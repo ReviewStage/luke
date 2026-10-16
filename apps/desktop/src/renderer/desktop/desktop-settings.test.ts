@@ -480,7 +480,7 @@ test("the plan template's version history keeps a call's card at the foot of its
   function CallSettings(): React.JSX.Element {
     const { tell } = useAct();
     const call: CallCardInput = {
-      card: { planName: "Checkout redesign", status: undefined, microphoneMuted: false },
+      card: { taskName: "Checkout redesign", status: undefined, microphoneMuted: false },
       speakerMuted: false,
       controls: callControls(tell, false),
     };
@@ -511,7 +511,7 @@ test("the plan template's version history keeps a call's card at the foot of its
   const back = card.querySelector<HTMLButtonElement>('button[aria-label="Open Checkout redesign"]');
   assert.ok(back);
   act(() => back.click());
-  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_PLAN]);
+  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {

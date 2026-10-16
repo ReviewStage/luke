@@ -5,7 +5,7 @@ import {
   SpeakerIcon,
   SpeakerOffIcon,
 } from "@luke/ui";
-import type { CallStatus } from "@luke/ui/planning-model";
+import type { CallStatus } from "@luke/ui/tasks-model";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
@@ -53,7 +53,7 @@ function CallStatusLines({
   muted: boolean;
   titled: boolean;
 }): React.JSX.Element {
-  const planner = status?.backend.planner;
+  const planner = status?.backend.brain;
   const notes = status?.backend.notes ?? false;
   return (
     <span className="call-status">

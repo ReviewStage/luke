@@ -1,5 +1,5 @@
-import type { CodeRef } from "@luke/features/plan-wire";
-import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/planning-view";
+import type { CodeRef } from "@luke/features/task-wire";
+import { type TaskShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/tasks-view";
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@luke/gateway";
 import {
   chunkForAppend,
@@ -259,7 +259,7 @@ export interface LiveSessionServiceOptions {
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
   /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
-  onCode?: (shown: PlanShownCode) => void;
+  onCode?: (shown: TaskShownCode) => void;
   /**
    * The developer said they are done and the planning model asked to end
    * the call: the peer hangs up once Luke's goodbye has played, through the
@@ -280,7 +280,7 @@ export interface LiveSessionServiceOptions {
  */
 export interface LiveSessionStatus {
   readonly voice: VoicePhase | undefined;
-  readonly planner: { readonly action: string | undefined } | undefined;
+  readonly brain: { readonly action: string | undefined } | undefined;
 }
 
 /**
@@ -354,7 +354,7 @@ interface StandingSession {
    * replaces any still held.
    */
   pendingCode:
-    | { readonly shown: PlanShownCode; readonly delegationId: LiveDelegationId }
+    | { readonly shown: TaskShownCode; readonly delegationId: LiveDelegationId }
     | undefined;
   /**
    * The questions the planning model queued that the voice has not been
@@ -519,7 +519,7 @@ export class LiveSessionService {
   readonly #tasks: SerialQueue;
   #stopped = false;
   /** What `onStatus` was last told, so it hears a change and never a repeat. */
-  #status: LiveSessionStatus = { voice: undefined, planner: undefined };
+  #status: LiveSessionStatus = { voice: undefined, brain: undefined };
   /**
    * The release still running for the session last declared over. A
    * tear-down clears `#standing` where it is decided and releases a turn
@@ -1415,13 +1415,13 @@ export class LiveSessionService {
       session && [...this.#exchanges.values()].find((held) => held.sessionId === session.sessionId);
     const status: LiveSessionStatus = {
       voice: session?.voicePhase,
-      planner: exchange === undefined ? undefined : { action: exchange.action },
+      brain: exchange === undefined ? undefined : { action: exchange.action },
     };
     const last = this.#status;
     if (
       status.voice === last.voice &&
-      (status.planner === undefined) === (last.planner === undefined) &&
-      status.planner?.action === last.planner?.action
+      (status.brain === undefined) === (last.brain === undefined) &&
+      status.brain?.action === last.brain?.action
     ) {
       return;
     }

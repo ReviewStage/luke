@@ -1,67 +1,69 @@
 import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
 import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
-import type {
-  CodeLines,
-  PlanningArchiveParams,
-  PlanningBoardSaveParams,
-  PlanningEditAnswer,
-  PlanningEditParams,
-  PlanningFileAnswer,
-  PlanningFileParams,
-  PlanningGitHubDisconnectAnswer,
-  PlanningGitHubPageAnswer,
-  PlanningLinearIssuesAnswer,
-  PlanningLinearIssuesParams,
-  PlanningMessagesParams,
-  PlanningMoveAnswer,
-  PlanningMoveParams,
-  PlanningPageAnswer,
-  PlanningPageParams,
-  PlanningPageSourceAnswer,
-  PlanningPictureAnswer,
-  PlanningPictureKeepAnswer,
-  PlanningPictureKeepParams,
-  PlanningPictureParams,
-  PlanningPinParams,
-  PlanningPinRepositoryParams,
-  PlanningPullRequestAnswer,
-  PlanningPullRequestParams,
-  PlanningRenameParams,
-  PlanningRepositoriesAnswer,
-  PlanningRepositoriesParams,
-  PlanningRevisionAnswer,
-  PlanningRevisionParams,
-  PlanningRevisionsAnswer,
-  PlanningRevisionsParams,
-  PlanningSetRepositoryAnswer,
-  PlanningSetRepositoryParams,
-  PlanningSkillsAnswer,
-  PlanningSkillsParams,
-  PlanningStartAnswer,
-  PlanningStartRequest,
-  PlanningTreeAnswer,
-  PlanningTreeParams,
-  PlanningWorkspaceAnswer,
-  PlanningWorkspaceCreateParams,
-  PlanningWorkspaceGitHubConnectAnswer,
-  PlanningWorkspaceInvitationAnswer,
-  PlanningWorkspaceInvitationCancelParams,
-  PlanningWorkspaceInvitationsAnswer,
-  PlanningWorkspaceInviteParams,
-  PlanningWorkspaceLeaveAnswer,
-  PlanningWorkspaceLeaveParams,
-  PlanningWorkspaceMemberRemoveParams,
-  PlanningWorkspaceMemberRoleParams,
-  PlanningWorkspaceMembersAnswer,
-  PlanningWorkspaceMembersParams,
-  PlanningWorkspaceParams,
-  PlanningWorkspacePhotoAnswer,
-  PlanningWorkspacePhotoParams,
-  PlanningWorkspacePhotoSetParams,
-  PlanningWorkspaceRenameParams,
-  PlanningWorkspaceTransferParams,
-} from "@luke/features/planning-view";
-import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
+import {
+  type CodeLines,
+  GITHUB_DISCONNECT_FAILURE,
+  type TasksArchiveParams,
+  type TasksBoardSaveParams,
+  type TasksEditAnswer,
+  type TasksEditParams,
+  type TasksFileAnswer,
+  type TasksFileParams,
+  type TasksGitHubDisconnectAnswer,
+  type TasksGitHubPageAnswer,
+  type TasksIssueAnswer,
+  type TasksIssueParams,
+  type TasksLinearIssuesAnswer,
+  type TasksLinearIssuesParams,
+  type TasksMessagesParams,
+  type TasksMoveAnswer,
+  type TasksMoveParams,
+  type TasksPageAnswer,
+  type TasksPageParams,
+  type TasksPageSourceAnswer,
+  type TasksPictureAnswer,
+  type TasksPictureKeepAnswer,
+  type TasksPictureKeepParams,
+  type TasksPictureParams,
+  type TasksPinParams,
+  type TasksPinRepositoryParams,
+  type TasksPullRequestAnswer,
+  type TasksPullRequestParams,
+  type TasksRenameParams,
+  type TasksRepositoriesAnswer,
+  type TasksRepositoriesParams,
+  type TasksRevisionAnswer,
+  type TasksRevisionParams,
+  type TasksRevisionsAnswer,
+  type TasksRevisionsParams,
+  type TasksSetRepositoryAnswer,
+  type TasksSetRepositoryParams,
+  type TasksSkillsAnswer,
+  type TasksSkillsParams,
+  type TasksStartAnswer,
+  type TasksStartRequest,
+  type TasksTreeAnswer,
+  type TasksTreeParams,
+  type TasksWorkspaceAnswer,
+  type TasksWorkspaceCreateParams,
+  type TasksWorkspaceGitHubConnectAnswer,
+  type TasksWorkspaceInvitationAnswer,
+  type TasksWorkspaceInvitationCancelParams,
+  type TasksWorkspaceInvitationsAnswer,
+  type TasksWorkspaceInviteParams,
+  type TasksWorkspaceLeaveAnswer,
+  type TasksWorkspaceLeaveParams,
+  type TasksWorkspaceMemberRemoveParams,
+  type TasksWorkspaceMemberRoleParams,
+  type TasksWorkspaceMembersAnswer,
+  type TasksWorkspaceMembersParams,
+  type TasksWorkspaceParams,
+  type TasksWorkspacePhotoAnswer,
+  type TasksWorkspacePhotoParams,
+  type TasksWorkspacePhotoSetParams,
+  type TasksWorkspaceRenameParams,
+  type TasksWorkspaceTransferParams,
+} from "@luke/features/tasks-view";
 import {
   ACT,
   ACT_KIND,
@@ -85,90 +87,71 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  */
 export interface PlanningActsDependencies {
   host: {
-    planningRefresh(): Effect.Effect<void>;
-    planningOpen(planId: string): Effect.Effect<boolean>;
-    planningClose(): Effect.Effect<void>;
-    planningDelete(planId: string): Effect.Effect<boolean>;
-    planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
-    planningPin(params: PlanningPinParams): Effect.Effect<boolean>;
-    planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
-    planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
-    planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
-    planningRepositories(
-      params: PlanningRepositoriesParams,
-    ): Effect.Effect<PlanningRepositoriesAnswer>;
-    planningSetRepository(
-      params: PlanningSetRepositoryParams,
-    ): Effect.Effect<PlanningSetRepositoryAnswer>;
-    planningMove(params: PlanningMoveParams): Effect.Effect<PlanningMoveAnswer>;
-    planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
-    planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
-    planningWorkEarlier(): Effect.Effect<void>;
-    planningConversationEarlier(): Effect.Effect<void>;
-    planningMessages(params: PlanningMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
-    planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
-    planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
-    planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
-    planningPullRequest(
-      params: PlanningPullRequestParams,
-    ): Effect.Effect<PlanningPullRequestAnswer>;
-    planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
-    planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
-    planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
-    planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
-    planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
-    planningPictureKeep(
-      params: PlanningPictureKeepParams,
-    ): Effect.Effect<PlanningPictureKeepAnswer>;
-    githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
-    githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
-    workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
-    workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
-    workspacePhotoSet(
-      params: PlanningWorkspacePhotoSetParams,
-    ): Effect.Effect<PlanningWorkspaceAnswer>;
+    tasksRefresh(): Effect.Effect<void>;
+    tasksOpen(planId: string): Effect.Effect<boolean>;
+    tasksClose(): Effect.Effect<void>;
+    tasksDelete(planId: string): Effect.Effect<boolean>;
+    tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
+    tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
+    tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
+    tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
+    tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
+    tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
+    tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
+    tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
+    tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
+    tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
+    tasksWorkEarlier(): Effect.Effect<void>;
+    tasksConversationEarlier(): Effect.Effect<void>;
+    tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
+    tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
+    tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
+    tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
+    tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
+    tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+    tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
+    tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
+    tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
+    tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
+    tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
+    tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
+    githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
+    githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
+    workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
+    workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
+    workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceGitHubConnect(
-      params: PlanningWorkspaceParams,
-    ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
-    workspaceGitHubDisconnect(
-      params: PlanningWorkspaceParams,
-    ): Effect.Effect<PlanningWorkspaceAnswer>;
+      params: TasksWorkspaceParams,
+    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
+    workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceLinearConnect(
-      params: PlanningWorkspaceParams,
-    ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
-    workspaceLinearDisconnect(
-      params: PlanningWorkspaceParams,
-    ): Effect.Effect<PlanningWorkspaceAnswer>;
-    workspaceLinearIssues(
-      params: PlanningLinearIssuesParams,
-    ): Effect.Effect<PlanningLinearIssuesAnswer>;
+      params: TasksWorkspaceParams,
+    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
+    workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
+    workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
     workspaceMembers(
-      params: PlanningWorkspaceMembersParams,
-    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
-    workspacePhoto(
-      params: PlanningWorkspacePhotoParams,
-    ): Effect.Effect<PlanningWorkspacePhotoAnswer>;
+      params: TasksWorkspaceMembersParams,
+    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
+    workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
     workspaceMemberRemove(
-      params: PlanningWorkspaceMemberRemoveParams,
-    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+      params: TasksWorkspaceMemberRemoveParams,
+    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
     workspaceMemberRole(
-      params: PlanningWorkspaceMemberRoleParams,
-    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+      params: TasksWorkspaceMemberRoleParams,
+    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
     workspaceTransfer(
-      params: PlanningWorkspaceTransferParams,
-    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
-    workspaceLeave(
-      params: PlanningWorkspaceLeaveParams,
-    ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
+      params: TasksWorkspaceTransferParams,
+    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
+    workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
     workspaceInvitations(
-      params: PlanningWorkspaceParams,
-    ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+      params: TasksWorkspaceParams,
+    ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
     workspaceInvite(
-      params: PlanningWorkspaceInviteParams,
-    ): Effect.Effect<PlanningWorkspaceInvitationAnswer>;
+      params: TasksWorkspaceInviteParams,
+    ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
     workspaceInvitationCancel(
-      params: PlanningWorkspaceInvitationCancelParams,
-    ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+      params: TasksWorkspaceInvitationCancelParams,
+    ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
@@ -187,39 +170,40 @@ export interface PlanningActsDependencies {
 }
 
 type PlanningActKind =
-  | typeof ACT_KIND.PLANNING_REFRESH
-  | typeof ACT_KIND.PLANNING_SELECT
-  | typeof ACT_KIND.PLANNING_CLOSE
-  | typeof ACT_KIND.PLANNING_START
-  | typeof ACT_KIND.PLANNING_DELETE
-  | typeof ACT_KIND.PLANNING_RENAME
-  | typeof ACT_KIND.PLANNING_PIN
-  | typeof ACT_KIND.PLANNING_PIN_REPOSITORY
-  | typeof ACT_KIND.PLANNING_ARCHIVE
-  | typeof ACT_KIND.PLANNING_REPOSITORIES
-  | typeof ACT_KIND.PLANNING_SET_REPOSITORY
-  | typeof ACT_KIND.PLANNING_MOVE
-  | typeof ACT_KIND.PLANNING_EDIT
+  | typeof ACT_KIND.TASKS_REFRESH
+  | typeof ACT_KIND.TASKS_SELECT
+  | typeof ACT_KIND.TASKS_CLOSE
+  | typeof ACT_KIND.TASKS_START
+  | typeof ACT_KIND.TASKS_DELETE
+  | typeof ACT_KIND.TASKS_RENAME
+  | typeof ACT_KIND.TASKS_PIN
+  | typeof ACT_KIND.TASKS_PIN_REPOSITORY
+  | typeof ACT_KIND.TASKS_ARCHIVE
+  | typeof ACT_KIND.TASKS_REPOSITORIES
+  | typeof ACT_KIND.TASKS_SET_REPOSITORY
+  | typeof ACT_KIND.TASKS_MOVE
+  | typeof ACT_KIND.TASKS_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.WEB_OPEN
   | typeof ACT_KIND.GITHUB_CONNECT
   | typeof ACT_KIND.GITHUB_DISCONNECT
-  | typeof ACT_KIND.PLANNING_TALK
-  | typeof ACT_KIND.PLANNING_BOARD_SAVE
-  | typeof ACT_KIND.PLANNING_WORK_EARLIER
-  | typeof ACT_KIND.PLANNING_CONVERSATION_EARLIER
-  | typeof ACT_KIND.PLANNING_MESSAGES
-  | typeof ACT_KIND.PLANNING_FILE
-  | typeof ACT_KIND.PLANNING_TREE
-  | typeof ACT_KIND.PLANNING_SKILLS
-  | typeof ACT_KIND.PLANNING_PULL_REQUEST
-  | typeof ACT_KIND.PLANNING_COLOUR_CODE
-  | typeof ACT_KIND.PLANNING_REVISIONS
-  | typeof ACT_KIND.PLANNING_REVISION
-  | typeof ACT_KIND.PLANNING_RESTORE
-  | typeof ACT_KIND.PLANNING_PAGE_SOURCE
-  | typeof ACT_KIND.PLANNING_PICTURE_READ
-  | typeof ACT_KIND.PLANNING_PICTURE_KEEP
+  | typeof ACT_KIND.TASKS_TALK
+  | typeof ACT_KIND.TASKS_BOARD_SAVE
+  | typeof ACT_KIND.TASKS_WORK_EARLIER
+  | typeof ACT_KIND.TASKS_CONVERSATION_EARLIER
+  | typeof ACT_KIND.TASKS_MESSAGES
+  | typeof ACT_KIND.TASKS_FILE
+  | typeof ACT_KIND.TASKS_TREE
+  | typeof ACT_KIND.TASKS_SKILLS
+  | typeof ACT_KIND.TASKS_PULL_REQUEST
+  | typeof ACT_KIND.TASKS_ISSUE
+  | typeof ACT_KIND.TASKS_COLOUR_CODE
+  | typeof ACT_KIND.TASKS_REVISIONS
+  | typeof ACT_KIND.TASKS_REVISION
+  | typeof ACT_KIND.TASKS_RESTORE
+  | typeof ACT_KIND.TASKS_PAGE_SOURCE
+  | typeof ACT_KIND.TASKS_PICTURE_READ
+  | typeof ACT_KIND.TASKS_PICTURE_KEEP
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_PHOTO_SET
@@ -316,7 +300,7 @@ function isServicePage(url: string, serviceBaseUrl: string): boolean {
  */
 function openedPage(
   kind: typeof ACT_KIND.GITHUB_CONNECT,
-  page: PlanningGitHubPageAnswer,
+  page: TasksGitHubPageAnswer,
   dependencies: Pick<PlanningActsDependencies, "openExternal" | "serviceBaseUrl">,
 ) {
   const refused = new ActRefused({ message: ACT[kind].refusal });
@@ -330,26 +314,26 @@ export function planningActRows(
 ): Pick<ActRows, PlanningActKind> {
   const { host } = dependencies;
   return {
-    [ACT_KIND.PLANNING_REFRESH]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REFRESH, sender);
-      return host.planningRefresh();
+    [ACT_KIND.TASKS_REFRESH]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_REFRESH, sender);
+      return host.tasksRefresh();
     },
-    [ACT_KIND.PLANNING_SELECT]: ({ planId }, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_SELECT, sender);
-      return host.planningOpen(planId);
+    [ACT_KIND.TASKS_SELECT]: ({ taskId: planId }, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_SELECT, sender);
+      return host.tasksOpen(planId);
     },
-    [ACT_KIND.PLANNING_CLOSE]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_CLOSE, sender);
-      return host.planningClose();
+    [ACT_KIND.TASKS_CLOSE]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_CLOSE, sender);
+      return host.tasksClose();
     },
     // Note that a started plan opens its call at once, because pressing
     // Start plan is the developer's gesture and Luke opens a new plan by
     // greeting it; where the call would first have to ask for the
     // microphone, the plan's own microphone button asks instead, and where
     // a call already stands the panel asks whether to end it first.
-    [ACT_KIND.PLANNING_START]: (request, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_START, sender);
-      return Effect.tap(host.planningStart(request), (answer) =>
+    [ACT_KIND.TASKS_START]: (request, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_START, sender);
+      return Effect.tap(host.tasksStart(request), (answer) =>
         Effect.sync(() => {
           if ("planId" in answer && dependencies.voiceReady() && !dependencies.callStanding()) {
             dependencies.talkAboutPlan(answer.planId);
@@ -357,41 +341,41 @@ export function planningActRows(
         }),
       );
     },
-    [ACT_KIND.PLANNING_DELETE]: ({ planId }, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_DELETE, sender);
-      return host.planningDelete(planId);
+    [ACT_KIND.TASKS_DELETE]: ({ taskId: planId }, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_DELETE, sender);
+      return host.tasksDelete(planId);
     },
-    [ACT_KIND.PLANNING_RENAME]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_RENAME, sender);
-      return host.planningRename(params);
+    [ACT_KIND.TASKS_RENAME]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_RENAME, sender);
+      return host.tasksRename(params);
     },
-    [ACT_KIND.PLANNING_PIN]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PIN, sender);
-      return host.planningPin(params);
+    [ACT_KIND.TASKS_PIN]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PIN, sender);
+      return host.tasksPin(params);
     },
-    [ACT_KIND.PLANNING_PIN_REPOSITORY]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PIN_REPOSITORY, sender);
-      return host.planningPinRepository(params);
+    [ACT_KIND.TASKS_PIN_REPOSITORY]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PIN_REPOSITORY, sender);
+      return host.tasksPinRepository(params);
     },
-    [ACT_KIND.PLANNING_ARCHIVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_ARCHIVE, sender);
-      return host.planningArchive(params);
+    [ACT_KIND.TASKS_ARCHIVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_ARCHIVE, sender);
+      return host.tasksArchive(params);
     },
-    [ACT_KIND.PLANNING_REPOSITORIES]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);
-      return host.planningRepositories(params);
+    [ACT_KIND.TASKS_REPOSITORIES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_REPOSITORIES, sender);
+      return host.tasksRepositories(params);
     },
-    [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
-      return host.planningSetRepository(params);
+    [ACT_KIND.TASKS_SET_REPOSITORY]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_SET_REPOSITORY, sender);
+      return host.tasksSetRepository(params);
     },
-    [ACT_KIND.PLANNING_MOVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_MOVE, sender);
-      return host.planningMove(params);
+    [ACT_KIND.TASKS_MOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_MOVE, sender);
+      return host.tasksMove(params);
     },
-    [ACT_KIND.PLANNING_EDIT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_EDIT, sender);
-      return host.planningEdit(params);
+    [ACT_KIND.TASKS_EDIT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_EDIT, sender);
+      return host.tasksEdit(params);
     },
     // The address is GitHub's by the act's own schema, so what opens is a
     // repository's page or the App's installation page and nothing else.
@@ -432,90 +416,99 @@ export function planningActRows(
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.
-    [ACT_KIND.PLANNING_TALK]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_TALK, sender);
+    [ACT_KIND.TASKS_TALK]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_TALK, sender);
       const planId = dependencies.activePlanId();
       if (planId === undefined) {
-        throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_TALK].refusal });
+        throw new ActRefused({ message: ACT[ACT_KIND.TASKS_TALK].refusal });
       }
       dependencies.talkAboutPlan(planId);
     },
-    [ACT_KIND.PLANNING_WORK_EARLIER]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_WORK_EARLIER, sender);
-      return host.planningWorkEarlier();
+    [ACT_KIND.TASKS_WORK_EARLIER]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_WORK_EARLIER, sender);
+      return host.tasksWorkEarlier();
     },
-    [ACT_KIND.PLANNING_CONVERSATION_EARLIER]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_CONVERSATION_EARLIER, sender);
-      return host.planningConversationEarlier();
+    [ACT_KIND.TASKS_CONVERSATION_EARLIER]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_CONVERSATION_EARLIER, sender);
+      return host.tasksConversationEarlier();
     },
-    [ACT_KIND.PLANNING_MESSAGES]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_MESSAGES, sender);
-      return host.planningMessages(params);
+    [ACT_KIND.TASKS_MESSAGES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_MESSAGES, sender);
+      return host.tasksMessages(params);
     },
-    [ACT_KIND.PLANNING_FILE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);
-      return host.planningFile(params);
+    [ACT_KIND.TASKS_FILE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_FILE, sender);
+      return host.tasksFile(params);
     },
-    [ACT_KIND.PLANNING_TREE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_TREE, sender);
-      return host.planningTree(params);
+    [ACT_KIND.TASKS_TREE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_TREE, sender);
+      return host.tasksTree(params);
     },
-    [ACT_KIND.PLANNING_SKILLS]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_SKILLS, sender);
-      return host.planningSkills(params);
+    [ACT_KIND.TASKS_SKILLS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_SKILLS, sender);
+      return host.tasksSkills(params);
     },
     // A service that did not answer is refused, so a link draws what it holds
     // rather than reading the silence as no pull request.
-    [ACT_KIND.PLANNING_PULL_REQUEST]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PULL_REQUEST, sender);
-      return Effect.flatMap(host.planningPullRequest(params), (answer) =>
+    [ACT_KIND.TASKS_PULL_REQUEST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PULL_REQUEST, sender);
+      return Effect.flatMap(host.tasksPullRequest(params), (answer) =>
         "pullRequest" in answer
           ? Effect.succeed(answer.pullRequest)
-          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.PLANNING_PULL_REQUEST].refusal })),
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.TASKS_PULL_REQUEST].refusal })),
       );
     },
-    [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);
+    // Likewise an issue: a service that did not answer is refused, never read as no issue.
+    [ACT_KIND.TASKS_ISSUE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_ISSUE, sender);
+      return Effect.flatMap(host.tasksIssue(params), (answer) =>
+        "issue" in answer
+          ? Effect.succeed(answer.issue)
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.TASKS_ISSUE].refusal })),
+      );
+    },
+    [ACT_KIND.TASKS_COLOUR_CODE]: ({ language, code }, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_COLOUR_CODE, sender);
       return dependencies.colourCode(language, code);
     },
-    [ACT_KIND.PLANNING_REVISIONS]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REVISIONS, sender);
-      return host.planningRevisions(params);
+    [ACT_KIND.TASKS_REVISIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_REVISIONS, sender);
+      return host.tasksRevisions(params);
     },
-    [ACT_KIND.PLANNING_REVISION]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REVISION, sender);
-      return host.planningRevision(params);
+    [ACT_KIND.TASKS_REVISION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_REVISION, sender);
+      return host.tasksRevision(params);
     },
-    [ACT_KIND.PLANNING_RESTORE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_RESTORE, sender);
-      return host.planningRestore(params);
+    [ACT_KIND.TASKS_RESTORE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_RESTORE, sender);
+      return host.tasksRestore(params);
     },
     // Note that the picture's answer, a failure among them, is the panel's to
     // read, as a workspace photo's is, because a picture that hears none
     // draws its words rather than a refusal.
-    [ACT_KIND.PLANNING_PICTURE_READ]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_READ, sender);
-      return host.planningPicture(params);
+    [ACT_KIND.TASKS_PICTURE_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PICTURE_READ, sender);
+      return host.tasksPicture(params);
     },
     // A refusal is the editor's to say on the picture, with its retry, so it is answered rather than refused.
-    [ACT_KIND.PLANNING_PICTURE_KEEP]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_KEEP, sender);
-      return host.planningPictureKeep(params);
+    [ACT_KIND.TASKS_PICTURE_KEEP]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PICTURE_KEEP, sender);
+      return host.tasksPictureKeep(params);
     },
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
-    [ACT_KIND.PLANNING_PAGE_SOURCE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PAGE_SOURCE, sender);
+    [ACT_KIND.TASKS_PAGE_SOURCE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PAGE_SOURCE, sender);
       return Effect.map(
-        host.planningPage(params),
-        (answer): PlanningPageSourceAnswer =>
+        host.tasksPage(params),
+        (answer): TasksPageSourceAnswer =>
           "page" in answer
             ? { lines: pageSourceLines(answer.page.html, dependencies.colourCode) }
             : answer,
       );
     },
-    [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
-      return host.planningBoardSave(params);
+    [ACT_KIND.TASKS_BOARD_SAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_BOARD_SAVE, sender);
+      return host.tasksBoardSave(params);
     },
     [ACT_KIND.WORKSPACE_CREATE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_CREATE, sender);

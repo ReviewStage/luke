@@ -1,5 +1,5 @@
-import { PLAN_BOUNDS } from "@luke/features/plan-wire";
-import { RENAME_FAILED_NOTE } from "@luke/ui/planning-model";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /**
@@ -25,7 +25,7 @@ export function PlanNameField({
   name,
   className,
   label = "Task name",
-  maxLength = PLAN_BOUNDS.MAX_NAME_CHARS,
+  maxLength = TASK_BOUNDS.MAX_NAME_CHARS,
   onEnd,
 }: {
   name: string;

@@ -1,5 +1,4 @@
-import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACCOUNT_PROVIDER } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   type AutomationDeletedView,
   type AutomationListView,
@@ -97,79 +96,82 @@ import {
 } from "@luke/features/integration-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
-import {
-  type CodeLines,
-  codeLinesSchema,
-  type PlanningEditAnswer,
-  type PlanningFileAnswer,
-  type PlanningMoveAnswer,
-  type PlanningPageSourceAnswer,
-  type PlanningPictureAnswer,
-  type PlanningPictureKeepAnswer,
-  type PlanningPullRequest,
-  type PlanningRepositoriesAnswer,
-  type PlanningRevisionAnswer,
-  type PlanningRevisionsAnswer,
-  type PlanningSetRepositoryAnswer,
-  type PlanningSkillsAnswer,
-  type PlanningStartAnswer,
-  type PlanningTreeAnswer,
-  type PlanningWorkspacePhotoAnswer,
-  planningArchiveParamsSchema,
-  planningBoardSaveParamsSchema,
-  planningEditAnswerSchema,
-  planningEditParamsSchema,
-  planningFileAnswerSchema,
-  planningFileParamsSchema,
-  planningLinearIssuesParamsSchema,
-  planningMessagesParamsSchema,
-  planningMoveAnswerSchema,
-  planningMoveParamsSchema,
-  planningPageParamsSchema,
-  planningPageSourceAnswerSchema,
-  planningPictureAnswerSchema,
-  planningPictureKeepAnswerSchema,
-  planningPictureKeepParamsSchema,
-  planningPictureParamsSchema,
-  planningPinParamsSchema,
-  planningPinRepositoryParamsSchema,
-  planningPullRequestParamsSchema,
-  planningPullRequestSchema,
-  planningRenameParamsSchema,
-  planningRepositoriesAnswerSchema,
-  planningRepositoriesParamsSchema,
-  planningRevisionAnswerSchema,
-  planningRevisionParamsSchema,
-  planningRevisionsAnswerSchema,
-  planningRevisionsParamsSchema,
-  planningSetRepositoryAnswerSchema,
-  planningSetRepositoryParamsSchema,
-  planningSkillsAnswerSchema,
-  planningSkillsParamsSchema,
-  planningStartAnswerSchema,
-  planningStartRequestSchema,
-  planningTreeAnswerSchema,
-  planningTreeParamsSchema,
-  planningWorkspaceCreateParamsSchema,
-  planningWorkspaceInvitationCancelParamsSchema,
-  planningWorkspaceInviteParamsSchema,
-  planningWorkspaceLeaveParamsSchema,
-  planningWorkspaceMemberRemoveParamsSchema,
-  planningWorkspaceMemberRoleParamsSchema,
-  planningWorkspaceMembersParamsSchema,
-  planningWorkspaceParamsSchema,
-  planningWorkspacePhotoAnswerSchema,
-  planningWorkspacePhotoParamsSchema,
-  planningWorkspacePhotoSetParamsSchema,
-  planningWorkspaceRenameParamsSchema,
-  planningWorkspaceTransferParamsSchema,
-} from "@luke/features/planning-view";
 import { prRunPullRequestSchema, prRunWorkspaceParamsSchema } from "@luke/features/pr-run-view";
 import {
   type RepositoryRunsAnswer,
   repositoryRunSetRequestSchema,
   repositoryRunsAnswerSchema,
 } from "@luke/features/repository-run-wire";
+import {
+  type CodeLines,
+  codeLinesSchema,
+  type PlanningPullRequest,
+  planningPullRequestParamsSchema,
+  planningPullRequestSchema,
+  type TasksEditAnswer,
+  type TasksFileAnswer,
+  type TasksIssue,
+  type TasksMoveAnswer,
+  type TasksPageSourceAnswer,
+  type TasksPictureAnswer,
+  type TasksPictureKeepAnswer,
+  type TasksRepositoriesAnswer,
+  type TasksRevisionAnswer,
+  type TasksRevisionsAnswer,
+  type TasksSetRepositoryAnswer,
+  type TasksSkillsAnswer,
+  type TasksStartAnswer,
+  type TasksTreeAnswer,
+  type TasksWorkspacePhotoAnswer,
+  tasksArchiveParamsSchema,
+  tasksBoardSaveParamsSchema,
+  tasksEditAnswerSchema,
+  tasksEditParamsSchema,
+  tasksFileAnswerSchema,
+  tasksFileParamsSchema,
+  tasksIssueParamsSchema,
+  tasksIssueSchema,
+  tasksLinearIssuesParamsSchema,
+  tasksMessagesParamsSchema,
+  tasksMoveAnswerSchema,
+  tasksMoveParamsSchema,
+  tasksPageParamsSchema,
+  tasksPageSourceAnswerSchema,
+  tasksPictureAnswerSchema,
+  tasksPictureKeepAnswerSchema,
+  tasksPictureKeepParamsSchema,
+  tasksPictureParamsSchema,
+  tasksPinParamsSchema,
+  tasksPinRepositoryParamsSchema,
+  tasksRenameParamsSchema,
+  tasksRepositoriesAnswerSchema,
+  tasksRepositoriesParamsSchema,
+  tasksRevisionAnswerSchema,
+  tasksRevisionParamsSchema,
+  tasksRevisionsAnswerSchema,
+  tasksRevisionsParamsSchema,
+  tasksSetRepositoryAnswerSchema,
+  tasksSetRepositoryParamsSchema,
+  tasksSkillsAnswerSchema,
+  tasksSkillsParamsSchema,
+  tasksStartAnswerSchema,
+  tasksStartRequestSchema,
+  tasksTreeAnswerSchema,
+  tasksTreeParamsSchema,
+  tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceInvitationCancelParamsSchema,
+  tasksWorkspaceInviteParamsSchema,
+  tasksWorkspaceLeaveParamsSchema,
+  tasksWorkspaceMemberRemoveParamsSchema,
+  tasksWorkspaceMemberRoleParamsSchema,
+  tasksWorkspaceMembersParamsSchema,
+  tasksWorkspaceParamsSchema,
+  tasksWorkspacePhotoAnswerSchema,
+  tasksWorkspacePhotoParamsSchema,
+  tasksWorkspacePhotoSetParamsSchema,
+  tasksWorkspaceRenameParamsSchema,
+  tasksWorkspaceTransferParamsSchema,
+} from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -284,27 +286,27 @@ export const ACT_KIND = {
    * plan left, a plan started on a repository, and a plan renamed, given its
    * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
    * an answer. The one write of a plan's document from here is the
-   * developer's edit of a field, `PLANNING_EDIT`, which answers whether it
+   * developer's edit of a field, `TASKS_EDIT`, which answers whether it
    * saved, conflicted with what Luke wrote meanwhile, or failed.
    */
-  PLANNING_REFRESH: "planning.refresh",
-  PLANNING_SELECT: "planning.select",
-  PLANNING_CLOSE: "planning.close",
-  PLANNING_START: "planning.start",
-  PLANNING_DELETE: "planning.delete",
-  PLANNING_RENAME: "planning.rename",
-  PLANNING_PIN: "planning.pin",
+  TASKS_REFRESH: "tasks.refresh",
+  TASKS_SELECT: "tasks.select",
+  TASKS_CLOSE: "tasks.close",
+  TASKS_START: "tasks.start",
+  TASKS_DELETE: "tasks.delete",
+  TASKS_RENAME: "tasks.rename",
+  TASKS_PIN: "tasks.pin",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
-  PLANNING_PIN_REPOSITORY: "planning.pinRepository",
-  PLANNING_ARCHIVE: "planning.archive",
+  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
-  PLANNING_REPOSITORIES: "planning.repositories",
+  TASKS_REPOSITORIES: "tasks.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
-  PLANNING_SET_REPOSITORY: "planning.setRepository",
+  TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** A plan moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
-  PLANNING_MOVE: "planning.move",
+  TASKS_MOVE: "tasks.move",
   /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
-  PLANNING_EDIT: "planning.edit",
+  TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
@@ -314,37 +316,39 @@ export const ACT_KIND = {
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
-  PLANNING_TALK: "planning.talk",
+  TASKS_TALK: "tasks.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  PLANNING_BOARD_SAVE: "planning.boardSave",
+  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
-  PLANNING_WORK_EARLIER: "planning.workEarlier",
+  TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The Call tab scrolled back to its oldest turn: the open plan's page of conversation before it, read from the service; the view arrives on the document. */
-  PLANNING_CONVERSATION_EARLIER: "planning.conversationEarlier",
+  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
   /** One page of a plan's conversation, or a planning worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
-  PLANNING_MESSAGES: "planning.messages",
+  TASKS_MESSAGES: "tasks.messages",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
-  PLANNING_FILE: "planning.file",
+  TASKS_FILE: "tasks.file",
   /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
-  PLANNING_TREE: "planning.tree",
+  TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
-  PLANNING_SKILLS: "planning.skills",
+  TASKS_SKILLS: "planning.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  PLANNING_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "planning.pullRequest",
+  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_ISSUE: "tasks.issue",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
-  PLANNING_COLOUR_CODE: "planning.colourCode",
+  TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
-  PLANNING_REVISIONS: "planning.revisions",
+  TASKS_REVISIONS: "tasks.revisions",
   /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
-  PLANNING_REVISION: "planning.revision",
+  TASKS_REVISION: "tasks.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
-  PLANNING_RESTORE: "planning.restore",
+  TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
-  PLANNING_PAGE_SOURCE: "planning.pageSource",
+  TASKS_PAGE_SOURCE: "planning.pageSource",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
-  PLANNING_PICTURE_READ: "planning.pictureRead",
+  TASKS_PICTURE_READ: "planning.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
-  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "planning.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -498,7 +502,7 @@ export const ACT_KIND = {
   PR_RUN_DELETE_CHECKOUT: "prRun.deleteCheckout",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
-  CALL_SHOW_PLAN: "call.showPlan",
+  CALL_SHOW_TASK: "call.showPlan",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
   /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
@@ -845,61 +849,61 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.PLANNING_REFRESH]: press("Could not read your tasks on this system."),
-  [ACT_KIND.PLANNING_SELECT]: {
-    payload: record({ planId: exactId }),
+  [ACT_KIND.TASKS_REFRESH]: press("Could not read your tasks on this system."),
+  [ACT_KIND.TASKS_SELECT]: {
+    payload: record({ taskId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not open that task on this system.",
   },
-  [ACT_KIND.PLANNING_CLOSE]: press("Could not leave that task on this system."),
-  [ACT_KIND.PLANNING_START]: {
-    payload: actSchema(planningStartRequestSchema),
-    result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),
+  [ACT_KIND.TASKS_CLOSE]: press("Could not leave that task on this system."),
+  [ACT_KIND.TASKS_START]: {
+    payload: actSchema(tasksStartRequestSchema),
+    result: wireResult<TasksStartAnswer>(isReadable(tasksStartAnswerSchema)),
     refusal: "Could not start that task on this system.",
   },
-  [ACT_KIND.PLANNING_DELETE]: {
-    payload: record({ planId: exactId }),
+  [ACT_KIND.TASKS_DELETE]: {
+    payload: record({ taskId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not delete that task on this system.",
   },
-  [ACT_KIND.PLANNING_RENAME]: {
-    payload: actSchema(planningRenameParamsSchema),
+  [ACT_KIND.TASKS_RENAME]: {
+    payload: actSchema(tasksRenameParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not rename that task on this system.",
   },
-  [ACT_KIND.PLANNING_PIN]: {
-    payload: actSchema(planningPinParamsSchema),
+  [ACT_KIND.TASKS_PIN]: {
+    payload: actSchema(tasksPinParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that task on this system.",
   },
-  [ACT_KIND.PLANNING_PIN_REPOSITORY]: {
-    payload: actSchema(planningPinRepositoryParamsSchema),
+  [ACT_KIND.TASKS_PIN_REPOSITORY]: {
+    payload: actSchema(tasksPinRepositoryParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that repository on this system.",
   },
-  [ACT_KIND.PLANNING_ARCHIVE]: {
-    payload: actSchema(planningArchiveParamsSchema),
+  [ACT_KIND.TASKS_ARCHIVE]: {
+    payload: actSchema(tasksArchiveParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not archive that task on this system.",
   },
-  [ACT_KIND.PLANNING_REPOSITORIES]: {
-    payload: actSchema(planningRepositoriesParamsSchema),
-    result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
+  [ACT_KIND.TASKS_REPOSITORIES]: {
+    payload: actSchema(tasksRepositoriesParamsSchema),
+    result: wireResult<TasksRepositoriesAnswer>(isReadable(tasksRepositoriesAnswerSchema)),
     refusal: "Could not read your GitHub repositories on this system.",
   },
-  [ACT_KIND.PLANNING_SET_REPOSITORY]: {
-    payload: actSchema(planningSetRepositoryParamsSchema),
-    result: wireResult<PlanningSetRepositoryAnswer>(isReadable(planningSetRepositoryAnswerSchema)),
+  [ACT_KIND.TASKS_SET_REPOSITORY]: {
+    payload: actSchema(tasksSetRepositoryParamsSchema),
+    result: wireResult<TasksSetRepositoryAnswer>(isReadable(tasksSetRepositoryAnswerSchema)),
     refusal: "Could not change that task's repository on this system.",
   },
-  [ACT_KIND.PLANNING_MOVE]: {
-    payload: actSchema(planningMoveParamsSchema),
-    result: wireResult<PlanningMoveAnswer>(isReadable(planningMoveAnswerSchema)),
+  [ACT_KIND.TASKS_MOVE]: {
+    payload: actSchema(tasksMoveParamsSchema),
+    result: wireResult<TasksMoveAnswer>(isReadable(tasksMoveAnswerSchema)),
     refusal: "Could not move that task on this system.",
   },
-  [ACT_KIND.PLANNING_EDIT]: {
-    payload: actSchema(planningEditParamsSchema),
-    result: wireResult<PlanningEditAnswer>(isReadable(planningEditAnswerSchema)),
+  [ACT_KIND.TASKS_EDIT]: {
+    payload: actSchema(tasksEditParamsSchema),
+    result: wireResult<TasksEditAnswer>(isReadable(tasksEditAnswerSchema)),
     refusal: "Could not save that edit on this system.",
   },
   [ACT_KIND.GITHUB_OPEN]: {
@@ -914,125 +918,128 @@ export const ACT = {
   },
   [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
-  [ACT_KIND.PLANNING_TALK]: press("Could not talk about that task on this system."),
+  [ACT_KIND.TASKS_TALK]: press("Could not talk about that task on this system."),
   [ACT_KIND.WORKSPACE_CREATE]: {
-    payload: actSchema(planningWorkspaceCreateParamsSchema),
+    payload: actSchema(tasksWorkspaceCreateParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
     refusal: "Could not make that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_RENAME]: {
-    payload: actSchema(planningWorkspaceRenameParamsSchema),
+    payload: actSchema(tasksWorkspaceRenameParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
     refusal: "Could not rename that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_INVITATIONS_READ]: {
-    payload: actSchema(planningWorkspaceParamsSchema),
+    payload: actSchema(tasksWorkspaceParamsSchema),
     result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
     refusal: "Could not read invitations on this system.",
   },
   [ACT_KIND.WORKSPACE_INVITE]: {
-    payload: actSchema(planningWorkspaceInviteParamsSchema),
+    payload: actSchema(tasksWorkspaceInviteParamsSchema),
     result: wireResult<WorkspaceInvitation>(isReadable(workspaceInvitationSchema)),
     refusal: "Could not invite that address on this system.",
   },
   [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: {
-    payload: actSchema(planningWorkspaceInvitationCancelParamsSchema),
+    payload: actSchema(tasksWorkspaceInvitationCancelParamsSchema),
     result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
     refusal: "Could not cancel that invitation on this system.",
   },
   [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
-    payload: actSchema(planningWorkspaceParamsSchema),
+    payload: actSchema(tasksWorkspaceParamsSchema),
     result: answersNothing,
     refusal: "Could not connect GitHub to that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
-    payload: actSchema(planningWorkspaceParamsSchema),
+    payload: actSchema(tasksWorkspaceParamsSchema),
     result: answersNothing,
     refusal: "Could not disconnect GitHub from that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: {
-    payload: actSchema(planningWorkspaceParamsSchema),
+    payload: actSchema(tasksWorkspaceParamsSchema),
     result: answersNothing,
     refusal: "Could not connect Linear to that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: {
-    payload: actSchema(planningWorkspaceParamsSchema),
+    payload: actSchema(tasksWorkspaceParamsSchema),
     result: answersNothing,
     refusal: "Could not disconnect Linear from that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: {
-    payload: actSchema(planningLinearIssuesParamsSchema),
+    payload: actSchema(tasksLinearIssuesParamsSchema),
     result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
     refusal: "Could not read that workspace's Linear issues on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
-    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    payload: actSchema(tasksWorkspaceMembersParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not read that workspace's members on this system.",
   },
   [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: {
-    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    payload: actSchema(tasksWorkspaceMembersParamsSchema),
     result: wireResult<readonly FormerMember[]>(isReadable(formerMembersSchema)),
     refusal: "Could not read who left that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
-    payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),
+    payload: actSchema(tasksWorkspaceMemberRemoveParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not remove that member on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBER_ROLE]: {
-    payload: actSchema(planningWorkspaceMemberRoleParamsSchema),
+    payload: actSchema(tasksWorkspaceMemberRoleParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not change that member's role on this system.",
   },
   [ACT_KIND.WORKSPACE_TRANSFER]: {
-    payload: actSchema(planningWorkspaceTransferParamsSchema),
+    payload: actSchema(tasksWorkspaceTransferParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not transfer that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_LEAVE]: {
-    payload: actSchema(planningWorkspaceLeaveParamsSchema),
+    payload: actSchema(tasksWorkspaceLeaveParamsSchema),
     result: answersNothing,
     refusal: "Could not leave that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_PHOTO_READ]: {
-    payload: actSchema(planningWorkspacePhotoParamsSchema),
-    result: wireResult<PlanningWorkspacePhotoAnswer>(
-      isReadable(planningWorkspacePhotoAnswerSchema),
-    ),
+    payload: actSchema(tasksWorkspacePhotoParamsSchema),
+    result: wireResult<TasksWorkspacePhotoAnswer>(isReadable(tasksWorkspacePhotoAnswerSchema)),
     refusal: "Could not read that workspace's photo on this system.",
   },
   [ACT_KIND.WORKSPACE_PHOTO_SET]: {
-    payload: actSchema(planningWorkspacePhotoSetParamsSchema),
+    payload: actSchema(tasksWorkspacePhotoSetParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
     refusal: "Could not change that workspace's photo on this system.",
   },
-  [ACT_KIND.PLANNING_BOARD_SAVE]: {
-    payload: actSchema(planningBoardSaveParamsSchema),
+  [ACT_KIND.TASKS_BOARD_SAVE]: {
+    payload: actSchema(tasksBoardSaveParamsSchema),
     result: answersNothing,
     refusal: "Could not save the board on this system.",
   },
-  [ACT_KIND.PLANNING_FILE]: {
-    payload: actSchema(planningFileParamsSchema),
-    result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
+  [ACT_KIND.TASKS_FILE]: {
+    payload: actSchema(tasksFileParamsSchema),
+    result: wireResult<TasksFileAnswer>(isReadable(tasksFileAnswerSchema)),
     refusal: "Could not read that file on this system.",
   },
-  [ACT_KIND.PLANNING_TREE]: {
-    payload: actSchema(planningTreeParamsSchema),
-    result: wireResult<PlanningTreeAnswer>(isReadable(planningTreeAnswerSchema)),
+  [ACT_KIND.TASKS_TREE]: {
+    payload: actSchema(tasksTreeParamsSchema),
+    result: wireResult<TasksTreeAnswer>(isReadable(tasksTreeAnswerSchema)),
     refusal: "Could not list that folder on this system.",
   },
-  [ACT_KIND.PLANNING_SKILLS]: {
-    payload: actSchema(planningSkillsParamsSchema),
-    result: wireResult<PlanningSkillsAnswer>(isReadable(planningSkillsAnswerSchema)),
+  [ACT_KIND.TASKS_SKILLS]: {
+    payload: actSchema(tasksSkillsParamsSchema),
+    result: wireResult<TasksSkillsAnswer>(isReadable(tasksSkillsAnswerSchema)),
     refusal: "Could not read this repository's skills on this system.",
   },
-  [ACT_KIND.PLANNING_PULL_REQUEST]: {
+  [ACT_KIND.TASKS_PULL_REQUEST]: {
     payload: actSchema(planningPullRequestParamsSchema),
     result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
     refusal: "Could not read that pull request on this system.",
   },
-  [ACT_KIND.PLANNING_COLOUR_CODE]: {
+  [ACT_KIND.TASKS_ISSUE]: {
+    payload: actSchema(tasksIssueParamsSchema),
+    result: wireResult<TasksIssue>(isReadable(tasksIssueSchema)),
+    refusal: "Could not read that issue on this system.",
+  },
+  [ACT_KIND.TASKS_COLOUR_CODE]: {
     payload: record({
       language: exactText(FENCE_LANGUAGE_MAX_CHARS),
       code: exactText(COLOURED_CODE_MAX_CHARS),
@@ -1040,44 +1047,42 @@ export const ACT = {
     result: wireResult<CodeLines>(isReadable(codeLinesSchema)),
     refusal: "Could not colour that code on this system.",
   },
-  [ACT_KIND.PLANNING_REVISIONS]: {
-    payload: actSchema(planningRevisionsParamsSchema),
-    result: wireResult<PlanningRevisionsAnswer>(isReadable(planningRevisionsAnswerSchema)),
+  [ACT_KIND.TASKS_REVISIONS]: {
+    payload: actSchema(tasksRevisionsParamsSchema),
+    result: wireResult<TasksRevisionsAnswer>(isReadable(tasksRevisionsAnswerSchema)),
     refusal: "Could not read that plan's history on this system.",
   },
-  [ACT_KIND.PLANNING_REVISION]: {
-    payload: actSchema(planningRevisionParamsSchema),
-    result: wireResult<PlanningRevisionAnswer>(isReadable(planningRevisionAnswerSchema)),
+  [ACT_KIND.TASKS_REVISION]: {
+    payload: actSchema(tasksRevisionParamsSchema),
+    result: wireResult<TasksRevisionAnswer>(isReadable(tasksRevisionAnswerSchema)),
     refusal: "Could not read that version on this system.",
   },
-  [ACT_KIND.PLANNING_RESTORE]: {
-    payload: actSchema(planningRevisionParamsSchema),
+  [ACT_KIND.TASKS_RESTORE]: {
+    payload: actSchema(tasksRevisionParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not restore that version on this system.",
   },
-  [ACT_KIND.PLANNING_PICTURE_READ]: {
-    payload: actSchema(planningPictureParamsSchema),
-    result: wireResult<PlanningPictureAnswer>(isReadable(planningPictureAnswerSchema)),
+  [ACT_KIND.TASKS_PICTURE_READ]: {
+    payload: actSchema(tasksPictureParamsSchema),
+    result: wireResult<TasksPictureAnswer>(isReadable(tasksPictureAnswerSchema)),
     refusal: "Could not read that picture on this system.",
   },
-  [ACT_KIND.PLANNING_PICTURE_KEEP]: {
-    payload: actSchema(planningPictureKeepParamsSchema),
-    result: wireResult<PlanningPictureKeepAnswer>(isReadable(planningPictureKeepAnswerSchema)),
+  [ACT_KIND.TASKS_PICTURE_KEEP]: {
+    payload: actSchema(tasksPictureKeepParamsSchema),
+    result: wireResult<TasksPictureKeepAnswer>(isReadable(tasksPictureKeepAnswerSchema)),
     refusal: "Could not keep that picture on this system.",
   },
-  [ACT_KIND.PLANNING_PAGE_SOURCE]: {
-    payload: actSchema(planningPageParamsSchema),
-    result: wireResult<PlanningPageSourceAnswer>(isReadable(planningPageSourceAnswerSchema)),
+  [ACT_KIND.TASKS_PAGE_SOURCE]: {
+    payload: actSchema(tasksPageParamsSchema),
+    result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
     refusal: "Could not read that page's source on this system.",
   },
-  [ACT_KIND.PLANNING_WORK_EARLIER]: press(
-    "Could not read that task's earlier work on this system.",
-  ),
-  [ACT_KIND.PLANNING_CONVERSATION_EARLIER]: press(
+  [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
+  [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(
     "Could not read that task's earlier conversation on this system.",
   ),
-  [ACT_KIND.PLANNING_MESSAGES]: {
-    payload: actSchema(planningMessagesParamsSchema),
+  [ACT_KIND.TASKS_MESSAGES]: {
+    payload: actSchema(tasksMessagesParamsSchema),
     result: wireResult<CodingAgentMessagesAnswerView>(
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
@@ -1188,7 +1193,7 @@ export const ACT = {
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
-      inboxPlanId: EffectSchema.NullOr(exactId),
+      inboxTaskId: EffectSchema.NullOr(exactId),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
@@ -1465,7 +1470,7 @@ export const ACT = {
   [ACT_KIND.NOTIFICATIONS_TEST]: press("Could not post a notification on this system."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
-  [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's task forward on this system."),
+  [ACT_KIND.CALL_SHOW_TASK]: press("Could not bring the call's task forward on this system."),
   [ACT_KIND.AVATAR_REPORT]: {
     payload: actSchema(avatarStateSchema),
     result: answersNothing,

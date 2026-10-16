@@ -1,4 +1,4 @@
-import type { PlanArchived } from "@luke/database/models/plan-store";
+import type { TaskArchived } from "@luke/database/models/task-store";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -34,7 +34,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -94,7 +94,7 @@ export const HOSTED_REFUSAL = {
   /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The plan is archived, so it takes nothing until it is brought back; nothing was written. */
-  PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
+  TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
@@ -131,13 +131,13 @@ export function hostedStoreOrUnavailable<A, R>(
  * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
  */
 export function hostedStoreOrArchived<A, R>(
-  effect: Effect.Effect<A, StoreFailure | PlanArchived, R>,
+  effect: Effect.Effect<A, StoreFailure | TaskArchived, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
   return Effect.catch(
     effect,
     (failure): Effect.Effect<never, HostedRefusal> =>
-      "_tag" in failure && failure._tag === "PlanArchived"
-        ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
+      "_tag" in failure && failure._tag === "TaskArchived"
+        ? Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED)
         : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }

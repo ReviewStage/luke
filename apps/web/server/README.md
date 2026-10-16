@@ -148,9 +148,9 @@ it moves every plan standing into its starter's first workspace, and
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
 statement joins into its own where clause. A plan is read and written by
 every member of its workspace, whichever of them started it:
-`planReachableBy` and `reachablePlan` gate every plan statement in
-`plan-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
-and `plan-revisions.ts`, and the voice door's `heldPlan`, on the caller's
+`taskReachableBy` and `reachableTask` gate every plan statement in
+`task-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
+and `plan-revisions.ts`, and the voice door's `heldTask`, on the caller's
 membership of the plan's workspace rather than on the plan's starter. Past
 that gate a shared plan's transcript and a new call's earlier calls are
 every member's calls about it.
@@ -185,7 +185,7 @@ the plan, the board, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
 A voice call is the caller's `voice_sessions` row and meter, landing in the
-plan's one conversation, which `openPlanConversation` answers with its
+plan's one conversation, which `openTaskConversation` answers with its
 opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
@@ -480,7 +480,7 @@ deployment teaches every read to decode both the old shape and the new one,
 and the second, once the first is live, carries the migration that rewrites
 the rows. `0082_plan_template_teammate` shipped in one step, and the release
 still serving refused every plan until its own build went live. Each read
-projects only the columns it answers (`plan-store.ts`'s list reads no part of
+projects only the columns it answers (`task-store.ts`'s list reads no part of
 the document), so a rewrite reaches only the reads of what it rewrote.
 
 ## Where a function runs an Effect
@@ -523,7 +523,7 @@ client out of the fiber it runs on rather than holding one of its own, the
 Drizzle `Database` of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
-Outside `packages/database/src/models/`, `packages/database/src/models/plan-store.ts` is on the same
+Outside `packages/database/src/models/`, `packages/database/src/models/task-store.ts` is on the same
 client, and `packages/database/src/models/voice-session-record.ts` is on it whole, each of its five methods
 answering an effect over the live session row rather than running one.
 `VoiceService` yields those five

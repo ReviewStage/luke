@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
-  type PlanlessAgent,
   PULL_REQUEST_STATE,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_RESPONSE, INBOX_STATUS, INBOX_WIRE_VERSION } from "@luke/features/inbox-wire";
 import type {
-  PlanAgentLine,
-  PlanAgentsSummary,
-  PlanPullRequestLine,
-  PlanSummary,
-} from "@luke/features/plan-wire";
-import type { AppInboxPlan } from "@luke/host/app-state";
+  TaskAgentLine,
+  TaskAgentsSummary,
+  TaskPullRequestLine,
+  TaskSummary,
+} from "@luke/features/task-wire";
+import type { AppInboxTask } from "@luke/host/app-state";
 import { test } from "vitest";
 import { INBOX_HOLDER, planHolder } from "../planning/inbox-model";
 import {
@@ -33,8 +33,8 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 
 /** A plan saved `ago` before now, with the agents its row carries where it has any. */
-function plan(n: number, name: string, ago: number, agents?: PlanAgentsSummary): PlanSummary {
-  const summary: PlanSummary = {
+function plan(n: number, name: string, ago: number, agents?: TaskAgentsSummary): TaskSummary {
+  const summary: TaskSummary = {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
     name,
@@ -46,7 +46,7 @@ function plan(n: number, name: string, ago: number, agents?: PlanAgentsSummary):
   return { ...summary, agents };
 }
 
-function agent(n: number, status: PlanAgentLine["status"], at = NOW - MINUTE): PlanAgentLine {
+function agent(n: number, status: TaskAgentLine["status"], at = NOW - MINUTE): TaskAgentLine {
   return {
     id: `a0000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title: `Agent ${n}`,
@@ -59,17 +59,17 @@ function agent(n: number, status: PlanAgentLine["status"], at = NOW - MINUTE): P
 
 function pullRequest(
   number: number,
-  state: PlanPullRequestLine["state"],
-  checks: PlanPullRequestLine["checks"],
-): PlanPullRequestLine {
+  state: TaskPullRequestLine["state"],
+  checks: TaskPullRequestLine["checks"],
+): TaskPullRequestLine {
   return { number, title: `PR ${number}`, state, checks, additions: 10, deletions: 2 };
 }
 
 /** What a plan's row says of its agents and pull requests. */
 function agents(
-  lines: readonly PlanAgentLine[],
-  pullRequests: readonly PlanPullRequestLine[] = [],
-): PlanAgentsSummary {
+  lines: readonly TaskAgentLine[],
+  pullRequests: readonly TaskPullRequestLine[] = [],
+): TaskAgentsSummary {
   const working = lines.filter(
     (line) =>
       line.status === CODING_AGENT_STATUS.RUNNING || line.status === CODING_AGENT_STATUS.STARTING,
@@ -87,7 +87,7 @@ function board(patch: Partial<FactoryInput>) {
   return factoryBoard({
     plans: [],
     waiting: [],
-    callPlanId: undefined,
+    callTaskId: undefined,
     oneOff: [],
     oneOffWaiting: [],
     now: NOW,
@@ -96,7 +96,7 @@ function board(patch: Partial<FactoryInput>) {
 }
 
 /** Each row's task, or its automation for an agent with no task. */
-const names = (rows: readonly (FactoryStop | FactoryWork | { readonly plan: PlanSummary })[]) =>
+const names = (rows: readonly (FactoryStop | FactoryWork | { readonly plan: TaskSummary })[]) =>
   rows.map((row) => ("plan" in row ? row.plan.name : (row.agent.automationName ?? "no task")));
 
 /** Build's work as a reader scans it: an agent by its title, a pull request by its number, each with its plan. */
@@ -151,7 +151,7 @@ test("the task on this Mac's call stands in Talk however long ago it was saved, 
     3 * LOOKBACK_MS,
     agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
-  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callPlanId: call.id });
+  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
   assert.deepEqual(names(drawn.talking.map((each) => ({ plan: each }))), ["Factory tab"]);
   assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });
@@ -178,9 +178,9 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
     2 * LOOKBACK_MS,
     agents([agent(7, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE)]),
   );
-  const waiting: AppInboxPlan[] = [
+  const waiting: AppInboxTask[] = [
     {
-      planId: billing.id,
+      taskId: billing.id,
       items: [
         {
           id: "i2",
@@ -191,7 +191,7 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
       ],
     },
     {
-      planId: invites.id,
+      taskId: invites.id,
       items: [
         {
           id: "i1",
@@ -220,7 +220,7 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
 });
 
 test("what stops a merge leads Ship: failing checks, then pull requests ready to merge (passing, or no checks to run); one in checks or a draft is still built, and a closed one stands nowhere", () => {
-  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+  const withPullRequest = (n: number, name: string, line: TaskPullRequestLine) =>
     plan(
       n,
       name,
@@ -309,7 +309,7 @@ test("with nothing standing anywhere, the board is empty", () => {
 });
 
 test("an agent that failed before its first turn waits in Build as recent as its task's last activity, however old the task's last save", () => {
-  const turnless: PlanAgentLine = {
+  const turnless: TaskAgentLine = {
     id: "a0000000-0000-4000-8000-000000000001",
     title: "Agent 1",
     model: "anthropic/claude-opus-5.5",
@@ -327,7 +327,7 @@ test("an agent that failed before its first turn waits in Build as recent as its
 });
 
 test("a draft's failing checks are its own work still, standing in Build; only an open pull request's wait in Ship", () => {
-  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+  const withPullRequest = (n: number, name: string, line: TaskPullRequestLine) =>
     plan(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
   const drawn = board({
     plans: [
@@ -376,19 +376,19 @@ test("what waits is every open item the Inbox read of the listed plans and main'
     ],
     [
       {
-        planId: billing.id,
+        taskId: billing.id,
         items: [
           { id: "i1", agentId: "a1", title: "Which account pays out?", postedAt: NOW - HOUR },
         ],
       },
       {
-        planId: invites.id,
+        taskId: invites.id,
         items: [{ id: "i4", agentId: "a2", title: "Send a reminder?", postedAt: NOW - MINUTE }],
       },
     ],
   );
   assert.deepEqual(
-    waiting.map(({ planId, items }) => [planId, items.map((each) => each.title)]),
+    waiting.map(({ taskId: planId, items }) => [planId, items.map((each) => each.title)]),
     [
       [billing.id, ["Which account pays out?"]],
       [invites.id, ["Expire after a week?", "Send a reminder?"]],
@@ -399,11 +399,11 @@ test("what waits is every open item the Inbox read of the listed plans and main'
 /** An agent with no task, as the plan list carries it, its automation's name where it has one. */
 function oneOff(
   n: number,
-  status: PlanlessAgent["status"],
+  status: TasklessAgent["status"],
   activityAt: number,
   automationName?: string,
-): PlanlessAgent {
-  const agent: PlanlessAgent = {
+): TasklessAgent {
+  const agent: TasklessAgent = {
     id: `c0000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     planId: null,
     model: "anthropic/claude-opus-5.5",

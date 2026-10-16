@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -102,7 +102,7 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
 }
 
 /** A plan whose text holds `fence` under a heading. */
-function planWith(fence: string): Plan {
+function planWith(fence: string): Task {
   return { ...DOCUMENT_PLAN, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
 }
 

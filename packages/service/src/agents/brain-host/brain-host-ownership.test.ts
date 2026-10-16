@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openPlanConversation } from "@luke/database/models/plan-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
   insertConversation,
   joinWorkspace,
   openHostedStoreTestDatabase,
   setConversationDeletedAt,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -16,9 +16,9 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../../core.js";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
-import { QUEUE_QUESTION_TOOL } from "../../plans/queue-question.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
+import { QUEUE_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
 import { DEPLOYMENT_PRESENCE } from "./auth.js";
 import {
@@ -273,9 +273,9 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const SESSION = sessions();
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startTask(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
-    await database.run(openPlanConversation(userA, started.id)),
+    await database.run(openTaskConversation(userA, started.id)),
   ).conversationId;
   const target = { userId: userA, conversationId };
   const seat = ownSeat(userA, conversationId);
@@ -326,10 +326,10 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
   const userA = await database.createUser();
   const teammate = await database.createUser();
   const stranger = await database.createUser();
-  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startTask(userA, { name: "Teammate invitations" }));
   await database.run(joinWorkspace(started.workspaceId, teammate));
   const { conversationId } = Option.getOrThrow(
-    await database.run(openPlanConversation(userA, started.id)),
+    await database.run(openTaskConversation(userA, started.id)),
   );
   const target = { userId: userA, conversationId };
   const seat = ownSeat(userA, conversationId);

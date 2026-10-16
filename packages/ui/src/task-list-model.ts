@@ -1,6 +1,6 @@
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { agentTabLabel } from "@luke/features/model-label";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 
 /**
  * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
@@ -57,8 +57,8 @@ export const TASK_ROW = {
 
 /** One row of the list: a task, or an agent an automation started with no task. */
 export type TaskRow =
-  | { readonly kind: typeof TASK_ROW.TASK; readonly plan: PlanSummary }
-  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: PlanlessAgent };
+  | { readonly kind: typeof TASK_ROW.TASK; readonly plan: TaskSummary }
+  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent };
 
 /** The rows of one repository, as the sidebar groups them under its header; null is the rows with none. */
 export interface RepositoryGroup {
@@ -73,12 +73,12 @@ export interface CreatorGroup {
 }
 
 /** A task as a row of the list. */
-export function taskRow(plan: PlanSummary): TaskRow {
+export function taskRow(plan: TaskSummary): TaskRow {
   return { kind: TASK_ROW.TASK, plan };
 }
 
 /** An agent with no task as a row of the list. */
-export function agentRow(agent: PlanlessAgent): TaskRow {
+export function agentRow(agent: TasklessAgent): TaskRow {
   return { kind: TASK_ROW.AGENT, agent };
 }
 
@@ -93,7 +93,7 @@ export function taskRowRepository(row: TaskRow): string | null {
 }
 
 /** Who created a plan, by account id: the creator the wire names, else its owner. */
-function creatorIdOf(plan: PlanSummary): string | undefined {
+function creatorIdOf(plan: TaskSummary): string | undefined {
   return plan.createdBy?.userId ?? plan.ownerId;
 }
 
@@ -111,7 +111,7 @@ function taskRowCreatorId(row: TaskRow): string | undefined {
  * and Cursor. Neither moves while an agent's turn streams, so a row holds its
  * place while the agent works.
  */
-export function taskTime(plan: PlanSummary, order: TaskOrder): number {
+export function taskTime(plan: TaskSummary, order: TaskOrder): number {
   if (order === TASK_ORDER.CREATED) return plan.createdAt;
   return Math.max(plan.updatedAt, plan.agents?.activityAt ?? 0);
 }
@@ -138,7 +138,7 @@ export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskR
 }
 
 /** The plans in the order chosen, as their rows are ordered. */
-export function orderTasks(plans: readonly PlanSummary[], order: TaskOrder): PlanSummary[] {
+export function orderTasks(plans: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
   return orderTaskRows(plans.map(taskRow), order).flatMap((row) =>
     row.kind === TASK_ROW.TASK ? [row.plan] : [],
   );
@@ -210,10 +210,10 @@ export function repositoryLabel(
 
 /** The plans one member created, or every plan where the view names nobody. */
 export function createdByOnly(
-  plans: readonly PlanSummary[],
+  tasks: readonly TaskSummary[],
   createdBy: string | undefined,
-): readonly PlanSummary[] {
-  return createdBy === undefined ? plans : plans.filter((plan) => creatorIdOf(plan) === createdBy);
+): readonly TaskSummary[] {
+  return createdBy === undefined ? tasks : tasks.filter((task) => creatorIdOf(task) === createdBy);
 }
 
 /** The rows one member created, or every row where the view names nobody. */

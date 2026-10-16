@@ -56,30 +56,40 @@ export function appLinkInArguments(argv: readonly string[]): string | undefined 
   return argv.findLast(isAppLink);
 }
 
-/** What a launch hands Electron after the scheme when it claims it: the binary a link starts, and the arguments it starts it with. */
-export type AppLinkClaim = [executable: string, args: string[]];
+/** What a launch does about the app's own scheme as it starts. */
+export const APP_LINK_CLAIM = {
+  /** Asks macOS to send the scheme to this app. */
+  CLAIM: "claim",
+  /** Gives the scheme back where this app holds it, to whichever other app declares it. */
+  RELEASE: "release",
+  /** Leaves the scheme as it stands. */
+  LEAVE: "leave",
+} as const;
+
+export type AppLinkClaim = (typeof APP_LINK_CLAIM)[keyof typeof APP_LINK_CLAIM];
 
 /**
- * Whether this launch asks macOS to send it the app's own scheme, and on
- * what. A packaged build claims it as itself, its bundle declaring the
- * scheme. A live development run asks too, on the Electron binary it runs
- * and the app it was started on, so a link may reach the build
- * `./scripts/run.sh` launched rather than an older Luke installed beside it.
- * Note that the stock Electron bundle a development run is declares no
- * scheme, so whether macOS honours that claim is LaunchServices' to decide;
- * `pnpm package:dir`'s Luke.app declares it, and is the local build a link
- * surely reaches. A fixture or capture run claims nothing, so a
- * deterministic run never takes the developer's links.
+ * What this launch does about the app's own scheme. A packaged build claims
+ * it as itself, its bundle declaring the scheme.
+ *
+ * A development run never claims it. On macOS Electron claims a scheme for
+ * the running bundle and drops the binary and arguments it is handed, so a
+ * development run's claim lands on the stock Electron bundle every checkout
+ * shares; it outlives the run, and the next link launches a bare Electron on
+ * no app, its "To run a local app" page, rather than Luke. A live
+ * development run instead gives back a claim an earlier one left, so the
+ * installed Luke answers links again. `pnpm package:dir`'s Luke.app declares
+ * the scheme and is the local build to try a link against. A fixture or
+ * capture run leaves the scheme alone, so a deterministic run never touches
+ * the developer's links.
  */
 export function appLinkClaim(launch: {
   readonly packaged: boolean;
   readonly live: boolean;
-  readonly executable: string;
-  readonly appPath: string;
-}): AppLinkClaim | undefined {
-  if (launch.packaged) return [launch.executable, []];
-  if (!launch.live) return undefined;
-  return [launch.executable, [launch.appPath]];
+}): AppLinkClaim {
+  if (launch.packaged) return APP_LINK_CLAIM.CLAIM;
+  if (launch.live) return APP_LINK_CLAIM.RELEASE;
+  return APP_LINK_CLAIM.LEAVE;
 }
 
 /** An inbox holding no link and able to open none yet. */

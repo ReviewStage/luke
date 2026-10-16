@@ -8,10 +8,10 @@ import {
   mockModel,
 } from "eve/evals";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../agents/brain-host/bounds.js";
-import { PLANNER_DELEGATE_TOOL } from "../agents/brain-host/planning.js";
+import { BRAIN_DELEGATE_TOOL } from "../agents/brain-host/brain.js";
 import { SEARCH_WEB_TOOL } from "../agents/public-research.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
-import { DRAW_ON_BOARD_TOOL } from "../plans/board-tool.js";
+import { DRAW_ON_BOARD_TOOL } from "../tasks/board-tool.js";
 
 /**
  * The fixture model the end-to-end eval runs the whole host under: a
@@ -29,7 +29,7 @@ import { DRAW_ON_BOARD_TOOL } from "../plans/board-tool.js";
  * fixture's own environment variable and a deployment never names it.
  */
 
-export const SCRIPTED_PLANNING_REPLY = "Who should be able to do that?";
+export const SCRIPTED_BRAIN_REPLY = "Who should be able to do that?";
 /** What a developer's words start with when they ask the scripted planner to research the rest. */
 const SCRIPTED_LOOK_UP = "Look up: ";
 const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
@@ -95,7 +95,7 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
   if (request.toolResults.some((result) => result.name === DRAW_ON_BOARD_TOOL.name)) {
     return { text: SCRIPTED_DRAWN_REPLY };
   }
-  if (request.toolResults.some((result) => result.name === PLANNER_DELEGATE_TOOL.name)) {
+  if (request.toolResults.some((result) => result.name === BRAIN_DELEGATE_TOOL.name)) {
     return { text: SCRIPTED_DELEGATED_REPLY };
   }
   if (request.lastUserMessage?.startsWith(SCRIPTED_DELEGATE)) {
@@ -103,7 +103,7 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
     return {
       toolCalls: [
         {
-          name: PLANNER_DELEGATE_TOOL.name,
+          name: BRAIN_DELEGATE_TOOL.name,
           input: { task: `${SCRIPTED_LOOK_UP}${question}` },
         },
       ],
@@ -124,7 +124,7 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
     const command = request.lastUserMessage.slice(SCRIPTED_READ.length);
     return { toolCalls: [{ name: RUN_IN_REPOSITORY_TOOL.name, input: { command } }] };
   }
-  return { text: SCRIPTED_PLANNING_REPLY };
+  return { text: SCRIPTED_BRAIN_REPLY };
 }
 
 export function scriptedModel(): LanguageModel {

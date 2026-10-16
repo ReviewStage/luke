@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { plan } from "../../schemas/plan.js";
+import { task } from "../../schemas/plan.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
   keepPlanAttachment,
@@ -16,7 +16,7 @@ import {
   purgeUnsavedAttachments,
   readPlanAttachment,
 } from "../plan-attachments.js";
-import { createPlan, savePlanText } from "../plan-store.js";
+import { createTask, savePlanText } from "../task-store.js";
 
 /**
  * A plan's pictures over a real dialect: kept by a member, read by every
@@ -41,14 +41,14 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** A plan in a workspace the owner made and the teammate joined, and an account in neither. */
-const openSharedPlan = Effect.gen(function* () {
+const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
   const outsider = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const { id: planId } = yield* createPlan(owner, { organizationId: workspace, name: "Invites" });
-  return { owner, teammate, outsider, planId };
+  const { id: taskId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
+  return { owner, teammate, outsider, taskId };
 });
 
 /** The id a keep answered, failing the test where it kept nothing. */
@@ -63,53 +63,53 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
     "a picture a teammate pasted reads for every member of the plan's workspace, and as nothing for anyone else",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId } = yield* openSharedPlan;
+        const { owner, teammate, outsider, taskId } = yield* openSharedTask;
 
-        const id = keptId(yield* keepPlanAttachment(teammate, planId, PICTURE));
+        const id = keptId(yield* keepPlanAttachment(teammate, taskId, PICTURE));
 
-        const read = yield* readPlanAttachment(owner, planId, id);
+        const read = yield* readPlanAttachment(owner, taskId, id);
         assert.ok(Option.isSome(read));
         assert.equal(read.value.contentType, PICTURE_TYPE.PNG);
         assert.deepEqual([...read.value.bytes], [...PICTURE.bytes]);
-        assert.ok(Option.isNone(yield* readPlanAttachment(outsider, planId, id)));
+        assert.ok(Option.isNone(yield* readPlanAttachment(outsider, taskId, id)));
         assert.equal(
-          (yield* keepPlanAttachment(outsider, planId, PICTURE)).status,
-          PLAN_ATTACHMENT_KEEP.NO_PLAN,
+          (yield* keepPlanAttachment(outsider, taskId, PICTURE)).status,
+          PLAN_ATTACHMENT_KEEP.NO_TASK,
         );
       }),
   );
 
   it.effect("a picture is read only under the plan it was kept on", () =>
     Effect.gen(function* () {
-      const first = yield* openSharedPlan;
-      const second = yield* openSharedPlan;
-      const id = keptId(yield* keepPlanAttachment(first.owner, first.planId, PICTURE));
+      const first = yield* openSharedTask;
+      const second = yield* openSharedTask;
+      const id = keptId(yield* keepPlanAttachment(first.owner, first.taskId, PICTURE));
 
-      assert.ok(Option.isNone(yield* readPlanAttachment(second.owner, second.planId, id)));
+      assert.ok(Option.isNone(yield* readPlanAttachment(second.owner, second.taskId, id)));
     }),
   );
 
   it.effect("a plan keeps no more pictures than its bound, and an archived plan keeps none", () =>
     Effect.gen(function* () {
-      const { owner, planId } = yield* openSharedPlan;
+      const { owner, taskId } = yield* openSharedTask;
       for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN; kept += 1) {
-        keptId(yield* keepPlanAttachment(owner, planId, PICTURE));
+        keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
       }
 
       assert.equal(
-        (yield* keepPlanAttachment(owner, planId, PICTURE)).status,
+        (yield* keepPlanAttachment(owner, taskId, PICTURE)).status,
         PLAN_ATTACHMENT_KEEP.TOO_MANY,
       );
 
-      const other = yield* openSharedPlan;
+      const other = yield* openSharedTask;
       const db = yield* Database;
       yield* db
-        .update(plan)
+        .update(task)
         .set({ archivedAt: new Date(0) })
-        .where(eq(plan.id, other.planId));
+        .where(eq(task.id, other.taskId));
       assert.equal(
-        (yield* keepPlanAttachment(other.owner, other.planId, PICTURE)).status,
-        PLAN_ATTACHMENT_KEEP.NO_PLAN,
+        (yield* keepPlanAttachment(other.owner, other.taskId, PICTURE)).status,
+        PLAN_ATTACHMENT_KEEP.NO_TASK,
       );
     }),
   );
@@ -118,13 +118,13 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
     "the sweep deletes the pictures uploaded before its cutoff that no save named, and keeps every picture a save did",
     () =>
       Effect.gen(function* () {
-        const { owner, planId } = yield* openSharedPlan;
-        const named = keptId(yield* keepPlanAttachment(owner, planId, PICTURE));
-        const undone = keptId(yield* keepPlanAttachment(owner, planId, PICTURE));
-        const address = planAttachmentAddress({ planId, attachmentId: named }, "acme");
-        yield* savePlanText(owner, planId, `## Approach\n\n![The mock](${address})\n`);
+        const { owner, taskId } = yield* openSharedTask;
+        const named = keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
+        const undone = keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
+        const address = planAttachmentAddress({ taskId, attachmentId: named }, "acme");
+        yield* savePlanText(owner, taskId, `## Approach\n\n![The mock](${address})\n`);
         // A later save that no longer names it leaves it saved, since a restore can bring it back.
-        yield* savePlanText(owner, planId, "## Approach\n\nNo picture now.\n");
+        yield* savePlanText(owner, taskId, "## Approach\n\nNo picture now.\n");
 
         // Every picture here was uploaded at the test clock's start; the cutoff is the sweep's, a day before its own now.
         assert.equal(
@@ -136,8 +136,8 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
         let purged = yield* purgeUnsavedAttachments(new Date(1));
         while (purged > 0) purged = yield* purgeUnsavedAttachments(new Date(1));
 
-        assert.ok(Option.isSome(yield* readPlanAttachment(owner, planId, named)));
-        assert.ok(Option.isNone(yield* readPlanAttachment(owner, planId, undone)));
+        assert.ok(Option.isSome(yield* readPlanAttachment(owner, taskId, named)));
+        assert.ok(Option.isNone(yield* readPlanAttachment(owner, taskId, undone)));
       }),
   );
 });

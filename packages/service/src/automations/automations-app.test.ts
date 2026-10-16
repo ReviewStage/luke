@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { createPlan } from "@luke/database/models/plan-store";
+import { createTask } from "@luke/database/models/task-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -13,7 +13,7 @@ import {
   joinWorkspace,
   leaveWorkspace,
   openWorkspace,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import {
   automationPath,
@@ -187,25 +187,25 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 const openAccounts = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const other = yield* openGithubUser();
-  const plan = yield* startPlan(owner, {
+  const task = yield* startTask(owner, {
     name: "Issue triage",
     repository: `${RELAY.owner}/${RELAY.name}`,
   });
   const installation = INSTALLATIONS[installationsConnected++];
   assert.ok(installation);
-  yield* connectWorkspaceGitHub(plan.workspaceId, installation);
-  const bare = yield* startPlan(owner, { name: "No repository yet" });
+  yield* connectWorkspaceGitHub(task.workspaceId, installation);
+  const bare = yield* startTask(owner, { name: "No repository yet" });
   const { ask, opened } = yield* standing(
     new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]),
   );
-  return { owner, other, plan, bare, ask, opened };
+  return { owner, other, task, bare, ask, opened };
 });
 
-const weekdays = (planId: string) => ({
-  planId,
+const weekdays = (taskId: string) => ({
+  planId: taskId,
   name: "Morning triage",
   trigger: {
     kind: AUTOMATION_TRIGGER.SCHEDULE,
@@ -226,7 +226,7 @@ const pausedByAnOlderBuild = (id: string) =>
 
 /** The weekday triage made on a workspace with the repositories named, no plan between. */
 const onWorkspace = (workspaceId: string, repositories: readonly string[]) => {
-  const { planId: _planId, ...rest } = weekdays("");
+  const { planId: _taskId, ...rest } = weekdays("");
   return { ...rest, workspaceId, repositories };
 };
 
@@ -235,7 +235,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation is made on a workspace with its repositories and no plan, listed by its workspace, and given other repositories, each read through the workspace's installation",
     () =>
       Effect.gen(function* () {
-        const { owner, other, plan, ask } = yield* openAccounts;
+        const { owner, other, task, ask } = yield* openAccounts;
         const relay = `${RELAY.owner}/${RELAY.name}`;
 
         const made = readAnswer(
@@ -243,20 +243,20 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: onWorkspace(plan.workspaceId, [relay.toLowerCase()]),
+            body: onWorkspace(task.workspaceId, [relay.toLowerCase()]),
           }),
         );
         const { automation } = made;
         assert.deepEqual(
           [automation.planId, automation.planName, automation.workspaceId, automation.repositories],
-          [null, null, plan.workspaceId, [relay]],
+          [null, null, task.workspaceId, [relay]],
           "no plan, the workspace, and the repository as GitHub spells it",
         );
 
         const listed = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?workspaceId=${plan.workspaceId}`, owner),
+          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?workspaceId=${task.workspaceId}`, owner),
         );
         assert.deepEqual(
           listed.automations.map((each) => each.id),
@@ -290,30 +290,30 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
-        const { owner, other, plan, ask } = yield* openAccounts;
+        const { owner, other, task, ask } = yield* openAccounts;
         const relay = `${RELAY.owner}/${RELAY.name}`;
         const post = (by: string, body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
 
-        const outside = yield* post(other, onWorkspace(plan.workspaceId, [relay]));
+        const outside = yield* post(other, onWorkspace(task.workspaceId, [relay]));
         const both = yield* post(owner, {
-          ...onWorkspace(plan.workspaceId, [relay]),
-          planId: plan.id,
+          ...onWorkspace(task.workspaceId, [relay]),
+          planId: task.id,
         });
-        const { repositories: _none, ...bare } = onWorkspace(plan.workspaceId, [relay]);
+        const { repositories: _none, ...bare } = onWorkspace(task.workspaceId, [relay]);
         const noRepositories = yield* post(owner, bare);
-        const unreached = yield* post(owner, onWorkspace(plan.workspaceId, ["acme/elsewhere"]));
+        const unreached = yield* post(owner, onWorkspace(task.workspaceId, ["acme/elsewhere"]));
         const onGitHub = yield* post(owner, {
-          ...onWorkspace(plan.workspaceId, [relay]),
+          ...onWorkspace(task.workspaceId, [relay]),
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
         });
         // One standing on a plan takes the plan's repository and no other.
-        const onPlan = readAnswer(
+        const onTask = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* post(owner, weekdays(plan.id)),
+          yield* post(owner, weekdays(task.id)),
         );
-        const elsewhere = yield* ask(automationPath(onPlan.automation.id), owner, {
+        const elsewhere = yield* ask(automationPath(onTask.automation.id), owner, {
           method: "PATCH",
           body: { repositories: [relay] },
         });
@@ -343,7 +343,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation on a workspace changes to a GitHub event, as it may be made on one, and so does one on a plan",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const relay = `${RELAY.owner}/${RELAY.name}`;
         const onGitHub = {
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
@@ -354,8 +354,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
             (answer) =>
               readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
           );
-        const onWorkspaceMade = yield* made(onWorkspace(plan.workspaceId, [relay]));
-        const onPlanMade = yield* made(weekdays(plan.id));
+        const onWorkspaceMade = yield* made(onWorkspace(task.workspaceId, [relay]));
+        const onTaskMade = yield* made(weekdays(task.id));
 
         const changed = readAnswer(
           automationAnswerSchema,
@@ -365,16 +365,16 @@ it.layer(getTestDB())("the automation routes", (it) => {
             body: onGitHub,
           }),
         );
-        const onPlanChanged = yield* ask(automationPath(onPlanMade.id), owner, {
+        const onTaskChanged = yield* ask(automationPath(onTaskMade.id), owner, {
           method: "PATCH",
           body: onGitHub,
         });
 
         assert.deepEqual(changed.automation.trigger, onGitHub.trigger);
         assert.equal(
-          onPlanChanged.status,
+          onTaskChanged.status,
           HOSTED_HTTP_STATUS.OK,
-          JSON.stringify(onPlanChanged.body),
+          JSON.stringify(onTaskChanged.body),
         );
       }),
   );
@@ -383,7 +383,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation is made with its schedule's first due instant and read, changed, and deleted by its own account alone",
     () =>
       Effect.gen(function* () {
-        const { owner, other, plan, ask } = yield* openAccounts;
+        const { owner, other, task, ask } = yield* openAccounts;
         const now = yield* Clock.currentTimeMillis;
 
         const made = readAnswer(
@@ -391,7 +391,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(plan.id),
+            body: weekdays(task.id),
           }),
         );
 
@@ -408,7 +408,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const listed = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=${plan.id}`, owner),
+          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=${task.id}`, owner),
         );
         assert.deepEqual(
           listed.automations.map((each) => each.id),
@@ -459,10 +459,10 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation is refused where its schedule fires too often, its model is not offered, its plan names no repository, or its body names a key it should not",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, bare, ask } = yield* openAccounts;
+        const { owner, task, bare, ask } = yield* openAccounts;
         const make = (body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
-        const base = weekdays(plan.id);
+        const base = weekdays(task.id);
 
         const tooOften = yield* make({ ...base, trigger: { ...base.trigger, cron: "* * * * *" } });
         const unknownZone = yield* make({
@@ -498,14 +498,14 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a webhook's secret is answered once and kept only as its hash, and a paused automation resumed is due again with why it was paused cleared",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
 
         const hooked = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...weekdays(plan.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+            body: { ...weekdays(task.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
           }),
         );
         const secret = hooked.webhookSecret ?? "";
@@ -525,7 +525,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(plan.id),
+            body: weekdays(task.id),
           }),
         ).automation;
         yield* pausedByAnOlderBuild(scheduled.id);
@@ -560,7 +560,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an edit whose action names no servers keeps the ones switched off, as a desktop from before sends it, and one that names none on switches every one back",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task: plan, ask } = yield* openAccounts;
         const made = weekdays(plan.id);
         const { automation } = readAnswer(
           automationAnswerSchema,
@@ -609,7 +609,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a run whose agent failed is read back in the history with why it failed, as the agent's own end line says it",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task: plan, ask } = yield* openAccounts;
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -657,13 +657,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a Run now is one run per key that starts the automation's agent, read back in the history with the agent's status",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask, opened } = yield* openAccounts;
+        const { owner, task, ask, opened } = yield* openAccounts;
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(plan.id),
+            body: weekdays(task.id),
           }),
         );
         const key = randomUUID();
@@ -706,13 +706,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a webhook sent again keeps its secret, the owner's own pause clears why the service paused it, a prompt at its bound fits however JSON spells it, and a Run now key must be a UUID",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const hooked = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...weekdays(plan.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+            body: { ...weekdays(task.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
           }),
         ).automation;
         const hashOf = (id: string) =>
@@ -748,7 +748,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const escaped = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
           method: "POST",
           body: {
-            ...weekdays(plan.id),
+            ...weekdays(task.id),
             action: {
               kind: AUTOMATION_ACTION.CODING_AGENT,
               prompt: `${"\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS - 1)}x`,
@@ -769,13 +769,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an automation keeps whose it is, where its runs land, and whether a successful run's agent is archived; a workspace scope in a personal workspace and an agent the account cannot read are refused",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const made = (body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* made(weekdays(plan.id)),
+          yield* made(weekdays(task.id)),
         );
         const { run } = readAnswer(
           automationRunAnswerSchema,
@@ -808,19 +808,19 @@ it.layer(getTestDB())("the automation routes", (it) => {
             .insert(personalWorkspace)
             .values({ userId: owner, organizationId: personal, createdAt: new Date(0) }),
         );
-        const personalPlan = yield* createPlan(owner, {
+        const personalTask = yield* createTask(owner, {
           name: "Just mine",
           repository: `${RELAY.owner}/${RELAY.name}`,
           organizationId: personal,
         });
         const inPersonalWorkspace = yield* made({
-          ...weekdays(personalPlan.id),
+          ...weekdays(personalTask.id),
           scope: AUTOMATION_SCOPE.WORKSPACE,
         });
         const shared = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* made({ ...weekdays(plan.id), scope: AUTOMATION_SCOPE.WORKSPACE }),
+          yield* made({ ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE }),
         ).automation;
 
         assert.deepEqual(
@@ -852,11 +852,11 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a personal automation is its creator's, seen, paused, and deleted by owners and admins; a workspace one is seen, run, and paused by every member and changed by its creator and admins; a creator who left reaches nothing of theirs",
     () =>
       Effect.gen(function* () {
-        const { owner, plan } = yield* openAccounts;
+        const { owner, task } = yield* openAccounts;
         const member = yield* openGithubUser();
         const admin = yield* openGithubUser();
-        yield* joinWorkspace(plan.workspaceId, member, WORKSPACE_ROLE.MEMBER);
-        yield* joinWorkspace(plan.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
+        yield* joinWorkspace(task.workspaceId, member, WORKSPACE_ROLE.MEMBER);
+        yield* joinWorkspace(task.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
         // The plugin's role text may name several roles; this admin is one only among them.
         yield* Database.use((db) =>
           db
@@ -899,12 +899,12 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const remove = (by: string, id: string) =>
           Effect.map(ask(automationPath(id), by, { method: "DELETE" }), (answer) => answer.status);
 
-        const personal = yield* make(owner, weekdays(plan.id));
+        const personal = yield* make(owner, weekdays(task.id));
         const shared = yield* make(owner, {
-          ...weekdays(plan.id),
+          ...weekdays(task.id),
           scope: AUTOMATION_SCOPE.WORKSPACE,
         });
-        const leavers = yield* make(member, weekdays(plan.id));
+        const leavers = yield* make(member, weekdays(task.id));
 
         assert.deepEqual(yield* listed(member), [shared.id, leavers.id].toSorted());
         assert.deepEqual(
@@ -945,7 +945,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           "an admin changes the workspace's, and pauses but neither changes nor runs a personal one",
         );
 
-        yield* leaveWorkspace(plan.workspaceId, member);
+        yield* leaveWorkspace(task.workspaceId, member);
         assert.deepEqual(yield* listed(member), [], "a creator who left reaches nothing of theirs");
         assert.equal(
           yield* remove(admin, leavers.id),
@@ -959,16 +959,16 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "each automation says whether the account reading it made it, the one it made, listed, and read alike",
     () =>
       Effect.gen(function* () {
-        const { owner, plan } = yield* openAccounts;
+        const { owner, task } = yield* openAccounts;
         const member = yield* openGithubUser();
-        yield* joinWorkspace(plan.workspaceId, member, WORKSPACE_ROLE.MEMBER);
+        yield* joinWorkspace(task.workspaceId, member, WORKSPACE_ROLE.MEMBER);
         const { ask } = yield* standing(
           new Map([
             [`Bearer ${owner}`, owner],
             [`Bearer ${member}`, member],
           ]),
         );
-        const shared = { ...weekdays(plan.id), scope: AUTOMATION_SCOPE.WORKSPACE };
+        const shared = { ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE };
         const make = (by: string) =>
           Effect.map(
             ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body: shared }),
@@ -1005,13 +1005,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "sending enabled as it stands moves no due instant, and a plan filter that names no plan is refused as invalid",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(plan.id),
+            body: weekdays(task.id),
           }),
         );
         // The due instant as the sweep leaves it once it has moved a schedule on.

@@ -5,15 +5,15 @@ import type {
   VoiceSessionRecord,
 } from "@luke/database/models/voice-session-record";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import {
+  callOpeningHistory,
   decodeLivePayload,
   developerSeedItem,
   type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_SESSION_OUTCOME,
   liveSessionConfig,
-  planningOpeningHistory,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   seedItemTokens,
@@ -71,7 +71,7 @@ type AdmittedAccount =
   | {
       accountId: string;
       /** The plan the call is about, read as the account holds it. */
-      plan: Plan;
+      task: Task;
     }
   | Refusal;
 
@@ -87,7 +87,7 @@ type Opened =
       /** The account the session is billed to. */
       accountId: string;
       /** The plan the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
-      planId: string;
+      taskId: string;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
       /** The store's own id for the session's row, which its avatar rows name; none where the row is another account's. */
@@ -135,15 +135,15 @@ function sessionsInput(frame: SessionCreateFrame): readonly InitialItem[] | unde
 }
 
 /** What the plan seed opens with, so the voice reads it as the service's note rather than the developer's words. */
-const PLAN_SEED_MARKER = "[task]";
+const TASK_SEED_MARKER = "[task]";
 
 /**
  * Whether a plan is still as it was started: nobody has written it. Note that
  * its text is no mark of that, because it starts as the account's own
  * template, which holds whatever its developer wrote into it.
  */
-function planUntouched(plan: Plan): boolean {
-  return plan.lastEdit === undefined;
+function taskUntouched(task: Task): boolean {
+  return task.lastEdit === undefined;
 }
 
 /** What the history of earlier calls opens with, read the same way as the plan seed. */
@@ -154,7 +154,7 @@ const EARLIER_CALLS_MARKER = "[earlier calls]";
  * a long conversation never crowds the document out; the plan takes more
  * wherever the history leaves room.
  */
-const PLAN_SEED_FLOOR_TOKENS = 5_000;
+const TASK_SEED_FLOOR_TOKENS = 5_000;
 
 /**
  * The plan a planning call is about, as one developer message: its name and
@@ -165,18 +165,18 @@ const PLAN_SEED_FLOOR_TOKENS = 5_000;
  * continues one opened a brand-new plan by looking for the progress it was
  * told stood.
  */
-function planSeedText(plan: Plan, talkedAbout: boolean): string {
-  const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
+function taskSeedText(task: Task, talkedAbout: boolean): string {
+  const assumptions = task.document.assumptions.map((assumption) => `- ${assumption.text}`);
   const standing = talkedAbout
     ? "This call continues the task below, its saved plan, and the conversation about it after them. It is not a new task."
-    : planUntouched(plan)
+    : taskUntouched(task)
       ? "This call starts the new task below. Nothing in its plan is answered yet."
       : "This call continues the task below and its saved plan. It is not a new task.";
   return [
-    `${PLAN_SEED_MARKER} ${standing}`,
-    `Name: ${plan.name}`,
+    `${TASK_SEED_MARKER} ${standing}`,
+    `Name: ${task.name}`,
     "",
-    plan.document.body,
+    task.document.body,
     ...(assumptions.length === 0 ? [] : ["", "Assumptions:", ...assumptions]),
   ].join("\n");
 }
@@ -247,27 +247,27 @@ function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string
  */
 function startupInput(
   input: readonly InitialItem[],
-  plan: Plan,
+  task: Task,
   earlier: readonly EarlierCallLine[],
 ): readonly InitialItem[] {
-  const opening = planningOpeningHistory();
+  const opening = callOpeningHistory();
   const openingRoom = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens([opening]);
   if (input.length + 1 > LIVE_INPUT_BOUNDS.MESSAGES || seedItemTokens(input) > openingRoom) {
     return input;
   }
   if (input.length + 1 >= LIVE_INPUT_BOUNDS.MESSAGES) return [...input, opening];
   const room = openingRoom - seedItemTokens(input);
-  const planFloor = Math.min(room, PLAN_SEED_FLOOR_TOKENS, startupTokens(planSeedText(plan, true)));
+  const taskFloor = Math.min(room, TASK_SEED_FLOOR_TOKENS, startupTokens(taskSeedText(task, true)));
   // The plan's seed and the transcript are one message each, and the plan's is kept first.
   const said =
     input.length + 3 > LIVE_INPUT_BOUNDS.MESSAGES
       ? []
-      : newestWithin(earlier, room - planFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
+      : newestWithin(earlier, room - taskFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
   const history =
     said.length === 0 ? [] : [developerSeedItem(`${EARLIER_CALLS_NOTE}\n\n${said.join("\n")}`)];
-  const seed = startupPrefix(planSeedText(plan, said.length > 0), room - seedItemTokens(history));
-  const planItems = seed.length <= PLAN_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
-  return [...planItems, ...history, ...input, opening];
+  const seed = startupPrefix(taskSeedText(task, said.length > 0), room - seedItemTokens(history));
+  const taskItems = seed.length <= TASK_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
+  return [...taskItems, ...history, ...input, opening];
 }
 
 /**
@@ -338,17 +338,17 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    */
   const admitAccount = (
     admission: Admission,
-    planId: string,
+    taskId: string,
   ): Effect.Effect<AdmittedAccount, SessionFailure, DatabaseServices> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
       if (Option.isNone(account)) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       const accountId = account.value;
-      const plan = yield* record.heldPlan({ userId: accountId, planId });
-      if (plan === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
-      if (plan.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
+      const task = yield* record.heldTask({ userId: accountId, taskId });
+      if (task === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
+      if (task.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
       yield* accounts.spend(accountId);
-      return { accountId, plan };
+      return { accountId, task };
     });
 
   /**
@@ -377,12 +377,12 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if ("refusal" in account) return account;
       const earlier = yield* record.earlierCalls({
         userId: account.accountId,
-        planId: frame.planId,
+        taskId: frame.planId,
       });
       const config = liveSessionConfig({
         model: options.model,
         voice: frame.voice,
-        input: startupInput(input, account.plan, earlier),
+        input: startupInput(input, account.task, earlier),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
       });
@@ -395,7 +395,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const voiceSessionId = yield* record.register({
         userId: account.accountId,
         sessionId,
-        planId: frame.planId,
+        taskId: frame.planId,
         attachId,
         model: config.model,
       });
@@ -415,7 +415,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       return {
         sessionId,
         accountId: account.accountId,
-        planId: frame.planId,
+        taskId: frame.planId,
         attachId,
         voiceSessionId,
         started: false,
@@ -448,10 +448,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
       // A session no plan was bound to is no call this service still runs.
-      if (owned.planId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+      if (owned.taskId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
-      const plan = yield* record.heldPlan({ userId: accountId, planId: owned.planId });
-      if (plan?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
+      const task = yield* record.heldTask({ userId: accountId, taskId: owned.taskId });
+      if (task?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.TASK_ARCHIVED);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be
@@ -465,7 +465,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       return {
         sessionId: frame.sessionId,
         accountId,
-        planId: owned.planId,
+        taskId: owned.taskId,
         attachId,
         voiceSessionId: owned.voiceSessionId,
         started: true,

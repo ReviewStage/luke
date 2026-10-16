@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import {
   PLAN_ACTOR,
-  type Plan,
   type PlanSectionEdit,
-  type PlanSummary,
-} from "@luke/features/plan-wire";
+  type Task,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -38,7 +38,7 @@ function changedFor(
   readerId: string | undefined,
   edits: readonly Omit<PlanSectionEdit, "at" | "duringCall">[],
 ): string[] {
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     sectionEdits: edits.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
@@ -74,7 +74,7 @@ test("a developer's save the window cannot place counts as the reader's, as befo
 });
 
 test("a reader's id arriving while the plan stays open lights a teammate's saves read without it", () => {
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
@@ -103,15 +103,15 @@ interface Drawn {
 /** A window as a test drives it: what it drew last, a render with a plan open or none, and `summary` marked unread or read from a menu. */
 interface TestWindow {
   readonly drawn: Drawn;
-  readonly draw: (open: Plan | undefined) => void;
+  readonly draw: (open: Task | undefined) => void;
   readonly mark: (unread: boolean) => void;
 }
 
 /** A window drawing `summary`'s row and, while `open` is given, that plan open, re-rendered by `draw`. */
-function windowOn(summary: PlanSummary): TestWindow {
+function windowOn(summary: TaskSummary): TestWindow {
   const drawn: Drawn = { changed: [], unread: false };
   let marks: ReturnType<typeof useReadMarks> | undefined;
-  function Window({ open }: { open: Plan | undefined }) {
+  function Window({ open }: { open: Task | undefined }) {
     drawn.changed = [...usePlanLooks(open, DEAN.userId).changed].sort();
     drawn.unread = useUnreadPlans([summary], { listRead: true, staged: false })(summary);
     marks = useReadMarks();
@@ -120,14 +120,14 @@ function windowOn(summary: PlanSummary): TestWindow {
   const root = createRoot(document.createElement("div"));
   roots.push(root);
   const registry = AtomRegistry.make();
-  const draw = (open: Plan | undefined) =>
+  const draw = (open: Task | undefined) =>
     act(() => root.render(onRegistry(registry, createElement(Window, { open }))));
   const mark = (unread: boolean) => act(() => marks?.mark(summary, unread));
   return { drawn, draw, mark };
 }
 
 test("a plan opened is read at once, and still lights what changed since the last look for that visit alone", () => {
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
@@ -150,7 +150,7 @@ test("a plan opened is read at once, and still lights what changed since the las
 });
 
 test("a plan marked unread lights, as it next opens, what changed since its last look and nothing before it", () => {
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [
@@ -171,10 +171,10 @@ test("a plan marked unread lights, as it next opens, what changed since its last
 });
 
 test("a save landing while the plan stays open is read as it lands, and stays read once the plan is left", () => {
-  const plan: Plan = { ...DOCUMENT_PLAN, updatedAt: LOOKED_AT };
+  const plan: Task = { ...DOCUMENT_PLAN, updatedAt: LOOKED_AT };
   window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
   window.localStorage.setItem("luke.planLooksSeeded", "1");
-  const saved: Plan = {
+  const saved: Task = {
     ...plan,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [
@@ -193,12 +193,12 @@ test("a save landing while the plan stays open is read as it lands, and stays re
 
 test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
   const charles = { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES };
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [{ ...charles, at: LOOKED_AT + 1, duringCall: false }],
   };
-  const saved: Plan = {
+  const saved: Task = {
     ...plan,
     updatedAt: LOOKED_AT + 2,
     sectionEdits: [
@@ -209,14 +209,14 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
   const stay = (dismissing: boolean) => {
     window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
     let looks = NO_LOOKS;
-    function Reader({ open, readerId }: { open: Plan; readerId: string | undefined }) {
+    function Reader({ open, readerId }: { open: Task; readerId: string | undefined }) {
       looks = usePlanLooks(open, readerId);
       return null;
     }
     const root = createRoot(document.createElement("div"));
     roots.push(root);
     const registry = AtomRegistry.make();
-    const draw = (open: Plan, readerId: string | undefined) =>
+    const draw = (open: Task, readerId: string | undefined) =>
       act(() => root.render(onRegistry(registry, createElement(Reader, { open, readerId }))));
     draw(plan, undefined);
     if (dismissing) act(() => looks.dismiss());

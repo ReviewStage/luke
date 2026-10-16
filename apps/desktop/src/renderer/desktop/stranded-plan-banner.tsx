@@ -1,4 +1,4 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { strandedHome, useMovePlanDialog } from "./move-plan-dialog";
 import { PlanBanner } from "./plan-banner";
@@ -31,7 +31,7 @@ interface StrandedPlanNotice {
 /** The open plan's banner while it is stranded, nothing otherwise, and the dialog its press opens. */
 export function useStrandedPlanBanner(
   plans: PlansControl,
-  plan: PlanSummary | undefined,
+  plan: TaskSummary | undefined,
 ): StrandedPlanNotice {
   const moving = useMovePlanDialog(plans, plan);
   const home = plan === undefined ? undefined : strandedHome(plans, plan);

@@ -14,58 +14,60 @@ import { Effect, Schema } from "effect";
 export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
   /** The panel's Plans tab shows: the plan list read now, and the active plan's document with it. */
-  PLANNING_REFRESH: "planning.refresh",
+  TASKS_REFRESH: "tasks.refresh",
   /** One plan made the active one and its saved document read, replacing whichever was active. */
-  PLANNING_OPEN: "planning.open",
+  TASKS_OPEN: "tasks.open",
   /** The developer left the open plan: its call ends and no plan is active. */
-  PLANNING_CLOSE: "planning.close",
+  TASKS_CLOSE: "tasks.close",
   /** A named plan started on the service, on the repository it names where it names one, and made the active one. */
-  PLANNING_START: "planning.start",
+  TASKS_START: "tasks.start",
   /** One plan deleted on the service; deleting the open plan ends its call and leaves no plan active. */
-  PLANNING_DELETE: "planning.delete",
+  TASKS_DELETE: "tasks.delete",
   /** One plan renamed on the service; the list and the open document take the name it answered without reading either again. */
-  PLANNING_RENAME: "planning.rename",
+  TASKS_RENAME: "tasks.rename",
   /** One plan pinned or unpinned on the service; the list and the open document take the plan it answered without reading either again. */
-  PLANNING_PIN: "planning.pin",
-  PLANNING_PIN_REPOSITORY: "planning.pinRepository",
+  TASKS_PIN: "tasks.pin",
+  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One plan archived or brought back on the service, taken in place as a pin is; the open plan stays open either way. */
-  PLANNING_ARCHIVE: "planning.archive",
+  TASKS_ARCHIVE: "tasks.archive",
   /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
-  PLANNING_REPOSITORIES: "planning.repositories",
+  TASKS_REPOSITORIES: "tasks.repositories",
   /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
-  PLANNING_SET_REPOSITORY: "planning.setRepository",
+  TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** One plan moved to another of the account's workspaces on the service; the list and the open document take the plan it answered without reading either again. */
-  PLANNING_MOVE: "planning.move",
+  TASKS_MOVE: "tasks.move",
   /** The developer's edit of a plan's document saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
-  PLANNING_EDIT: "planning.edit",
+  TASKS_EDIT: "tasks.edit",
   /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
-  PLANNING_WORK_EARLIER: "planning.workEarlier",
+  TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The page of the open plan's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
-  PLANNING_CONVERSATION_EARLIER: "planning.conversationEarlier",
+  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
   /** One page of a plan's conversation as an agent's transcript is read, or a planning worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
-  PLANNING_MESSAGES: "planning.messages",
+  TASKS_MESSAGES: "tasks.messages",
   /** A window of a file of one plan's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
-  PLANNING_FILE: "planning.file",
+  TASKS_FILE: "tasks.file",
   /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  PLANNING_TREE: "planning.tree",
+  TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  PLANNING_SKILLS: "planning.skills",
+  TASKS_SKILLS: "planning.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  PLANNING_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "planning.pullRequest",
+  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  TASKS_ISSUE: "tasks.issue",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
-  PLANNING_REVISIONS: "planning.revisions",
+  TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
-  PLANNING_REVISION: "planning.revision",
+  TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
-  PLANNING_PAGE: "planning.page",
+  TASKS_PAGE: "planning.page",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
-  PLANNING_PICTURE: "planning.picture",
+  TASKS_PICTURE: "planning.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
-  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "planning.pictureKeep",
   /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
-  PLANNING_RESTORE: "planning.restore",
+  TASKS_RESTORE: "tasks.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
-  PLANNING_BOARD_SAVE: "planning.boardSave",
+  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
@@ -372,7 +374,7 @@ const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
-  planId: text,
+  taskId: text,
 });
 
 /**
@@ -524,7 +526,7 @@ export const GATEWAY_EVENT = {
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's plans, active plan, and document, whole, whenever a read moved them. */
-  PLANNING_CHANGED: "planning.changed",
+  TASKS_CHANGED: "tasks.changed",
   /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */

@@ -68,7 +68,7 @@ export function useRepositoriesRead(workspaceId: string): RepositoriesRead {
     let live = true;
     setFailed(false);
     Promise.all([
-      act(ACT_KIND.PLANNING_REPOSITORIES, { workspaceId }),
+      act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }),
       act(ACT_KIND.PR_RUN_COMMANDS, { workspaceId }),
     ]).then(
       ([repositories, commands]) => {

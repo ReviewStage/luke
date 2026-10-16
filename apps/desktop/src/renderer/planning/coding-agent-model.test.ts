@@ -520,7 +520,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   const onPlan = messageFailureNote(refused, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   const planless = messageFailureNote(refused, null);
 
-  assert.equal("planId" in onPlan && onPlan.planId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
+  assert.equal("taskId" in onPlan && onPlan.taskId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   assert.deepEqual(planless, {
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),

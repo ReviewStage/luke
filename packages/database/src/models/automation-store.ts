@@ -46,11 +46,11 @@ import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
-import { AGENT_WORKSPACE, isWorkspaceMember, reachablePlan } from "./workspace-store.js";
+import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
+import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
@@ -77,10 +77,10 @@ const AutomationRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   /** The plan it was made on; null for one made on its workspace with no plan. */
-  planId: Schema.NullOr(Schema.String),
-  planName: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
+  taskName: Schema.NullOr(Schema.String),
   /** The plan's repository as `owner/name`, or null where it names none or there is no plan. */
-  planRepository: Schema.NullOr(Schema.String),
+  taskRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
   trigger: automationTriggerSchema,
@@ -101,19 +101,19 @@ const AutomationRowSchema = Schema.Struct({
 export type Automation = typeof AutomationRowSchema.Type;
 
 /** An automation row's workspace: its own, or its plan's on a row an older build wrote, its workspace still null. */
-const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`;
+const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
 
 /** An automation row's repositories: its own, or its plan's on a row an older build wrote, its list still empty. */
 const AUTOMATION_REPOSITORIES = sql<
   readonly string[]
->`case when ${automation.repositories} = '[]'::jsonb and ${plan.repository} is not null then jsonb_build_array(${plan.repository}) else ${automation.repositories} end`;
+>`case when ${automation.repositories} = '[]'::jsonb and ${task.repository} is not null then jsonb_build_array(${task.repository}) else ${automation.repositories} end`;
 
 const AUTOMATION_COLUMNS = {
   id: automation.id,
   userId: automation.userId,
-  planId: automation.planId,
-  planName: plan.name,
-  planRepository: plan.repository,
+  taskId: automation.taskId,
+  taskName: task.name,
+  taskRepository: task.repository,
   name: automation.name,
   enabled: automation.enabled,
   trigger: automation.trigger,
@@ -124,7 +124,7 @@ const AUTOMATION_COLUMNS = {
   // repositories empty, reads its plan's, until the contract step fills it for good.
   organizationId: sql<
     string | null
-  >`coalesce(${automation.organizationId}, ${plan.organizationId})`,
+  >`coalesce(${automation.organizationId}, ${task.organizationId})`,
   scope: automation.scope,
   repositories: AUTOMATION_REPOSITORIES,
   targetKind: automation.targetKind,
@@ -137,7 +137,7 @@ const AUTOMATION_COLUMNS = {
 /** What making an automation takes: the plan, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
   /** The plan it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
-  readonly planId: string | null;
+  readonly taskId: string | null;
   /** The workspace an automation with no plan stands on, which the account must be a member of; read off the plan otherwise. */
   readonly organizationId?: string | undefined;
   /** The repositories an automation with no plan works in; read off the plan otherwise. */
@@ -335,26 +335,26 @@ function triggerColumns(
   };
 }
 
-const findReachablePlan = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+const findReachableTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({
     id: Schema.String,
     organizationId: Schema.String,
     repository: Schema.NullOr(Schema.String),
   }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id, organizationId: plan.organizationId, repository: plan.repository })
-        .from(plan)
-        .where(reachablePlan(userId, planId)),
+        .select({ id: task.id, organizationId: task.organizationId, repository: task.repository })
+        .from(task)
+        .where(reachableTask(userId, taskId)),
     ),
 });
 
 const insertAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     name: Schema.String,
     trigger: automationTriggerSchema,
     action: automationActionSchema,
@@ -376,7 +376,7 @@ const insertAutomation = SqlSchema.findAll({
         .insert(automation)
         .values({
           userId: row.userId,
-          planId: row.planId,
+          taskId: row.taskId,
           organizationId: row.organizationId,
           repositories: row.repositories,
           scope: row.scope,
@@ -398,20 +398,20 @@ const insertAutomation = SqlSchema.findAll({
 const findAutomations = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     organizationId: Schema.NullOr(Schema.String),
   }),
   Result: AutomationRowSchema,
-  execute: ({ userId, planId, organizationId }) =>
+  execute: ({ userId, taskId, organizationId }) =>
     Database.use((db) =>
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .leftJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(task, eq(task.id, automation.taskId))
         .where(
           and(
             allowedTo(userId, AUTOMATION_ACCESS.READ),
-            planId === null ? undefined : eq(automation.planId, planId),
+            taskId === null ? undefined : eq(automation.taskId, taskId),
             organizationId === null ? undefined : eq(AUTOMATION_WORKSPACE, organizationId),
           ),
         )
@@ -427,7 +427,7 @@ const findAutomation = SqlSchema.findOneOption({
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .leftJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(task, eq(task.id, automation.taskId))
         .where(allowedTo(userId, access, id)),
     ),
 });
@@ -658,7 +658,7 @@ const findAutomationToRun = SqlSchema.findOneOption({
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .leftJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(task, eq(task.id, automation.taskId))
         .where(eq(automation.id, id)),
     ),
 });
@@ -943,7 +943,7 @@ const findGithubAutomations = SqlSchema.findAll({
       db
         .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
         .from(automation)
-        .leftJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(task, eq(task.id, automation.taskId))
         .where(
           and(
             eq(automation.enabled, true),
@@ -1023,7 +1023,7 @@ const findOwnFailedRuns = SqlSchema.findAll({
 });
 
 /** Re-reads one automation after a write, which answered only that a row was written. */
-function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<Automation>> {
+function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
 }
 
@@ -1034,8 +1034,8 @@ function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<
  * where the account is a member of it; nothing where it reaches neither.
  */
 const placeOf = Effect.fnUntraced(function* (userId: string, made: NewAutomation) {
-  if (made.planId !== null) {
-    const reached = yield* findReachablePlan({ userId, planId: made.planId });
+  if (made.taskId !== null) {
+    const reached = yield* findReachableTask({ userId, taskId: made.taskId });
     return Option.map(reached, (held) => ({
       organizationId: held.organizationId,
       repositories: held.repository === null ? [] : [held.repository],
@@ -1052,7 +1052,7 @@ const placeOf = Effect.fnUntraced(function* (userId: string, made: NewAutomation
 export function createAutomation(
   userId: string,
   made: NewAutomation,
-): PlanStoreEffect<Option.Option<Automation>> {
+): TaskStoreEffect<Option.Option<Automation>> {
   return Effect.gen(function* () {
     const reached = yield* placeOf(userId, made);
     if (Option.isNone(reached)) return Option.none();
@@ -1075,7 +1075,7 @@ export function createAutomation(
 
 /** Which automations a list reads: one plan's, one workspace's, or every one the account may read where it names neither. */
 export interface AutomationListFilter {
-  readonly planId?: string | undefined;
+  readonly taskId?: string | undefined;
   readonly organizationId?: string | undefined;
 }
 
@@ -1083,10 +1083,10 @@ export interface AutomationListFilter {
 export function listAutomations(
   userId: string,
   filter: AutomationListFilter = {},
-): PlanStoreEffect<readonly Automation[]> {
+): TaskStoreEffect<readonly Automation[]> {
   return findAutomations({
     userId,
-    planId: filter.planId ?? null,
+    taskId: filter.taskId ?? null,
     organizationId: filter.organizationId ?? null,
   });
 }
@@ -1096,7 +1096,7 @@ export function readAutomation(
   userId: string,
   id: string,
   access: AutomationAccess = AUTOMATION_ACCESS.READ,
-): PlanStoreEffect<Option.Option<Automation>> {
+): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access });
 }
 
@@ -1112,7 +1112,7 @@ export function updateAutomation(
   access:
     | typeof AUTOMATION_ACCESS.CHANGE
     | typeof AUTOMATION_ACCESS.TOGGLE = AUTOMATION_ACCESS.CHANGE,
-): PlanStoreEffect<Option.Option<Automation>> {
+): TaskStoreEffect<Option.Option<Automation>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const written = yield* writeAutomation({ ...changes, userId, id, access, now });
@@ -1122,7 +1122,7 @@ export function updateAutomation(
 }
 
 /** Deletes an automation the account may delete, and its history; false for any other id. */
-export function deleteAutomation(userId: string, id: string): PlanStoreEffect<boolean> {
+export function deleteAutomation(userId: string, id: string): TaskStoreEffect<boolean> {
   return Effect.map(removeAutomation({ userId, id }), (rows) => rows.length > 0);
 }
 
@@ -1130,7 +1130,7 @@ export function deleteAutomation(userId: string, id: string): PlanStoreEffect<bo
 export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
-): PlanStoreEffect<Option.Option<QueuedRun>> {
+): TaskStoreEffect<Option.Option<QueuedRun>> {
   const row = {
     dedupeKey: run.dedupeKey,
     firing: run.firing,
@@ -1146,7 +1146,7 @@ export function recordAutomationRun(
 export function settleAutomationRun(
   runId: string,
   outcome: AutomationRunOutcome,
-): PlanStoreEffect<boolean> {
+): TaskStoreEffect<boolean> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const written = yield* writeRunOutcome({
@@ -1166,7 +1166,7 @@ export function listAutomationRuns(
   userId: string,
   automationId: string,
   limit: number = MAX_RUNS_READ,
-): PlanStoreEffect<readonly AutomationRunInHistory[]> {
+): TaskStoreEffect<readonly AutomationRunInHistory[]> {
   return findRuns({ userId, automationId, limit: Math.min(Math.max(limit, 1), MAX_RUNS_READ) });
 }
 
@@ -1175,7 +1175,7 @@ export function automationRunByKey(
   userId: string,
   automationId: string,
   dedupeKey: string,
-): PlanStoreEffect<Option.Option<AutomationRunInHistory>> {
+): TaskStoreEffect<Option.Option<AutomationRunInHistory>> {
   return findRunByKey({ userId, automationId, dedupeKey });
 }
 
@@ -1183,7 +1183,7 @@ export function automationRunByKey(
 export function automationRunsSince(
   automationId: string,
   since: Date,
-): PlanStoreEffect<readonly AutomationRun[]> {
+): TaskStoreEffect<readonly AutomationRun[]> {
   return findRunsSince({ automationId, since });
 }
 
@@ -1203,13 +1203,13 @@ export type OwnFailedRun = typeof FailedRunRowSchema.Type;
 export function ownFailedAutomationRuns(
   userId: string,
   since: Date,
-): PlanStoreEffect<readonly OwnFailedRun[]> {
+): TaskStoreEffect<readonly OwnFailedRun[]> {
   return Effect.map(findOwnFailedRuns({ userId, since }), (runs) =>
     runs.toSorted((a, b) => b.failedAt.getTime() - a.failedAt.getTime()),
   );
 }
 
-export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly ClaimedFiring[]> {
+export function claimDueAutomations(claim: DueClaim): TaskStoreEffect<readonly ClaimedFiring[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1236,7 +1236,7 @@ export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly C
  * sweep and a trigger hold no account's bearer, and the run's own start
  * checks the owner still reaches the plan, as every Start does.
  */
-export function readAutomationToRun(id: string): PlanStoreEffect<Option.Option<Automation>> {
+export function readAutomationToRun(id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomationToRun(id);
 }
 
@@ -1244,7 +1244,7 @@ export function readAutomationToRun(id: string): PlanStoreEffect<Option.Option<A
 export function queuedAutomationRuns(
   since: Date,
   limit: number,
-): PlanStoreEffect<readonly QueuedRun[]> {
+): TaskStoreEffect<readonly QueuedRun[]> {
   return findQueuedRuns({ since, limit });
 }
 
@@ -1252,7 +1252,7 @@ export function queuedAutomationRuns(
 export function startedRunAgents(
   automationId: string,
   since: Date,
-): PlanStoreEffect<readonly StartedRunAgent[]> {
+): TaskStoreEffect<readonly StartedRunAgent[]> {
   return findStartedAgents({ automationId, since });
 }
 
@@ -1260,7 +1260,7 @@ export function startedRunAgents(
 export function archivableRunAgents(
   since: Date,
   limit: number,
-): PlanStoreEffect<readonly ArchivableRunAgent[]> {
+): TaskStoreEffect<readonly ArchivableRunAgent[]> {
   return findArchivableAgents({ since, limit });
 }
 
@@ -1276,7 +1276,7 @@ const writeArchiveSettled = SqlSchema.void({
 });
 
 /** Marks what becomes of the run's agent as settled, archived or left standing for good, so no later sweep reads it again. */
-export function settleRunArchive(runId: string): PlanStoreEffect<void> {
+export function settleRunArchive(runId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => writeArchiveSettled({ runId, now }));
 }
 
@@ -1284,7 +1284,7 @@ export function settleRunArchive(runId: string): PlanStoreEffect<void> {
 export function expireQueuedAutomationRuns(
   before: Date,
   reason: AutomationRunReason,
-): PlanStoreEffect<number> {
+): TaskStoreEffect<number> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
   );
@@ -1305,7 +1305,7 @@ const findCreatorMembership = SqlSchema.findAll({
 });
 
 /** Whether the automation's creator is a member of its workspace still, which a run that starts as them needs. */
-export function creatorStillMember(automationId: string): PlanStoreEffect<boolean> {
+export function creatorStillMember(automationId: string): TaskStoreEffect<boolean> {
   return Effect.map(findCreatorMembership(automationId), (rows) => rows.length > 0);
 }
 
@@ -1318,7 +1318,7 @@ export function creatorStillMember(automationId: string): PlanStoreEffect<boolea
 export function withAutomationLocked<A, E, R>(
   automationId: string,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | PlanStoreFailure, R | DatabaseServices> {
+): Effect.Effect<A, E | TaskStoreFailure, R | DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(Effect.andThen(lockAutomationRow(automationId), effect)),
   );
@@ -1328,14 +1328,14 @@ export function withAutomationLocked<A, E, R>(
 export function claimAutomationRun(
   runId: string,
   claimedAgentId: string | null = null,
-): PlanStoreEffect<boolean> {
+): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeClaim({ id: runId, claimedAgentId, now }), (rows) => rows.length > 0),
   );
 }
 
 /** The run started with the agent named, from queued or from its claim; false where it settled otherwise. */
-export function attachRunAgent(runId: string, codingAgentId: string): PlanStoreEffect<boolean> {
+export function attachRunAgent(runId: string, codingAgentId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeAgent({ id: runId, codingAgentId, now }), (rows) => rows.length > 0),
   );
@@ -1345,14 +1345,14 @@ export function attachRunAgent(runId: string, codingAgentId: string): PlanStoreE
 export function failClaimedRun(
   runId: string,
   reason: AutomationRunReason,
-): PlanStoreEffect<boolean> {
+): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeClaimFailed({ id: runId, reason, now }), (rows) => rows.length > 0),
   );
 }
 
 /** How many of the automation's runs claimed at or after `since` are still starting, which count against its concurrency; a claim is dated by when it was made, whenever its run fired. */
-export function claimedRunsStarting(automationId: string, since: Date): PlanStoreEffect<number> {
+export function claimedRunsStarting(automationId: string, since: Date): TaskStoreEffect<number> {
   return Effect.map(findClaimed({ automationId, since }), (rows) => rows.length);
 }
 
@@ -1369,7 +1369,7 @@ export interface StrandedRun {
 export function strandedAutomationRuns(
   before: Date,
   limit: number,
-): PlanStoreEffect<readonly StrandedRun[]> {
+): TaskStoreEffect<readonly StrandedRun[]> {
   return findStranded({ before, limit });
 }
 
@@ -1410,7 +1410,7 @@ const findWebhookAutomation = SqlSchema.findOneOption({
 /** The webhook automation under this id, whoever owns it, of an owner still a member of its workspace, for a call to its address; nothing for any other id or trigger. */
 export function readWebhookAutomation(
   id: string,
-): PlanStoreEffect<Option.Option<WebhookAutomation>> {
+): TaskStoreEffect<Option.Option<WebhookAutomation>> {
   return findWebhookAutomation(id);
 }
 
@@ -1424,6 +1424,6 @@ export function githubAutomationsOn(
   repository: string,
   event: GitHubTriggerEvent,
   limit: number,
-): PlanStoreEffect<readonly ListeningAutomation[]> {
+): TaskStoreEffect<readonly ListeningAutomation[]> {
   return findGithubAutomations({ repository, event, limit });
 }

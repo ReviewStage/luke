@@ -3,16 +3,16 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
 import { childConversationId } from "@luke/database/models/ids";
-import { openPlanConversation } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
   insertConversation,
   joinWorkspace,
   openHostedStoreTestDatabase,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
-import type { PlanWorkTurn } from "@luke/features/planning-view";
+import type { TaskWorkTurn } from "@luke/features/tasks-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -29,6 +29,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../agents/brain-host/auth.js";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../agents/brain-host/bounds.js";
+import { BRAIN_DELEGATE_TOOL } from "../agents/brain-host/brain.js";
 import { askStanding } from "../agents/brain-host/brain-ask.js";
 import { DEPLOYMENT_TURNS } from "../agents/brain-host/channel.js";
 import { openChildConversation } from "../agents/brain-host/conversation.js";
@@ -41,7 +42,6 @@ import {
   type EveStreamEvent,
   eveSessions,
 } from "../agents/brain-host/eve-sessions.js";
-import { PLANNER_DELEGATE_TOOL } from "../agents/brain-host/planning.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
 import {
   SEARCH_WEB_REFUSAL,
@@ -49,7 +49,7 @@ import {
   SEARCH_WEB_TOOL,
 } from "../agents/public-research.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "../core.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
@@ -74,7 +74,7 @@ afterAll(() => database.close());
 const NOW = 1_800_000_000_000;
 
 /** A plan the account starts, as the Plans tab's new-plan form saves one. */
-const PLAN = {
+const TASK = {
   name: "Teammate invitations",
 } as const;
 /**
@@ -576,13 +576,13 @@ it.live(
 );
 
 /** The one call a planning turn makes, as eve names its input and its result. */
-interface PlanningCall {
+interface BrainCall {
   readonly toolName: string;
   readonly input: unknown;
   readonly output: unknown;
 }
 
-const SEARCH_WEB_CALL: PlanningCall = {
+const SEARCH_WEB_CALL: BrainCall = {
   toolName: SEARCH_WEB_TOOL.name,
   input: { query: "invite link expiry best practice" },
   output: {
@@ -593,10 +593,10 @@ const SEARCH_WEB_CALL: PlanningCall = {
 };
 
 /** A planning turn as eve streams it: the spoken ask, one call and its result, and the reply. */
-function planningTurn(
+function brainTurn(
   turnId: string,
   now: number,
-  call: PlanningCall = SEARCH_WEB_CALL,
+  call: BrainCall = SEARCH_WEB_CALL,
 ): readonly MessageStreamEvent[] {
   const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
     stampedEveEvent(event, now);
@@ -659,31 +659,31 @@ it.live(
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const planConversation = yield* Effect.promise(() =>
+      const taskConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+            const task = yield* startTask(target.userId, TASK);
+            return Option.getOrThrow(yield* openTaskConversation(target.userId, task.id))
               .conversationId;
           }),
         ),
       );
-      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, taskConversation));
       const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       assert.deepEqual(
         f.eve.opened.map((message) => message.conversationId),
-        [planConversation],
+        [taskConversation],
       );
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
-        target: { userId: target.userId, conversationId: planConversation },
+        target: { userId: target.userId, conversationId: taskConversation },
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
       };
-      yield* Effect.promise(() => play(planningTurn(FIRST_EVE_TURN, NOW), standing));
+      yield* Effect.promise(() => play(brainTurn(FIRST_EVE_TURN, NOW), standing));
       yield* f.arrived(4);
       yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
 
@@ -715,9 +715,9 @@ it.live(
       const target = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* startPlan(opener, PLAN);
-            yield* joinWorkspace(plan.workspaceId, member);
-            const opened = Option.getOrThrow(yield* openPlanConversation(opener, plan.id));
+            const task = yield* startTask(opener, TASK);
+            yield* joinWorkspace(task.workspaceId, member);
+            const opened = Option.getOrThrow(yield* openTaskConversation(opener, task.id));
             return { userId: opener, conversationId: opened.conversationId };
           }),
         ),
@@ -733,7 +733,7 @@ it.live(
       const f = yield* Effect.promise(() =>
         stand(target, QUICK, database.store, target.conversationId, askEffects, undefined, member),
       );
-      const shown: PlanWorkTurn[] = [];
+      const shown: TaskWorkTurn[] = [];
       f.brain.onWork((work) => shown.push(work));
       const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
@@ -748,8 +748,8 @@ it.live(
           state: memoryRelayState(),
         }),
       );
-      const events = planningTurn(FIRST_EVE_TURN, NOW, {
-        toolName: PLANNER_DELEGATE_TOOL.name,
+      const events = brainTurn(FIRST_EVE_TURN, NOW, {
+        toolName: BRAIN_DELEGATE_TOOL.name,
         input: { task: "Compare the two queue libraries." },
         output: "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
       });

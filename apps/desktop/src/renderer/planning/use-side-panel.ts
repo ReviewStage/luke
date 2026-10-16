@@ -1,11 +1,11 @@
-import type { CodeRef } from "@luke/features/plan-wire";
+import type { CodeRef } from "@luke/features/task-wire";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
   changesLabelOf,
   type FileStripTab,
-  inPlanOrder,
+  inTaskOrder,
   isAgentTab,
   isChangesTab,
   isFileTab,
@@ -575,7 +575,7 @@ function drawnFixed(held: HeldState, plan: OpenPlan): readonly FixedSidePanelTab
     (tab) =>
       chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && plan.holds[tab] === true),
   );
-  return inPlanOrder(open, orderOn(held, plan.id), (tab) => tab);
+  return inTaskOrder(open, orderOn(held, plan.id), (tab) => tab);
 }
 
 /**
@@ -983,7 +983,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
     ...held.prRuns.filter((each) => drawsPrRun(each, drawn)),
   ];
-  return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
+  return inTaskOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
 
 /**

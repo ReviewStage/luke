@@ -1,7 +1,7 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * plan-pin.ts -- one plan an account pinned in its sidebar, and when.
@@ -15,20 +15,20 @@ import { plan } from "./plan.js";
  * whichever goes first, and one left behind by a member who has since left
  * the workspace reads as nothing, since every read gates on membership first.
  */
-export const planPin = pgTable(
+export const taskPin = pgTable(
   "plan_pin",
   {
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    planId: uuid("plan_id")
+    taskId: uuid("plan_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => task.id, { onDelete: "cascade" }),
     pinnedAt: timestamptz("pinned_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.planId] }),
+    primaryKey({ columns: [table.userId, table.taskId] }),
     // A plan's delete cascades to its pins, found by the plan alone.
-    index("plan_pin_plan").on(table.planId),
+    index("plan_pin_plan").on(table.taskId),
   ],
 );

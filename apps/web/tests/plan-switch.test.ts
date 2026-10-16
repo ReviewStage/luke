@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writePlanTemplate } from "@luke/database/models/account-store";
-import { readPlan } from "@luke/database/models/plan-store";
+import { readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { Effect, Option } from "effect";
 
@@ -26,7 +26,7 @@ const openUser = Effect.gen(function* () {
 
 /** The plan as the window opens it, failing the test where it does not read. */
 const opened = (userId: string, planId: string) =>
-  Effect.map(readPlan(userId, planId), (stored) => Option.getOrThrow(stored).plan);
+  Effect.map(readTask(userId, planId), (stored) => Option.getOrThrow(stored).task);
 
 it.layer(getTestDB())("a new plan as one document", (it) => {
   it.effect(
@@ -38,9 +38,9 @@ it.layer(getTestDB())("a new plan as one document", (it) => {
         const template = "## Why\n\n## What\n\n## Risks\n";
         yield* writePlanTemplate(userId, template);
 
-        const started = yield* startPlan(userId, RELAY);
+        const started = yield* startTask(userId, RELAY);
         yield* writePlanTemplate(userId, "## Something else\n");
-        const othersPlan = yield* startPlan(other, RELAY);
+        const othersPlan = yield* startTask(other, RELAY);
 
         assert.equal((yield* opened(userId, started.id)).document.body, template);
         assert.equal(othersPlan.document.body, DEFAULT_PLAN_TEMPLATE);

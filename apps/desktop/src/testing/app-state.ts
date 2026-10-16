@@ -3,7 +3,7 @@
  */
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import type { ExperimentChoices } from "@luke/settings";
@@ -43,9 +43,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
     hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
-    planning: IDLE_PLANNING_VIEW,
+    tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [], planless: [], automations: [], failedRuns: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     window: { role: WINDOW_ROLE.PANEL, fullScreen: false },

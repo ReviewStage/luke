@@ -1,4 +1,4 @@
-import { PLAN_SECTION_BOUNDS, type PlanActor, type PlanEditor } from "./plan-wire.js";
+import { PLAN_SECTION_BOUNDS, type PlanActor, type PlanEditor } from "./task-wire.js";
 
 /**
  * plan-document.ts -- a plan kept as one free Markdown document: its sections, and who last changed each.
@@ -29,7 +29,7 @@ export interface PlanSectionWriter {
   readonly agentId?: string;
   /** Present, and true, where the notetaker wrote the revision on one of the plan's calls. */
   readonly duringCall?: boolean;
-  /** The member who wrote the revision, where the service can name one (`plan-wire.ts`'s `planEditorSchema`). */
+  /** The member who wrote the revision, where the service can name one (`task-wire.ts`'s `planEditorSchema`). */
   readonly by?: PlanEditor;
   /** Epoch milliseconds of the revision's latest save. */
   readonly at: number;

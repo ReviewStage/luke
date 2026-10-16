@@ -1,4 +1,4 @@
-import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@luke/features/plan-wire";
+import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@luke/features/task-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -6,7 +6,7 @@ import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * repository-pin-store.ts -- the repositories an account pinned in the sidebar, read and written for `/api/repository-pins`.
@@ -73,7 +73,7 @@ const deletePin = SqlSchema.void({
 });
 
 /** The account's pinned repositories, newest pinned first. */
-export function listRepositoryPins(userId: string): PlanStoreEffect<readonly RepositoryPin[]> {
+export function listRepositoryPins(userId: string): TaskStoreEffect<readonly RepositoryPin[]> {
   return Effect.map(findPins(userId), (rows) =>
     rows.map((row) => ({ repository: row.repository, pinnedAt: row.pinnedAt.getTime() })),
   );
@@ -89,7 +89,7 @@ export function setRepositoryPin(
   userId: string,
   repository: string,
   pinned: boolean,
-): PlanStoreEffect<Option.Option<readonly RepositoryPin[]>> {
+): TaskStoreEffect<Option.Option<readonly RepositoryPin[]>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

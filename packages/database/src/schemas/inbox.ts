@@ -12,7 +12,7 @@ import {
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * inbox.ts -- one item of the developer's inbox: something a coding agent needs of the developer, posted under a key of the agent's own.
@@ -43,7 +43,7 @@ export const inboxItem = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     /** The agent's plan; null for an agent with no plan. */
-    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
     /** The agent's workspace. */
     organizationId: text("organization_id")
       .notNull()
@@ -83,7 +83,7 @@ export const inboxItem = pgTable(
     // One item per key per agent: a post under a key it used is that item's write.
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A plan's inbox is read the latest changed first.
-    index("inbox_item_plan_updated").on(table.planId, table.updatedAt),
+    index("inbox_item_plan_updated").on(table.taskId, table.updatedAt),
     // A workspace's items of agents with no plan are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.

@@ -216,8 +216,8 @@ test("a draft asks nothing of the service, one per plan, until its first message
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
-    { planId: PLAN, idempotencyKey: draft, prompt, ...choice },
-    { planId: PLAN, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
+    { taskId: PLAN, idempotencyKey: draft, prompt, ...choice },
+    { taskId: PLAN, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
@@ -353,7 +353,7 @@ test("with no plan open, a / reads the agent's own repository's skills through t
     },
   });
   const skills = { skills: { repository: "acme/relay", branch: "main", skills: [] } };
-  tab.answer(ACT_KIND.PLANNING_SKILLS, skills);
+  tab.answer(ACT_KIND.TASKS_SKILLS, skills);
   await tab.mount();
 
   const read = tab.control().readSkills;
@@ -362,10 +362,10 @@ test("with no plan open, a / reads the agent's own repository's skills through t
 
   assert.deepEqual(answered, { skills: [] });
   assert.deepEqual(
-    tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_SKILLS),
+    tab.asked.filter((each) => each.kind === ACT_KIND.TASKS_SKILLS),
     [
       {
-        kind: ACT_KIND.PLANNING_SKILLS,
+        kind: ACT_KIND.TASKS_SKILLS,
         payload: { workspaceId: "workspace-1", repository: "acme/relay" },
       },
     ],

@@ -5,8 +5,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -416,7 +416,7 @@ export function MainTabStrip({
   actionsSlot,
   onOpenTerminal,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
   planCard: React.ReactNode;
   main: MainTabsControl;
@@ -466,7 +466,7 @@ export function MainTabStrip({
     : [];
   // The agents', the draft's, and the Inbox's tabs in the column's order,
   // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
-  const own = inPlanOrder(
+  const own = inTaskOrder(
     [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
     main.tabs,
     (entry) => entry.tab,

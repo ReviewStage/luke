@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -164,7 +164,7 @@ function mount(
   inboxOpen: boolean,
   restoring = false,
   overrides: Partial<PlansControl> = {},
-  tab: PanelTab = PANEL_TAB.PLANS,
+  tab: PanelTab = PANEL_TAB.TASKS,
   onTabChange: (tab: PanelTab) => void = ignore,
   sidebarPatch: Partial<SidebarCollapse> = {},
   registry = AtomRegistry.make(),
@@ -176,7 +176,7 @@ function mount(
   function Shell() {
     const [asked, setAsked] = useState(false);
     const plans = plansControl({
-      page: PLANS_PAGE.HOME,
+      page: TASKS_PAGE.HOME,
       restoring,
       inboxView: {
         open: inboxOpen,
@@ -212,7 +212,7 @@ test("Escape pressed while Settings is still loading leaves Settings for the pla
     assert.ok(runAppCommand(APP_COMMAND.EXIT_SETTINGS), "Settings' way out is offered");
   });
 
-  assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
 test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
@@ -265,7 +265,7 @@ test("Home, pressed or by its chord from Settings, brings the Plans tab forward 
   const tabs: PanelTab[] = [];
   mount(false, false, { onGoHome: () => (home += 1) }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   act(() => runAppCommand(APP_COMMAND.HOME));
-  assert.deepEqual([home, tabs], [1, [PANEL_TAB.PLANS]]);
+  assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
   act(() => root?.unmount());
 
   const plans = mount(false, false, { onGoHome: () => (home += 1) });
@@ -290,7 +290,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
         signedIn,
         workspaces,
         workspace: ACME,
-        region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
       },
       tab,
     );
@@ -301,11 +301,11 @@ test("the window is called by what stands in it: the plan on screen in its own w
 
   assert.deepEqual(
     [
-      titled(false, PANEL_TAB.PLANS),
-      titled(true, PANEL_TAB.PLANS),
+      titled(false, PANEL_TAB.TASKS),
+      titled(true, PANEL_TAB.TASKS),
       titled(false, PANEL_TAB.SETTINGS),
-      titled(false, PANEL_TAB.PLANS, false),
-      titled(false, PANEL_TAB.PLANS, true, [{ ...ACME, id: "workspace-other" }]),
+      titled(false, PANEL_TAB.TASKS, false),
+      titled(false, PANEL_TAB.TASKS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
     [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
   );
@@ -314,7 +314,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
     workspaces: [ACME],
     workspace: ACME,
     factoryView: { open: true, onOpen: ignore, onClose: ignore },
-    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
   });
   assert.equal(document.title, "Factory — Acme");
 });
@@ -327,17 +327,17 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
       inboxOpen,
       false,
       {
-        page: PLANS_PAGE.DOCUMENT,
+        page: TASKS_PAGE.DOCUMENT,
         plans: [DOCUMENT_PLAN],
         activePlanId: DOCUMENT_PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
         mainTabs: {
           ...plansControl().mainTabs,
           tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
           tab: MAIN_TAB.INBOX,
         },
       },
-      PANEL_TAB.PLANS,
+      PANEL_TAB.TASKS,
       ignore,
       { collapsed: false },
     );
@@ -354,7 +354,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 });
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const NOTES_PLAN: Plan = {
+const NOTES_PLAN: Task = {
   ...DOCUMENT_PLAN,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Release notes",
@@ -368,9 +368,9 @@ const NOTES_PLAN: Plan = {
  * next and the home page for none, the same shell throughout.
  */
 function mountListing(
-  listed: readonly Plan[],
+  listed: readonly Task[],
   looks: Readonly<Record<string, number>>,
-): (open: Plan | undefined) => void {
+): (open: Task | undefined) => void {
   window.localStorage.setItem("luke.planLooks", JSON.stringify(looks));
   window.localStorage.setItem("luke.planLooksSeeded", "1");
   const container = document.createElement("div");
@@ -379,15 +379,15 @@ function mountListing(
   const registry = AtomRegistry.make();
   return (open) => {
     const plans = plansControl({
-      page: open === undefined ? PLANS_PAGE.HOME : PLANS_PAGE.DOCUMENT,
+      page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
       plans: listed.map((plan) => (plan.id === open?.id ? open : plan)),
       activePlanId: open?.id,
       region:
         open === undefined
           ? { kind: DOCUMENT_REGION.NONE }
-          : { kind: DOCUMENT_REGION.READY, plan: open },
+          : { kind: DOCUMENT_REGION.READY, task: open },
     });
-    const props = shellProps(plans, PANEL_TAB.PLANS, ignore, { collapsed: false });
+    const props = shellProps(plans, PANEL_TAB.TASKS, ignore, { collapsed: false });
     act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
   };
 }
@@ -488,7 +488,7 @@ test("Factory's sidebar row and its command stand only while the account has its
 test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   handState(experimentsOn(EXPERIMENT.FACTORY));
   const told: SidebarCollapse["overlay"][] = [];
-  const page = mount(false, false, {}, PANEL_TAB.PLANS, ignore, {
+  const page = mount(false, false, {}, PANEL_TAB.TASKS, ignore, {
     overlay: SIDEBAR_OVERLAY.OPEN,
     onOverlay: (next) => told.push(next),
   });
@@ -529,7 +529,7 @@ test("Escape pressed while the Automations pages are still loading closes Automa
     false,
     false,
     { workspaces: [ACME], workspace: ACME, automationsView },
-    PANEL_TAB.PLANS,
+    PANEL_TAB.TASKS,
     ignore,
     {},
     registry,
@@ -543,7 +543,7 @@ test("Escape pressed while the Automations pages are still loading closes Automa
     false,
     false,
     { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
-    PANEL_TAB.PLANS,
+    PANEL_TAB.TASKS,
     ignore,
     {},
     registry,
@@ -570,7 +570,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
     workspaces: [ACME],
     workspace: ACME,
     automationsView,
-    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
   };
 
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
@@ -626,11 +626,11 @@ const LEFT_COLUMN = {
 function placed(place: Place) {
   const control = plansControl();
   const onPlan = {
-    page: PLANS_PAGE.DOCUMENT,
-    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    page: TASKS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
   } as const;
   const plans = {
-    [PLACE.HOME]: { page: PLANS_PAGE.HOME },
+    [PLACE.HOME]: { page: TASKS_PAGE.HOME },
     [PLACE.OTHER_PLAN]: onPlan,
     [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
@@ -641,11 +641,11 @@ function placed(place: Place) {
       ...onPlan,
       sidePanel: { ...control.sidePanel, open: true, fullScreen: true },
     },
-    [PLACE.SETTINGS]: { page: PLANS_PAGE.HOME },
+    [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },
     [PLACE.VERSION_HISTORY]: { ...onPlan, history: { ...control.history, open: true } },
   } satisfies Record<Place, Partial<PlansControl>>;
   return {
-    tab: place === PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.PLANS,
+    tab: place === PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS,
     plans: plans[place],
   };
 }
@@ -681,7 +681,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       staged: false,
     },
     call: {
-      card: { planName: CALL_PLAN_NAME, status: undefined, microphoneMuted: false },
+      card: { taskName: CALL_PLAN_NAME, status: undefined, microphoneMuted: false },
       speakerMuted: false,
       controls: callControls(tell, false),
     },
@@ -821,7 +821,7 @@ test("walking every place in the window during a call about another plan, the ca
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_PLAN], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
   }
   assert.deepEqual(
     standing,
@@ -845,7 +845,7 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     standing[place] = cardStanding(container, place);
     sentActs = [];
     pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_PLAN], `the way back from ${place}`);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_TASK], `the way back from ${place}`);
     act(() => root?.unmount());
     container.remove();
   }

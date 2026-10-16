@@ -1,10 +1,10 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import {
   PLAN_ACTOR,
-  type Plan,
   type PlanSectionEdit,
-  type PlanSummary,
-} from "@luke/features/plan-wire";
+  type Task,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { Option, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
@@ -212,7 +212,7 @@ const looksAtom = Atom.writable(
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
 /** The save that last changed each of the plan's sections, each by its heading. */
-function sectionSavesOf(plan: Plan): readonly PlanSectionEdit[] {
+function sectionSavesOf(plan: Task): readonly PlanSectionEdit[] {
   return plan.sectionEdits ?? [];
 }
 
@@ -221,7 +221,7 @@ function sectionSavesOf(plan: Plan): readonly PlanSectionEdit[] {
  * `updatedAt` stands among its revisions' instants, because the sidebar's row
  * reads that one, and the service stamps it apart from the revision's.
  */
-function newestSaveOf(plan: Plan): number {
+function newestSaveOf(plan: Task): number {
   return Math.max(
     plan.updatedAt,
     ...(plan.lastEdit === undefined ? [] : [plan.lastEdit.at]),
@@ -243,7 +243,7 @@ function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolea
 
 /** A visit to the plan between `mark`, the last look's, and `opened`: each section someone else, a teammate or Luke or an agent, saved in that span; none while no plan is drawn. */
 function visited(
-  plan: Plan | undefined,
+  plan: Task | undefined,
   readerId: string | undefined,
   mark: number | undefined,
   opened: number | undefined,
@@ -270,7 +270,7 @@ function visited(
 /** The visit as the plan opens, or as the reader's id arrives on the one already open, whose span it keeps. */
 function revisited(
   held: Visit | undefined,
-  plan: Plan | undefined,
+  plan: Task | undefined,
   readerId: string | undefined,
 ): Visit {
   if (plan === undefined) return visited(undefined, readerId, undefined, undefined);
@@ -289,7 +289,7 @@ function revisited(
  * window's shell rather than the plan's page, because the plan's version
  * history standing in the page's place is still a stay on the plan.
  */
-export function usePlanLooks(plan: Plan | undefined, readerId: string | undefined): PlanLooks {
+export function usePlanLooks(plan: Task | undefined, readerId: string | undefined): PlanLooks {
   const [visit, setVisit] = useState(() => revisited(undefined, plan, readerId));
   const keep = useAtomSet(looksAtom);
   const watch = useAtomSet(watchedAtom);
@@ -340,9 +340,9 @@ export function usePlanLooks(plan: Plan | undefined, readerId: string | undefine
  * nothing, so its frames never wear a developer's marks.
  */
 export function useUnreadPlans(
-  plans: readonly PlanSummary[],
+  plans: readonly TaskSummary[],
   { listRead, staged }: { listRead: boolean; staged: boolean },
-): (plan: PlanSummary) => boolean {
+): (plan: TaskSummary) => boolean {
   const looks = useAtomValue(looksAtom);
   const keep = useAtomSet(looksAtom);
   const watched = useAtomValue(watchedAtom);
@@ -382,7 +382,7 @@ export interface ReadMarks {
   /** Whether the plan is marked unread by hand: the only way the plan being looked at is unread. */
   readonly markedUnread: (planId: string) => boolean;
   /** Marks the plan unread until it next opens, or read, as a look at its newest save. */
-  readonly mark: (plan: Pick<PlanSummary, "id" | "updatedAt">, unread: boolean) => void;
+  readonly mark: (plan: Pick<TaskSummary, "id" | "updatedAt">, unread: boolean) => void;
 }
 
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */

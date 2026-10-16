@@ -12,7 +12,7 @@
  * each waits for room rather than pushing out an earlier one.
  */
 
-import type { AppInboxPlan } from "@luke/host/app-state";
+import type { AppInboxTask } from "@luke/host/app-state";
 import { useEffect, useRef } from "react";
 import { TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 import { appStateNow } from "../use-app-state";
@@ -27,7 +27,7 @@ const VIEW_LABEL = "View";
  */
 export function useInboxToasts(
   view: (planId: string) => void,
-  waiting: readonly AppInboxPlan[],
+  waiting: readonly AppInboxTask[],
   /** The version of main's document `waiting` was read from. */
   version: number,
   shownInbox: string | null,

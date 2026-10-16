@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
-import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -29,18 +29,22 @@ async function settle(): Promise<void> {
   });
 }
 
-const holding = (planId: string): AppInboxPlanHolding => ({ planId, items: 1, updatedAt: 1 });
+const holding = (planId: string): AppInboxTaskHolding => ({
+  taskId: planId,
+  items: 1,
+  updatedAt: 1,
+});
 
 test("a read that failed for a plan another workspace listed says nothing once the list holds only plans that read", async () => {
   // The service refuses Personal's plan and answers Acme's with nothing waiting.
-  const readInbox = ({ planId }: { planId: string }): Promise<CodingAgentInboxAnswerView> =>
+  const readInbox = ({ taskId: planId }: { taskId: string }): Promise<CodingAgentInboxAnswerView> =>
     Promise.resolve(
       planId === "personal-plan"
         ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
         : { items: [], cursor: INBOX_CURSOR_START },
     );
   let control: InboxItemsControl | undefined;
-  function Probe({ holdings }: { holdings: readonly AppInboxPlanHolding[] }) {
+  function Probe({ holdings }: { holdings: readonly AppInboxTaskHolding[] }) {
     control = useInboxItems({ holdings, readInbox });
     return null;
   }
@@ -60,7 +64,7 @@ test("a plan that changed since its items were read is pending until a read of i
   const readInbox = (): Promise<CodingAgentInboxAnswerView> =>
     new Promise((resolve) => answers.push(resolve));
   let control: InboxItemsControl | undefined;
-  function Probe({ holdings }: { holdings: readonly AppInboxPlanHolding[] }) {
+  function Probe({ holdings }: { holdings: readonly AppInboxTaskHolding[] }) {
     control = useInboxItems({ holdings, readInbox });
     return null;
   }

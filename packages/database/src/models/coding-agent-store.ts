@@ -1,5 +1,6 @@
 import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
@@ -38,9 +39,10 @@ import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
+  type StoredArchive,
   type StoredAutomationOrigin,
 } from "../schemas/coding-agent.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -53,12 +55,12 @@ import {
   type TurnUsageRow,
   turnUsagesOf,
 } from "./message-reads.js";
-import { PlanArchived } from "./plan-store.js";
+import { TaskArchived } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
-  planReachableBy,
-  reachablePlan,
+  reachableTask,
+  taskReachableBy,
   workspaceReachableBy,
 } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
@@ -135,7 +137,7 @@ export interface CodingAgent {
   /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
   readonly userId: string;
   /** The plan the agent works on; null for an agent an automation started with no plan. */
-  readonly planId: string | null;
+  readonly taskId: string | null;
   /** The workspace the agent belongs to: its own, or its plan's on a row the backfill has not reached. */
   readonly organizationId: string;
   /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
@@ -157,6 +159,8 @@ export interface CodingAgent {
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
+  /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
+  readonly archivedBy: StoredArchive | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
   readonly disabledServers: readonly string[];
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
@@ -198,9 +202,9 @@ export type CodingAgentBriefText =
  * no plan to hand it.
  */
 export type CodingAgentPlace =
-  | (CodingAgentBriefText & { readonly planId: string; readonly organizationId?: undefined })
+  | (CodingAgentBriefText & { readonly taskId: string; readonly organizationId?: undefined })
   | {
-      readonly planId: null;
+      readonly taskId: null;
       readonly organizationId: string;
       readonly planSnapshot: null;
       readonly prompt: string;
@@ -230,7 +234,7 @@ export type NewCodingAgent = CodingAgentPlace & {
 const CODING_AGENT_COLUMNS = {
   id: codingAgent.id,
   userId: codingAgent.userId,
-  planId: codingAgent.planId,
+  taskId: codingAgent.taskId,
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
   automationOrigin: codingAgent.automationOrigin,
@@ -244,6 +248,7 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
+  archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
   author: codingAgent.author,
   createdAt: codingAgent.createdAt,
@@ -282,13 +287,23 @@ const AutomationOriginColumnSchema = Schema.NullOr(
     body: Schema.optionalKey(Schema.String),
   }),
 );
+/** The `archived_by` column as a row holds it. */
+const ArchivedByColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    by: Schema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+    userId: Schema.String,
+    agentId: Schema.optionalKey(Schema.String),
+    agentName: Schema.optionalKey(Schema.String),
+    reason: Schema.optionalKey(Schema.String),
+  }),
+);
 /** An author as the agent's row holds it. */
 const AuthorColumnSchema = Schema.Literals(Object.values(CODING_AGENT_AUTHOR));
 
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationOrigin: AutomationOriginColumnSchema,
@@ -302,6 +317,7 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  archivedBy: ArchivedByColumnSchema,
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
   createdAt: InstantColumnSchema,
@@ -321,23 +337,23 @@ function reachableAgent(userId: string, agentId: string): SQL | undefined {
 }
 
 /** The plan row under its own lock, where the account is a member of its workspace, with whether it is archived. */
-const lockReachablePlan = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+const lockReachableTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({
     id: Schema.String,
     archived: Schema.Boolean,
     organizationId: Schema.String,
   }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select({
-          id: plan.id,
-          archived: sql<boolean>`${plan.archivedAt} is not null`,
-          organizationId: plan.organizationId,
+          id: task.id,
+          archived: sql<boolean>`${task.archivedAt} is not null`,
+          organizationId: task.organizationId,
         })
-        .from(plan)
-        .where(reachablePlan(userId, planId))
+        .from(task)
+        .where(reachableTask(userId, taskId))
         .for("update"),
     ),
 });
@@ -360,11 +376,11 @@ const lockReachableWorkspace = SqlSchema.findOneOption({
 
 /** The workspace a Start puts its agent in, locked: the plan's, where the plan stands archived or not, or the workspace named; nothing where the account reaches neither. */
 const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
-  if (place.planId === null) {
+  if (place.taskId === null) {
     const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
     return Option.map(reached, (workspace) => ({ organizationId: workspace.id, archived: false }));
   }
-  return yield* lockReachablePlan({ userId, planId: place.planId });
+  return yield* lockReachableTask({ userId, taskId: place.taskId });
 });
 
 const findAgentByKey = SqlSchema.findOneOption({
@@ -404,7 +420,7 @@ const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
@@ -427,7 +443,7 @@ const insertAgent = SqlSchema.findOne({
         .insert(codingAgent)
         .values({
           userId: write.userId,
-          planId: write.planId,
+          taskId: write.taskId,
           organizationId: write.organizationId,
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
@@ -576,13 +592,14 @@ const updateUnmovedArchived = SqlSchema.findAll({
     agentId: Schema.String,
     seenSeq: Schema.Number,
     archivedAt: Schema.Date,
+    archivedBy: ArchivedByColumnSchema,
   }),
   Result: IdRowSchema,
-  execute: ({ userId, agentId, seenSeq, archivedAt }) =>
+  execute: ({ userId, agentId, seenSeq, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
-        .set({ archivedAt })
+        .set({ archivedAt, archivedBy })
         .where(
           and(
             reachableAgent(userId, agentId),
@@ -609,13 +626,14 @@ const updateAgentArchived = SqlSchema.findOneOption({
     userId: Schema.String,
     agentId: Schema.String,
     archivedAt: Schema.NullOr(Schema.Date),
+    archivedBy: ArchivedByColumnSchema,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, agentId, archivedAt }) =>
+  execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
-        .set({ archivedAt })
+        .set({ archivedAt, archivedBy })
         .where(reachableAgent(userId, agentId))
         .returning(CODING_AGENT_COLUMNS),
     ),
@@ -719,22 +737,22 @@ const findAgentContext = SqlSchema.findOneOption({
     ),
 });
 
-const findAgentsOfPlan = SqlSchema.findAll({
+const findAgentsOfTask = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.String,
+    taskId: Schema.String,
     includeArchived: Schema.Boolean,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, planId, includeArchived }) =>
+  execute: ({ userId, taskId, includeArchived }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
-        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .innerJoin(task, eq(task.id, codingAgent.taskId))
         .where(
           and(
-            reachablePlan(userId, planId),
+            reachableTask(userId, taskId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -762,7 +780,7 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
             agentReachableBy(userId),
             eq(AGENT_WORKSPACE, organizationId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
-            planId === null ? undefined : eq(codingAgent.planId, planId),
+            planId === null ? undefined : eq(codingAgent.taskId, planId),
             // Note that a repository is matched as GitHub matches one, its case aside.
             repository === null
               ? undefined
@@ -789,7 +807,7 @@ const findPlanlessAgents = SqlSchema.findAll({
         )
         .where(
           and(
-            isNull(codingAgent.planId),
+            isNull(codingAgent.taskId),
             agentReachableBy(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
@@ -810,7 +828,7 @@ const updateAgentPublished = SqlSchema.void({
     ),
 });
 
-const findAgentsOfPlans = SqlSchema.findAll({
+const findAgentsOfTasks = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     planIds: Schema.Array(Schema.String),
@@ -825,14 +843,30 @@ const findAgentsOfPlans = SqlSchema.findAll({
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
-        .innerJoin(plan, eq(plan.id, codingAgent.planId))
+        .innerJoin(task, eq(task.id, codingAgent.taskId))
         .where(
           and(
-            inArray(plan.id, [...planIds]),
-            planReachableBy(userId),
+            inArray(task.id, [...planIds]),
+            taskReachableBy(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
+});
+
+const findPublishedAgentsById = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, agentIds }) =>
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+        .from(codingAgent)
+        .where(and(inArray(codingAgent.id, [...agentIds]), agentReachableBy(userId)))
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
     ),
 });
@@ -965,7 +999,7 @@ export function createCodingAgent(
   started: NewCodingAgent,
 ): Effect.Effect<
   Option.Option<CodingAgentStarted>,
-  CodingAgentStoreFailure | PlanArchived,
+  CodingAgentStoreFailure | TaskArchived,
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -980,7 +1014,7 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
-        if (reached.value.archived) return yield* new PlanArchived();
+        if (reached.value.archived) return yield* new TaskArchived();
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -989,7 +1023,7 @@ export function createCodingAgent(
         const row = yield* insertAgent({
           userId,
           conversationId: conversation.id,
-          planId: started.planId,
+          taskId: started.taskId,
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
@@ -1035,10 +1069,10 @@ export function discardCodingAgent(
 /** Every agent started on the plan, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such plan. */
 export function listCodingAgents(
   userId: string,
-  planId: string,
+  taskId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
-  return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+  return findAgentsOfTask({ userId, taskId, includeArchived: options.includeArchived ?? false });
 }
 
 /**
@@ -1074,7 +1108,7 @@ export function listWorkspaceCodingAgents(
  * each with the account's own pin of it: what the plan list carries beside
  * the plans, read by the same gate.
  */
-export function listPlanlessCodingAgents(
+export function listTasklessCodingAgents(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PlanlessCodingAgent[]> {
@@ -1094,12 +1128,12 @@ const findPlanNames = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: plan.id,
-          name: plan.name,
-          archived: sql<boolean>`${plan.archivedAt} is not null`,
+          id: task.id,
+          name: task.name,
+          archived: sql<boolean>`${task.archivedAt} is not null`,
         })
-        .from(plan)
-        .where(and(inArray(plan.id, [...planIds]), planReachableBy(userId))),
+        .from(task)
+        .where(and(inArray(task.id, [...planIds]), taskReachableBy(userId))),
     ),
 });
 
@@ -1130,7 +1164,18 @@ export function listPublishedCodingAgents(
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
   if (planIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
-  return Effect.map(findAgentsOfPlans({ userId, planIds, includeArchived }), (rows) =>
+  return Effect.map(findAgentsOfTasks({ userId, planIds, includeArchived }), (rows) =>
+    rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
+}
+
+/** The agents named, by id, on a plan or with none, archived or not, each with what it published, in the order they were started: the read opening an agent's tab makes, so one of a workspace the account is not in names none. None asked, none read. */
+export function listPublishedCodingAgentsById(
+  userId: string,
+  agentIds: readonly string[],
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  if (agentIds.length === 0) return Effect.succeed([]);
+  return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }
@@ -1309,15 +1354,124 @@ export function renameCodingAgent(
   return updateAgentTitle({ userId, agentId, title });
 }
 
-/** The account's agent archived, stamped now, or brought back; its conversation and what it published are kept either way. Nothing for an agent the account does not own. */
+/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. Nothing for an agent of a workspace the account is not in. */
 export function archiveCodingAgent(
   userId: string,
   agentId: string,
   archived: boolean,
+  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+    updateAgentArchived({
+      userId,
+      agentId,
+      archivedAt: archived ? now : null,
+      archivedBy: archived ? archivedBy : null,
+    }),
   );
+}
+
+/** What an archive of an idle agent came to: archived now, archived already, still working, or no agent the account reaches. */
+export const IDLE_ARCHIVE = {
+  ARCHIVED: "archived",
+  ALREADY: "already",
+  WORKING: "working",
+  NOT_FOUND: "not-found",
+} as const;
+
+export type IdleArchive = (typeof IDLE_ARCHIVE)[keyof typeof IDLE_ARCHIVE];
+
+/** The agent's conversation row under its own lock, the one every write of its lines and turns takes; nothing where no such conversation stands. */
+const lockAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: IdRowSchema,
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .for("update"),
+    ),
+});
+
+const archiveIfUnarchived = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    archivedAt: Schema.Date,
+    archivedBy: ArchivedByColumnSchema,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, archivedAt, archivedBy }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt, archivedBy })
+        .where(and(reachableAgent(userId, agentId), isNull(codingAgent.archivedAt)))
+        .returning({ id: codingAgent.id }),
+    ),
+});
+
+/**
+ * Archives the agent under who archived it, but only while `idle` says it
+ * is, read under its conversation's lock, the one every write of its lines
+ * and turns takes, so no turn queued and no message handed over between
+ * the read and the stamp leaves an agent archived at work. An agent
+ * archived already keeps the archive standing.
+ */
+export function archiveIdleCodingAgent(
+  userId: string,
+  agentId: string,
+  archivedBy: StoredArchive,
+  idle: (agent: CodingAgent) => CodingAgentStoreEffect<boolean>,
+): CodingAgentStoreEffect<IdleArchive> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const found = yield* findAgent({ userId, agentId });
+        if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
+        const locked = yield* lockAgentConversation({
+          conversationId: found.value.conversationId,
+        });
+        if (Option.isNone(locked)) return IDLE_ARCHIVE.NOT_FOUND;
+        // The row is read again under the lock, so an archive made meanwhile is seen.
+        const agent = yield* findAgent({ userId, agentId });
+        if (Option.isNone(agent)) return IDLE_ARCHIVE.NOT_FOUND;
+        if (agent.value.archivedAt !== null) return IDLE_ARCHIVE.ALREADY;
+        if (!(yield* idle(agent.value))) return IDLE_ARCHIVE.WORKING;
+        const archivedAt = yield* DateTime.nowAsDate;
+        const rows = yield* archiveIfUnarchived({ userId, agentId, archivedAt, archivedBy });
+        return rows.length > 0 ? IDLE_ARCHIVE.ARCHIVED : IDLE_ARCHIVE.ALREADY;
+      }),
+    ),
+  );
+}
+
+const unarchiveIfStamped = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    archivedAt: Schema.Date,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, archivedAt }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt: null, archivedBy: null })
+        .where(and(reachableAgent(userId, agentId), eq(codingAgent.archivedAt, archivedAt)))
+        .returning({ id: codingAgent.id }),
+    ),
+});
+
+/** Brings the agent back, but only from the archive stamped at `archivedAt`, the one its reader saw, so an archive made since stands; answers whether it was brought back. */
+export function unarchiveCodingAgentFrom(
+  userId: string,
+  agentId: string,
+  archivedAt: Date,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(unarchiveIfStamped({ userId, agentId, archivedAt }), (rows) => rows.length > 0);
 }
 
 /**
@@ -1335,7 +1489,7 @@ export function pinCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
-    if (Option.isNone(found) || found.value.planId !== null) return Option.none();
+    if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
     if (pinned) yield* insertAgentPin({ userId, agentId, now: yield* DateTime.nowAsDate });
     else yield* deleteAgentPin({ userId, agentId });
     return found;
@@ -1379,7 +1533,7 @@ export function archiveUnmovedCodingAgent(
 ): CodingAgentStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (archivedAt) =>
     Effect.map(
-      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt }),
+      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt, archivedBy: null }),
       (rows) => rows.length > 0,
     ),
   );

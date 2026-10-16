@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createPlan } from "@luke/database/models/plan-store";
+import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { planAttachment } from "@luke/database/schemas/plan-attachment";
 import {
@@ -18,8 +18,8 @@ import {
   planAttachmentAnswerSchema,
 } from "@luke/features/plan-attachment-wire";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { plansApp } from "@luke/service/plans/plans-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -78,7 +78,7 @@ const ask = (request: Request) =>
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
-      plansApp({
+      tasksApp({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
@@ -126,13 +126,13 @@ function uploaded(answered: Answered) {
 }
 
 /** A plan in a workspace the owner made and the teammate joined, and an account in neither. */
-const openSharedPlan = Effect.gen(function* () {
+const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
   const outsider = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const { id: planId } = yield* createPlan(owner, { organizationId: workspace, name: "Invites" });
+  const { id: planId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
   return { owner, teammate, outsider, planId };
 });
 
@@ -141,7 +141,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
     "a picture a teammate keeps on the plan is served to every member as its bytes, and to nobody else",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId } = yield* openSharedPlan;
+        const { owner, teammate, outsider, planId } = yield* openSharedTask;
 
         const kept = yield* ask(upload(planId, teammate, PNG_URL));
 
@@ -166,7 +166,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
 
   it.effect("bytes that are not the image their label names are refused, and nothing is kept", () =>
     Effect.gen(function* () {
-      const { owner, planId } = yield* openSharedPlan;
+      const { owner, planId } = yield* openSharedTask;
       const mislabelled = PNG_URL.replace("image/png", "image/webp");
 
       const refused = yield* ask(upload(planId, owner, mislabelled));
@@ -181,11 +181,11 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
 
   it.effect("a plan holding its bound of pictures refuses one more in band", () =>
     Effect.gen(function* () {
-      const { owner, planId } = yield* openSharedPlan;
+      const { owner, planId } = yield* openSharedTask;
       const db = yield* Database;
       yield* db.insert(planAttachment).values(
         Array.from({ length: PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN }, () => ({
-          planId,
+          taskId: planId,
           userId: owner,
           contentType: PICTURE_TYPE.PNG,
           byteCount: PNG_BYTES.length,

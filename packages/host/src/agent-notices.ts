@@ -3,8 +3,8 @@ import type {
   AccountInboxAnswer,
   AccountInboxAutomation,
   AccountInboxEntry,
-  AccountInboxPlan,
-  AccountPlanlessEntry,
+  AccountInboxTask,
+  AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { failedRunText } from "@luke/features/automation-list-model";
 import {
@@ -19,13 +19,13 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-  type PlanlessAgent,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { PlanningView } from "@luke/features/planning-view";
+import type { TasksView } from "@luke/features/tasks-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
@@ -130,7 +130,7 @@ const WATCH_INTERVAL = Duration.seconds(30);
 const READ_SKEW = Duration.minutes(1);
 
 /** What the notification is titled for a plan main holds no name for. */
-const UNNAMED_PLAN_TITLE = "Luke";
+const UNNAMED_TASK_TITLE = "Luke";
 
 /** The statuses under which an agent may still write, which is when its plan is watched. */
 const WRITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -153,7 +153,7 @@ export interface AgentNotice {
 
 /** Where a notification's click takes the developer: the plan, on the agent's tab, or the agent's own page for one with no plan. */
 export interface AgentPlace {
-  planId: string | null;
+  taskId: string | null;
   agentId: string;
 }
 
@@ -181,7 +181,7 @@ export interface FailedRunToast {
 
 /** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
 export interface InboxItemToast {
-  planId: string;
+  taskId: string;
   itemId: string;
   words: string;
   detail: string;
@@ -214,8 +214,8 @@ export interface AgentNoticesDependencies {
   readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
-  /** The plan as a notice's title names it (`noticePlanTitle`), or nothing for a plan main holds no name for. */
-  planName: (planId: string) => string | undefined;
+  /** The plan as a notice's title names it (`noticeTaskTitle`), or nothing for a plan main holds no name for. */
+  taskName: (taskId: string) => string | undefined;
   /** Brings Luke forward on the plan with the agent's tab open: the click's whole effect. */
   open: (place: AgentPlace) => void;
   /** Where the unseen agents are written, for the tabs to draw. */
@@ -231,7 +231,7 @@ export interface AgentNoticesDependencies {
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
-  onPlanAgentsMoved: () => void;
+  onTaskAgentsMoved: () => void;
   /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
   readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
@@ -239,13 +239,13 @@ export interface AgentNoticesDependencies {
   /** Where each plan's waiting items, and every plan holding an item, are written, for the window's Inbox. */
   onInboxChanged: (inbox: AppInboxSlice) => void;
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
-  openInbox: (planId: string) => void;
+  openInbox: (taskId: string) => void;
   /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
   /** Brings Luke forward on a failed run, in its automation's workspace: its notification's click. */
   openFailedRun: (place: FailedRunPlace) => void;
   /** Whether the account has Automations on, without which no failed run is announced. */
   automationsOn: () => boolean;
-  openPlanlessItem: (item: {
+  openTasklessItem: (item: {
     readonly agentId: string;
     readonly itemId: string;
     /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
@@ -259,7 +259,7 @@ export interface AgentNotices {
   /** Agents as an answer carried them: a plan's list, or the one a Start or a Stop answered. */
   observeAgents(agents: readonly CodingAgentSummary[]): void;
   /** The agents with no plan as the plan list last carried them: the account's own are held, each with its automation's name. */
-  observePlanless(agents: readonly PlanlessAgent[]): void;
+  observeTaskless(agents: readonly TasklessAgent[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
   observeStatus(agentId: string, status: CodingAgentStatus): void;
   /** One agent's title as a transcript page carried it, which the list that named the agent may have read before the title landed; said whatever the agent's standing. */
@@ -271,17 +271,17 @@ export interface AgentNotices {
   /** What one agent published, as a read of it answered: the pull request, or none. */
   observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
   /** A plan the host no longer holds: its agents are forgotten. */
-  observePlanGone(planId: string): void;
+  observeTaskGone(taskId: string): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
   /** The panel said which plan's Inbox tab it shows, or none. */
-  shownInbox(planId: string | null): void;
+  shownInbox(taskId: string | null): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
 interface HeldAgent {
   /** The plan it works on; null for one an automation started with no plan. */
-  planId: string | null;
+  taskId: string | null;
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
@@ -302,17 +302,17 @@ interface HeldAgent {
  * export", so a notice from a workspace the window is not listing says
  * whose it is; nothing for a plan main holds no name for.
  */
-export function noticePlanTitle(
-  planning: Pick<PlanningView, "plans" | "workspaces" | "document">,
-  planId: string,
+export function noticeTaskTitle(
+  tasks: Pick<TasksView, "tasks" | "workspaces" | "document">,
+  taskId: string,
 ): string | undefined {
-  const open = planning.document.plan;
-  const listed = planning.plans.find((plan) => plan.id === planId);
-  const plan = listed ?? (open?.id === planId ? open : undefined);
-  if (plan === undefined) return undefined;
-  if (planning.workspaces.length <= 1) return plan.name;
-  const workspace = planning.workspaces.find((each) => each.id === plan.workspaceId);
-  return workspace === undefined ? plan.name : `${workspace.name} · ${plan.name}`;
+  const open = tasks.document.task;
+  const listed = tasks.tasks.find((task) => task.id === taskId);
+  const task = listed ?? (open?.id === taskId ? open : undefined);
+  if (task === undefined) return undefined;
+  if (tasks.workspaces.length <= 1) return task.name;
+  const workspace = tasks.workspaces.find((each) => each.id === task.workspaceId);
+  return workspace === undefined ? task.name : `${workspace.name} · ${task.name}`;
 }
 
 /** One turn's end as the ledger saw it, waiting to be announced, and whether the window was focused as it ended. */
@@ -367,7 +367,7 @@ function noticeText(input: {
     input.pullRequest !== undefined && status === CODING_AGENT_STATUS.COMPLETED
       ? `opened #${input.pullRequest}`
       : ENDED_WORD[status];
-  return { title: input.subject ?? UNNAMED_PLAN_TITLE, body: `${name} ${ended}` };
+  return { title: input.subject ?? UNNAMED_TASK_TITLE, body: `${name} ${ended}` };
 }
 
 /**
@@ -378,11 +378,11 @@ function noticeText(input: {
  */
 function inboxNoticeText(
   item: AccountInboxEntry,
-  planName: string | undefined,
+  taskName: string | undefined,
   models: readonly CatalogModel[] | undefined,
 ): Pick<AgentNotice, "title" | "body"> {
   const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
-  return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${linkLabels(item.title)}` };
+  return { title: taskName ?? UNNAMED_TASK_TITLE, body: `${agent}: ${linkLabels(item.title)}` };
 }
 
 /**
@@ -404,8 +404,8 @@ function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): A
 }
 
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
-function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
-  const plans = new Map<string, AppInboxWaitingItem[]>();
+function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
+  const tasks = new Map<string, AppInboxWaitingItem[]>();
   for (const item of items) {
     const waiting = {
       id: item.id,
@@ -413,15 +413,15 @@ function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
       title: item.title,
       postedAt: item.postedAt,
     };
-    const held = plans.get(item.planId);
-    if (held === undefined) plans.set(item.planId, [waiting]);
+    const held = tasks.get(item.planId);
+    if (held === undefined) tasks.set(item.planId, [waiting]);
     else held.push(waiting);
   }
-  return [...plans].map(([planId, held]) => ({ planId, items: held }));
+  return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
 /** The open items of agents with no plan as the window holds them: each with its agent and the automation and repository standing in a plan's place. */
-function waitingPlanless(items: readonly AccountPlanlessEntry[]): AppInboxSlice["planless"] {
+function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
     agentId: item.agentId,
@@ -441,8 +441,8 @@ function waitingPlanless(items: readonly AccountPlanlessEntry[]): AppInboxSlice[
  * automation's name, or the repository where the reader may not read it,
  * over the agent and the item's title, as a plan's item says its plan.
  */
-function planlessNoticeText(
-  item: AccountPlanlessEntry,
+function tasklessNoticeText(
+  item: AccountTasklessEntry,
   models: readonly CatalogModel[] | undefined,
 ): Pick<AgentNotice, "title" | "body"> {
   const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
@@ -459,9 +459,9 @@ type InboxAnswered = Pick<
 >;
 
 /** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model, the automation and repository standing in a plan's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
-function samePlanless(
-  one: readonly AccountPlanlessEntry[],
-  other: readonly AccountPlanlessEntry[],
+function sameTaskless(
+  one: readonly AccountTasklessEntry[],
+  other: readonly AccountTasklessEntry[],
 ): boolean {
   return (
     one.length === other.length &&
@@ -501,16 +501,16 @@ function sameAutomations(
 }
 
 /** Whether two answers list the same plans holding items, alike in order, count, and instant. */
-function samePlans(one: readonly AccountInboxPlan[], other: readonly AccountInboxPlan[]): boolean {
+function sameTasks(one: readonly AccountInboxTask[], other: readonly AccountInboxTask[]): boolean {
   return (
     one.length === other.length &&
-    one.every((plan, at) => {
+    one.every((task, at) => {
       const was = other[at];
       return (
         was !== undefined &&
-        was.planId === plan.planId &&
-        was.items === plan.items &&
-        was.updatedAt === plan.updatedAt
+        was.planId === task.planId &&
+        was.items === task.items &&
+        was.updatedAt === task.updatedAt
       );
     })
   );
@@ -525,7 +525,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
   function* (
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
-    const { listAgents, readPullRequest, planName, open, onUnseenChanged, report } = dependencies;
+    const { listAgents, readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
@@ -570,7 +570,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void {
       const was = published.get(agentId) ?? null;
       published.set(agentId, pullRequest);
-      if (!samePublished(was, pullRequest)) dependencies.onPlanAgentsMoved();
+      if (!samePublished(was, pullRequest)) dependencies.onTaskAgentsMoved();
     }
 
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
@@ -606,9 +606,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const pullRequest = yield* pullRequestOf(end);
       const text = noticeText({
         subject:
-          end.agent.planId === null
+          end.agent.taskId === null
             ? planlessSubjects.get(end.agentId)
-            : planName(end.agent.planId),
+            : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
         automationName: end.agent.automationName,
@@ -617,7 +617,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         ...(pullRequest === undefined ? undefined : { pullRequest }),
       });
       if (text === undefined) return;
-      const place = { planId: end.agent.planId, agentId: end.agentId };
+      const place = { taskId: end.agent.taskId, agentId: end.agentId };
       if (end.focused && focused) {
         doors.toast({
           place,
@@ -635,9 +635,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** What the window holds of an answer: each plan's items and every plan holding one, and beside them the items of agents with no plan and the automations holding them. */
     function sliceOf(answer: InboxAnswered): AppInboxSlice {
       return {
-        waiting: waitingPlans(answer.items),
-        plans: answer.plans,
-        planless: waitingPlanless(answer.planless ?? []),
+        waiting: waitingTasks(answer.items),
+        tasks: answer.plans.map(({ planId, ...holding }) => ({ ...holding, taskId: planId })),
+        taskless: waitingTaskless(answer.planless ?? []),
         automations: answer.automations ?? [],
         failedRuns: answer.failedRuns ?? [],
       };
@@ -650,14 +650,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /** An item of an agent with no plan opened: told nowhere in front, since the window's toast opens a plan and the window's Inbox lists it, and as a notification behind, which opens the window's Inbox on the item, where it is answered. */
-    function announcePlanless(item: AccountPlanlessEntry): void {
+    function announceTaskless(item: AccountTasklessEntry): void {
       if (focused) return;
       if (dependencies.notifying()) {
-        const text = planlessNoticeText(item, models);
+        const text = tasklessNoticeText(item, models);
         doors.post({
           ...text,
           onClick: () =>
-            dependencies.openPlanlessItem({
+            dependencies.openTasklessItem({
               agentId: item.agentId,
               itemId: item.id,
               ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
@@ -687,10 +687,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
     function announceItem(item: AccountInboxEntry): void {
       if (focused && shownInbox === item.planId) return;
-      const text = inboxNoticeText(item, planName(item.planId), models);
+      const text = inboxNoticeText(item, taskName(item.planId), models);
       if (focused) {
         doors.toastInbox({
-          planId: item.planId,
+          taskId: item.planId,
           itemId: item.id,
           words: text.body,
           detail: text.title,
@@ -722,9 +722,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         // Note that the plans and automations holding items, and what an item with no plan is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
-          samePlans(was.answer.plans, answer.plans) &&
+          sameTasks(was.answer.plans, answer.plans) &&
           sameAutomations(was.answer.automations ?? [], answer.automations ?? []) &&
-          samePlanless(was.answer.planless ?? [], answer.planless ?? [])
+          sameTaskless(was.answer.planless ?? [], answer.planless ?? [])
         ) {
           return;
         }
@@ -738,8 +738,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         dependencies.onInboxChanged(sliceOf(moved));
         return;
       }
-      const planless = answer.planless ?? [];
-      waiting = { answer, items: new Set([...answer.items, ...planless].map((item) => item.id)) };
+      const taskless = answer.planless ?? [];
+      waiting = { answer, items: new Set([...answer.items, ...taskless].map((item) => item.id)) };
       publishWaiting(answer);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
@@ -749,11 +749,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (since === undefined || was?.items.has(item.id) === true) continue;
         if ((known ?? 0) < item.revision && item.updatedAt > since) announceItem(item);
       }
-      for (const item of planless) {
+      for (const item of taskless) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
         if (since === undefined || was?.items.has(item.id) === true) continue;
-        if ((known ?? 0) < item.revision && item.updatedAt > since) announcePlanless(item);
+        if ((known ?? 0) < item.revision && item.updatedAt > since) announceTaskless(item);
       }
       // A run settles once, so one the last answer did not hold that failed since it was read is news.
       const told = new Set((was?.answer.failedRuns ?? []).map((run) => run.id));
@@ -809,7 +809,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
-        if (stillWriting(next.status)) dependencies.onPlanAgentsMoved();
+        if (stillWriting(next.status)) dependencies.onTaskAgentsMoved();
         return;
       }
       // The reads overlap, so a list can land after a newer read moved the
@@ -824,7 +824,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
         if (stillWriting(next.status)) return;
         ended(agentId, next);
-        dependencies.onPlanAgentsMoved();
+        dependencies.onTaskAgentsMoved();
         return;
       }
       // A new turn: the one before it is left behind, and its own end is the next notice.
@@ -832,7 +832,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId !== null) pastTurns.add(was.turnId);
       ledger.set(agentId, { ...next, pastTurns });
       if (!stillWriting(next.status)) ended(agentId, next);
-      dependencies.onPlanAgentsMoved();
+      dependencies.onTaskAgentsMoved();
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan or an agent deleted or an account left has no tab to clear one. */
@@ -862,7 +862,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function watchedPlans(): readonly string[] {
       const plans = new Set<string>();
       for (const agent of ledger.values()) {
-        if (agent.planId !== null && watched(agent)) plans.add(agent.planId);
+        if (agent.taskId !== null && watched(agent)) plans.add(agent.taskId);
       }
       return [...plans];
     }
@@ -870,7 +870,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** The agents with no plan watched, each read again by itself on the watch's clock. */
     function watchedPlanless(): readonly string[] {
       return [...ledger]
-        .filter(([, agent]) => agent.planId === null && watched(agent))
+        .filter(([, agent]) => agent.taskId === null && watched(agent))
         .map(([agentId]) => agentId);
     }
 
@@ -882,7 +882,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       >,
     ): HeldAgent {
       return {
-        planId: agent.planId,
+        taskId: agent.planId,
         model: agent.model,
         title: agent.title,
         automationName: agent.automationName,
@@ -924,7 +924,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           observe(agent.id, heldOf(agent));
         }
       },
-      observePlanless: (agents) => {
+      observeTaskless: (agents) => {
         for (const agent of agents) {
           if (!heldHere(agent)) continue;
           planlessSubjects.set(agent.id, agent.automationName ?? agent.repository);
@@ -940,7 +940,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
           ledger.set(agent.id, { ...held, awaiting: true });
           // The service reads the agent running from the message on, so the list is read again now.
-          dependencies.onPlanAgentsMoved();
+          dependencies.onTaskAgentsMoved();
         }
       },
       observeStatus: (agentId, status) => {
@@ -955,13 +955,13 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         models = next;
       },
       observePublished,
-      observePlanGone: (planId) => forget((agent) => agent.planId !== planId),
+      observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
       },
-      shownInbox: (planId) => {
-        shownInbox = planId;
+      shownInbox: (taskId) => {
+        shownInbox = taskId;
       },
     };
 
@@ -974,7 +974,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             Effect.map(listAgents(planId), (answer) => {
               if ("agents" in answer) notices.observeAgents(answer.agents);
               else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-                notices.observePlanGone(planId);
+                notices.observeTaskGone(planId);
               }
             }),
           { discard: true },

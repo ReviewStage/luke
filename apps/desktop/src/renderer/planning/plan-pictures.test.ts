@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -59,7 +59,7 @@ function standHost(
     value: {
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.PLANNING_PICTURE_READ) {
+        if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         asked.push(request.payload.attachmentId);
@@ -85,12 +85,12 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
 }
 
 /** A plan of its own id, so the window's pictures read for one test stand apart from another's. */
-function planOf(id: string, body: string): Plan {
+function planOf(id: string, body: string): Task {
   return { ...DOCUMENT_PLAN, id, document: { body, assumptions: [] } };
 }
 
 const picture = (planId: string, id: string) =>
-  planAttachmentAddress({ planId, attachmentId: id }, "acme");
+  planAttachmentAddress({ taskId: planId, attachmentId: id }, "acme");
 
 test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
   const planId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";

@@ -1,5 +1,5 @@
-import type { PlanEditor } from "@luke/features/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
+import type { PlanEditor } from "@luke/features/task-wire";
+import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
 import type { UIMessage } from "ai";
 import type { VoiceView } from "./voice-view.js";
@@ -82,7 +82,7 @@ export type TranscriptRegion =
  * past the call's end until the record's copy of it has caught up.
  */
 export interface HeardCall {
-  readonly planId: string;
+  readonly taskId: string;
   readonly transcript: NonNullable<VoiceView["callTranscript"]>;
   /** When this window first heard the call, which its header shows. */
   readonly heardAt: number;
@@ -128,21 +128,21 @@ function wordCount(messages: readonly UIMessage[]): number {
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];
-  voice: Pick<VoiceView, "callPlanId" | "callTranscript">;
-  planId: string | undefined;
+  voice: Pick<VoiceView, "callTaskId" | "callTranscript">;
+  taskId: string | undefined;
   now: number;
 }): readonly HeardCall[] {
-  const { voice, planId, now } = input;
-  if (planId === undefined) return [];
-  const held = input.held.filter((call) => call.planId === planId);
-  const reported = voice.callPlanId === planId ? voice.callTranscript : undefined;
+  const { voice, taskId, now } = input;
+  if (taskId === undefined) return [];
+  const held = input.held.filter((call) => call.taskId === taskId);
+  const reported = voice.callTaskId === taskId ? voice.callTranscript : undefined;
   const ended = (call: HeardCall): HeardCall => (call.live ? { ...call, live: false } : call);
   if (reported === undefined) return held.map(ended);
   // Note that a call reported again keeps its place and when it was first heard.
   const standing = held.find(
     (call) => call.live && call.transcript.voiceSessionId === reported.voiceSessionId,
   );
-  const live = { planId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
+  const live = { taskId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
   const kept = held.map((call) => (call === standing ? live : ended(call)));
   return standing === undefined ? [...kept, live] : kept;
 }
@@ -187,7 +187,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
  * own state is drawn.
  */
 export function transcriptRegion(input: {
-  transcript: PlanningView["transcript"];
+  transcript: TasksView["transcript"];
   heard: readonly HeardCall[];
   /** The store's id for the session of the last call Luke ended himself, which closes with a line saying so. */
   lukeEndedCall?: string | undefined;
@@ -232,7 +232,7 @@ export function transcriptRegion(input: {
     };
   }
   if (stored !== undefined) return { kind: TRANSCRIPT_REGION.EMPTY };
-  if (input.transcript?.status === PLANNING_READ.FAILED) return { kind: TRANSCRIPT_REGION.FAILED };
+  if (input.transcript?.status === TASKS_READ.FAILED) return { kind: TRANSCRIPT_REGION.FAILED };
   return { kind: TRANSCRIPT_REGION.READING };
 }
 

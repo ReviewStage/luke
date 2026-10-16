@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { account, user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-
 import { CHANGES_BOUNDS, REVIEW_STATE } from "@luke/features/coding-agent-wire";
 import { Effect, Redacted } from "effect";
 import {

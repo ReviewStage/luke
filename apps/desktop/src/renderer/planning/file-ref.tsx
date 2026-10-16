@@ -1,5 +1,5 @@
-import type { CodeRef } from "@luke/features/plan-wire";
-import type { PlanCodeShowing } from "@luke/features/planning-view";
+import type { CodeRef } from "@luke/features/task-wire";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
@@ -53,7 +53,7 @@ export interface FileRead {
  * repository's file of the same path, nor of another commit than its tab's.
  */
 export function newestFileNote(
-  shown: readonly PlanCodeShowing[],
+  shown: readonly TaskCodeShowing[],
   path: string,
   read: FileRead,
 ): string | undefined {

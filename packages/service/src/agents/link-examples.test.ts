@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
-import { PLANNING_INSTRUCTIONS, SCRIBE_INSTRUCTIONS } from "./brain-host/planning.js";
+import { BRAIN_INSTRUCTIONS, SCRIBE_INSTRUCTIONS } from "./brain-host/brain.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
 import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
@@ -31,8 +31,8 @@ function drawnAs(words: string): (string | undefined)[] {
 
 test("a coding agent is shown to write a file of its own repository as a link Luke draws as the file's chip", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    for (const onPlan of [true, false]) {
-      const words = coderInstructions(REPOSITORY, brief, true, onPlan);
+    for (const onTask of [true, false]) {
+      const words = coderInstructions(REPOSITORY, brief, true, onTask);
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(drawnAs(told), [MENTION_KIND.FILE], brief);
     }
@@ -42,7 +42,7 @@ test("a coding agent is shown to write a file of its own repository as a link Lu
 test("the inbox's post tool, the plan's edit tool, and the planner show a file's link Luke draws as its chip", () => {
   assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
   assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);
-  assert.deepEqual(drawnAs(PLANNING_INSTRUCTIONS), [MENTION_KIND.FILE]);
+  assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.FILE]);
 });
 
 test("the notetaker shows an issue's link Luke draws as the integration page's chip", () => {

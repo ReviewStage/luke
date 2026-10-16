@@ -2,11 +2,11 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { listRepositoryRuns, setRepositoryRun } from "@luke/database/models/repository-run-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { workspaceIdSchema } from "@luke/features/plan-wire";
 import {
   REPOSITORY_RUNS_QUERY,
   repositoryRunSetRequestSchema,
 } from "@luke/features/repository-run-wire";
+import { workspaceIdSchema } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";

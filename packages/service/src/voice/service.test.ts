@@ -8,15 +8,15 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import {
+  callOpeningHistory,
   type InitialItem,
   LIVE_DEFAULTS,
   LIVE_DELEGATION_TARGET,
   LIVE_INPUT_BOUNDS,
   LIVE_TRANSPORT_TYPE,
   LIVE_VOICE,
-  planningOpeningHistory,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_CONTENT_TYPE,
@@ -80,7 +80,7 @@ const SEED = [
 ];
 
 /** A plan the account holds, untouched since it was started. */
-const PLAN: Plan = {
+const TASK: Task = {
   id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -97,7 +97,7 @@ function createFrame(input: WireRecord[] = SEED): WireRecord {
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input,
-    planId: PLAN.id,
+    planId: TASK.id,
   };
 }
 
@@ -136,7 +136,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
   const openAi = await startFakeOpenAi();
   const accounts = fakeAccounts();
   const record = fakeSessionRecord();
-  record.plans.push({ userId: FAKE_USER_ID, plan: PLAN });
+  record.tasks.push({ userId: FAKE_USER_ID, task: TASK });
   const log: LogEntry[] = [];
   const voice = voiceServer();
   const scope = await runWithoutDatabase(Scope.make());
@@ -211,7 +211,7 @@ test("a long history of earlier calls is cut to leave room for the opening, whic
   assert.ok(isRecord(session) && Array.isArray(session.input));
   // SAFETY: the service builds `input` from `InitialItem`s alone, which the request carries as sent.
   const input = session.input as InitialItem[];
-  assert.deepEqual(input.at(-1), planningOpeningHistory());
+  assert.deepEqual(input.at(-1), callOpeningHistory());
   assert.ok(seedItemTokens(input) <= LIVE_INPUT_BOUNDS.TOKENS);
   assert.ok(input.length <= LIVE_INPUT_BOUNDS.MESSAGES);
 });
@@ -255,7 +255,7 @@ test("a session is authorized, counted, created, registered to its account, atta
     {
       userId: FAKE_USER_ID,
       sessionId: created.sessionId,
-      planId: PLAN.id,
+      taskId: TASK.id,
       model: LIVE_DEFAULTS.MODEL,
     },
   ]);
@@ -276,7 +276,7 @@ test("a session is authorized, counted, created, registered to its account, atta
   // call's opening comes last, so Luke speaks first with nothing appended once it starts.
   assert.ok(Array.isArray(session.input));
   assert.deepEqual(session.input.slice(1, -1), SEED);
-  assert.deepEqual(session.input.at(-1), planningOpeningHistory());
+  assert.deepEqual(session.input.at(-1), callOpeningHistory());
   assert.deepEqual(session.client, {
     data_channel: {
       allowed_client_events: RENDERER_CLIENT_EVENTS,
@@ -325,7 +325,7 @@ test("an attach to a session another account created, or one never created, is r
     context.record.register({
       userId: "user-2",
       sessionId: "live_theirs",
-      planId: PLAN.id,
+      taskId: TASK.id,
       attachId: "attach-theirs",
       model: LIVE_DEFAULTS.MODEL,
     }),

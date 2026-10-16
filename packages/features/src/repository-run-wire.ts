@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { workspaceIdSchema } from "./plan-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 
 /**
  * repository-run-wire.ts -- how a workspace's repositories are set up and run on a Mac, shared by every member.

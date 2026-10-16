@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { unparsedWire } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -47,22 +47,22 @@ const COMMANDS: CommandTable = (command) =>
   command === "ls" ? LISTING : command === "cat secret" ? { ...LISTING, stdout: "x" } : undefined;
 
 /** An account holding one plan, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens. */
-const openPlan = (
+const openTask = (
   repository: string | null,
   installation: InstallationFixture,
   commands: CommandTable = COMMANDS,
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
+    const started = yield* startTask(userId, { name: "Teammate invitations", repository });
     yield* connectWorkspaceGitHub(started.workspaceId, installation);
     const sandbox = sandboxDouble(commands);
     const call: RepositoryCall = {
-      plan: { userId, planId: started.id },
+      task: { userId, taskId: started.id },
       repository,
       sandbox: sandbox.door,
     };
-    return { userId, planId: started.id, sandbox, call };
+    return { userId, taskId: started.id, sandbox, call };
   });
 
 const run = (
@@ -90,7 +90,7 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
     () =>
       Effect.gen(function* () {
         const installation = installationOf(7);
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
+        const { call, sandbox } = yield* openTask(RELAY_FULL_NAME, installation);
         const github = githubReaching([installation]);
 
         const first = yield* run(call, "ls", github.layer);
@@ -144,7 +144,7 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
     () =>
       Effect.gen(function* () {
         const installation = installationOf(8);
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
+        const { call, sandbox } = yield* openTask(RELAY_FULL_NAME, installation);
 
         const answered = yield* run(call, "ls", githubReaching([installation]).layer);
 
@@ -158,7 +158,7 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
   it.effect("a repository the workspace's installation no longer reaches checks nothing out", () =>
     Effect.gen(function* () {
       const installation = installationOf(9);
-      const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, installation);
+      const { call, sandbox } = yield* openTask(RELAY_FULL_NAME, installation);
       const elsewhere = githubReaching([{ ...installation, repositories: [] }]);
 
       const answered = yield* run(call, "ls", elsewhere.layer);

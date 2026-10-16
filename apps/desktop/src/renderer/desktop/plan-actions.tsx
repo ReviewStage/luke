@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, type PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
 import {
   ArchiveIcon,
   CopyIcon,
@@ -14,7 +14,7 @@ import {
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -74,18 +74,18 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  */
 
 /** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
-export function planOf(plans: PlansControl, planId: string): PlanSummary | undefined {
+export function planOf(plans: PlansControl, planId: string): TaskSummary | undefined {
   const listed = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId);
   if (listed !== undefined) return listed;
   const { region } = plans;
-  return region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
-    ? region.plan
+  return region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+    ? region.task
     : undefined;
 }
 
 /** One way a plan can be moved in the sidebar, as the menu and the row's own buttons both offer it. */
 interface PlaceMark {
-  mark: PlanMark;
+  mark: TaskMark;
   label: string;
   icon: React.JSX.Element;
 }
@@ -95,20 +95,20 @@ interface PlaceMark {
  * archived plan offers no pin, because the sidebar draws it among the
  * archived whether or not it is pinned.
  */
-function placeMarks(plan: PlanSummary): PlaceMark[] {
+function placeMarks(plan: TaskSummary): PlaceMark[] {
   if (plan.archivedAt !== undefined) {
-    return [{ mark: PLAN_MARK.UNARCHIVE, label: "Unarchive", icon: <UnarchiveIcon /> }];
+    return [{ mark: TASK_MARK.UNARCHIVE, label: "Unarchive", icon: <UnarchiveIcon /> }];
   }
   return [
     plan.pinnedAt === undefined
-      ? { mark: PLAN_MARK.PIN, label: "Pin", icon: <PinIcon /> }
-      : { mark: PLAN_MARK.UNPIN, label: "Unpin", icon: <UnpinIcon /> },
-    { mark: PLAN_MARK.ARCHIVE, label: "Archive", icon: <ArchiveIcon /> },
+      ? { mark: TASK_MARK.PIN, label: "Pin", icon: <PinIcon /> }
+      : { mark: TASK_MARK.UNPIN, label: "Unpin", icon: <UnpinIcon /> },
+    { mark: TASK_MARK.ARCHIVE, label: "Archive", icon: <ArchiveIcon /> },
   ];
 }
 
 /** Pin and Archive as the menu's items; nothing for a plan neither the list nor the document holds. */
-function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuAction[] {
+function placeActions(plans: PlansControl, plan: TaskSummary | undefined): MenuAction[] {
   if (plan === undefined) return [];
   return placeMarks(plan).map(({ mark, label, icon }) => ({
     label,
@@ -136,7 +136,7 @@ function SidebarPlanMarks({
   onContextMenu,
 }: {
   plans: PlansControl;
-  plan: PlanSummary;
+  plan: TaskSummary;
   current: boolean;
   disabled: boolean;
   /** Offers the row's own menu, so a right-click on a button over its end still reaches it. */
@@ -148,7 +148,7 @@ function SidebarPlanMarks({
         <Tooltip
           key={mark}
           label={label}
-          {...(current && mark === PLAN_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_PLAN } : {})}
+          {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_PLAN } : {})}
         >
           <button
             type="button"
@@ -190,7 +190,7 @@ function planActionGroups(
   },
 ): MenuAction[][] {
   const { region } = plans;
-  const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
+  const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === planId;
   const plan = planOf(plans, planId);
   const archived = plan?.archivedAt !== undefined;
   const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress };
@@ -252,18 +252,18 @@ function PlanMenuFooter({
   plan,
 }: {
   plans: PlansControl;
-  plan: PlanSummary;
+  plan: TaskSummary;
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: plans.me });
   const account = useAppState()?.account;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const { region } = plans;
-  const opened = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
-  const edit = opened ? lastEditOf(region.plan) : undefined;
+  const opened = region.kind === DOCUMENT_REGION.READY && region.task.id === plan.id;
+  const edit = opened ? lastEditOf(region.task) : undefined;
   const place: EditPlace = {
     reader,
-    sections: (opened ? region.plan.sectionEdits : undefined) ?? [],
+    sections: (opened ? region.task.sectionEdits : undefined) ?? [],
     agents: { control: plans.agents, onOpen: undefined },
     now,
   };
@@ -374,7 +374,7 @@ export function PlanActions({
   onRename,
 }: {
   plans: PlansControl;
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** Whether the ⋯ button is drawn: the shortcuts and the delete question stand either way. */
   button: boolean;
   /** Opens the toolbar's title as the plan's name field. */
@@ -391,7 +391,7 @@ export function PlanActions({
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
   useAppCommand(
     APP_COMMAND.ARCHIVE_PLAN,
-    plan.archivedAt === undefined ? () => plans.onMarkPlan(plan.id, PLAN_MARK.ARCHIVE) : undefined,
+    plan.archivedAt === undefined ? () => plans.onMarkPlan(plan.id, TASK_MARK.ARCHIVE) : undefined,
   );
   return (
     <>
@@ -447,7 +447,7 @@ export function SidebarPlan({
   onOpen,
 }: {
   plans: PlansControl;
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
   /** Whether the plan is open in the window, its column's tabs marking their own drafts; a row the sidebar does not mark may be, as one opened from a pin, and is its own mark unless said. */

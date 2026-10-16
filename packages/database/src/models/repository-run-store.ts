@@ -4,7 +4,7 @@ import { DateTime, Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { workspaceRepositoryRun } from "../schemas/workspace-repository-run.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * repository-run-store.ts -- how a workspace's repositories are set up and run on a Mac, read and written for `/api/repository-runs`.
@@ -92,7 +92,7 @@ const deleteRun = SqlSchema.void({
 /** The workspace's repositories with a command set, by name. */
 export function listRepositoryRuns(
   organizationId: string,
-): PlanStoreEffect<readonly RepositoryRun[]> {
+): TaskStoreEffect<readonly RepositoryRun[]> {
   return findRuns(organizationId);
 }
 
@@ -105,7 +105,7 @@ export function setRepositoryRun(
   organizationId: string,
   userId: string,
   run: RepositoryRun,
-): PlanStoreEffect<readonly RepositoryRun[]> {
+): TaskStoreEffect<readonly RepositoryRun[]> {
   return Effect.gen(function* () {
     const repository = run.repository.toLowerCase();
     if (run.setupCommand === null && run.runCommand === null) {

@@ -3,20 +3,17 @@ import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
 import { toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openPlanConversation, readPlan, savePlanText } from "@luke/database/models/plan-store";
+import { openTaskConversation, readTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
-import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
+import { readMessagesByConversationTyped, readTurnById, startTask } from "@luke/database/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  PLANNER_DELEGATE_TOOL,
-  planningToolDeclarations,
-} from "@luke/service/agents/brain-host/planning";
+import { BRAIN_DELEGATE_TOOL, brainToolDeclarations } from "@luke/service/agents/brain-host/brain";
 import { REPOSITORY_SHELL_REFUSAL } from "@luke/service/agents/repository-shell";
 import {
+  SCRIPTED_BRAIN_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,
-  SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
 } from "@luke/service/testing/eve-scripted-model";
 import {
@@ -114,17 +111,17 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
 }
 
 /** The id of the plan's conversation, opened on its first call; the plan must stand. */
-async function planConversation(run: Run, planId: string): Promise<string> {
-  const opened = await run(openPlanConversation(LOCAL_DEV_PRINCIPAL, planId));
+async function taskConversation(run: Run, planId: string): Promise<string> {
+  const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(opened));
   return opened.value.conversationId;
 }
 
 /** The document the plan holds now, failing the eval where it does not read. */
 async function planDocument(run: Run, planId: string) {
-  const stored = await run(readPlan(LOCAL_DEV_PRINCIPAL, planId));
+  const stored = await run(readTask(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(stored));
-  return stored.value.plan.document;
+  return stored.value.task.document;
 }
 
 export default defineEval({
@@ -172,15 +169,15 @@ export default defineEval({
       // The planning model is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
-      const plan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
       await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
-      const planConversationId = await planConversation(run, plan.id);
-      const planning = await openSession(planConversationId, PLAN_WORDS.FIRST);
-      const planningSession = await t.target.attachSession(planning.sessionId);
+      const planConversationId = await taskConversation(run, plan.id);
+      const tasks = await openSession(planConversationId, PLAN_WORDS.FIRST);
+      const planningSession = await t.target.attachSession(tasks.sessionId);
       planningSession.succeeded();
       assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
 
-      const turnId = hostTurnId(planning.sessionId, "turn_0");
+      const turnId = hostTurnId(tasks.sessionId, "turn_0");
       const turn = await readTurnById(run, turnId);
       assert.ok(turn);
       assert.equal(turn.conversationId, planConversationId);
@@ -190,7 +187,7 @@ export default defineEval({
       // durable state to the turn row: the prompt's fingerprint and the tool
       // set's, neither naming a row, since nothing of either is kept.
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
-      assert.equal(turn.toolSetHash, toolSetHashOf(planningToolDeclarations()));
+      assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations()));
 
       const planningRows = await readMessagesByTurn(run, planConversationId, turnId);
       assert.deepEqual(
@@ -205,18 +202,18 @@ export default defineEval({
       assert.ok(planningAnswer);
       assert.ok(
         planningAnswer.parts.some(
-          (part) => isTextUIPart(part) && part.text === SCRIPTED_PLANNING_REPLY,
+          (part) => isTextUIPart(part) && part.text === SCRIPTED_BRAIN_REPLY,
         ),
       );
       const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
-      assert.equal(runtimeSessionId, planning.sessionId);
+      assert.equal(runtimeSessionId, tasks.sessionId);
 
       // Research handed to the worker subagent returns a receipt at once, and
       // the planning turn stays open until the worker's result reaches the
       // model inside it: one turn on record, settled, holding the call, the
       // words before the wait, and the words after it.
-      const researchPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
-      const researchConversationId = await planConversation(run, researchPlan.id);
+      const researchPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
+      const researchConversationId = await taskConversation(run, researchPlan.id);
       const research = await openSession(
         researchConversationId,
         `${SCRIPTED_DELEGATE}invite links`,
@@ -236,7 +233,7 @@ export default defineEval({
       // The worker ran to its end on its own model and tools, rather than failing for want of them.
       const settled = researchSession.events.find((event) => event.type === "task.settled");
       assert.ok(settled && settled.type === "task.settled");
-      assert.equal(settled.data.name, PLANNER_DELEGATE_TOOL.name);
+      assert.equal(settled.data.name, BRAIN_DELEGATE_TOOL.name);
       assert.equal(settled.data.status, "completed");
       const researchRows = await readMessagesByTurn(run, researchConversationId, held.id);
       assert.deepEqual(
@@ -247,7 +244,7 @@ export default defineEval({
       assert.ok(researchAnswer);
       const delegation = researchAnswer.parts.find((part) => isToolUIPart(part));
       assert.ok(delegation);
-      assert.equal(delegation.type, `tool-${PLANNER_DELEGATE_TOOL.name}`);
+      assert.equal(delegation.type, `tool-${BRAIN_DELEGATE_TOOL.name}`);
       assert.equal(delegation.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       // The words before the wait and the words after it, in one answer.
       assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);
@@ -255,8 +252,8 @@ export default defineEval({
       // A repository read on a plan with no repository yet runs nothing and
       // says so: the refusal reaches the model as the tool's result, ahead of
       // any sandbox, and the model repeats why.
-      const readingPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
-      const readingConversationId = await planConversation(run, readingPlan.id);
+      const readingPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
+      const readingConversationId = await taskConversation(run, readingPlan.id);
       const reading = await openSession(readingConversationId, `${SCRIPTED_READ}ls`);
       const readingSession = await t.target.attachSession(reading.sessionId);
       readingSession.succeeded();

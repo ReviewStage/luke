@@ -1,6 +1,6 @@
 import { catalogIdOf } from "@luke/features/model-label";
 import {
-  type PlanTranscript,
+  type TaskTranscript,
   TRANSCRIPT_BOUNDS,
   TRANSCRIPT_PART_TYPE,
   type TranscriptCall,
@@ -11,13 +11,13 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import { type SpokenRow, spokenRowsOn } from "./message-reads.js";
-import type { PlanStoreEffect } from "./plan-store.js";
-import { reachablePlan } from "./workspace-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
+import { reachableTask } from "./workspace-store.js";
 
 /**
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
@@ -32,7 +32,7 @@ import { reachablePlan } from "./workspace-store.js";
  * its session row recorded of it: when and why it ended, its metered
  * seconds, and its model by the catalog's id (`catalogIdOf`), each only where the row holds it. The plan is read
  * under the account's membership of its workspace, so a plan of a workspace
- * the account is not in reads as no plan, exactly as in `plan-store.ts`;
+ * the account is not in reads as no plan, exactly as in `task-store.ts`;
  * past that gate a shared plan's transcript is every member's calls about
  * it, so the calls are gathered by the plan alone. Nothing is written here.
  */
@@ -42,17 +42,17 @@ const SPEAKER_OF_ROLE = {
   [VOICE_SEGMENT_ROLE.ASSISTANT]: TRANSCRIPT_SPEAKER.ASSISTANT,
 } as const;
 
-const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
+const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.String });
 
-const findReachablePlan = SqlSchema.findOneOption({
-  Request: PlanKeySchema,
+const findReachableTask = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.NullOr(Schema.String) }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id, conversationId: plan.conversationId })
-        .from(plan)
-        .where(reachablePlan(userId, planId)),
+        .select({ id: task.id, conversationId: task.conversationId })
+        .from(task)
+        .where(reachableTask(userId, taskId)),
     ),
 });
 
@@ -75,7 +75,7 @@ type SegmentRow = typeof SegmentRowSchema.Type;
 const findNewestSegments = SqlSchema.findAll({
   Request: Schema.String,
   Result: SegmentRowSchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
       db
         .select({
@@ -88,7 +88,7 @@ const findNewestSegments = SqlSchema.findAll({
         })
         .from(voiceTranscriptSegments)
         .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-        .where(eq(voiceSessions.planId, planId))
+        .where(eq(voiceSessions.taskId, taskId))
         .orderBy(
           desc(voiceSessions.startedAt),
           desc(voiceSessions.id),
@@ -192,7 +192,7 @@ function transcriptOf(
   records: ReadonlyMap<string, CallRecordRow>,
   spoken: ReadonlyMap<string, readonly SpokenRow[]>,
   earlierOmitted: boolean,
-): PlanTranscript {
+): TaskTranscript {
   return {
     calls: calls.map(({ first, ledger }) => ({
       id: first.voiceSessionId,
@@ -220,7 +220,7 @@ function spokenRowsOf(
   userId: string,
   conversationId: string | null,
   ids: readonly string[],
-): PlanStoreEffect<ReadonlyMap<string, readonly SpokenRow[]>> {
+): TaskStoreEffect<ReadonlyMap<string, readonly SpokenRow[]>> {
   if (conversationId === null || ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(spokenRowsOn(userId, conversationId, ids), (rows) => {
     const byCall = new Map<string, SpokenRow[]>();
@@ -233,12 +233,12 @@ function spokenRowsOf(
 /** What was said on the plan's calls, oldest call first; nothing where the account reaches no such plan. */
 export function readTranscript(
   userId: string,
-  planId: string,
-): PlanStoreEffect<Option.Option<PlanTranscript>> {
+  taskId: string,
+): TaskStoreEffect<Option.Option<TaskTranscript>> {
   return Effect.gen(function* () {
-    const owned = yield* findReachablePlan({ userId, planId });
+    const owned = yield* findReachableTask({ userId, taskId });
     if (Option.isNone(owned)) return Option.none();
-    const newestFirst = yield* findNewestSegments(planId);
+    const newestFirst = yield* findNewestSegments(taskId);
     const calls = callsOf(newestFirst);
     const ids = calls.map((call) => call.first.voiceSessionId);
     const records = ids.length === 0 ? [] : yield* findCallRecords(ids);

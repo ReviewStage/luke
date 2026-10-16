@@ -7,7 +7,7 @@ import { childConversationId } from "@luke/database/models/ids";
 import { listJournals, type SpokenAskRow } from "@luke/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
-import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@luke/features/planning-view";
+import { TASK_ACTIVITY_ACTION_MAX_CHARS, type TaskWorkTurn } from "@luke/features/tasks-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -35,6 +35,7 @@ import {
   Stream,
 } from "effect";
 import { SqlClient } from "effect/sql";
+import { BRAIN_DELEGATION_TOOLS, BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
   ASK_REFUSAL,
   type AskInput,
@@ -46,7 +47,6 @@ import {
   type StopOutcome,
   stopAsk,
 } from "../agents/brain-host/brain-ask.js";
-import { PLANNER_DELEGATION_TOOLS, PLANNING_EXPLORE_ASK } from "../agents/brain-host/planning.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
 import { projectTurnEvents } from "../agents/turn-events.js";
 import {
@@ -64,17 +64,17 @@ import {
   type TurnEventKind,
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
-import { subagentRecordsByCall } from "../plans/child-models.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
+import { subagentRecordsByCall } from "../tasks/child-models.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import {
   callsSendingToEarlierTasks,
-  planWorkOf,
   SUBAGENT_JOURNALS,
   type SubagentJournal,
+  taskWorkOf,
   workerSessionCallsOf,
-} from "../plans/plan-work.js";
-import { plannerDelegationJournalsOf } from "../plans/plan-work-store.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../plans/queue-question.js";
+} from "../tasks/task-work.js";
+import { brainDelegationJournalsOf } from "../tasks/task-work-store.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
 /**
@@ -243,7 +243,7 @@ interface FollowTold {
   action: string | undefined;
   settled: number;
   delegated: boolean;
-  work: PlanWorkTurn | undefined;
+  work: TaskWorkTurn | undefined;
   /** The `worker` calls the last look found on the journal, each with the call whose child conversation the next look reads its subagent's session from. */
   workers: ReadonlyMap<string, string>;
   /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
@@ -314,8 +314,8 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
   const action = isRepositoryCommand(pending.input)
     ? pending.input.command
     : storedToolName(pending);
-  if (action.length <= PLAN_ACTIVITY_ACTION_MAX_CHARS) return action;
-  return `${action.slice(0, PLAN_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
+  if (action.length <= TASK_ACTIVITY_ACTION_MAX_CHARS) return action;
+  return `${action.slice(0, TASK_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
 }
 
 /**
@@ -328,7 +328,7 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
 function delegatedOf(journal: StoredUIMessage | undefined): boolean {
   return (journal?.parts ?? [])
     .filter(isStoredToolPart)
-    .some((part) => PLANNER_DELEGATION_TOOLS.has(storedToolName(part)));
+    .some((part) => BRAIN_DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
 /** The calls about the plan's questions rather than its work. */
@@ -402,7 +402,7 @@ export interface HostedLiveBrainOptions {
  */
 export interface HostedLiveBrain extends LiveBrain {
   /** Hears each followed turn's work whenever it changes, its last as the turn ended; answers the unsubscribe. */
-  onWork(listener: (work: PlanWorkTurn) => void): () => void;
+  onWork(listener: (work: TaskWorkTurn) => void): () => void;
 }
 
 export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(function* (
@@ -413,7 +413,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const socket = yield* Effect.scope;
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-  const workListeners = new Set<(work: PlanWorkTurn) => void>();
+  const workListeners = new Set<(work: TaskWorkTurn) => void>();
   /** Each followed ask by its task revision, so the newest of several is known. */
   const followed = new Map<string, number>();
   /** How far each turn a recovered run is on was told by the connection before, as the record holds it. */
@@ -641,7 +641,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * earlier turn started was started; none where they could not be read.
    */
   const workerJournalsOf = (conversationId: string) =>
-    plannerDelegationJournalsOf(options.conversation.userId, conversationId).pipe(
+    brainDelegationJournalsOf(options.conversation.userId, conversationId).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): StoredUIMessage[] => []),
     );
@@ -731,7 +731,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       (callId) => !found(told.workers, callId),
     );
     const work = telling
-      ? planWorkOf(turn, message, subagents, titles, records, told.asked)
+      ? taskWorkOf(turn, message, subagents, titles, records, told.asked)
       : undefined;
     if (work !== undefined && !isDeepStrictEqual(work, told.work)) {
       told.work = work;
@@ -901,7 +901,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         {
           accountId: options.accountId,
           userId: options.conversation.userId,
-          question: PLANNING_EXPLORE_ASK,
+          question: BRAIN_EXPLORE_ASK,
           origin: ASK_ORIGIN.SPOKEN,
           clientId: sessionId,
           conversationId: options.conversation.conversationId,

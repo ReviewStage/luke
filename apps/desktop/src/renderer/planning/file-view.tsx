@@ -1,5 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import {
@@ -421,14 +421,14 @@ export function FileView({
   repository: string | null;
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
-  snippet: PlanCode | undefined;
+  snippet: TaskCode | undefined;
   /** Every code Luke showed on the plan, whose files of this repository the tree's filter narrows to. */
-  shownCode: readonly PlanCodeShowing[] | undefined;
+  shownCode: readonly TaskCodeShowing[] | undefined;
   readFile: ReadFileWindow;
   /** Lists one folder of the repository through the service. */
   readFolder: ListFolder;
   /** Lists the whole repository in one read through the service, which the tree's search narrows. */
-  readWhole: () => Promise<PlanningTreeAnswer>;
+  readWhole: () => Promise<TasksTreeAnswer>;
   openGitHub: (url: string) => void;
   treeOpen: boolean;
   onToggleTree: () => void;

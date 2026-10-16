@@ -10,8 +10,8 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import type { Plan } from "@luke/features/plan-wire";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import type { Task } from "@luke/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -37,7 +37,7 @@ import { DesktopPlans } from "./desktop-plans";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -85,9 +85,9 @@ async function mount(input: {
   const read = new Set<string>();
   const control = plansControl({
     me: input.reader,
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     mainTabs: {
       ...plansControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }],

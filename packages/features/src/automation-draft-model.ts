@@ -383,7 +383,7 @@ export function automationDraft(
  */
 export function draftProblems(
   draft: AutomationDraft,
-  planBacked: boolean,
+  taskBacked: boolean,
   now: Date,
 ): DraftProblems {
   const name = textProblem(
@@ -406,7 +406,7 @@ export function draftProblems(
         ? githubSettingsProblem(draft)
         : undefined;
   const repository =
-    !planBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
+    !taskBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
   const agent =
     draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
       ? "Choose the agent its runs go to."

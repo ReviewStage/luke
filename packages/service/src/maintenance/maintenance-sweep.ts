@@ -35,7 +35,7 @@ interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
   /** Removes the ended calls of plans deleted since, a sweep's worth, answering how many went. */
-  purgeDeletedPlanCalls: (now: number) => SweepRead<number>;
+  purgeDeletedTaskCalls: (now: number) => SweepRead<number>;
   /** Settles every turn still running past its kind's bound, an hour for a planning turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
@@ -97,7 +97,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
     const now = yield* Clock.currentTimeMillis;
     const answer: MaintenanceSweepAnswer = {
       purged: yield* options.purgeCleared(now),
-      purgedCalls: yield* options.purgeDeletedPlanCalls(now),
+      purgedCalls: yield* options.purgeDeletedTaskCalls(now),
       abandoned: yield* options.sweepAbandonedTurns(now),
       voice: yield* options.sweepVoice(now),
       sandboxes: yield* options.sweepSandboxes(now),

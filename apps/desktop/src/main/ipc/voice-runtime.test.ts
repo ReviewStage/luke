@@ -137,7 +137,7 @@ it.effect("the five live session acts reach the host from the voice window alone
     assert.deepEqual(
       yield* f.perform(f.voiceSender, {
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-        payload: { sdp: offer, planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+        payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
       }),
       { status: "done", value: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
     );
@@ -169,7 +169,7 @@ it.effect("the five live session acts reach the host from the voice window alone
     assert.deepEqual(
       yield* f.perform(f.panelSender, {
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-        payload: { sdp: offer, planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+        payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
       }),
       { status: "done", value: undefined },
     );

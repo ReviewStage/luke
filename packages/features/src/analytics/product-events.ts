@@ -187,7 +187,7 @@ type ProductUpdateAction = (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_U
 
 /** Which half of the panel is drawn, said exactly as `APP_PANEL_TAB` says it. */
 const PRODUCT_PANEL_TAB = {
-  PLANS: APP_PANEL_TAB.PLANS,
+  TASKS: APP_PANEL_TAB.TASKS,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
 } as const satisfies Record<string, AppPanelTab>;
 

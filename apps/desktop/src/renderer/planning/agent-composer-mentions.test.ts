@@ -16,7 +16,7 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -57,7 +57,7 @@ const PLAN_ID = "pl_1";
 
 const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
-const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" };
+const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "rollout" };
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
@@ -130,7 +130,7 @@ beforeEach(() => {
                     ],
                   },
                 }
-              : request.kind === ACT_KIND.PLANNING_TREE
+              : request.kind === ACT_KIND.TASKS_TREE
                 ? {
                     status: ACT_OUTCOME_STATUS.DONE,
                     value: {
@@ -138,7 +138,7 @@ beforeEach(() => {
                         path: "",
                         repository: standing,
                         branch: "main",
-                        entries: [{ name: TREES.get(standing) ?? "", kind: PLAN_TREE_ENTRY.FILE }],
+                        entries: [{ name: TREES.get(standing) ?? "", kind: TASK_TREE_ENTRY.FILE }],
                         truncated: false,
                       },
                     },
@@ -311,7 +311,7 @@ test("on the page of an agent no plan holds an @ offers its repository's files, 
 
   assert.deepEqual(listed(container), ["rollout-store.ts"]);
   assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.PLANNING_TREE).map((each) => each.payload),
+    told.filter((each) => each.kind === ACT_KIND.TASKS_TREE).map((each) => each.payload),
     [{ workspaceId: "workspace-1", repository: "acme/relay", path: "", recursive: true }],
   );
 });
@@ -592,7 +592,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   pressInComposer(container, "Enter");
   await settle();
 
-  const pageMention: Mention = { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: PAGE.id };
+  const pageMention: Mention = { kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE.id };
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Invites by week"],
@@ -619,12 +619,12 @@ test("another agent picked from the @ list is drawn as its chip and sent as its 
 test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
   const opened: ReadLink[] = [];
   const page = mentionMarkdown(
-    { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: PAGE.id },
+    { kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE.id },
     PAGE.title,
     PLACE,
   );
   const agent = mentionMarkdown(
-    { kind: MENTION_KIND.AGENT, planId: PLAN_ID, agentId: STORE_AGENT.id },
+    { kind: MENTION_KIND.AGENT, taskId: PLAN_ID, agentId: STORE_AGENT.id },
     STORE_AGENT.name,
     PLACE,
   );

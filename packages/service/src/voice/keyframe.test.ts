@@ -95,7 +95,7 @@ it.effect("a session is minted on the key for the persona and answers the grant"
 const REFUSALS = [
   { status: 503, failure: KEYFRAME_FAILURE.NO_CAPACITY },
   { status: 429, failure: KEYFRAME_FAILURE.NO_CAPACITY },
-  { status: 403, failure: KEYFRAME_FAILURE.PLAN_REFUSED },
+  { status: 403, failure: KEYFRAME_FAILURE.TASK_REFUSED },
   { status: 401, failure: KEYFRAME_FAILURE.UPSTREAM },
   { status: 500, failure: KEYFRAME_FAILURE.UPSTREAM },
 ] as const;

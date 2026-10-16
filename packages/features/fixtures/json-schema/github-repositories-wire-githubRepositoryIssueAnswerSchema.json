@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "properties": {
+    "issue": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed",
+                "not-planned"
+              ]
+            }
+          },
+          "required": [
+            "number",
+            "title",
+            "url",
+            "state"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "issue"
+  ],
+  "additionalProperties": false
+}

@@ -531,7 +531,7 @@ export class LiveCall implements LiveVoiceCall {
         createPeerConnection: this.#options.createPeerConnection,
         createSilence: this.#options.createSilence,
         openMicrophone: this.#options.openMicrophone,
-        createSession: (sdp) => this.#options.acts.createSession(sdp, opening.planId),
+        createSession: (sdp) => this.#options.acts.createSession(sdp, opening.taskId),
         onRemoteStream: (stream) => {
           this.#remoteStream = stream;
           this.#options.remoteStream.show(stream);

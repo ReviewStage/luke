@@ -2137,6 +2137,9 @@ ul.actor-stack {
 .primary-button,
 .danger-button {
   --button-ground: transparent;
+  /* The fill a button wears at rest, named so an unavailable one can fade it
+     rather than itself. */
+  --button-fill: transparent;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -2145,7 +2148,7 @@ ul.actor-stack {
   height: var(--control-height);
   padding: 0 var(--space-12);
   border-radius: var(--control-radius);
-  background: none;
+  background: var(--button-fill);
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -2191,12 +2194,12 @@ ul.actor-stack {
 }
 
 .primary-button {
-  background: var(--message-sent);
+  --button-fill: var(--message-sent);
   color: var(--on-accent);
 }
 
 .danger-button {
-  background: var(--danger-fill);
+  --button-fill: var(--danger-fill);
   color: var(--on-accent);
 }
 
@@ -2208,11 +2211,35 @@ ul.actor-stack {
   filter: brightness(0.92);
 }
 
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(
-  :disabled,
-  [aria-disabled="true"]
-) {
+/* Unavailable, a button fades to 45%. A disabled one is out of the tab order
+   and fades whole. One that says so with `aria-disabled` stays in it, so its
+   hover can say why, and fades its fill, its words, and its glyphs rather
+   than itself, because an opacity on the button would fade the keyboard's
+   ring (base.css) with it, and the ring is where the keyboard is. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(:disabled) {
   opacity: 0.45;
+}
+
+/* Its words and glyphs fade toward the window's ground, as they did when the
+   whole button faded over it, a filled button's included: faded over its
+   faded fill instead, they would fade twice. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--button-fill) 45%, transparent);
+  -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
+}
+
+/* What it holds draws in that faded ink however it draws, words, a glyph's
+   stroke, or a wait's spinning arc, each in `currentColor`. Set on what the
+   button holds directly, so whatever is nested deeper inherits it and fades
+   once. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"])
+> * {
+  color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
+  -webkit-text-fill-color: currentColor;
+}
+
+:is(.toolbar-button, .icon-button):where([aria-disabled="true"]) svg {
+  color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* A small act beside a line of words, a failure's retry

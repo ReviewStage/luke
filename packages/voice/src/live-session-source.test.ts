@@ -15,7 +15,7 @@ const SDP_ANSWER =
   "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
 
 function createdFrame(overrides: ParsedJsonObject = {}) {
@@ -54,7 +54,7 @@ it.live(
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = hosted(script, { voice: LIVE_VOICE.MARIN });
 
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID });
 
       assert.equal(opened?.sessionId, SESSION_ID);
       assert.equal(opened?.sdpAnswer, SDP_ANSWER);
@@ -70,7 +70,7 @@ it.live(
         sdp: SDP_OFFER,
         voice: LIVE_VOICE.MARIN,
         input: [],
-        planId: PLAN_ID,
+        planId: TASK_ID,
       });
       const report = source.diagnostics();
       assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
@@ -83,7 +83,7 @@ it.live("the hosted source refuses to open without an access token and opens no 
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID }), undefined);
     assert.equal(script.opens.length, 0);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),
@@ -107,7 +107,7 @@ it.live("the hosted source does not carry a renewed bearer for another account",
         }),
     });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID }), undefined);
     assert.equal(script.opens.length, 1);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),

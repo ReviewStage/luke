@@ -151,7 +151,7 @@ function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): 
 /** The list's query: one plan's or one workspace's, or none for every automation the account reads. */
 function listQuery(params: AutomationListParams): string {
   const query = new URLSearchParams();
-  if (params.planId !== undefined) query.set(AUTOMATION_LIST_QUERY.PLAN_ID, params.planId);
+  if (params.taskId !== undefined) query.set(AUTOMATION_LIST_QUERY.TASK_ID, params.taskId);
   if (params.workspaceId !== undefined) {
     query.set(AUTOMATION_LIST_QUERY.WORKSPACE_ID, params.workspaceId);
   }

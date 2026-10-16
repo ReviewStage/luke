@@ -1,4 +1,4 @@
-import type { PlanEditor } from "@luke/features/plan-wire";
+import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import { cn } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";

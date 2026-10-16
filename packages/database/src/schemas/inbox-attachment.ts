@@ -5,7 +5,7 @@ import { check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core"
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * inbox-attachment.ts -- one picture of an inbox item's: the bytes of an image block, kept beside the item it belongs to.
@@ -34,7 +34,7 @@ export const inboxAttachment = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     /** The item's plan; null for an item of an agent with no plan. */
-    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
     /** The item's workspace. */
     organizationId: text("organization_id")
       .notNull()

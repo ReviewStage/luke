@@ -170,7 +170,7 @@ const done = (value: ActResultFor<ActKind>): ActOutcome => ({
 function answer(request: Act): Promise<ActOutcome> {
   // The Repositories group's acts are its own, kept apart from the rest the page sends.
   switch (request.kind) {
-    case ACT_KIND.PLANNING_REPOSITORIES:
+    case ACT_KIND.TASKS_REPOSITORIES:
       return Promise.resolve(
         done({
           repositories: {

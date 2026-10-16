@@ -6,8 +6,8 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import { GitHubApp } from "../github/github-app.js";
-import { planWorkspace } from "../github/workspace-repository.js";
-import type { PlanDocumentBinding } from "../plans/plan-notes.js";
+import { taskWorkspace } from "../github/workspace-repository.js";
+import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
@@ -211,7 +211,7 @@ export type RepositorySandboxDoor = () => Promise<RepositorySandbox>;
 
 /** What one call runs under: the plan, the repository it names now, and the session's sandbox. */
 export interface RepositoryCall {
-  readonly plan: PlanDocumentBinding;
+  readonly task: PlanDocumentBinding;
   /** The plan's repository as the row holds it, `owner/name`; null for a plan with none. */
   readonly repository: string | null;
   readonly sandbox: RepositorySandboxDoor;
@@ -262,7 +262,7 @@ export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
 }> {}
 
 /** The planning checkout is one commit deep: it is read and never pushed from. */
-const PLANNING_CLONE_DEPTH = "1";
+const BRAIN_CLONE_DEPTH = "1";
 
 /** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of, and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
@@ -430,7 +430,7 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
 ): Effect.fn.Return<void, RepositoryRefusal, RepositoryShellServices> {
   const app = yield* GitHubApp;
   const reached = yield* Effect.gen(function* () {
-    const workspace = yield* planWorkspace(call.plan.userId, call.plan.planId);
+    const workspace = yield* taskWorkspace(call.task.userId, call.task.taskId);
     if (Option.isNone(workspace)) return Option.none();
     return yield* app.repositoryReadToken(workspace.value, repository);
   }).pipe(
@@ -440,7 +440,7 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
   const { repository: confirmed, token } = reached.value;
   yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
-    depth: PLANNING_CLONE_DEPTH,
+    depth: BRAIN_CLONE_DEPTH,
   });
 });
 

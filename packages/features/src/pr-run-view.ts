@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { workspaceIdSchema } from "./plan-wire.js";
 import { commitShaSchema, pullRequestNumberSchema } from "./pr-fetch-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 import { TERMINAL_FLOW } from "./terminal-view.js";
 
 /**

@@ -4,15 +4,15 @@ import {
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
-  HostedPlanClient,
   HostedPrFetchClient,
   HostedRepositoryRunClient,
+  HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-  type PlanActivityFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
+  type TaskActivityFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
 } from "@luke/features";
 import {
   carried,
@@ -33,9 +33,9 @@ import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
-import { composePlanning } from "./compose-planning.js";
 import { composePrRuns, prRunTools } from "./compose-pr-runs.js";
 import { composeSettings } from "./compose-settings.js";
+import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals } from "./compose-terminals.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -60,7 +60,7 @@ const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
-  PLANNING: "planning",
+  TASKS: "planning",
   CODING_AGENTS: "codingAgents",
   AUTOMATIONS: "automations",
   INTEGRATIONS: "integrations",
@@ -79,7 +79,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.LIVE,
-  HOST_CONCERN.PLANNING,
+  HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
@@ -120,21 +120,21 @@ export const hostAssemblyLayer: Layer.Layer<
     // The planning composer is built after the live one and ends its calls, so
     // the live composer reads the open plan, and hands it the plan's drafts
     // and their activity, through these late bindings.
-    let activePlanId: () => string | undefined = () => undefined;
+    let activeTaskId: () => string | undefined = () => undefined;
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
-    let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
-    let planCallEnded: (planId: string) => void = () => undefined;
-    let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
-    let showPlanWork: (work: PlanWorkFrame) => void = () => undefined;
+    let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
+    let taskCallEnded: (taskId: string) => void = () => undefined;
+    let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
+    let showTaskWork: (work: TaskWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
-      activePlanId: () => activePlanId(),
+      activeTaskId: () => activeTaskId(),
       showPlanDraft: (draft) => showPlanDraft(draft),
-      showPlanActivity: (activity) => showPlanActivity(activity),
-      planCallEnded: (planId) => planCallEnded(planId),
-      showPlanCode: (code) => showPlanCode(code),
-      showPlanWork: (work) => showPlanWork(work),
+      showTaskActivity: (activity) => showTaskActivity(activity),
+      taskCallEnded: (taskId) => taskCallEnded(taskId),
+      showTaskCode: (code) => showTaskCode(code),
+      showTaskWork: (work) => showTaskWork(work),
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -145,12 +145,12 @@ export const hostAssemblyLayer: Layer.Layer<
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,
     });
-    const planning = yield* composePlanning({
+    const tasks = yield* composeTasks({
       kernel,
       account,
-      endPlanCall: (planId) => live.service.endPlanCall(planId),
+      endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
-        new HostedPlanClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
+        new HostedTaskClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
         {
           workspaces: workspaceClient,
           github: new HostedGitHubConnectionClient({
@@ -228,12 +228,12 @@ export const hostAssemblyLayer: Layer.Layer<
       // Note that the credential helper is this app's own runtime run as Node, so it needs nothing installed beside Git.
       helper: { path: process.execPath, environment: { ELECTRON_RUN_AS_NODE: "1" } },
     });
-    activePlanId = planning.activePlanId;
-    showPlanDraft = planning.showDraft;
-    showPlanActivity = planning.showActivity;
-    planCallEnded = planning.callEnded;
-    showPlanCode = ({ type: _type, planId, ...shown }) => planning.showCode(planId, shown);
-    showPlanWork = (work) => planning.showWork(work.planId, work.turn);
+    activeTaskId = tasks.activeTaskId;
+    showPlanDraft = tasks.showDraft;
+    showTaskActivity = tasks.showActivity;
+    taskCallEnded = tasks.callEnded;
+    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
+    showTaskWork = (work) => tasks.showWork(work.planId, work.turn);
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
@@ -248,7 +248,7 @@ export const hostAssemblyLayer: Layer.Layer<
 
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
-      yield* planning.reset;
+      yield* tasks.reset;
       yield* terminals.reset;
       yield* prRuns.reset;
       yield* account.applyVoiceCredential;
@@ -275,7 +275,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.LIVE]: live,
-      [HOST_CONCERN.PLANNING]: planning,
+      [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,

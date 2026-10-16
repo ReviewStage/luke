@@ -1,6 +1,6 @@
 import type { Board } from "@luke/features/board-wire";
 import type { PageLine } from "@luke/features/page-wire";
-import type { PlanCodeShowing } from "@luke/features/planning-view";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel";
 
@@ -50,7 +50,7 @@ function lukeDrawing(board: Board): number {
 }
 
 /** Whether any snippet is one the visit has not read, reading each as it goes. */
-function readNewCode(read: Set<string>, code: readonly PlanCodeShowing[]): boolean {
+function readNewCode(read: Set<string>, code: readonly TaskCodeShowing[]): boolean {
   let fresh = false;
   for (const showing of code) {
     if (read.has(showing.callId)) continue;
@@ -86,7 +86,7 @@ export function usePanelArrivals(input: {
   planId: string | undefined;
   board: Board | undefined;
   /** The code shown on the plan, or nothing while no call about it stands, since only a call shows code. */
-  code: readonly PlanCodeShowing[] | undefined;
+  code: readonly TaskCodeShowing[] | undefined;
   /** The plan's pages, or nothing while no call about it stands, since a page shown on a call is what arrives. */
   pages: readonly PageLine[] | undefined;
   panel: SidePanelControl;

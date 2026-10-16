@@ -7,7 +7,7 @@
  * the bar can never disagree about the call they draw.
  */
 
-import type { PlanningView } from "@luke/features/planning-view";
+import type { TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import {
   AVATAR_STATUS,
@@ -17,13 +17,13 @@ import {
   avatarTiled,
 } from "@luke/voice/avatar";
 import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
-import { type CallStatus, standingCallStatus } from "./planning-model.js";
+import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
 /** The plan's name where the document has none to give, which a plan just started can briefly be. */
 const CALL_CARD_UNNAMED = "Planning call";
 
 export interface CallCardModel {
-  readonly planName: string;
+  readonly taskName: string;
   /** The call bar's own two lines for the standing call, which the card draws in the same bar. */
   readonly status: CallStatus | undefined;
   /** Whether the developer is not being heard on a call that could hear them. */
@@ -31,22 +31,22 @@ export interface CallCardModel {
 }
 
 /** The call's plan by name, from the list or the plan open, whichever holds it. */
-function planNameOf(planning: PlanningView, planId: string | undefined): string {
-  const open = planning.document.plan;
+function taskNameOf(tasks: TasksView, taskId: string | undefined): string {
+  const open = tasks.document.task;
   const named =
-    planning.plans.find((plan) => plan.id === planId)?.name ??
-    (open !== undefined && open.id === planId ? open.name : undefined);
+    tasks.tasks.find((task) => task.id === taskId)?.name ??
+    (open !== undefined && open.id === taskId ? open.name : undefined);
   return named === undefined || named === "" ? CALL_CARD_UNNAMED : named;
 }
 
 export function callCard(input: {
-  view: Pick<VoiceView, "voiceStatus" | "lukeSpeaking" | "listening" | "callPlanId">;
-  planning: PlanningView;
+  view: Pick<VoiceView, "voiceStatus" | "lukeSpeaking" | "listening" | "callTaskId">;
+  tasks: TasksView;
 }): CallCardModel {
-  const { view, planning } = input;
+  const { view, tasks } = input;
   return {
-    planName: planNameOf(planning, view.callPlanId),
-    status: standingCallStatus(view, planning.callActivity),
+    taskName: taskNameOf(tasks, view.callTaskId),
+    status: standingCallStatus(view, tasks.callActivity),
     microphoneMuted: !view.listening && view.voiceStatus !== LIVE_STATUS.CONNECTING,
   };
 }
@@ -57,18 +57,18 @@ export function callCard(input: {
  * agent's page, or a side panel filling the window covers the column the
  * call bar stands in.
  */
-export function callBarPlanId(input: {
-  plansTab: boolean;
+export function callBarTaskId(input: {
+  tasksTab: boolean;
   documentPage: boolean;
   historyOpen: boolean;
   inboxOpen: boolean;
   agentPageOpen: boolean;
   sidePanelFullScreen: boolean;
-  activePlanId: string | undefined;
+  activeTaskId: string | undefined;
 }): string | undefined {
   const covered =
     input.historyOpen || input.inboxOpen || input.agentPageOpen || input.sidePanelFullScreen;
-  return input.plansTab && input.documentPage && !covered ? input.activePlanId : undefined;
+  return input.tasksTab && input.documentPage && !covered ? input.activeTaskId : undefined;
 }
 
 /**
@@ -78,12 +78,12 @@ export function callBarPlanId(input: {
  * window, so the call is drawn in one place at a time.
  */
 export function callCardShown(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
   focused: boolean;
-  planShown: string | undefined;
+  taskShown: string | undefined;
 }): boolean {
-  const { view, focused, planShown } = input;
-  return focused && callInProgress(view) && planShown !== view.callPlanId;
+  const { view, focused, taskShown } = input;
+  return focused && callInProgress(view) && taskShown !== view.callTaskId;
 }
 
 /**
@@ -97,13 +97,13 @@ export function callCardShown(input: {
  * standing keeps its tile, and with it the one control that takes it down.
  */
 export function callTabVideoStatus(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
   avatar: AvatarState;
   planId: string;
   videoCalls: boolean;
 }): AvatarStatus | undefined {
   const { view, avatar, planId, videoCalls } = input;
-  if (!callInProgress(view) || view.callPlanId !== planId) return undefined;
+  if (!callInProgress(view) || view.callTaskId !== planId) return undefined;
   if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
 }
@@ -119,7 +119,7 @@ export function callTabVideoStatus(input: {
  * still standing when the experiment is turned off keeps its tile.
  */
 export function callCardVideoStatus(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
   avatar: AvatarState;
   videoCalls: boolean;
 }): AvatarStatus | undefined {

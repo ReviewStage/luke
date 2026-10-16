@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { PlanningTreeAnswer } from "@luke/features/planning-view";
+import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { CloseIcon, SearchIcon } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
@@ -125,7 +125,7 @@ export function FileTreePane({
   foot?: ReactNode;
   listFolder: ReadFolder;
   /** Lists the whole repository in one read, everything under its root, which the search narrows; none narrows the rows as they stand. */
-  readWhole?: (() => Promise<PlanningTreeAnswer>) | undefined;
+  readWhole?: (() => Promise<TasksTreeAnswer>) | undefined;
   /** A file chosen in the tree, to open in the tab, or in a tab of its own where ⌘ was held. */
   onOpen: (path: string, newTab: boolean) => void;
   /** The pane's own box, which its slide in and out plays on (`file-view.tsx`). */

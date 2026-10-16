@@ -20,18 +20,18 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/page-tool.js";
-import {
-  PICTURE_LOOK_REFUSAL,
-  type PictureLookResult,
-  pictureNotLooked,
-  runLookAtPicture,
-} from "../../plans/picture-look.js";
 import {
   ModelCatalog,
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
+import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
+import {
+  PICTURE_LOOK_REFUSAL,
+  type PictureLookResult,
+  pictureNotLooked,
+  runLookAtPicture,
+} from "../../tasks/picture-look.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
@@ -50,10 +50,12 @@ import {
   AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
+  runArchiveAgent,
   runListAgents,
   runListTasks,
   runMessageAgent,
   runStartAgent,
+  runUnarchiveAgent,
 } from "../coding-agent-tools.js";
 import {
   type ReadWebPageResult,
@@ -361,6 +363,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.LIST_AGENTS
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
+    | typeof CODER_TOOL.ARCHIVE_AGENT
+    | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.LIST_TASKS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -371,6 +375,8 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
+  [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
+  [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
 } as const;
 
@@ -447,7 +453,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       agent.repository,
       brief,
       ciReadable,
-      agent.planId !== null,
+      agent.taskId !== null,
       coAuthor,
     );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor };
@@ -641,11 +647,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
         // An agent handed a prompt never saw the plan, so it has none to take notes on.
-        if (found.success.prompt !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
-        const { id: agentId, planId } = found.success;
-        if (planId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
+        if (found.success.prompt !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
+        const { id: agentId, taskId } = found.success;
+        if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
         // The plan is written as the member whose turn this is, whoever started the agent.
-        const binding = { userId: admitted.caller, planId };
+        const binding = { userId: admitted.caller, taskId };
         return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
       }).pipe(
         Effect.tapError(logStoreFailure),
@@ -656,8 +662,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, planId, repository } = found.success;
-        const agent = { userId: admitted.target.userId, planId, agentId };
+        const { id: agentId, taskId, repository } = found.success;
+        const agent = { userId: admitted.target.userId, taskId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
             return yield* postToInbox({ ...agent, repository }, call.input, call.sandbox);
@@ -675,10 +681,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-        const { planId } = found.success;
-        if (planId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.PLANLESS);
+        const { taskId: planId } = found.success;
+        if (planId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
         // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, planId }, input);
+        return yield* runLookAtPicture({ userId: admitted.caller, taskId: planId }, input);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
@@ -698,11 +704,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return showPageRejected(found.failure);
-        const { planId } = found.success;
-        if (planId === null) return showPageRejected(SHOW_PAGE_REFUSAL.PLANLESS);
+        const { taskId } = found.success;
+        if (taskId === null) return showPageRejected(SHOW_PAGE_REFUSAL.TASKLESS);
         const binding = {
           userId: admitted.target.userId,
-          planId,
+          taskId,
           sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
         };
         return yield* runShowPage(binding, input);

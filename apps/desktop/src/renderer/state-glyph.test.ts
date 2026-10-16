@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { TerminalIcon } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -21,7 +21,7 @@ import { AgentGlyph, agentEndMark } from "./planning/tab-look";
 const MODEL = "anthropic/claude-opus-5.5";
 
 /** A plan an agent is working on, as the sidebar's list sums its agents up. */
-const WORKED_ON: PlanSummary = {
+const WORKED_ON: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",

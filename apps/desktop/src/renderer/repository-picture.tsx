@@ -1,4 +1,4 @@
-import { repositoryOwnerPictureUrl } from "@luke/ui/planning-model";
+import { repositoryOwnerPictureUrl } from "@luke/ui/tasks-model";
 import { useState } from "react";
 
 /**

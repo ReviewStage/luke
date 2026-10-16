@@ -4,12 +4,12 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
-import { updatePlan } from "@luke/database/models/plan-store";
+import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
-import { getTestDB, joinWorkspace, openWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -26,14 +26,14 @@ import {
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import {
-  accountInboxPlans,
+  accountInboxTasks,
   accountWaitingItems,
   answerInboxItem,
   closeInboxItem,
   type InboxAgent,
-  planInboxItems,
   postInboxItem,
   readInboxItem,
+  taskInboxItems,
   withdrawInboxAnswer,
 } from "../../inbox/inbox-store.js";
 import { accountInboxPast } from "./inbox-page.js";
@@ -62,9 +62,9 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan and one agent started on it, and the workspace the plan is in. */
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
+  const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createCodingAgent(userId, {
-    planId: plan.id,
+    taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -73,8 +73,8 @@ const openAgentIn = Effect.gen(function* () {
     prompt: null,
   });
   assert.ok(Option.isSome(started));
-  const agent = { userId, planId: plan.id, agentId: started.value.agent.id };
-  return { agent, workspaceId: plan.workspaceId };
+  const agent = { userId, taskId: task.id, agentId: started.value.agent.id };
+  return { agent, workspaceId: task.workspaceId };
 });
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
@@ -92,10 +92,10 @@ const DONE = { reply: INBOX_REPLY.DONE } as const;
 /** A workspace automation of the account's on a plan of the workspace, which its runs start agents beside. */
 const openAutomation = (userId: string, workspaceId: string) =>
   Effect.gen(function* () {
-    const plan = yield* startPlan(userId, { name: "Flaky tests" });
-    yield* updatePlan(userId, plan.id, { organizationId: workspaceId });
+    const task = yield* startTask(userId, { name: "Flaky tests" });
+    yield* updateTask(userId, task.id, { organizationId: workspaceId });
     const made = yield* createAutomation(userId, {
-      planId: plan.id,
+      taskId: task.id,
       name: "Flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
@@ -108,13 +108,13 @@ const openAutomation = (userId: string, workspaceId: string) =>
   });
 
 /** An account's workspace with one agent started in it on no plan, as an automation's run starts one, by an automation of the account's where asked. */
-const openPlanlessAgentOf = (byAutomation: boolean) =>
+const openTasklessAgentOf = (byAutomation: boolean) =>
   Effect.gen(function* () {
     const userId = yield* openUser;
     const workspaceId = yield* openWorkspace(userId);
     const automationId = byAutomation ? yield* openAutomation(userId, workspaceId) : undefined;
     const started = yield* createCodingAgent(userId, {
-      planId: null,
+      taskId: null,
       organizationId: workspaceId,
       automationId,
       idempotencyKey: randomUUID(),
@@ -125,18 +125,18 @@ const openPlanlessAgentOf = (byAutomation: boolean) =>
       prompt: "Sweep the flaky tests.",
     });
     assert.ok(Option.isSome(started));
-    const agent: InboxAgent = { userId, planId: null, agentId: started.value.agent.id };
+    const agent: InboxAgent = { userId, taskId: null, agentId: started.value.agent.id };
     return { agent, workspaceId, automationId };
   });
 
-const openPlanlessAgent = openPlanlessAgentOf(false);
+const openTasklessAgent = openTasklessAgentOf(false);
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
     "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation, by name or id, only to who may read it",
     () =>
       Effect.gen(function* () {
-        const { agent, workspaceId, automationId } = yield* openPlanlessAgentOf(true);
+        const { agent, workspaceId, automationId } = yield* openTasklessAgentOf(true);
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         const outsider = yield* openUser;
@@ -201,7 +201,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
     "an agent with no plan posts to its workspace: a member who did not start it reads and answers the item, and an account outside the workspace does neither",
     () =>
       Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openPlanlessAgent;
+        const { agent, workspaceId } = yield* openTasklessAgent;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         const outsider = yield* openUser;
@@ -226,7 +226,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
     "an answer names the member who gave it, to every member, and an answer withdrawn or an item asked again names nobody",
     () =>
       Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openPlanlessAgent;
+        const { agent, workspaceId } = yield* openTasklessAgent;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         const posted = yield* postInboxItem(agent, SETTINGS);
@@ -261,7 +261,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Result.isSuccess(posted));
         const destination = yield* openWorkspace(agent.userId);
 
-        yield* updatePlan(agent.userId, agent.planId, { organizationId: destination });
+        yield* updateTask(agent.userId, agent.taskId, { organizationId: destination });
         yield* Database.use((db) =>
           db.delete(organization).where(eq(organization.id, workspaceId)),
         );
@@ -334,7 +334,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           Option.isNone(yield* answerInboxItem(agent.userId, id, 2, done, randomUUID())),
           "a closed item takes no answer",
         );
-        assert.deepEqual(yield* planInboxItems(other, agent.planId), []);
+        assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
       }),
   );
 
@@ -352,7 +352,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const done = { reply: INBOX_REPLY.DONE } as const;
 
         assert.deepEqual(
-          (yield* planInboxItems(teammate, agent.planId)).map((each) => each.id),
+          (yield* taskInboxItems(teammate, agent.taskId)).map((each) => each.id),
           [id],
         );
         assert.ok(Option.isSome(yield* readInboxItem(teammate, id)));
@@ -379,13 +379,13 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "the teammate's read names who started the agent, whom it asks",
         );
         assert.deepEqual(
-          (yield* accountInboxPlans(teammate)).map((each) => each.planId),
-          [agent.planId],
+          (yield* accountInboxTasks(teammate)).map((each) => each.planId),
+          [agent.taskId],
         );
         assert.deepEqual(yield* accountWaitingItems(stranger), []);
-        assert.deepEqual(yield* accountInboxPlans(stranger), []);
+        assert.deepEqual(yield* accountInboxTasks(stranger), []);
 
-        assert.deepEqual(yield* planInboxItems(stranger, agent.planId), []);
+        assert.deepEqual(yield* taskInboxItems(stranger, agent.taskId), []);
         assert.ok(Option.isNone(yield* readInboxItem(stranger, id)));
         assert.ok(Option.isNone(yield* answerInboxItem(stranger, id, 1, done, randomUUID())));
       }),

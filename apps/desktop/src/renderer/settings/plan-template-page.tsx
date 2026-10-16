@@ -4,8 +4,8 @@ import {
   type PlanTemplateAnswer,
 } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ResetIcon } from "@luke/ui";
@@ -110,7 +110,7 @@ function written(
  * own edit here moves on, so the document takes their words in at once as
  * it takes a plan's, rather than typing them in again.
  */
-function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Plan {
+function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Task {
   return {
     id: TEMPLATE_DOCUMENT_ID,
     workspaceId: TEMPLATE_WORKSPACE_ID,
@@ -215,13 +215,13 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     };
   }, [act, signedIn, attempt, take]);
 
-  const save = (words: string): Promise<PlanningEditAnswer> => {
+  const save = (words: string): Promise<TasksEditAnswer> => {
     const writes = held.current;
     writes.failed = undefined;
     if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
       return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
     }
-    const sent = written(act, words).then((answer): PlanningEditAnswer => {
+    const sent = written(act, words).then((answer): TasksEditAnswer => {
       if (answer !== undefined) {
         if (writes.standing) take(answer, editedNow());
         return { saved: true };
@@ -236,7 +236,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
           action: { label: "Retry", onPress: () => save(words) },
         });
       }
-      return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+      return { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
     writes.flight = sent;
     return sent;

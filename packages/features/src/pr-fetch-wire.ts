@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { workspaceIdSchema } from "./plan-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 
 /**
  * pr-fetch-wire.ts -- what the Mac asks the service before it checks a pull request out to run it, and what it is answered with.
