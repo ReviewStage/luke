@@ -415,9 +415,7 @@ function withInboxRead(
  * was the one shown. Closing an agent's tab closes nothing of the agent's
  * own, closing a draft's leaves the draft its owner's to let go, and
  * closing the Inbox keeps what it has seen, so only a newer item opens it.
- * The plan's own tab closes only while another stands, and a close that
- * leaves no other tab standing opens the plan's again, so it stays open
- * once another tab opens beside it.
+ * The plan's own tab closes only while another stands.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
   const before = stripOf(held, drawn);
@@ -431,15 +429,12 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
     ...(tab === MAIN_TAB.INBOX ? { inboxOpen: false } : undefined),
     ...(tab === MAIN_TAB.PLAN ? { planClosed: true } : undefined),
   }));
+  if (!sameTab(shownIn(held, drawn), tab)) return forgotten;
   // Note that the draft's tab stands until its owner lets the draft go, so it is left out here.
   const standing = stripOf(forgotten, drawn).filter((each) => !sameTab(each, tab));
-  const settled = standing.some((each) => each !== MAIN_TAB.PLAN)
-    ? forgotten
-    : withOpened(forgotten, drawn, MAIN_TAB.PLAN);
-  if (!sameTab(shownIn(held, drawn), tab)) return settled;
-  const recent = choicesOn(settled, drawn.taskId).recent ?? NO_TABS;
+  const recent = choicesOn(forgotten, drawn.taskId).recent ?? NO_TABS;
   const replacement = replacementOf(standing, recent, before, tab) ?? MAIN_TAB.PLAN;
-  return withViewed(settled, drawn.taskId, [replacement]);
+  return withViewed(forgotten, drawn.taskId, [replacement]);
 }
 
 /** The state with the tab moved to `to` among the tabs after the plan's, kept as the plan's order (`movedOrder`). */
@@ -570,6 +565,17 @@ export function useMainTabs(
   }, [fixture, kept]);
 
   const tabs = useMemo(() => stripOf(state, drawn), [state, drawn]);
+  // A closed plan's tab that stands again because nothing else does, every
+  // other tab closed, its draft let go, or its agents archived, is opened
+  // for good, so it stays beside the next tab to open. Note that this waits
+  // on the agents' read, because a launch draws the plan's alone until then.
+  const fallenBack =
+    agents !== undefined &&
+    choicesOn(state, taskId).planClosed === true &&
+    tabs.every((tab) => tab === MAIN_TAB.PLAN);
+  useEffect(() => {
+    if (fallenBack) update((held) => withOpened(held, drawn, MAIN_TAB.PLAN));
+  }, [fallenBack, update, drawn]);
   const openAgents = useMemo(() => openAgentsOf(state, agents), [state, agents]);
   const onChoose = useCallback(
     (tab: MainTab) => update((held) => withChosen(held, tab, drawn)),
