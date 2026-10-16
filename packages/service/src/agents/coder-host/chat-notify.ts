@@ -176,7 +176,7 @@ const AUTHOR_OF_KIND = {
 } as const;
 
 /** What the row says sent a notice's line: the poster, as the agent, Luke, or the member they are. */
-function senderOf(from: ChatMemberRow): LineSender {
+export function senderOf(from: ChatMemberRow): LineSender {
   if (from.kind === MEMBER_KIND.PLANNER) return { kind: MESSAGE_SENDER.LUKE };
   if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
     return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };

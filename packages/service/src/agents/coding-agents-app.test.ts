@@ -165,7 +165,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
-import { CHAT_TURN_SIGN, PLANNING_INSTRUCTIONS } from "./brain-host/planning.js";
+import { BRAIN_INSTRUCTIONS, CHAT_TURN_SIGN } from "./brain-host/brain.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -2508,7 +2508,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const luke = Option.getOrThrow(
           yield* ensureMember(chat.owner, chat.workspace, {
             kind: MEMBER_KIND.PLANNER,
-            planId: chat.plan.id,
+            planId: chat.task.id,
           }),
         );
         const dm = Option.getOrThrow(
@@ -2519,7 +2519,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const sent = yield* post(chat.first.member, "Who owns the invite table?", dm.id);
         assert.deepEqual(sent.receipt.told, ["luke"]);
         const conversation = Option.getOrThrow(
-          yield* openPlanConversation(chat.owner, chat.plan.id),
+          yield* openTaskConversation(chat.owner, chat.task.id),
         );
         assert.deepEqual(
           eve.opened.slice(opensBefore).map((each) => each.message.conversationId),
@@ -2534,7 +2534,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         // The line opens with the sign the planning instructions tell Luke a chat turn by.
         const words = line.message.parts.find(isTextUIPart)?.text ?? "";
         assert.ok(words.startsWith(`${CHAT_TURN_SIGN}agent-1`), words);
-        assert.ok(PLANNING_INSTRUCTIONS.includes(`"${CHAT_TURN_SIGN}"`));
+        assert.ok(BRAIN_INSTRUCTIONS.includes(`"${CHAT_TURN_SIGN}"`));
         assert.deepEqual(line.message.metadata, {
           author: MESSAGE_AUTHOR.AGENT,
           channel: MESSAGE_CHANNEL.CHAT,
@@ -3459,7 +3459,10 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const chat = yield* openAgents();
         yield* chat.post(chat.first, { text: "Said before the newcomer." });
         const started = yield* startedAgent(chat.owner, chat.task.id, chat.ask);
-        const newcomer: ChatAgent = { ...chat.first, agentId: started.agent.id };
+        const newcomer: ChatAgent = {
+          ...chat.first,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+        };
         assert.equal(yield* chatDigest(newcomer), undefined);
         const after = yield* chat.post(chat.first, { text: "Said after." });
         assert.ok("seq" in after);

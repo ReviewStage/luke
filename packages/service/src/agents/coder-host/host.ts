@@ -834,7 +834,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return undefined;
         const { id: agentId, taskId: planId } = found.success;
-        return yield* chatDigest({ userId: admitted.target.userId, agentId, planId });
+        const self = { kind: MEMBER_KIND.AGENT, agentId };
+        return yield* chatDigest({ userId: admitted.target.userId, planId, self });
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(undefined)),

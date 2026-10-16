@@ -499,10 +499,10 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
     "asked to post, Luke posts in the plan's channel as @luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
     () =>
       Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
         const session = yield* startSession(host, userId, conversationId);
 
-        const reply = yield* planningTurn(
+        const reply = yield* brainTurn(
           host,
           session,
           "turn_0",
@@ -543,7 +543,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         const retried = yield* failedTurn(host, session, "turn_2", CORRECTION);
         assert.ok(retried.includes(line), retried);
         // A turn that completes took it in, so the turn after is handed nothing of it.
-        yield* planningTurn(host, session, "turn_3", CORRECTION);
+        yield* brainTurn(host, session, "turn_3", CORRECTION);
         const after = (yield* host.standingContext(yield* admitted(host, session))).text;
         assert.equal(after.includes("[chat since the last planning call]"), false, after);
       }),

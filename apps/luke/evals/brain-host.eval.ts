@@ -281,8 +281,8 @@ export default defineEval({
 
       // Asked to post, the model posts in the plan's channel as the plan's
       // Luke, and says where it landed.
-      const chatPlan = await run(startPlan(LOCAL_DEV_PRINCIPAL, PLAN));
-      const chatConversationId = await planConversation(run, chatPlan.id);
+      const chatPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
+      const chatConversationId = await taskConversation(run, chatPlan.id);
       const posting = await openSession(chatConversationId, `${SCRIPTED_POST}${PLAN_WORDS.POSTED}`);
       const postingSession = await t.target.attachSession(posting.sessionId);
       postingSession.succeeded();

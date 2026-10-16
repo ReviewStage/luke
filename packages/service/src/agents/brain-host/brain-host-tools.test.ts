@@ -729,8 +729,8 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
 
 test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
   const userId = await database.createUser();
-  const plan = await planConversation(userId, RELAY_FULL_NAME);
-  const agent = await agentOn(userId, plan.planId);
+  const plan = await taskConversation(userId, RELAY_FULL_NAME);
+  const agent = await agentOn(userId, plan.taskId);
   const eve = await fakeCoderEve(plan.workspaceId);
   const acting = brainHost({
     ...seams,
@@ -750,8 +750,8 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   assert.match(JSON.parse(eve.sent[0]?.body ?? "").message, /@luke to you/u);
 
   // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
-  const other = await planConversation(undefined, RELAY_FULL_NAME);
-  await agentOn(other.userId, other.planId);
+  const other = await taskConversation(undefined, RELAY_FULL_NAME);
+  await agentOn(other.userId, other.taskId);
   const unsecured = await callerOn(brainHost(seams), other, eve.services);
   const held = await unsecured(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
   assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(held));
@@ -760,7 +760,7 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
 });
 
 test("Luke posts at most the chat's bound in one turn, a call eve runs again is its one post however many came after, and a post the bound refused is no post", async () => {
-  const plan = await planConversation();
+  const plan = await taskConversation();
   const call = await callerOn(brainHost(seams), plan);
 
   const first = await call(CHAT_TOOL.POST, { text: "Step 0 is done." }, "call-0");
@@ -781,12 +781,12 @@ test("Luke posts at most the chat's bound in one turn, a call eve runs again is 
 });
 
 test("a post interrupted before it lands holds none of the turn's count", async () => {
-  const plan = await planConversation();
+  const plan = await taskConversation();
   const tally = new ChatPostTally();
   let opened = false;
   const call: PlannerChatCall = {
     luke: {
-      ...lukeOn(plan.userId, plan.planId),
+      ...lukeOn(plan.userId, plan.taskId),
       repository: null,
       telling: { eveFor: () => undefined, writer: Effect.succeed(writer), doors: HELD_DOORS },
     },
@@ -826,18 +826,3 @@ test("two runs of one call that land differently hold the turn's count while eit
   // Another turn counts on its own.
   assert.equal(tally.reserve("turn-2", "call-a"), 0);
 });
-
-/** The agent a start answered, as the model reads it; the test fails where the answer carries none. */
-function startedAgentOf(answer: WireRecord) {
-  const agent = answer.agent;
-  assert.ok(isRecord(agent), JSON.stringify(answer));
-  const { id, model, modelName, effort, status } = agent;
-  assert.ok(
-    isWireString(id) &&
-      isWireString(model) &&
-      isWireString(modelName) &&
-      isWireString(effort) &&
-      isWireString(status),
-  );
-  return { id, model, modelName, effort, status };
-}

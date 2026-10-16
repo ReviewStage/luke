@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
 import { markNoticed, releaseNotice } from "@luke/database/models/chat-store";
 import { chatNoticeKey } from "@luke/database/models/ids";
-import { openPlanConversation } from "@luke/database/models/plan-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { Effect, Option, Result } from "effect";
 import { ASK_ORIGIN } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
@@ -14,6 +14,7 @@ import {
   HELD_DOORS,
   NOTICE_OUTCOME,
   noticeMetadata,
+  senderOf,
 } from "../coder-host/chat-notify.js";
 import { acceptAsk } from "./brain-ask.js";
 import type { EveSessions } from "./eve-sessions.js";
@@ -55,7 +56,7 @@ const wake = (
   telling: ChatTelling,
 ) =>
   Effect.gen(function* () {
-    const conversation = yield* openPlanConversation(telling.userId, planId);
+    const conversation = yield* openTaskConversation(telling.userId, planId);
     if (Option.isNone(conversation)) return false;
     const { conversationId, ownerId } = conversation.value;
     const services = yield* Effect.context<DatabaseServices>();
@@ -79,7 +80,12 @@ const wake = (
     const writer = yield* telling.writer;
     const written = yield* writer.writeAwaitingLine(
       { userId: ownerId, conversationId },
-      { text: notice.text, clientKey: key, metadata: noticeMetadata(notice) },
+      {
+        text: notice.text,
+        clientKey: key,
+        sender: senderOf(notice.from),
+        metadata: noticeMetadata(notice),
+      },
       dispatch,
     );
     return Result.isSuccess(written) && Option.isSome(written.success);
@@ -101,7 +107,7 @@ function plannerWakeDoor(
       const eve = brainEveFor(userId);
       if (planId === null || eve === undefined) return NOTICE_OUTCOME.HELD;
       const place = notice.message.touchedSeq;
-      const claimed = yield* markNoticed(userId, organizationId, member.id, place);
+      const claimed = yield* markNoticed(userId, organizationId, member.id, notice.message.channelId, place);
       if (!claimed) return NOTICE_OUTCOME.HELD;
       const key = chatNoticeKey(notice.message.id, place, member.id);
       const woke = yield* wake(eve, planId, key, notice, telling).pipe(
