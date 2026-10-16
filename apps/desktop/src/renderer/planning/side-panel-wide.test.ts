@@ -10,17 +10,18 @@ import {
   drawSubagentRow,
   unmountTabs,
 } from "#testing/side-panel-tabs";
+import { SIDE_PANEL_WIDTH } from "./use-side-panel";
 
 /**
- * The side panel's tabs at 480px, wide enough for a tab and its pane side
- * by side: the same tabs `side-panel-narrow.test.ts` reads at the panel's
+ * The side panel's tabs at its default width, as it opens, which holds a
+ * tab and its pane side by side: the same tabs `side-panel-narrow.test.ts` reads at the panel's
  * narrowest keep their wide layout here, the tree beside the diff and its
  * count under it, the diff numbered on both sides, a note's age and link in
  * words, a subagent's job on one line, and a page's versions in words.
  */
 
 beforeAll(() => {
-  layContainersAt({ "side-panel": 480 });
+  layContainersAt({ "side-panel": SIDE_PANEL_WIDTH.DEFAULT });
   // The first element read cascades the whole window once, which is left to the setup.
   getComputedStyle(document.documentElement);
   // Note that the setup is given longer than most, because jsdom takes seconds to lay the stylesheets.
