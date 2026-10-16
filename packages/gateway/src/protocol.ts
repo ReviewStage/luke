@@ -215,7 +215,7 @@ export const GATEWAY_METHOD = {
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
-  /** Where each repository lives on this Mac and what runs it (`@luke/features/mac-repository-wire`): read, and one repository's set. */
+  /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
   MAC_REPOSITORIES_READ: "macRepositories.read",
   MAC_REPOSITORY_SET: "macRepositories.set",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */

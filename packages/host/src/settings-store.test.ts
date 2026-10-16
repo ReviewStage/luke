@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { MacRepository } from "@luke/features/mac-repository-wire";
+import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { LIVE_VOICE } from "@luke/live";
 import {
   type AccountPreferenceField,
@@ -271,21 +271,17 @@ test("a stored account and a chosen preference survive each other's writes", asy
   }
 });
 
-test("a repository's clone and command on this Mac survive a reopen, by name in any case, and both unset forgets it", async (t) => {
+test("a repository's run command on this Mac survives a reopen, by name in any case, and none forgets it", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
-  const app: MacRepository = {
-    repository: "acme/app",
-    folder: "/Users/dev/app",
-    command: "pnpm dev",
-  };
-  const site: MacRepository = { repository: "acme/site", folder: "/Users/dev/site", command: null };
+  const app: MacRepository = { repository: "acme/app", command: "pnpm dev" };
+  const site: MacRepository = { repository: "acme/site", command: "make serve" };
 
   assert.deepEqual(await store.macRepositories(), []);
   await store.setMacRepository(app);
   await store.setMacRepository(site);
   await store.set("theme", THEME.DARK);
-  const renamed = { ...app, repository: "Acme/App", command: "pnpm start" };
+  const renamed = { repository: "Acme/App", command: "pnpm start" };
   await store.setMacRepository(renamed);
 
   const reopened = await storeIn(directory).macRepositories();
@@ -295,7 +291,7 @@ test("a repository's clone and command on this Mac survive a reopen, by name in 
   );
   assert.equal(await storeIn(directory).get("theme"), THEME.DARK);
 
-  await store.setMacRepository({ repository: "acme/site", folder: null, command: null });
+  await store.setMacRepository({ repository: "acme/site", command: null });
   assert.deepEqual(await storeIn(directory).macRepositories(), [renamed]);
 });
 

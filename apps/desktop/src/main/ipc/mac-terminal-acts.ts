@@ -1,11 +1,12 @@
 /**
- * mac-terminal-acts.ts -- the act rows that open a coding agent's branch on this Mac: each repository's local clone and command read, set, and its folder chosen; and a terminal of this Mac opened on the branch for the asking panel, and closed with its tab.
+ * mac-terminal-acts.ts -- the act rows that open a coding agent's branch on this Mac: each repository's run command read and set; and a terminal of this Mac opened on the branch for the asking panel, and closed with its tab.
  *
- * An open reads the repository's clone and command from this Mac's
- * settings, refuses with where to fill them in where either is missing, and
- * starts the terminal (`@luke/host/mac-terminal`), whose script brings the
- * branch into a worktree of the clone and runs the command there
- * (`@luke/host/open-on-mac`). Its output goes out on a port posted to the
+ * An open asks nothing of the developer first. It reads the repository's
+ * run command from this Mac's settings, where it has one, and starts the
+ * terminal (`@luke/host/mac-terminal`), whose script clones the repository
+ * into Luke's own folder the first time, brings the branch into a worktree
+ * of that clone, runs the command there where there is one, and opens a
+ * shell (`@luke/host/open-on-mac`). Its output goes out on a port posted to the
  * asking panel alone, and what the panel types and its size come back on
  * it. The terminal keeps running while its tab is out of sight: a tab drawn
  * again opens afresh, gets a new port, and is shown the terminal's latest
@@ -21,11 +22,11 @@ import {
   type MacTerminalOpenParams,
   type MacTerminalPortOutbound,
   macTerminalPortInboundSchema,
-} from "@luke/features/mac-repository-wire";
+} from "@luke/features/mac-terminal-wire";
 import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import type { MacTerminal, startMacTerminal } from "@luke/host/mac-terminal";
-import { openOnMacScript, worktreeFolder } from "@luke/host/open-on-mac";
+import { cloneFolder, openOnMacScript, worktreeFolder } from "@luke/host/open-on-mac";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
@@ -35,7 +36,6 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
 type MacTerminalActKind =
   | typeof ACT_KIND.MAC_REPOSITORIES
   | typeof ACT_KIND.MAC_REPOSITORY_SET
-  | typeof ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER
   | typeof ACT_KIND.MAC_TERMINAL_OPEN
   | typeof ACT_KIND.MAC_TERMINAL_CLOSE;
 
@@ -57,8 +57,6 @@ export interface MacTerminalActsDependencies {
     /** Calls `then` once, when the panel's page is gone. */
     whenGone(sender: WebContents, then: () => void): void;
   };
-  /** The system's folder picker over the asking window; the folder chosen, or null. */
-  chooseFolder: (sender: WebContents) => Promise<string | null>;
   /** Starts a terminal; the host's own, or a test's. */
   start: typeof startMacTerminal;
 }
@@ -93,7 +91,7 @@ function refuseUnlessPanel(kind: MacTerminalActKind, sender: ActSender): void {
 export function macTerminalActRows(
   dependencies: MacTerminalActsDependencies,
 ): Pick<ActRows, MacTerminalActKind> {
-  const { host, stateRoot, ports, chooseFolder, start } = dependencies;
+  const { host, stateRoot, ports, start } = dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the
    * newest open asked for each agent while it reads the settings, which a
@@ -142,12 +140,7 @@ export function macTerminalActRows(
    * where it has not ended, its latest output replayed, or else a new one
    * started on the branch, its port posted before its script starts.
    */
-  const opened = (
-    sender: WebContents,
-    params: MacTerminalOpenParams,
-    clone: string,
-    command: string,
-  ) => {
+  const opened = (sender: WebContents, params: MacTerminalOpenParams, command: string | null) => {
     const { terminals } = panelOf(sender);
     const standing = terminals.get(params.agentId);
     const same = standing?.repository === params.repository && standing.branch === params.branch;
@@ -169,7 +162,8 @@ export function macTerminalActRows(
       terminal: start({
         build: (ttyFile) =>
           openOnMacScript({
-            clone,
+            repository: params.repository,
+            clone: cloneFolder(stateRoot, params.repository),
             worktree: worktreeFolder(stateRoot, params.repository, params.branch),
             branch: params.branch,
             command,
@@ -211,10 +205,6 @@ export function macTerminalActRows(
           : Effect.void,
       );
     },
-    [ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER, sender);
-      return chooseFolder(sender.sender);
-    },
     [ACT_KIND.MAC_TERMINAL_OPEN]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_OPEN, sender);
       const panel = panelOf(sender.sender);
@@ -227,14 +217,7 @@ export function macTerminalActRows(
         panel.asking.delete(params.agentId);
         const key = params.repository.toLowerCase();
         const entry = answer?.repositories.find((each) => each.repository.toLowerCase() === key);
-        if (entry?.folder == null || entry.command == null) {
-          return yield* Effect.fail(
-            new ActRefused({
-              message: `Set where ${params.repository} is cloned on this Mac, and its run command, under Settings › Workspace › Repositories.`,
-            }),
-          );
-        }
-        opened(sender.sender, params, entry.folder, entry.command);
+        opened(sender.sender, params, entry?.command ?? null);
       });
     },
     [ACT_KIND.MAC_TERMINAL_CLOSE]: ({ agentId }, sender) => {

@@ -2,36 +2,23 @@ import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 
 /**
- * mac-repository-wire.ts -- where a repository lives on this Mac and how it is run, and the terminal a coding agent's branch is opened in there.
+ * mac-terminal-wire.ts -- the terminal a coding agent's pushed branch is opened in on this Mac.
  *
- * Each repository may name the folder of the developer's own local clone of
- * it and the command that runs it. Both are this Mac's alone, kept in its
- * settings file and never sent anywhere. Open on this Mac names the agent,
- * its repository, and its pushed branch; Luke opens a terminal of this Mac
- * in a tab of its own, whose shell brings the branch into a worktree of the
- * clone and runs the command there. What the terminal prints and what is
- * typed into it travel on a port between main and that one tab, and nowhere
- * else.
+ * Open on this Mac names the agent, its repository, and its pushed branch;
+ * Luke opens a terminal of this Mac in a tab of its own, whose shell brings
+ * the branch into a worktree of Luke's own clone of the repository and opens
+ * a shell there, after the repository's run command where this Mac has one
+ * for it, kept in its settings file and never sent anywhere. What the terminal prints and what is typed into it travel
+ * on a port between main and that one tab, and nowhere else.
  */
 
 export const MAC_REPOSITORY_BOUNDS = {
-  MAX_FOLDER_CHARS: 1_024,
   MAX_COMMAND_CHARS: 4_096,
 } as const;
 
-/** A branch name as an agent pushes one: Git's own characters, no `..`, no leading `-`. */
-const BRANCH_PATTERN = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,255}$/u;
-
-/** One repository's folder and command on this Mac; null where it has none. */
+/** A repository's run command on this Mac, which Open on this Mac runs in the branch's worktree before the shell; null where it has none. */
 export const macRepositorySchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
-  /** The absolute path of the developer's local clone. */
-  folder: EffectSchema.NullOr(
-    EffectSchema.String.check(
-      EffectSchema.isPattern(/^\//u),
-      EffectSchema.isMaxLength(MAC_REPOSITORY_BOUNDS.MAX_FOLDER_CHARS),
-    ),
-  ),
   command: EffectSchema.NullOr(
     EffectSchema.String.check(
       EffectSchema.isMinLength(1),
@@ -42,12 +29,15 @@ export const macRepositorySchema = EffectSchema.Struct({
 
 export type MacRepository = typeof macRepositorySchema.Type;
 
-/** Every repository set on this Mac. */
+/** Every repository with a run command on this Mac. */
 export const macRepositoriesAnswerSchema = EffectSchema.Struct({
   repositories: EffectSchema.Array(macRepositorySchema),
 });
 
 export type MacRepositoriesAnswer = typeof macRepositoriesAnswerSchema.Type;
+
+/** A branch name as an agent pushes one: Git's own characters, no `..`, no leading `-`. */
+const BRANCH_PATTERN = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,255}$/u;
 
 const terminalSize = (maximum: number) =>
   EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum }));

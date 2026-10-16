@@ -7,7 +7,7 @@ import {
   type RecordProductEvent,
 } from "@luke/features/analytics";
 import { ProductEventSender } from "@luke/features/analytics/sender";
-import { macRepositorySchema } from "@luke/features/mac-repository-wire";
+import { macRepositorySchema } from "@luke/features/mac-terminal-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -430,9 +430,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         Effect.gen(function* () {
           const read = readEither(macRepositorySchema)(unparsedWire(params));
           if (Result.isFailure(read)) {
-            return yield* invalid(
-              "a repository names itself, its folder or null, and its command or null",
-            );
+            return yield* invalid("a repository names itself and its command or null");
           }
           yield* Effect.orDie(store.setMacRepository(read.success));
           return carried({ repositories: yield* Effect.orDie(store.macRepositories()) });

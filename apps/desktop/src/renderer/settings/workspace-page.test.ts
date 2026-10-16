@@ -8,7 +8,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { MacRepository } from "@luke/features/mac-repository-wire";
+import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -124,8 +124,6 @@ let refusePhoto = false;
 let refuseRole = false;
 /** Each repository's clone and command set on this Mac, as its settings file holds them. */
 let macRepositories: MacRepository[] = [];
-/** The folder the system's picker answers. */
-let chosenFolder: string | null = null;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
@@ -306,8 +304,6 @@ function answer(request: Act): Promise<ActOutcome> {
       ];
       return Promise.resolve(done(undefined));
     }
-    case ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER:
-      return Promise.resolve(done(chosenFolder));
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
@@ -338,7 +334,6 @@ beforeEach(() => {
   refuseRole = false;
   automations = undefined;
   macRepositories = [];
-  chosenFolder = null;
   githubRepositories = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -1789,53 +1784,46 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
 });
 
-test("the Repositories group lists the workspace's repositories and those set here, and saves a clone chosen and a command typed on this Mac", async () => {
+test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {
   githubRepositories = ["acme/app"];
-  macRepositories = [{ repository: "acme/old", folder: "/Users/dev/old", command: "make run" }];
-  chosenFolder = "/Users/dev/app";
+  macRepositories = [{ repository: "acme/old", command: "make run" }];
   const { page } = await mount(ACME);
   const group = page.querySelector<HTMLElement>(
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
   );
   assert.ok(group !== null);
-  const names = () =>
-    [...group.querySelectorAll(".mac-repository-name")].map((each) => each.textContent);
-  const repository = (name: string) => {
-    const found = [...group.querySelectorAll<HTMLElement>(".mac-repository")].find(
-      (each) => each.querySelector(".mac-repository-name")?.textContent === name,
+  const field = (name: string) => {
+    const label = [...group.querySelectorAll<HTMLLabelElement>(".mac-repository-name")].find(
+      (each) => each.textContent === name,
     );
-    assert.ok(found !== undefined, name);
-    return found;
+    const input =
+      label === undefined ? null : group.querySelector<HTMLInputElement>(`#${label.htmlFor}`);
+    assert.ok(input !== null, name);
+    return input;
   };
-  assert.deepEqual(names(), ["acme/app", "acme/old"]);
-  assert.match(repository("acme/app").textContent ?? "", /Not set/u);
-  assert.match(repository("acme/old").textContent ?? "", /\/Users\/dev\/old/u);
-
-  const choose = [...repository("acme/app").querySelectorAll("button")].find(
-    (each) => each.textContent === "Choose…",
+  assert.deepEqual(
+    [...group.querySelectorAll(".mac-repository-name")].map((each) => each.textContent),
+    ["acme/app", "acme/old"],
   );
-  act(() => choose?.click());
-  await settle();
-  const field = repository("acme/app").querySelector<HTMLInputElement>("input");
-  assert.ok(field !== null);
+  assert.equal(field("acme/app").value, "");
+  assert.equal(field("acme/old").value, "make run");
+
+  const typed = field("acme/app");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      field,
+      typed,
       " pnpm dev ",
     );
-    field.dispatchEvent(new Event("input", { bubbles: true }));
+    typed.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  act(() => field.form?.requestSubmit());
+  act(() => typed.form?.requestSubmit());
   await settle();
 
   assert.deepEqual(
     sent.flatMap((request) =>
       request.kind === ACT_KIND.MAC_REPOSITORY_SET ? [request.payload] : [],
     ),
-    [
-      { repository: "acme/app", folder: "/Users/dev/app", command: null },
-      { repository: "acme/app", folder: "/Users/dev/app", command: "pnpm dev" },
-    ],
+    [{ repository: "acme/app", command: "pnpm dev" }],
   );
-  assert.match(repository("acme/app").textContent ?? "", /\/Users\/dev\/app/u);
+  assert.equal(field("acme/app").value, "pnpm dev");
 });

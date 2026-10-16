@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   macTerminalPortOutboundSchema,
-} from "@luke/features/mac-repository-wire";
+} from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
@@ -20,12 +20,12 @@ import { useOpenLink } from "./use-open-link";
  * Open on this Mac in the agent tab's ⋯ opens this tab. Drawn, the tab
  * mounts the terminal's screen and asks main to open the agent's terminal
  * at the screen's size (`mac-terminal-acts.ts`): main starts it the first
- * time, in a worktree of the developer's own clone, running the
- * repository's command, and later only hands the standing one a fresh port,
- * its latest output first. What is typed and the screen's size go back on
- * that port. Out of sight, the tab lets go of its port and the terminal
- * runs on; closing the tab closes it (`use-side-panel.ts`). Main's refusal,
- * a setting missing or no clone where it says, is written on the screen.
+ * time, in a worktree of Luke's own clone of the repository, running the
+ * repository's command where this Mac has one and then a shell, and later
+ * only hands the standing one a fresh port, its latest output first. What
+ * is typed and the screen's size go back on that port. Out of sight, the tab
+ * lets go of its port and the terminal runs on; closing the tab closes it
+ * (`use-side-panel.ts`). A refusal from main is written on the screen.
  * What the terminal prints reaches this screen and nowhere else, so the tab
  * is left out of the screen recording.
  */

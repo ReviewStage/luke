@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-repository-wire";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { ACT_KIND } from "@luke/host/acts";
@@ -142,14 +142,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           };
         },
         whenGone: whenPageGone,
-      },
-      chooseFolder: async (sender) => {
-        const window = BrowserWindow.fromWebContents(sender);
-        const options = { properties: ["openDirectory" as const] };
-        const chosen = window
-          ? await dialog.showOpenDialog(window, options)
-          : await dialog.showOpenDialog(options);
-        return chosen.canceled ? null : (chosen.filePaths[0] ?? null);
       },
       start: startMacTerminal,
     }),

@@ -1,4 +1,4 @@
-import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-repository-wire";
+import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useState } from "react";
@@ -6,14 +6,14 @@ import { useAct } from "../act";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
- * mac-repository-settings.tsx -- the Workspace page's Repositories group: where each repository is cloned on this Mac, and the command that runs it.
+ * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Open on this Mac runs for each repository.
  *
  * A row stands for each repository the workspace reaches on GitHub, and for
- * any set on this Mac that it no longer lists. Choose… picks the folder of
- * the developer's own clone and saves it at once; the command is saved with
- * Save or Return. Both are kept in this Mac's settings file alone, never
- * sent to the service. Open on this Mac, in an agent tab's ⋯, refuses until
- * both are set for the agent's repository, and names this group.
+ * any with a command on this Mac that it no longer lists. The command is
+ * saved with Save or Return, and emptied to have none. It is kept in this
+ * Mac's settings file alone, never sent to the service. Open on this Mac, in
+ * an agent tab's ⋯, runs it in the branch's worktree before the shell
+ * opens; a repository without one opens on the shell alone.
  */
 
 const NOT_READ = "The repositories could not be read.";
@@ -67,7 +67,7 @@ function useMacRepositoriesRead(workspaceId: string): Read {
   return { names, set: byKey, failed, reread: () => setAttempt((was) => was + 1) };
 }
 
-/** One repository's row: its name, its clone's folder with Choose…, and its command with Save. */
+/** One repository's row: its name, and its command with Save. */
 function MacRepositoryRow({
   repository,
   saved,
@@ -78,7 +78,6 @@ function MacRepositoryRow({
   onSaved: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const folder = saved?.folder ?? null;
   const savedCommand = saved?.command ?? "";
   const [command, setCommand] = useState(savedCommand);
   useEffect(() => setCommand(savedCommand), [savedCommand]);
@@ -101,43 +100,20 @@ function MacRepositoryRow({
     },
     [act, onSaved],
   );
-  const choose = () => {
-    act(ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER).then(
-      (chosen) => {
-        if (chosen !== null) write({ repository, folder: chosen, command: saved?.command ?? null });
-      },
-      (refused: Error) => setRejection(refused.message),
-    );
-  };
   const typed = command.trim();
   const changed = typed !== savedCommand;
   const id = `mac-repository-${repository.toLowerCase().replace(/[^a-z0-9]/gu, "-")}`;
   return (
     <div className="mac-repository">
-      <strong className="mac-repository-name">{repository}</strong>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <span>Local clone</span>
-          <small>{folder ?? "Not set"}</small>
-        </span>
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          disabled={busy}
-          onClick={choose}
-        >
-          Choose…
-        </button>
-      </div>
       <form
         className="settings-row"
         onSubmit={(event) => {
           event.preventDefault();
-          if (changed) write({ repository, folder, command: typed === "" ? null : typed });
+          if (changed) write({ repository, command: typed === "" ? null : typed });
         }}
       >
-        <label className="settings-copy" htmlFor={id}>
-          <span>Run command</span>
+        <label className="settings-copy mac-repository-name" htmlFor={id}>
+          {repository}
         </label>
         <input
           id={id}
@@ -168,9 +144,9 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
   return (
     <SettingsGroup title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
       <p className="settings-card-line settings-note">
-        Open on this Mac, in an agent tab&apos;s ⋯, fetches the agent&apos;s pushed branch into a
-        worktree of your clone, using your own git login, and runs the command there in a terminal
-        inside Luke. Both are kept on this Mac only.
+        Open on this Mac, in an agent tab&apos;s ⋯, checks the agent&apos;s pushed branch out on
+        this Mac with your own git login and opens a terminal on it inside Luke. A repository&apos;s
+        run command, if it has one, runs there first. Commands are kept on this Mac only.
       </p>
       {read.failed ? (
         <ReadFailed line={NOT_READ} onRetry={read.reread} />

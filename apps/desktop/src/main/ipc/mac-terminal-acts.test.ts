@@ -4,7 +4,7 @@ import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacRepository,
   type MacTerminalPortOutbound,
-} from "@luke/features/mac-repository-wire";
+} from "@luke/features/mac-terminal-wire";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";
@@ -14,10 +14,10 @@ import { macTerminalActRows } from "./mac-terminal-acts";
 
 /**
  * Open on this Mac's acts as main carries them, over settings, ports, and
- * terminals that answer from a script: an open with the repository's clone
- * or command missing refuses, naming where to set them, and starts
- * nothing; an open with both starts one terminal on a script fetching the
- * branch into a worktree of the clone and running the command, its output
+ * terminals that answer from a script: an open asks nothing first, and
+ * with no command set starts a terminal on Luke's own clone and a shell
+ * alone; with one, its script runs the command in the branch's worktree,
+ * its output
  * on the panel's port and the panel's typing and size back on it; the same
  * tab drawn again gets a fresh port with the output so far, the terminal
  * running on; a closed tab and a gone page close their terminals; and only
@@ -32,11 +32,7 @@ const OPEN = {
   cols: 100,
   rows: 30,
 };
-const SET: MacRepository = {
-  repository: "acme/app",
-  folder: "/Users/dev/app",
-  command: "pnpm dev",
-};
+const SET: MacRepository = { repository: "acme/app", command: "pnpm dev" };
 
 // SAFETY: the rows read a sender by identity alone; one inert object is one window.
 const panelOf = (): ActSender => ({
@@ -92,7 +88,6 @@ function fixture(repositories: readonly MacRepository[], read: Effect.Effect<voi
       },
       whenGone: (sender, then) => void gone.set(sender, then),
     },
-    chooseFolder: () => Promise.resolve("/Users/dev/app"),
     start: ({ build, onOutput, onExit }) => {
       const terminal: ScriptedTerminal = {
         script: build("/tmp/tty"),
@@ -122,23 +117,23 @@ const outputText = (posted: readonly MacTerminalPortOutbound[]) =>
     each.type === MAC_TERMINAL_PORT_MESSAGE.OUTPUT ? [new TextDecoder().decode(each.data)] : [],
   );
 
-it.effect("an open with the clone or the command unset refuses, naming where to set them", () =>
-  Effect.gen(function* () {
-    for (const set of [[], [{ ...SET, folder: null }], [{ ...SET, command: null }]]) {
-      const { router, started, opened } = fixture(set);
+it.effect(
+  "an open asks nothing first: with no command set it opens on Luke's own clone and a shell alone",
+  () =>
+    Effect.gen(function* () {
+      const { router, started, opened } = fixture([]);
       const answer = yield* router.performAct(
         { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
         panelOf(),
       );
-      assert.equal(answer.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.match(
-        "reason" in answer ? answer.reason : "",
-        /acme\/app.*Settings › Workspace › Repositories/u,
-      );
-      assert.equal(started.length, 0);
-      assert.equal(opened.length, 0);
-    }
-  }),
+
+      assert.equal(answer.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(opened.length, 1);
+      const script = started[0]?.script ?? "";
+      assert.match(script, /'\/state\/clones\/acme\/app'/u);
+      assert.match(script, /'https:\/\/github\.com\/acme\/app\.git'/u);
+      assert.doesNotMatch(script, /Running/u);
+    }),
 );
 
 it.effect("an open runs the branch's script, its output out on the port and typing back", () =>
@@ -152,7 +147,7 @@ it.effect("an open runs the branch's script, its output out on the port and typi
     const [terminal] = started;
     const [port] = opened;
     assert.ok(terminal !== undefined && port !== undefined);
-    assert.match(terminal.script, /'\/Users\/dev\/app'/u);
+    assert.match(terminal.script, /'\/state\/clones\/acme\/app'/u);
     assert.match(terminal.script, /'luke\/add-thing'/u);
     assert.match(terminal.script, /'\/state\/worktrees\/acme\/app\/luke%2Fadd-thing'/u);
     assert.match(terminal.script, /pnpm dev/u);

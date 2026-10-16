@@ -1,22 +1,37 @@
 import path from "node:path";
 
 /**
- * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Luke: a coding agent's pushed branch checked out in a worktree of the developer's own clone, and the repository's command run there.
+ * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Luke: a coding agent's pushed branch checked out in a worktree of Luke's own clone of the repository, and a shell opened there.
  *
- * Luke does none of it itself. The script runs in the developer's login
- * shell with their own Git login, so their credentials, remotes, and tools
- * are the ones used. It fetches the branch into their clone, makes a
- * worktree for it under Luke's application data the first time (detached at
- * the branch's head, so a branch they have checked out elsewhere is never in
- * the way) and moves it forward with a fast-forward after that, which Git
- * refuses rather than overwrite anything changed there. Then it runs the
- * command from the worktree and leaves a login shell open in it, Ctrl-C
- * included. The script deletes itself as it starts. Every value in it is
- * quoted for the shell, never spliced in bare.
+ * Nothing is asked of the developer first. Luke keeps one clone of each
+ * repository under its application data, made the first time a branch of
+ * it is opened, and a worktree per branch beside it. The script runs in the
+ * developer's login shell with their own Git login, so their credentials
+ * and tools are the ones used: it clones over HTTPS, and over SSH where
+ * that fails, without checking anything out; fetches the branch; makes the
+ * branch's worktree the first time, detached at its head, and moves it
+ * forward with a fast-forward after that, which Git refuses rather than
+ * overwrite anything changed there; runs the repository's run command there
+ * where this Mac has one for it; and then opens a login shell in the
+ * worktree for the developer to run what they like. The script deletes
+ * itself as it starts. Every value in it is quoted for the shell, never
+ * spliced in bare.
  */
 
-/** The folder under the state root every agent branch's worktree lives in. */
+/** The folders under the state root Luke's clones and every agent branch's worktree live in. */
+const CLONES_FOLDER = "clones";
 const WORKTREES_FOLDER = "worktrees";
+
+/** A repository's owner and name as folder names, lowercased as GitHub matches them. */
+function repositoryFolders(repository: string): readonly [string, string] {
+  const [owner = "", name = ""] = repository.toLowerCase().split("/");
+  return [owner, name];
+}
+
+/** Where Luke's own clone of a repository lives, under the state root. */
+export function cloneFolder(stateRoot: string, repository: string): string {
+  return path.join(stateRoot, CLONES_FOLDER, ...repositoryFolders(repository));
+}
 
 /** A word quoted for a POSIX shell. */
 function shellQuoted(word: string): string {
@@ -29,21 +44,34 @@ function shellQuoted(word: string): string {
  * folder and none reaches outside it.
  */
 export function worktreeFolder(stateRoot: string, repository: string, branch: string): string {
-  const [owner = "", name = ""] = repository.toLowerCase().split("/");
-  return path.join(stateRoot, WORKTREES_FOLDER, owner, name, encodeURIComponent(branch));
+  return path.join(
+    stateRoot,
+    WORKTREES_FOLDER,
+    ...repositoryFolders(repository),
+    encodeURIComponent(branch),
+  );
 }
 
-/** The script, its values quoted, that brings the branch into a worktree of the clone and runs the command there. */
+/** The script, its values quoted, that brings the branch into a worktree of Luke's clone, runs the command there where there is one, and opens a shell. */
 export function openOnMacScript(input: {
+  /** The repository as `owner/name`, cloned from GitHub the first time. */
+  readonly repository: string;
   readonly clone: string;
   readonly worktree: string;
   readonly branch: string;
-  readonly command: string;
+  /** The repository's run command on this Mac, run in the worktree before the shell opens; none where it has none. */
+  readonly command?: string | null | undefined;
   /** Where the script writes its terminal's device, which Luke resizes it through; none where nothing resizes it. */
   readonly ttyFile?: string | undefined;
   /** The terminal's size in cells as the tab first draws it. */
   readonly size?: { readonly cols: number; readonly rows: number } | undefined;
+  /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
+  readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
 }): string {
+  const remotes = input.remotes ?? {
+    https: `https://github.com/${input.repository}.git`,
+    ssh: `git@github.com:${input.repository}.git`,
+  };
   return [
     "#!/bin/bash",
     'rm -f "$0"',
@@ -54,28 +82,47 @@ export function openOnMacScript(input: {
     // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
     'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
     "export PATH",
-    "set -e",
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch)}`,
-    `command=${shellQuoted(input.command)}`,
-    'cd "$clone"',
-    'echo "▸ Fetching $branch"',
-    'git fetch origin "$branch"',
-    'if [ -e "$worktree/.git" ]; then',
-    '  cd "$worktree"',
+    `https=${shellQuoted(remotes.https)}`,
+    `ssh=${shellQuoted(remotes.ssh)}`,
+    "opened() {",
+    "  set -e",
+    '  if [ ! -e "$clone/.git" ]; then',
+    '    echo "▸ Cloning ${https%.git}"',
+    '    mkdir -p "$(dirname "$clone")"',
+    '    rm -rf "$clone"',
+    '    git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
+    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; }',
+    "  fi",
+    '  cd "$clone"',
+    '  echo "▸ Fetching $branch"',
     '  git fetch origin "$branch"',
-    "  git merge --ff-only FETCH_HEAD",
-    "else",
-    '  mkdir -p "$(dirname "$worktree")"',
-    '  git worktree add --detach "$worktree" FETCH_HEAD',
-    '  cd "$worktree"',
-    "fi",
-    'echo "▸ Running $command"',
-    // Note that Ctrl-C ends the command and not this script, so the shell after it still opens in the worktree.
-    "trap : INT",
-    '"${SHELL:-/bin/zsh}" -l -c "$command" || true',
-    "trap - INT",
+    '  if [ -e "$worktree/.git" ]; then',
+    '    cd "$worktree"',
+    // Note that a worktree keeps its own FETCH_HEAD, so it fetches the branch itself.
+    '    git fetch origin "$branch"',
+    "    git merge --ff-only FETCH_HEAD",
+    "  else",
+    '    mkdir -p "$(dirname "$worktree")"',
+    '    git worktree add --detach "$worktree" FETCH_HEAD',
+    "  fi",
+    "}",
+    // Note that a failed step is said and the shell still opens, in the worktree where it stands and the clone or home where not.
+    '( opened ) || echo "▸ Could not bring $branch onto this Mac; the shell is yours to look into it."',
+    'if [ -d "$worktree" ]; then cd "$worktree"; elif [ -d "$clone" ]; then cd "$clone"; fi',
+    'echo "▸ $branch in $(pwd)"',
+    ...(input.command == null
+      ? []
+      : [
+          `command=${shellQuoted(input.command)}`,
+          'echo "▸ Running $command"',
+          // Note that Ctrl-C ends the command and not this script, so the shell after it still opens.
+          "trap : INT",
+          '"${SHELL:-/bin/zsh}" -l -c "$command" || true',
+          "trap - INT",
+        ]),
     'exec "${SHELL:-/bin/zsh}" -l',
     "",
   ].join("\n");

@@ -4,7 +4,7 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@luke/credentials/snapshot";
-import type { MacRepository } from "@luke/features/mac-repository-wire";
+import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { LIVE_DEFAULTS } from "@luke/live";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@luke/settings/wire";
 import {
@@ -299,14 +299,13 @@ function storedExperiments(value: UnparsedWireValue): PersistedExperiments | und
   return choices === undefined ? undefined : { accountEmail: held.accountEmail, choices };
 }
 
-/** The most characters a repository's folder or command keeps; a longer one is not read. */
+/** The most characters a repository's command keeps; a longer one is not read. */
 const MAX_MAC_REPOSITORY_CHARS = 4_096;
 
 /**
- * Where each repository lives on this Mac and how it is run, by its full
- * name lowercased: the folder of the developer's own clone and the command
- * Open on this Mac runs there. This Mac's alone, whoever is signed in, and
- * never sent anywhere.
+ * Each repository's run command on this Mac, by its full name lowercased,
+ * which Open on this Mac runs in the agent branch's worktree. This Mac's
+ * alone, whoever is signed in, and never sent anywhere.
  */
 type MacRepositories = Readonly<Record<string, MacRepository>>;
 
@@ -314,9 +313,10 @@ type MacRepositories = Readonly<Record<string, MacRepository>>;
 function storedMacRepository(value: UnparsedWireValue): MacRepository | undefined {
   const held = readWireRecord(value);
   if (!held || !isWireString(held.repository)) return undefined;
-  const text = (field: UnparsedWireValue) =>
-    isWireString(field) && field !== "" && field.length <= MAX_MAC_REPOSITORY_CHARS ? field : null;
-  return { repository: held.repository, folder: text(held.folder), command: text(held.command) };
+  const { command } = held;
+  return isWireString(command) && command !== "" && command.length <= MAX_MAC_REPOSITORY_CHARS
+    ? { repository: held.repository, command }
+    : undefined;
 }
 
 function storedMacRepositories(value: UnparsedWireValue): MacRepositories | undefined {
@@ -610,12 +610,12 @@ export class SettingsStore {
     });
   }
 
-  /** Every repository set on this Mac: where its clone is and what runs it. */
+  /** Every repository with a run command on this Mac. */
   macRepositories(): Effect.Effect<readonly MacRepository[], PlatformError> {
     return Effect.map(this.#load(), (persisted) => Object.values(persisted.macRepositories ?? {}));
   }
 
-  /** One repository's folder and command set, or forgotten where both are null. */
+  /** One repository's run command set, or forgotten where it is null. */
   setMacRepository(entry: MacRepository): Effect.Effect<void, PlatformError> {
     return this.#mutate((persisted) => {
       const { macRepositories: held, ...rest } = persisted;
@@ -623,8 +623,7 @@ export class SettingsStore {
       const others = Object.fromEntries(
         Object.entries(held ?? {}).filter(([kept]) => kept !== key),
       );
-      const next =
-        entry.folder === null && entry.command === null ? others : { ...others, [key]: entry };
+      const next = entry.command === null ? others : { ...others, [key]: entry };
       return Object.keys(next).length === 0 ? rest : { ...rest, macRepositories: next };
     });
   }

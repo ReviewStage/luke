@@ -101,7 +101,7 @@ import {
   macRepositorySchema,
   macTerminalKeySchema,
   macTerminalOpenParamsSchema,
-} from "@luke/features/mac-repository-wire";
+} from "@luke/features/mac-terminal-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -485,15 +485,14 @@ export const ACT_KIND = {
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
   /**
-   * A coding agent's branch opened on this Mac (`@luke/features/mac-repository-wire`):
-   * each repository's local clone and command read, set, and its folder
-   * chosen; and a terminal of this Mac opened on the agent's branch for the
-   * asking panel, and closed with its tab. What the terminal prints and what
-   * is typed travel on the port an open posts to that panel, never on an act.
+   * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
+   * each repository's run command read and set; and a terminal of this Mac
+   * opened on the agent's branch for the asking panel, and closed with its
+   * tab. What the terminal prints and what is typed travel on the port an
+   * open posts to that panel, never on an act.
    */
   MAC_REPOSITORIES: "macRepositories.read",
   MAC_REPOSITORY_SET: "macRepositories.set",
-  MAC_REPOSITORY_CHOOSE_FOLDER: "macRepositories.chooseFolder",
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
   VOICE_COMMAND: "voice.command",
@@ -1363,19 +1362,12 @@ export const ACT = {
   [ACT_KIND.MAC_REPOSITORIES]: {
     payload: noPayload,
     result: wireResult<MacRepositoriesAnswer>(isReadable(macRepositoriesAnswerSchema)),
-    refusal: "Could not read the repositories set on this Mac.",
+    refusal: "Could not read the run commands set on this Mac.",
   },
   [ACT_KIND.MAC_REPOSITORY_SET]: {
     payload: actSchema(macRepositorySchema),
     result: answersNothing,
-    refusal: "Could not save the repository's settings on this Mac.",
-  },
-  [ACT_KIND.MAC_REPOSITORY_CHOOSE_FOLDER]: {
-    payload: noPayload,
-    result: wireResult<string | null>(
-      (value): value is string | null => value === null || isWireString(value),
-    ),
-    refusal: "Could not open the folder picker.",
+    refusal: "Could not save the repository's run command on this Mac.",
   },
   [ACT_KIND.MAC_TERMINAL_OPEN]: {
     payload: actSchema(macTerminalOpenParamsSchema),

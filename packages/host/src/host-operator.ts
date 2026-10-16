@@ -100,7 +100,7 @@ import {
   type MacRepositoriesAnswer,
   type MacRepository,
   macRepositoriesAnswerSchema,
-} from "@luke/features/mac-repository-wire";
+} from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -274,9 +274,9 @@ interface HostSessionReplay {
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  /** Every repository set on this Mac: its clone's folder and its command; none where the host could not answer. */
+  /** Every repository with a run command on this Mac; none where the host could not answer. */
   macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
-  /** One repository's folder and command set on this Mac, or forgotten with both null; the repositories as they then stand. */
+  /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
   setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
@@ -781,7 +781,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.MAC_REPOSITORY_SET, {
           repository: entry.repository,
-          folder: entry.folder,
           command: entry.command,
         }),
         terminalAnswer(macRepositoriesAnswerSchema),

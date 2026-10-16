@@ -1,4 +1,4 @@
-import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-repository-wire";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
