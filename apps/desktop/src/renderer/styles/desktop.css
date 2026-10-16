@@ -2096,6 +2096,8 @@ ul.actor-stack {
 .icon-button,
 .primary-button,
 .danger-button,
+.luke-button,
+.luke-chip,
 .segment,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
@@ -2326,70 +2328,31 @@ ul.actor-stack {
 
 /* Chips ----------------------------------------------------------------------- */
 
-/* A button that names a value or a thing (`chip.tsx`): the labelled button
-   above, giving way before the row around it does, its words cut short
-   rather than pushing past it, at a weight between the button's and the
-   body's. A mark beside the words is a size under the button's glyph, and a
-   menu's chevron is the small, muted one a menu draws. */
-.chip {
-  min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  font-weight: 560;
-}
-
+/* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
+   `@luke/ui/styles.css`. What stays here is the window's own: the marks it
+   holds a size under the control's glyph, its menu's chevron at the size a
+   menu draws it (restated, since `.settings-chevron`'s own rule here would
+   otherwise win over the shared layer), and the words its callers still mark
+   `.chip-name`, cut short rather than pushing past the row. */
 .chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chip :is(.repository-picture, .provider-mark, .harness-mark) {
+.luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
 }
 
-.chip .settings-chevron {
+.luke-chip .settings-chevron {
   width: 12px;
   height: 12px;
   color: var(--text-tertiary);
 }
 
-/* A toolbar chip picks what its place runs on, so it is drawn as the
-   toolbar's own buttons are, quiet until the pointer is on it or its menu is
-   open, tighter at its sides, and its words in the body's colour until then. */
-.chip:where([data-look="toolbar"]) {
-  padding: 0 var(--space-8);
-  color: var(--text-body);
-}
-
-/* A pill names a thing, so it stands filled and inside a hairline at rest,
-   its fill deepening under the pointer rather than taking a button's. */
-.chip:where([data-look="pill"]) {
-  padding: 0 var(--space-12) 0 var(--row-inset);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.chip:where([data-look="pill"]):is(:hover, [aria-expanded="true"]) {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-/* A field is a settings row's value, inside the row buttons' hairline, at
-   the form's type, its words leading and its chevron at the far end. */
-.chip:where([data-look="field"]) {
-  justify-content: flex-start;
-  padding: 0 var(--space-8) 0 var(--space-12);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.chip:where([data-look="field"]) :is(.chip-name, .model-label) {
+.luke-chip[data-look="field"] :is(.chip-name, .model-label) {
   flex: 1;
   text-align: left;
 }

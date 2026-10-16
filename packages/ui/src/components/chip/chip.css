@@ -1,0 +1,108 @@
+/* chip.css -- the chip: a control of the shared contract in one of three
+   looks, giving way before the row around it does, its words cut short
+   rather than pushing past it. A mark beside the words is a size under the
+   control's glyph, and a menu's chevron is the small, muted one a menu
+   draws. */
+
+@layer components {
+  .luke-chip {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    max-width: 100%;
+    height: var(--luke-control-height);
+    margin: 0;
+    padding: 0 var(--luke-space-8);
+    border: 1px solid transparent;
+    border-radius: var(--luke-control-radius);
+    background: transparent;
+    color: var(--luke-color-text-body);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-hover) ease,
+      color var(--duration-hover) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-chip {
+    cursor: default;
+  }
+
+  .luke-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-chip > svg {
+    flex: none;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-chip > svg.settings-chevron {
+    width: 12px;
+    height: 12px;
+    color: var(--luke-color-text-subtle);
+  }
+
+  /* A toolbar chip and a field light under the pointer and while their
+     menu is open, as a quiet button does. */
+  .luke-chip:is([data-look="toolbar"], [data-look="field"]):where(
+    :hover:not(:disabled),
+    [aria-expanded="true"]
+  ) {
+    background: var(--luke-color-fill-selected);
+    color: var(--luke-color-text);
+  }
+
+  .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(:disabled) {
+    background: var(--luke-color-fill-pressed);
+  }
+
+  /* A pill names a thing, so it stands filled and inside a hairline at rest,
+     its fill deepening under the pointer rather than taking a button's. */
+  .luke-chip[data-look="pill"] {
+    padding: 0 var(--luke-space-12) 0 var(--luke-space-8);
+    border-color: var(--luke-color-border);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text-muted);
+  }
+
+  /* The site's muted ink holds AA on its page's ground and not on a fill,
+     so a pill there names its thing in the text's own ink. */
+  [data-luke-profile="web"] .luke-chip[data-look="pill"] {
+    color: var(--luke-color-text);
+  }
+
+  .luke-chip[data-look="pill"]:where(:hover:not(:disabled), [aria-expanded="true"]) {
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+  }
+
+  /* A field is a settings row's value, inside an outlined button's
+     hairline, its words leading and its chevron at the far end. */
+  .luke-chip[data-look="field"] {
+    justify-content: flex-start;
+    padding: 0 var(--luke-space-8) 0 var(--luke-space-12);
+    border-color: var(--luke-color-border);
+    color: var(--luke-color-text);
+  }
+
+  .luke-chip[data-look="field"] > .luke-chip-name {
+    flex: 1;
+    text-align: left;
+  }
+
+  .luke-chip:disabled {
+    opacity: 0.45;
+  }
+}

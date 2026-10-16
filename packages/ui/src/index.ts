@@ -1,5 +1,6 @@
 export * from "./cn.js";
 export * from "./components/button/button.js";
+export * from "./components/chip/chip.js";
 export * from "./components/layout/layout.js";
 export * from "./components/text/text.js";
 export * from "./css.js";
