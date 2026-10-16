@@ -253,6 +253,16 @@ function composed(
     return snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.email : undefined;
   };
 
+  /** Each repository's clone's lock, by the clone's folder, which serializes the runs that change it. */
+  const repositoryLocks = new Map<string, Semaphore.Semaphore>();
+  const repositoryLock = (clone: string) => {
+    const held = repositoryLocks.get(clone);
+    if (held !== undefined) return held;
+    const made = Semaphore.makeUnsafe(1);
+    repositoryLocks.set(clone, made);
+    return made;
+  };
+
   /** The pull request's slot, made the first time it is named. */
   const slotOf = (pullRequest: PrRunPullRequest): Slot => {
     const repositories = slots.get(pullRequest.workspaceId) ?? new Map<string, Map<number, Slot>>();
@@ -382,11 +392,15 @@ function composed(
         phase: PR_RUN_PHASE.PREPARING,
         message: "Fetching the pull request's newest commit…",
       });
-      const prepared = yield* refreshCheckout(
-        git,
-        place,
-        slot.pullRequest.repository,
-        fetchInto(slot.pullRequest, owner),
+      // Note that the repository's clone is changed by one run at a time, because two pull requests of it share it.
+      const prepared = yield* repositoryLock(place.clone).withPermits(1)(
+        refreshCheckout(
+          git,
+          place,
+          slot.pullRequest.repository,
+          fetchInto(slot.pullRequest, owner),
+          commands.setup,
+        ),
       );
       if ("refused" in prepared) {
         return yield* tell(slot, { phase: PR_RUN_PHASE.FAILURE, message: prepared.refused });
@@ -396,9 +410,10 @@ function composed(
       }
       const { sha } = prepared.ok;
       const port = yield* freePort;
-      if (prepared.ok.setupNeeded && commands.setup !== null) {
+      const setup = prepared.ok.setupNeeded ? commands.setup : null;
+      if (setup !== null) {
         yield* tell(slot, { phase: PR_RUN_PHASE.PREPARING, sha, message: "Running setup…" });
-        const setUp = yield* runIn(slot, runId, place.folder, commands.setup, port);
+        const setUp = yield* runIn(slot, runId, place.folder, setup, port);
         if (setUp === undefined || setUp.exitCode !== 0) {
           return yield* tell(slot, {
             phase: PR_RUN_PHASE.FAILURE,
@@ -409,8 +424,8 @@ function composed(
                 : `Setup exited ${setUp.exitCode ?? "on a signal"}, so the run command did not start.`,
           });
         }
+        yield* markSetUp(git, place, sha, setup);
       }
-      if (prepared.ok.setupNeeded) yield* markSetUp(git, place, sha);
       yield* tell(slot, { phase: PR_RUN_PHASE.RUNNING, sha, message: `LUKE_PORT=${port}` });
       const ended = yield* runIn(slot, runId, place.folder, commands.run, port);
       if (ended === undefined) {
@@ -677,7 +692,9 @@ function composed(
             if (slot.runId !== undefined) {
               return { refused: "Stop the run before deleting its local checkout." };
             }
-            const removed = yield* removeCheckout(git, place).pipe(Effect.provideContext(services));
+            const removed = yield* repositoryLock(place.clone)
+              .withPermits(1)(removeCheckout(git, place))
+              .pipe(Effect.provideContext(services));
             return removed
               ? { done: true as const }
               : {

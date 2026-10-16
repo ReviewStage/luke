@@ -33,6 +33,8 @@ const machine = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
+const SETUP = "pnpm install";
+
 const OWNER = {
   accountEmail: "Developer@Luke.test",
   workspaceId: "ws_fixture",
@@ -65,7 +67,7 @@ const fixture = Effect.gen(function* () {
   };
   const place = placeOf(OWNER.number);
   const refresh = (into: FetchInto = fetchFrom(origin.folder, OWNER.number, "fix-relay")) =>
-    refreshCheckout(tool, place, OWNER.repository, into);
+    refreshCheckout(tool, place, OWNER.repository, into, SETUP);
   return { scratch, origin, first, stateRoot, place, placeOf, tool, fetchFrom, refresh };
 });
 
@@ -112,7 +114,7 @@ it.effect(
         const { origin, place, tool, refresh } = yield* fixture;
         const made = yield* refresh();
         assert.ok("ok" in made);
-        yield* markSetUp(tool, place, made.ok.sha);
+        yield* markSetUp(tool, place, made.ok.sha, SETUP);
         mkdirSync(path.join(place.folder, "node_modules"));
         writeFileSync(path.join(place.folder, "node_modules", "installed.js"), "kept\n");
 
@@ -236,6 +238,7 @@ it.effect(
           eight,
           OWNER.repository,
           fetchFrom(origin.folder, 8, "fix-relay"),
+          SETUP,
         );
 
         assert.deepEqual(outcome, { ok: { sha: other, setupNeeded: true } });
@@ -308,6 +311,91 @@ it.effect(
         assert.equal(yield* locateCheckout(place), undefined);
         assert.equal(yield* removeCheckout(tool, place), false);
         assert.equal(readFileSync(path.join(elsewhere, "pr-7", "precious.txt"), "utf8"), "keep\n");
+      }),
+    ).pipe(Effect.provide(machine)),
+);
+
+it.effect(
+  "a branch the clone already holds is never moved, a new setup command asks for setup again, and no setup command asks for none",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { origin, first, place, tool, fetchFrom } = yield* fixture;
+        // A branch named like the head, holding a commit of its own, as a developer could leave in the clone.
+        const theirs = origin.commit({ "THEIRS.md": "theirs\n" });
+        yield* refreshCheckout(
+          tool,
+          place,
+          OWNER.repository,
+          fetchFrom(origin.folder, 7, "fix-relay"),
+          SETUP,
+        );
+        yield* removeCheckout(tool, place);
+        fixtureGit(origin.folder, [
+          "push",
+          "--quiet",
+          place.clone,
+          `${theirs}:refs/heads/fix-relay`,
+        ]);
+        const made = yield* refreshCheckout(
+          tool,
+          place,
+          OWNER.repository,
+          fetchFrom(origin.folder, 7, "fix-relay"),
+          SETUP,
+        );
+        assert.ok("ok" in made);
+        yield* markSetUp(tool, place, made.ok.sha, SETUP);
+
+        const sameCommand = yield* refreshCheckout(
+          tool,
+          place,
+          OWNER.repository,
+          fetchFrom(origin.folder, 7, "fix-relay"),
+          SETUP,
+        );
+        const newCommand = yield* refreshCheckout(
+          tool,
+          place,
+          OWNER.repository,
+          fetchFrom(origin.folder, 7, "fix-relay"),
+          "npm ci",
+        );
+        const noCommand = yield* refreshCheckout(
+          tool,
+          place,
+          OWNER.repository,
+          fetchFrom(origin.folder, 7, "fix-relay"),
+          null,
+        );
+
+        assert.equal(inWorktree(place, ["symbolic-ref", "--short", "HEAD"]), "pr-7");
+        assert.equal(
+          fixtureGit(origin.folder, ["--git-dir", place.clone, "rev-parse", "fix-relay"]),
+          theirs,
+        );
+        assert.deepEqual(sameCommand, { ok: { sha: first, setupNeeded: false } });
+        assert.deepEqual(newCommand, { ok: { sha: first, setupNeeded: true } });
+        assert.deepEqual(noCommand, { ok: { sha: first, setupNeeded: false } });
+      }),
+    ).pipe(Effect.provide(machine)),
+);
+
+it.effect(
+  "the worktree's upstream is fetched by origin, so git pull finds the pull request's head",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { origin, place, refresh } = yield* fixture;
+        yield* refresh();
+        const later = origin.commit({ "README.md": "pulled\n" });
+        origin.pointPullRequest(OWNER.number, later);
+        // The test's origin stands in for GitHub's, which only the developer's own Git reaches.
+        inWorktree(place, ["remote", "set-url", "origin", origin.folder]);
+
+        inWorktree(place, ["pull", "--quiet", "--ff-only"]);
+
+        assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), later);
       }),
     ).pipe(Effect.provide(machine)),
 );

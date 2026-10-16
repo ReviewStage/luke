@@ -219,10 +219,11 @@ export function RepositoryPage({
   const [command, setCommand] = useState(run?.runCommand ?? "");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    setSetup(run?.setupCommand ?? "");
-    setCommand(run?.runCommand ?? "");
-  }, [run]);
+  const savedSetup = run?.setupCommand ?? "";
+  const savedRun = run?.runCommand ?? "";
+  // Note that the fields follow the saved strings, not the read that carried them, so a reread of unchanged commands keeps what is being typed.
+  useEffect(() => setSetup(savedSetup), [savedSetup]);
+  useEffect(() => setCommand(savedRun), [savedRun]);
   const next = { setupCommand: setup.trim() || null, runCommand: command.trim() || null };
   const changed =
     next.setupCommand !== (run?.setupCommand ?? null) ||

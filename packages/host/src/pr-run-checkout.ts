@@ -28,8 +28,9 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * moves no file, and the step that moves the worktree is never interrupted.
  *
  * Whether the run needs its setup is answered beside the commit: a worktree
- * never set up needs it, and one set up before needs it again only where
- * the newest commit changes a lockfile or a package manifest since.
+ * never set up needs it, as does one last set up with another setup
+ * command, and one set up before needs it again only where the newest
+ * commit changes a lockfile or a package manifest since.
  *
  * Every Git this module runs reads no system or global configuration, no
  * hooks, no credential helper but the one a fetch is handed, and no
@@ -174,6 +175,21 @@ const HARDENED_ENVIRONMENT = {
   GIT_PAGER: "cat",
   LC_ALL: "C",
 } as const;
+
+/** The fetch refspec that brings one pull request's head to `origin`'s own refs, which `git pull` in its worktree merges. */
+function pullRefspec(number: number): string {
+  return `+refs/pull/${number}/head:refs/remotes/origin/pull/${number}`;
+}
+
+/** What matches that refspec among `origin`'s fetch lines, for replacing or removing it alone. */
+function pullRefspecPattern(number: number): string {
+  return `^\\+refs/pull/${number}/head:`;
+}
+
+/** Where the clone's configuration keeps the setup command a pull request's setup last finished with. */
+function setupKey(number: number): string {
+  return `luke.pr-${number}.setup`;
+}
 
 /** The refs Luke keeps in the clone for one pull request. */
 function lukeRefs(number: number) {
@@ -328,7 +344,10 @@ function githubAddress(repository: string): string {
 function ensureClone(tool: GitTool, clone: string, repository: string) {
   return Effect.gen(function* () {
     const kind = yield* entryKind(clone);
-    if (kind === "folder") return true;
+    if (kind === "folder") {
+      const bare = yield* git(tool, { clone }, ["rev-parse", "--is-bare-repository"]);
+      return bare.exitCode === 0 && bare.stdout.trim() === "true";
+    }
     if (kind !== "none") return false;
     const made = yield* Effect.tryPromise(() => mkdir(clone, { recursive: true })).pipe(
       Effect.as(true),
@@ -347,15 +366,33 @@ function ensureClone(tool: GitTool, clone: string, repository: string) {
   });
 }
 
-/** A branch name for the pull request's worktree: its head branch's own where Git takes it and no other worktree holds it, else `pr-<number>`. */
+/** Whether the clone holds a branch of that name. */
+function branchStands(tool: GitTool, clone: string, branch: string) {
+  return Effect.map(
+    git(tool, { clone }, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]),
+    (run) => run.exitCode === 0,
+  );
+}
+
+/**
+ * A branch name for the pull request's worktree that the clone holds no
+ * branch of yet: its head branch's own where Git takes it, else
+ * `pr-<number>`, else that with a count. Note that an existing branch is
+ * never taken over, because the worktree is made with `-b`, which moves no
+ * branch that already points somewhere.
+ */
 function branchFor(tool: GitTool, clone: string, number: number, headRef: string) {
   return Effect.gen(function* () {
-    const fallback = `pr-${number}`;
     const formed = yield* git(tool, { clone }, ["check-ref-format", "--branch", headRef]);
-    if (formed.exitCode !== 0) return fallback;
-    const listed = yield* git(tool, { clone }, ["worktree", "list", "--porcelain"]);
-    const held = listed.stdout.split("\n").includes(`branch refs/heads/${headRef}`);
-    return held ? fallback : headRef;
+    const candidates = [
+      ...(formed.exitCode === 0 ? [headRef] : []),
+      `pr-${number}`,
+      ...Array.from({ length: 8 }, (_, at) => `pr-${number}-${at + 2}`),
+    ];
+    for (const candidate of candidates) {
+      if (!(yield* branchStands(tool, clone, candidate))) return candidate;
+    }
+    return undefined;
   });
 }
 
@@ -434,11 +471,27 @@ function collisions(tool: GitTool, place: CheckoutPlace, from: string, to: strin
   });
 }
 
-/** Whether the run needs its setup on `sha`: never set up, or a lockfile or manifest changed since it last was. */
-function setupNeeded(tool: GitTool, place: CheckoutPlace, sha: string) {
+/**
+ * Whether the run needs its setup on `sha`: never where there is no setup
+ * command; otherwise where it never finished, finished with another command,
+ * or a lockfile or manifest changed since it last finished.
+ */
+function setupNeeded(
+  tool: GitTool,
+  place: CheckoutPlace,
+  sha: string,
+  setupCommand: string | null,
+) {
   return Effect.gen(function* () {
+    if (setupCommand === null) return false;
     const setUp = yield* commitOf(tool, place.clone, lukeRefs(place.number).SET_UP);
     if (setUp === undefined) return true;
+    const ranWith = yield* git(tool, { clone: place.clone }, [
+      "config",
+      "--get",
+      setupKey(place.number),
+    ]);
+    if (ranWith.exitCode !== 0 || ranWith.stdout.replace(/\n$/u, "") !== setupCommand) return true;
     if (setUp === sha) return false;
     const changed = yield* changedFiles(tool, place.clone, setUp, sha, "ACDMRT");
     return (
@@ -456,13 +509,14 @@ function addWorktree(
   return Effect.uninterruptible(
     Effect.gen(function* () {
       const branch = yield* branchFor(tool, place.clone, place.number, fetched.headRef);
+      if (branch === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
       // A worktree whose folder went away without Git hearing of it would hold its branch, so the clone's list is pruned first.
       yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
       const added = yield* git(tool, { clone: place.clone }, [
         "worktree",
         "add",
         "--quiet",
-        "-B",
+        "-b",
         branch,
         place.folder,
         fetched.sha,
@@ -476,9 +530,17 @@ function addWorktree(
           refused: `Git could not make the local checkout (${lastLine(added.stderr)}).`,
         };
       }
+      // The clone's `origin` fetches the pull request's own ref too, so `git pull` in the worktree finds the upstream it merges.
       const upstream: readonly (readonly string[])[] = [
         ["config", `branch.${branch}.remote`, "origin"],
         ["config", `branch.${branch}.merge`, `refs/pull/${place.number}/head`],
+        [
+          "config",
+          "--replace-all",
+          "remote.origin.fetch",
+          pullRefspec(place.number),
+          pullRefspecPattern(place.number),
+        ],
         ["update-ref", lukeRefs(place.number).HEAD, fetched.sha],
       ];
       for (const step of upstream) {
@@ -532,6 +594,7 @@ export function refreshCheckout(
   place: CheckoutPlace,
   repository: string,
   fetchInto: FetchInto,
+  setupCommand: string | null,
 ): Effect.Effect<CheckoutStep<PreparedCheckout>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
     const repositoryFolder = path.dirname(place.folder);
@@ -563,7 +626,7 @@ export function refreshCheckout(
       const moved = yield* moveWorktree(tool, place, sha);
       if ("refused" in moved) return moved;
     }
-    return { ok: { sha, setupNeeded: yield* setupNeeded(tool, place, sha) } };
+    return { ok: { sha, setupNeeded: yield* setupNeeded(tool, place, sha, setupCommand) } };
   });
 }
 
@@ -572,10 +635,12 @@ export function markSetUp(
   tool: GitTool,
   place: CheckoutPlace,
   sha: string,
+  setupCommand: string,
 ): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> {
-  return Effect.asVoid(
-    git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.number).SET_UP, sha]),
-  );
+  return Effect.gen(function* () {
+    yield* git(tool, { clone: place.clone }, ["config", setupKey(place.number), setupCommand]);
+    yield* git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.number).SET_UP, sha]);
+  });
 }
 
 /**
@@ -650,6 +715,13 @@ export function removeCheckout(
       for (const ref of [refs.FETCHED, refs.HEAD, refs.SET_UP]) {
         yield* git(tool, { clone: place.clone }, ["update-ref", "-d", ref]);
       }
+      yield* git(tool, { clone: place.clone }, [
+        "config",
+        "--unset-all",
+        "remote.origin.fetch",
+        pullRefspecPattern(place.number),
+      ]);
+      yield* git(tool, { clone: place.clone }, ["config", "--unset", setupKey(place.number)]);
     }
     return true;
   });

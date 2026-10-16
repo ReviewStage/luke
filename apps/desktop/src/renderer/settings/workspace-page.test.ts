@@ -1853,3 +1853,33 @@ test("a section sought while a repository's page is open draws the workspace's s
   await settle();
   assert.equal(repositoryRow()?.querySelector("code")?.textContent, "make serve");
 });
+
+test("a draft on a repository's page survives the window taking the keyboard back", async () => {
+  runCommands = [{ repository: "acme/relay", setupCommand: null, runCommand: "pnpm dev" }];
+  const { page } = await mount(ACME);
+  await settle();
+  act(() =>
+    (page.querySelector<HTMLButtonElement>(".repository-row") ?? assert.fail("no row")).click(),
+  );
+  await settle();
+  const field =
+    page.querySelector<HTMLTextAreaElement>("#repository-setup-command") ??
+    assert.fail("no setup field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "pnpm install",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLTextAreaElement>("#repository-setup-command")?.value,
+    "pnpm install",
+  );
+});
