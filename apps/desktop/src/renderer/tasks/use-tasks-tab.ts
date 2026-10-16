@@ -70,7 +70,6 @@ import {
   TASKS_PAGE,
   type TaskMark,
   type TasksPage,
-  taskNameOfIssue,
   tasksPage,
   unsettledAgentPins,
   unsettledMarks,
@@ -514,29 +513,24 @@ export interface TasksControl {
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the plan starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       planning: boolean,
+      linearIssueId?: string,
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
-     * The listed workspace's Linear, where it stands connected: its issues
-     * read for the picker New plan opens, and a plan started from one, named
-     * by its title, on the repository the dialog would start on, in the
-     * listed workspace; answers why it did not start, or nothing once it
-     * has. Absent where the workspace has no Linear connected, which leaves
-     * New plan to the dialog alone.
+     * The read of a workspace's Linear issues, which the dialog matches its
+     * name against as it is typed, where that workspace has Linear
+     * connected; none where it has not, which leaves the name a plain field.
      */
-    linear:
-      | {
-          readonly issues: () => Promise<readonly LinearIssueSummary[]>;
-          readonly start: (issue: LinearIssueSummary) => Promise<string | undefined>;
-        }
-      | undefined;
+    linearIssuesIn: (
+      workspaceId: string | undefined,
+    ) => (() => Promise<readonly LinearIssueSummary[]>) | undefined;
   };
   /** Leaves the open plan for the home page; a call on it stands, as opening another plan leaves one. */
   onLeaveTask: () => void;
@@ -1889,25 +1883,13 @@ export function useTasksTab(input: {
       (refused: Error) => refused.message,
     );
 
-  // A plan started from a Linear issue is named by its title, cut to a
-  // name's bound, and starts where the dialog would have: the listed
-  // workspace, on the newest repository its plans were about that its
-  // GitHub reaches.
-  const listedLinear = listedWorkspace?.linear?.active === true ? listedWorkspace : undefined;
-  const linearPicker: TasksControl["newTask"]["linear"] =
-    listedLinear === undefined
-      ? undefined
-      : {
-          issues: () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: listedLinear.id }),
-          start: (issue) =>
-            startTask(
-              taskNameOfIssue(issue),
-              repositoriesIn(listedLinear.id).recent[0] ?? null,
-              listedLinear.id,
-              true,
-              issue.id,
-            ),
-        };
+  // The dialog matches its name against the Linear issues of the workspace
+  // it starts in, where that workspace has Linear connected.
+  const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] = (workspaceId) => {
+    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+    if (linked?.linear?.active !== true) return undefined;
+    return () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: linked.id });
+  };
 
   // New plan opens the dialog over whatever stands, an open plan and its
   // call included, which stay until a plan is started. Note that a press
@@ -2516,7 +2498,7 @@ export function useTasksTab(input: {
       repositoriesIn,
       start: startTask,
       onClose: () => setNewTaskAsk(undefined),
-      linear: linearPicker,
+      linearIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
     // Home is the page with no plan open, so where none is, only the Inbox, an

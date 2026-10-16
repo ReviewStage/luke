@@ -39,7 +39,7 @@ import {
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -54,7 +54,6 @@ import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU } from "../tasks/inbox-model";
-import { LinearIssuePicker } from "../tasks/linear-issue-picker";
 import { useMinute } from "../tasks/task-time";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { useUnreadTasks } from "../tasks/use-task-looks";
@@ -983,75 +982,30 @@ interface DesktopSidebarProps {
 }
 
 /**
- * New plan, heading the list. Where the listed workspace has Linear
- * connected, a press opens the picker of its issues beside the button
- * (`linear-issue-picker.tsx`), whose Blank plan opens the New plan dialog;
- * anywhere else the press opens the dialog at once, as the menu bar's and
- * the chord's New plan always do.
+ * New task, heading the list: a press opens the New task dialog at once, as
+ * the menu bar's and the chord's New task do, whose name field also
+ * searches the workspace's Linear issues where Linear is connected
+ * (`new-task-dialog.tsx`).
  */
 function NewTaskButton({
-  tasks: plans,
-  chosen,
+  tasks,
   onNewTask,
-  onShowPlans,
 }: {
   tasks: TasksControl;
-  chosen: FloatingSidebar["chosen"];
   onNewTask: () => void;
-  onShowPlans: () => void;
 }): React.JSX.Element {
-  const { linear } = plans.newTask;
-  const [picking, setPicking] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const open = picking && linear !== undefined;
-  const blankPlan = chosen(onNewTask);
-  // Note that we hand focus back to New plan, as a menu returns it to its
-  // trigger, because closing takes the focused search field away with it.
-  const close = () => {
-    setPicking(false);
-    trigger.current?.focus();
-  };
-  const press = () => {
-    if (linear === undefined) {
-      blankPlan();
-      return;
-    }
-    onShowPlans();
-    setPicking(!open);
-  };
   return (
-    <div className="sidebar-new-plan-wrap" ref={wrap}>
-      <button
-        ref={trigger}
-        type="button"
-        className="sidebar-new-task"
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
-        aria-haspopup={linear === undefined ? undefined : "dialog"}
-        aria-expanded={linear === undefined ? undefined : open}
-        disabled={!plans.signedIn}
-        onClick={press}
-      >
-        <ComposeIcon />
-        New task
-        <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="row-shortcut" />
-      </button>
-      {linear === undefined ? null : (
-        <LinearIssuePicker
-          open={open}
-          read={linear.issues}
-          start={linear.start}
-          onBlankPlan={() => {
-            setPicking(false);
-            blankPlan();
-          }}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && wrap.current?.contains(left))) setPicking(false);
-          }}
-        />
-      )}
-    </div>
+    <button
+      type="button"
+      className="sidebar-new-task"
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
+      disabled={!tasks.signedIn}
+      onClick={onNewTask}
+    >
+      <ComposeIcon />
+      New task
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="row-shortcut" />
+    </button>
   );
 }
 
@@ -1325,7 +1279,7 @@ function SidebarColumn({
         <LukeIdentity />
       )}
 
-      <NewTaskButton tasks={tasks} chosen={chosen} onNewTask={newTask} onShowPlans={showPlans} />
+      <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
       {/* Search is a second door to the command palette, drawn as New plan
           is, since it heads the list the same way. */}
       <button
