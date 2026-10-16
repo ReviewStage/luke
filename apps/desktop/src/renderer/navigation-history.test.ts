@@ -273,3 +273,18 @@ test("an automation's page is of the workspace it stood in, so once another is l
 
   assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
 });
+
+test("a deleted automation's page is passed over by Back, which returns to the page before it", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  const kept = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-kept" } as const;
+  window.stand(onAutomations(kept, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST, deleted: AUTOMATION_ID }, opened));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [kept]);
+});

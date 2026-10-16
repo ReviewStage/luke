@@ -919,7 +919,7 @@ test("a deletion asks first, then goes back to the list without the automation",
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST, deleted: SWEEP.id });
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 

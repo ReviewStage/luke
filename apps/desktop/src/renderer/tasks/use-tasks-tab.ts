@@ -272,7 +272,11 @@ export const AUTOMATIONS_PAGE = {
 } as const;
 
 export type AutomationsPlace =
-  | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.LIST;
+      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
+      readonly deleted?: string;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.NEW;
       /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */

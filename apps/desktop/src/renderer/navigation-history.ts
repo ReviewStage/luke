@@ -27,7 +27,8 @@
  * which stands in its place once Create lands, so Back from what it made
  * returns to wherever the new page was opened from. An automation's page is
  * of the workspace it was opened in, so Back passes over it once another is
- * listed, as it does a person's page.
+ * listed, as it does a person's page, and passes over it for good once it
+ * is deleted, as it does a deleted plan.
  */
 
 import { EXPERIMENT } from "@luke/settings";
@@ -348,6 +349,11 @@ export function useWindowHistory(input: {
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const task of [...plans.tasks, ...plans.archived]) everListed.add(task.id);
+  // Only grows the same way: every automation the window has seen deleted.
+  const deletedAutomations = useRef(new Set<string>()).current;
+  if (automationsPage.kind === AUTOMATIONS_PAGE.LIST && automationsPage.deleted !== undefined) {
+    deletedAutomations.add(automationsPage.deleted);
+  }
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
@@ -388,10 +394,11 @@ export function useWindowHistory(input: {
   const reachable = (to: Place) => {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
-    // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed.
+    // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
       if (!automationsOn) return false;
-      return to.page.kind !== AUTOMATIONS_PAGE.EDIT || to.workspaceId === listedWorkspace;
+      if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
+      return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;

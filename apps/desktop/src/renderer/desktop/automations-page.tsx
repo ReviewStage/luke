@@ -436,6 +436,9 @@ function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
         linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
         leaveGuard={plans.leaveGuard}
+        onDeleted={(automationId) =>
+          view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
+        }
         onCreated={(automationId) => {
           setMade(automationId);
           view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId, created: true });
