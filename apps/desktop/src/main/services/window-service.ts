@@ -169,6 +169,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const panels = new PanelManager({
     runMode,
+    instance: config.instance,
     mediaDuck: native.mediaDuck,
     preloadPath,
     rendererHtmlPath,
@@ -359,7 +360,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     pendingWaits.add(wait);
   }
   const hotkeys = new HotkeyRegistrar({
-    registersGlobalKeys: runMode.registersGlobalKeys,
+    // Note that a named development instance claims no system-wide key,
+    // because it runs beside the plain one and two Lukes cannot share a chord:
+    // whichever launched first would take it from the other.
+    registersGlobalKeys: runMode.registersGlobalKeys && config.instance === undefined,
     // A voice stands only when the host says one does.
     hasCredentials: () => operator.voiceAvailable(),
     host: {

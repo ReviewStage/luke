@@ -64,14 +64,63 @@ luke_wait_for_exit() {
 # so a caller replacing "the running instance" asks about all three. The product
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.
-luke_app_names() {
-    local app_name
-    if ! app_name=$(cd "$LUKE_DESKTOP_APP_ROOT" &&
+luke_product_name() {
+    if ! (cd "$LUKE_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
     fi
+}
+
+luke_app_names() {
+    local app_name
+    app_name=$(luke_product_name) || return 1
     printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
+}
+
+# A named development instance (`run.sh --instance <name>`) answers to
+# "<product name> Dev <name>", so it has a state directory, a lock, and a
+# Keychain entry of its own and runs beside the plain development instance.
+# The app refuses a name outside this pattern and runs as the plain instance
+# instead, so the script holds names to it first.
+LUKE_INSTANCE_NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
+LUKE_INSTANCE_NAME_MAX_LENGTH=48
+
+luke_is_instance_name() {
+    ((${#1} <= LUKE_INSTANCE_NAME_MAX_LENGTH)) && [[ $1 =~ $LUKE_INSTANCE_NAME_PATTERN ]]
+}
+
+luke_instance_app_name() {
+    local app_name
+    app_name=$(luke_product_name) || return 1
+    printf '%s Dev %s\n' "$app_name" "$1"
+}
+
+# Folds any text (a branch, a host) into an instance name: lower case, every
+# run of other characters one hyphen, cut to length.
+luke_instance_slug() {
+    local slug
+    slug=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+    slug=${slug:0:LUKE_INSTANCE_NAME_MAX_LENGTH}
+    printf '%s\n' "${slug%-}"
+}
+
+# The instance a `--preview` run gets when it names none: one per Preview, so
+# each keeps its own sign-in, since a Preview has its own database and auth
+# secret, and a Preview run never touches the plain instance's. A Preview the
+# script looked up is keyed to the branch it was built from (passed as the
+# second argument), which keeps one profile across that branch's pushes; an
+# address given by hand, or a lookup from a detached head, is keyed to the
+# address's host.
+luke_preview_instance() {
+    local address=$1 branch=${2:-}
+    local key=$branch
+    if [[ -z $key ]]; then
+        key=${address#*://}
+        key=${key%%/*}
+        key=${key%%.*}
+    fi
+    luke_instance_slug "preview-$key"
 }
 
 luke_app_lock_holder_pid() {
@@ -104,10 +153,16 @@ luke_app_lock_holder_pid() {
 # Stopping a holder has to wait for it to exit, because the lock is released
 # as that process goes away rather than when it is signalled. Development, test,
 # and release instances hold separate locks, so all are stopped: a launch means
-# "this build owns the screen now", whichever build was there before.
+# "this build owns the screen now", whichever build was there before. A named
+# instance, given as the one argument, stops only its own earlier run, and
+# the plain launch never stops a named one.
 luke_stop_running_app() {
-    local app_names
-    app_names=$(luke_app_names) || return 1
+    local instance=${1:-} app_names
+    if [[ -n $instance ]]; then
+        app_names=$(luke_instance_app_name "$instance") || return 1
+    else
+        app_names=$(luke_app_names) || return 1
+    fi
 
     local app_name pid
     while IFS= read -r app_name; do

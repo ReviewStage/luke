@@ -14,12 +14,17 @@ luke_ensure_dependencies
 # new launch then quits on startup and only re-asserts the running panel.
 # `--preview` points the build at this branch's Vercel Preview instead of
 # production, so a web change is tried against the Mac before it merges; an
-# address after it (`--preview https://…`) skips the lookup. Every other
-# argument is forwarded to Electron.
+# address after it (`--preview https://…`) skips the lookup. `--instance
+# <name>` launches a named development instance beside the plain one, with
+# its own profile, replacing only its own earlier run; a `--preview` run is
+# one without asking, named for its Preview (`luke_preview_instance`). Every
+# other argument is forwarded to Electron.
 replace_running_app=true
 capture_trace=true
 use_preview=false
 preview_address=
+preview_address_given=false
+instance=
 remaining_arguments=$#
 while ((remaining_arguments-- > 0)); do
     argument=$1
@@ -36,9 +41,21 @@ while ((remaining_arguments-- > 0)); do
         use_preview=true
         if ((remaining_arguments > 0)) && [[ $1 == https://* ]]; then
             preview_address=$1
+            preview_address_given=true
             shift
             ((remaining_arguments--))
         fi
+        continue
+    fi
+    if [[ $argument == --instance ]]; then
+        if ((remaining_arguments == 0)) || ! luke_is_instance_name "$1"; then
+            printf 'error: --instance takes a name of lower-case letters, digits, and single hyphens, at most %s long\n' \
+                "$LUKE_INSTANCE_NAME_MAX_LENGTH" >&2
+            exit 2
+        fi
+        instance=$1
+        shift
+        ((remaining_arguments--))
         continue
     fi
     set -- "$@" "$argument"
@@ -57,7 +74,24 @@ if [[ $use_preview == true ]]; then
         preview_address=$("$SCRIPT_DIRECTORY/preview-address.sh")
     fi
     export LUKE_ACCOUNT_BASE_URL="${preview_address%/}/api/auth"
+    if [[ -z $instance ]]; then
+        preview_branch=
+        if [[ $preview_address_given == false ]]; then
+            preview_branch=$(git -C "$LUKE_REPO_ROOT" symbolic-ref --quiet --short HEAD || true)
+        fi
+        instance=$(luke_preview_instance "$preview_address" "$preview_branch")
+    fi
     printf 'preview: launching against %s\n' "$preview_address" >&2
+fi
+
+# The instance travels to the app in the environment, which only an unpackaged
+# run reads (apps/desktop/src/main/bootstrap.ts); a plain launch clears one
+# inherited from the shell, so it is always the plain instance.
+if [[ -n $instance ]]; then
+    export LUKE_INSTANCE=$instance
+    printf 'instance: launching as "%s", beside the plain Luke Dev\n' "$(luke_instance_app_name "$instance")" >&2
+else
+    unset LUKE_INSTANCE
 fi
 
 # Development runs record the trace of Luke's own agent traffic by default,
@@ -66,12 +100,13 @@ fi
 # already in the environment wins over the default, and the app itself keeps
 # the last word: only an unpackaged live run honours the variable at all, so
 # fixture runs and packaged builds record nothing whatever this exports.
+# A named instance's traces go to a folder of their own.
 if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
-    export LUKE_TRACE_DIR="$LUKE_REPO_ROOT/.build/traces"
+    export LUKE_TRACE_DIR="$LUKE_REPO_ROOT/.build/traces${instance:+/$instance}"
 fi
 
 if [[ $replace_running_app == true ]]; then
-    luke_stop_running_app
+    luke_stop_running_app "$instance"
 fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;
