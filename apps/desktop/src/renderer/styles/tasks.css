@@ -3260,16 +3260,36 @@ button.attached-file-face:hover img {
 
 .attachment-viewer[data-view="image"] .attachment-viewer-body {
   display: grid;
+  overflow: hidden;
   place-items: center;
   background: var(--section-fill);
 }
 
+/* The picture is zoomed by a transform over its fitted size
+   (use-image-zoom.ts), so the card keeps its size and the frame clips what
+   stands past it. A press zooms in where it is fitted; zoomed, it is held
+   and dragged, and a press puts it back. A step from a press or a key
+   glides; a pinch or a drag follows the fingers at once. */
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
   max-height: calc(100vh - 2 * var(--space-24) - 50px);
   object-fit: contain;
-  cursor: zoom-out;
+  cursor: zoom-in;
+  touch-action: none;
+  user-select: none;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"] {
+  cursor: grab;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"]:active {
+  cursor: grabbing;
+}
+
+.attachment-viewer-image[data-glide="true"] {
+  transition: transform var(--duration-quick) var(--motion-pane);
 }
 
 .attachment-viewer-lines {

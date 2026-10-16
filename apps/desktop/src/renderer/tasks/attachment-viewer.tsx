@@ -7,15 +7,27 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { CloseIcon } from "@luke/ui";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from "lucide-react";
 import { useId } from "react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
+import { type ImageZoom, useImageZoom } from "./use-image-zoom";
 
 /**
  * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file's numbered lines, or any other file by its icon with a way to save it.
+ *
+ * A picture opens fitted to the window and zooms as Preview's does: a pinch
+ * or a Control-scroll about the pointer, a press to its own pixels there
+ * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
+ * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -24,8 +36,8 @@ import { FileTypeIcon } from "./file-type-icon";
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame
  * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
- * Escape, a press on the dimmed window or on the image, and the way out all
- * close it and hand focus back to the chip that opened it. The
+ * Escape, a press on the dimmed window, and the way out all close it and
+ * hand focus back to the chip that opened it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
  * developer's own, so the card is left out of the screen recording
@@ -40,6 +52,8 @@ const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
   COPY: "Copy text",
+  ZOOM_OUT: "Zoom out",
+  ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
   CLOSE: "Close",
 } as const;
@@ -107,18 +121,22 @@ function AttachmentBody({
   file,
   base64,
   text,
-  onClose,
+  zoom,
 }: {
   file: FileChip;
   base64: string;
   text: string | undefined;
-  onClose: () => void;
+  zoom: ImageZoom;
 }): React.JSX.Element {
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
-      <div className="attachment-viewer-body">
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape and the way out are the keyboard's close; a press on the picture is the pointer's. */}
-        <img className="attachment-viewer-image" src={file.url} alt={file.name} onClick={onClose} />
+      <div ref={zoom.frameRef} className="attachment-viewer-body">
+        <img
+          className="attachment-viewer-image"
+          src={file.url}
+          alt={file.name}
+          {...zoom.imageProps}
+        />
       </div>
     );
   }
@@ -172,6 +190,7 @@ export function AttachmentViewer({
   note?: React.ReactNode;
 }): React.JSX.Element | null {
   const titleId = useId();
+  const zoom = useImageZoom();
   const file = files[at];
 
   if (file === undefined) return null;
@@ -180,10 +199,18 @@ export function AttachmentViewer({
   // Note that the walk goes round from either end rather than stopping,
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
-  const walk = (step: number) => onAt((at + step + files.length) % files.length);
-  // The arrows walk the message's files; a key's own default, a copy of the
-  // lines selected among them, is left alone.
+  const walk = (step: number) => {
+    zoom.reset();
+    onAt((at + step + files.length) % files.length);
+  };
+  const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  // The arrows walk the message's files, and a picture's zoom keys zoom it;
+  // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (image && zoom.keyDown(event)) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     walk(event.key === "ArrowLeft" ? -1 : 1);
@@ -224,7 +251,17 @@ export function AttachmentViewer({
           </div>
         ) : null}
         {text === undefined ? null : <CopyTextButton text={text} />}
-        {action === undefined || attachmentView(file) !== ATTACHMENT_VIEW.IMAGE ? null : (
+        {image ? (
+          <>
+            <HeaderButton label={VIEWER_LABEL.ZOOM_OUT} onClick={() => zoom.step(-1)}>
+              <ZoomOutIcon aria-hidden="true" />
+            </HeaderButton>
+            <HeaderButton label={VIEWER_LABEL.ZOOM_IN} onClick={() => zoom.step(1)}>
+              <ZoomInIcon aria-hidden="true" />
+            </HeaderButton>
+          </>
+        ) : null}
+        {action === undefined || !image ? null : (
           <button type="button" className="toolbar-button" onClick={() => action.onPress(file)}>
             {action.icon}
             {action.label}
@@ -237,7 +274,7 @@ export function AttachmentViewer({
           <CloseIcon />
         </HeaderButton>
       </header>
-      <AttachmentBody key={at} file={file} base64={base64} text={text} onClose={onClose} />
+      <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
     </ModalShell>
   );
 }
