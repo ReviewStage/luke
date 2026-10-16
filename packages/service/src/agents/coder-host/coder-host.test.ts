@@ -5,6 +5,7 @@ import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
+  readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -22,6 +23,7 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
@@ -287,6 +289,27 @@ function codingTurn(
   ];
 }
 
+/** A title model answering each call with the next of `answers`, nothing once they run out, keeping each prompt it was asked. */
+function scriptedTitleModel(answers: readonly string[]) {
+  const asked: string[] = [];
+  const model = new MockLanguageModelV4({
+    doGenerate: async (options) => {
+      const text = answers[asked.length] ?? "";
+      asked.push(JSON.stringify(options.prompt));
+      return {
+        content: [{ type: "text", text }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  return { model, asked };
+}
+
 const STEP_START = "step-start";
 
 const TurnRowSchema = Schema.Struct({
@@ -367,6 +390,50 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
         assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
+      }),
+  );
+
+  it.effect(
+    "an agent started on its plan is titled from the plan as its first turn's words are received, long before the turn ends",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["Teammate invitations by email"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        for (const event of [started, received]) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Teammate invitations by email");
+        assert.equal(asked.length, 1);
+        assert.match(asked[0] ?? "", /Invite a teammate by email/u);
+      }),
+  );
+
+  it.effect(
+    "an opening the title model names nothing from is asked again as the turn ends, with the answer beside it",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Read the agent guide");
+        assert.equal(asked.length, 2);
+        assert.match(asked[1] ?? "", /The guide is read; the plan fits the code\./u);
       }),
   );
 
