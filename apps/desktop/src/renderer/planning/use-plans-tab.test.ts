@@ -1029,6 +1029,31 @@ test("a person's page is theirs in the workspace it opened in: another listed in
   assert.equal(tab.control().personView.userId, "user-maya");
 });
 
+test("a person's page opened in another workspace lists it without reopening its last plan, so no refused reopen takes the page with it", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, ACME, PLATFORM],
+        activePlanId: "alerts",
+      },
+    },
+    OPENS,
+  );
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+  });
+  const opensBefore = opensAsked(tab.payloads).length;
+
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", ACME.id));
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(opensAsked(tab.payloads).length, opensBefore);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads

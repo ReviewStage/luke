@@ -2159,9 +2159,11 @@ export function usePlansTab(input: {
       name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
         setHistoryFor(undefined);
-        // Note that the workspace is listed first, because the page reads the listed workspace's work.
+        // Note that the workspace is listed first, because the page reads the listed workspace's
+        // work, and only listed, as a link's place is: reopening its last plan behind the page
+        // would only hide it again, and a reopen refused would take the page with it.
         if (workspaceId !== undefined && workspaceId !== listedWorkspace?.id) {
-          switchWorkspace(workspaceId);
+          chooseListed(workspaceId);
         }
         const opened = {
           kind: STAND_IN.PERSON,
