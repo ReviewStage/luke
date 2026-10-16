@@ -30,7 +30,7 @@ import { ServerRowWords, useServerRows } from "./agent-servers";
  * already under way, the next, and the switch stays off; a server not
  * connected is handed to no agent. Under a rule stand the server's tools
  * as the popover's page lists them, a few and a count of the rest, and a
- * tool's mention its one tool's line. Where the words are no agent's, as a
+ * tool's mention its one tool's line, of those the server answered with. Where the words are no agent's, as a
  * plan's or Luke's are, the row has no switch and the note says nothing of
  * one.
  *
@@ -107,12 +107,16 @@ function unreadRow(provider: IntegrationProvider, connection: string): ServerRow
   };
 }
 
-/** The tools the card lists: the one a tool's mention names, as its server lists it or by its name alone, else the first few of the server's. */
+/**
+ * The tools the card lists, of those the server answered with: the one a
+ * tool's mention names, else the first few. Note that a tool the server
+ * does not list, or a server not read, lists nothing, because a name the
+ * mention kept is no tool the server offers now.
+ */
 function shownTools(row: ServerRow, tool: string | undefined): readonly IntegrationTool[] {
-  if (tool !== undefined) {
-    return [row.tools?.find((each) => each.name === tool) ?? { name: tool, description: "" }];
-  }
-  return byName(row.tools ?? []).slice(0, CARD_TOOLS);
+  const tools = row.tools ?? [];
+  if (tool !== undefined) return tools.filter((each) => each.name === tool);
+  return byName(tools).slice(0, CARD_TOOLS);
 }
 
 /** The card a mention of a server, or of one of its tools, hangs. */

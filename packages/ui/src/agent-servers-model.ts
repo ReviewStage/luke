@@ -357,7 +357,7 @@ export const SERVER_MENTION_NOTE = {
   OFF_STEERS:
     "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
   NOT_CONNECTED: "Not connected, so no agent is handed it.",
-  EXPIRED: "Its sign-in expired, so no agent is handed it until it is reconnected.",
+  EXPIRED: "Its sign-in expired, so a call to it asks for it to be reconnected first.",
 } as const;
 
 /**
@@ -366,7 +366,8 @@ export const SERVER_MENTION_NOTE = {
  * the server on has it anyway, and one with it off is handed it for one
  * turn, the one the words open or, where they reached a turn under way, the
  * next, its switch untouched (the service's `mentionedServers`); a server
- * not connected, or whose sign-in expired, is handed to no agent. Nothing
+ * not connected is handed to no agent, and one whose sign-in expired is
+ * handed all the same, its calls asking for it to be reconnected. Nothing
  * where the row already says it, a problem of its server's or a sign-in
  * under way, or nothing is read yet.
  */

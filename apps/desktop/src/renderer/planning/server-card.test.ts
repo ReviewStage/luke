@@ -360,7 +360,7 @@ test("in the box of an agent at rest, Linear off, a send hands it the turn the s
   assert.equal(drafted.note, SERVER_MENTION_NOTE.OFF_OPENS);
 });
 
-test("a server not connected says so, with no switch and no tools", async () => {
+test("a server not connected says so, with no switch and no tools, a tool's mention listing none it was written with", async () => {
   linear = INTEGRATION_STATUS.DISCONNECTED;
   const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, []));
 
@@ -373,9 +373,10 @@ test("a server not connected says so, with no switch and no tools", async () => 
     more: undefined,
     presses: 0,
   });
+  assert.deepEqual((await cardOf(chipIn(container, "steered"))).tools, []);
 });
 
-test("a server whose sign-in expired says no agent is handed it until it is reconnected", async () => {
+test("a server whose sign-in expired is handed all the same, its card saying a call to it asks for it to be reconnected", async () => {
   linear = INTEGRATION_STATUS.EXPIRED;
   const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, []));
 
