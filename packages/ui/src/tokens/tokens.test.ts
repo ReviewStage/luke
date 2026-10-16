@@ -14,7 +14,7 @@ interface TokenRule {
   readonly values: ReadonlyMap<string, string>;
 }
 
-/** The spacing scale the contract fixes (docs/proposals/design-system.md), in pixels. */
+/** The spacing scale every app shares, in pixels. */
 const SPACE_STEPS = [0, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96];
 
 const SHEETS = ["scale", "profiles", "palettes", "legacy"] as const;
