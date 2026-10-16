@@ -123,8 +123,13 @@ beforeEach(() => {
           const { issueId, change } = request.payload;
           const was = standing.find((each) => each.id === issueId);
           if (changeRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.UNANSWERED };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+            const refused = {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
+            };
+            const held = heldChanges;
+            if (held === undefined) return Promise.resolve(refused);
+            return new Promise((resolve) => held.push(() => resolve(refused)));
           }
           if (was === undefined) {
             const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
@@ -672,4 +677,47 @@ test("while a description's save is out the field takes no typing and no Escape,
   assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
   assert.equal(page.querySelector(".issue-description")?.textContent, "First draft");
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "First draft" } }]);
+});
+
+test("a Return that chooses a word the input method composes is the method's, and sends no title", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  act(() => {
+    title.focus();
+    title.textContent = "Fix ろぐいん";
+    title.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
+    );
+  });
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.equal(document.activeElement, title);
+});
+
+test("a refused rename answered while the title is written again puts nothing back over the newer words", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  changeRefused = true;
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  act(() => {
+    title.focus();
+    title.textContent = "First try";
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  act(() => {
+    title.focus();
+    title.textContent = "Second try, still typing";
+  });
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(titleOf(page), "Second try, still typing");
 });

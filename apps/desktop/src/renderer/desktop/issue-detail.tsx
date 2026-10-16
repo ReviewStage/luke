@@ -112,17 +112,21 @@ function IssueTitle({
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   const text = useRef<HTMLDivElement>(null);
+  // Note that each edit is counted, so a refusal of one a later edit has replaced puts nothing back over it.
+  const edits = useRef(0);
   const putBack = () => {
     if (text.current !== null) text.current.textContent = issue.title;
   };
   const keep = () => {
+    edits.current += 1;
+    const edit = edits.current;
     const typed = (text.current?.textContent ?? "").trim().slice(0, ISSUE_BOUNDS.MAX_TITLE_CHARS);
     if (typed === "" || typed === issue.title) {
       putBack();
       return;
     }
     onChange({ title: typed }).then((kept) => {
-      if (!kept) putBack();
+      if (!kept && edit === edits.current && document.activeElement !== text.current) putBack();
     });
   };
   return (
@@ -139,8 +143,12 @@ function IssueTitle({
         tabIndex={0}
         spellCheck
         onBlur={keep}
+        onFocus={() => {
+          edits.current += 1;
+        }}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
+          // Note that a Return choosing a word the input method composes is the method's, not the title's.
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
             event.preventDefault();
             text.current?.blur();
           }
