@@ -28,6 +28,14 @@
   color-scheme: light dark;
 }
 
+/* The site has no palette that follows the machine (`ThemeOf` in
+   `surface.ts` refuses the pair), so a web surface marked `system` anyway
+   keeps the light page's own controls rather than the machine's dark ones
+   over a light page. */
+[data-luke-profile="web"][data-luke-theme="system"] {
+  color-scheme: light;
+}
+
 [data-luke-profile="desktop"] {
   --luke-color-text: light-dark(rgba(0, 0, 0, 0.88), rgba(255, 255, 255, 0.95));
   --luke-color-text-muted: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.56));

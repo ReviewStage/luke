@@ -24,6 +24,16 @@ export const THEME = {
 
 export type Theme = (typeof THEME)[keyof typeof THEME];
 
+/**
+ * The themes a surface at `profile` may be drawn in. The site keeps a
+ * palette per theme and none that follows the machine, so `system` is the
+ * desktop's alone: a web surface asking for it would take the machine's
+ * native controls over a page that stays light.
+ */
+export type ThemeOf<P extends Profile> = P extends typeof PROFILE.WEB
+  ? Exclude<Theme, typeof THEME.SYSTEM>
+  : Theme;
+
 /** The attributes a surface's root wears for `profile` in `theme`. */
 export interface SurfaceAttributes {
   readonly "data-luke-profile": Profile;
@@ -31,6 +41,9 @@ export interface SurfaceAttributes {
 }
 
 /** The attributes a root or a portal spreads to be drawn at `profile` in `theme`. */
-export function surfaceAttributes(profile: Profile, theme: Theme): SurfaceAttributes {
+export function surfaceAttributes<P extends Profile>(
+  profile: P,
+  theme: ThemeOf<P>,
+): SurfaceAttributes {
   return { "data-luke-profile": profile, "data-luke-theme": theme };
 }
