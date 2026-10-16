@@ -20,12 +20,12 @@ function said(run: readonly Node[]): string {
 
 function glued(run: readonly Node[]): string {
   return said(
-    gluedRun(
-      run,
-      (node) => node.type === "chip",
+    gluedRun(run, {
+      held: (node) => node.type === "chip",
       text,
-      (inside) => ({ type: "box", inside }),
-    ),
+      box: (inside) => ({ type: "box", inside }),
+      markWords: (node) => (node.type === "mark" ? node.value : undefined),
+    }),
   );
 }
 
@@ -58,4 +58,14 @@ test("words full of opening brackets before a chip are read in one pass, only th
     glued([text(`${brackets}x((`), chip("IAM-482"), text(")")]),
     `${brackets}x[((IAM-482)]`,
   );
+});
+
+test("a change mark over nothing but a chip's punctuation is held whole with the chip, and one over words is left beside it", () => {
+  const mark = (value: string): Node => ({ type: "mark", value });
+  assert.equal(
+    glued([text("read "), chip("the plan"), mark(","), text(" then")]),
+    "read [the plan,] then",
+  );
+  assert.equal(glued([mark("("), chip("IAM-482"), text(") tracks")]), "[(IAM-482)] tracks");
+  assert.equal(glued([chip("the plan"), mark(", and more")]), "[the plan], and more");
 });

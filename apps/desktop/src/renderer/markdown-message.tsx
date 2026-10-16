@@ -322,6 +322,8 @@ const markFound =
 function isDrawnLink(node: HastElementChild, link: LinkDrawer): boolean {
   if (node.type !== "element" || node.tagName !== "a") return false;
   const href = node.properties.href;
+  // Note that a link whose label a change marks in part is drawn as words, which must still wrap (`drawnMarked`).
+  if (marksOf(node) === LINK_MARKS.MIXED) return false;
   return isWireString(href) && link(href, labelOf(node)) !== undefined;
 }
 
@@ -331,17 +333,17 @@ function gluedChildren(element: HastElement, link: LinkDrawer): HastElementChild
     if (child.type === "element" && !isDrawnLink(child, link))
       child.children = gluedChildren(child, link);
   }
-  return gluedRun<HastElementChild>(
-    element.children,
-    (child) => isDrawnLink(child, link),
-    (value) => ({ type: "text", value }),
-    (inside) => ({
+  return gluedRun<HastElementChild>(element.children, {
+    held: (child) => isDrawnLink(child, link),
+    text: (value) => ({ type: "text", value }),
+    box: (inside) => ({
       type: "element",
       tagName: "span",
       properties: { className: [LINK_GLUE.CLASS] },
       children: inside,
     }),
-  );
+    markWords: (child) => (isMark(child) ? wordsOf(child) : undefined),
+  });
 }
 
 /** The rehype step that holds every drawn link with the punctuation written against it, so a comma never starts a line alone after a chip. */

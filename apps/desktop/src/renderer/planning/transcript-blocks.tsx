@@ -260,12 +260,11 @@ function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, strin
 function glueMentions(node: MarkdownNode): void {
   if (node.children === undefined) return;
   for (const child of node.children) glueMentions(child);
-  node.children = gluedRun<MarkdownNode>(
-    node.children,
-    (child) => child.data?.hName === MENTION_ELEMENT.TAG,
-    (value) => ({ type: "text", value }),
-    (inside) => ({ type: LINK_GLUE.TAG, data: { hName: LINK_GLUE.TAG }, children: inside }),
-  );
+  node.children = gluedRun<MarkdownNode>(node.children, {
+    held: (child) => child.data?.hName === MENTION_ELEMENT.TAG,
+    text: (value) => ({ type: "text", value }),
+    box: (inside) => ({ type: LINK_GLUE.TAG, data: { hName: LINK_GLUE.TAG }, children: inside }),
+  });
 }
 
 /** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */

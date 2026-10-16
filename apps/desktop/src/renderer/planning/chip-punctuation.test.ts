@@ -108,8 +108,8 @@ function drawn(node: ReactNode): HTMLElement {
   return container;
 }
 
-/** A plan's version, read and ready, as the version history draws it. */
-function Version(): ReactNode {
+/** A plan's version, read and ready, as the version history draws it, against the version before it where one is given. */
+function Version({ previous = null }: { previous?: Plan["document"] | null } = {}): ReactNode {
   const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );
@@ -122,7 +122,7 @@ function Version(): ReactNode {
         changes: 1,
       },
       current: false,
-      read: { kind: HISTORY_READ.READY, document: PLAN.document, previous: null },
+      read: { kind: HISTORY_READ.READY, document: PLAN.document, previous },
     },
     restore,
   });
@@ -167,4 +167,51 @@ test("a transcript, the plan, a version, and a note hold each chip and the punct
     assert.equal(plain?.textContent, "the docs");
     assert.notEqual(getComputedStyle(plain?.parentElement ?? surface).whiteSpace, "nowrap");
   }
+});
+
+test("a version holds a chip with a comma it wrote in after it, and leaves a mention whose label it changed in part to wrap as words", () => {
+  const before = `## Rollout\n\nRead [the plan](https://tryluke.dev/acme/plan/${PLAN_ID}#rollout) then.\n\nSee [the store](https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5) too.`;
+  const after = before
+    .replace("#rollout) then.", "#rollout), then.")
+    .replace("[the store]", "[the new store]");
+  const version = { ...PLAN, document: { body: after, assumptions: [] } };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanMentions, {
+        value: { ...PAGE, text: () => after },
+        children: createElement(() =>
+          createElement(VersionView, {
+            viewing: {
+              line: {
+                seq: 2,
+                lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: true },
+                startedAt: 1,
+                changes: 2,
+              },
+              current: false,
+              read: {
+                kind: HISTORY_READ.READY,
+                document: version.document,
+                previous: { body: before, assumptions: [] },
+              },
+            },
+            restore: useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+              Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  );
+
+  assert.deepEqual(heldChips(container), [["", ","]]);
+  const changed = [...container.querySelectorAll<HTMLElement>(".text-link")].find((link) =>
+    link.textContent?.includes("store"),
+  );
+  assert.ok(changed, "the mention changed in part is drawn as words");
+  assert.equal(changed.closest(".link-glued"), null);
 });
