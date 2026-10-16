@@ -40,6 +40,7 @@ import type { HistorySpot } from "./tasks/use-plan-history";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
+  ISSUES_PAGE,
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab";
@@ -104,6 +105,8 @@ type Place =
       readonly kind: typeof PLACE_KIND.ISSUES;
       /** The workspace whose issues stood, which is no place of another's. */
       readonly workspaceId: string | undefined;
+      /** The issue whose page stood, or none for the list. */
+      readonly issueId: string | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
@@ -144,7 +147,7 @@ function madeFromNew(standing: Place, place: Place): boolean {
   );
 }
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Issues page, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Issues list or the same issue's page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
@@ -152,6 +155,9 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   }
   if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
+  if ("issueId" in one && "issueId" in other) {
+    return one.issueId === other.issueId && one.workspaceId === other.workspaceId;
+  }
   if ("userId" in one && "userId" in other) {
     return one.userId === other.userId && one.workspaceId === other.workspaceId;
   }
@@ -365,6 +371,8 @@ export function useWindowHistory(input: {
   const chatOpen = plans.chatView.open;
   const chatOn = useChatOn();
   const issuesOpen = plans.issuesView.open;
+  const issuesPlace = plans.issuesView.place;
+  const pageIssue = issuesPlace.kind === ISSUES_PAGE.ISSUE ? issuesPlace.issueId : undefined;
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
@@ -395,7 +403,9 @@ export function useWindowHistory(input: {
       return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage, workspaceId: listedWorkspace };
     }
     if (chatOpen) return { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace };
-    if (issuesOpen) return { kind: PLACE_KIND.ISSUES, workspaceId: listedWorkspace };
+    if (issuesOpen) {
+      return { kind: PLACE_KIND.ISSUES, workspaceId: listedWorkspace, issueId: pageIssue };
+    }
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
@@ -417,6 +427,7 @@ export function useWindowHistory(input: {
     automationsPage,
     chatOpen,
     issuesOpen,
+    pageIssue,
   ]);
   const reachable = (to: Place) => {
     // Factory, the Automations page, and the Issues page are experiments, so back and forward pass over each while it is off.
@@ -473,7 +484,11 @@ export function useWindowHistory(input: {
       return;
     }
     if (to.kind === PLACE_KIND.ISSUES) {
-      plans.issuesView.onOpen();
+      plans.issuesView.onOpen(
+        to.issueId === undefined
+          ? { kind: ISSUES_PAGE.LIST }
+          : { kind: ISSUES_PAGE.ISSUE, issueId: to.issueId },
+      );
       return;
     }
     // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, and the Issues page stand over.

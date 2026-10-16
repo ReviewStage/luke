@@ -18,6 +18,8 @@ import { PANEL_TAB } from "./panel-tabs";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
+  ISSUES_PAGE,
+  type IssuesPlace,
   type LeaveAsk,
   type TasksControl,
 } from "./tasks/use-tasks-tab";
@@ -341,4 +343,32 @@ test("the Issues page is its workspace's, so once another is listed Back passes 
 
   assert.equal(window.history().canGoBack, false);
   assert.equal(reopened, 0);
+});
+
+test("an issue's page is a step of its own beside the Issues list, so Back from it opens the list and Forward the issue again", async () => {
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const opened: (IssuesPlace | undefined)[] = [];
+  const control = tasksControl();
+  const standing = (place: IssuesPlace) =>
+    tasksControl({
+      issuesView: {
+        ...control.issuesView,
+        open: true,
+        place,
+        onOpen: (to) => opened.push(to),
+      },
+    });
+  const issue = { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" } as const;
+  const window = mount(standing({ kind: ISSUES_PAGE.LIST }));
+  // The account's experiments arrive with the window's state, which the page is reachable by.
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  window.stand(standing(issue));
+
+  act(() => window.history().onBack());
+  window.stand(standing({ kind: ISSUES_PAGE.LIST }));
+  act(() => window.history().onForward());
+
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.LIST }, issue]);
 });
