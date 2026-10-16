@@ -156,16 +156,32 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
-   the top of the call's Call tab, at the tab's width less the transcript's
-   own gutter and at the 16:9 the avatar is rendered in, on the card's
-   ground, border, and corner, so the tile reads as the call card grown into
-   a picture. It keeps its height as the transcript under it scrolls. */
+   the top of the call's Call tab, always at the 16:9 the avatar is rendered
+   in, on the card's ground, border, and corner, so the tile reads as the
+   call card grown into a picture. It keeps its height as the transcript
+   under it scrolls.
+
+   However wide the tab is drawn, the tile keeps to the transcript's own
+   column (`desktop.css`'s `[role="log"]` padding: the reading measure, or
+   the tab less its gutter where the tab is narrower), centred over it, so
+   the picture's edges line up with the lines under it. And it never takes
+   more than two fifths of the tab's height, narrowing to keep its 16:9
+   rather than cropping, so a wide, short tab still leaves the transcript
+   most of the room. It never narrows past the width its still frame and
+   Restart video need, short of the tab's own. The tab is the size
+   container the height is read from. */
+.plan-call {
+  container: plan-call / size;
+}
+
 .call-video-tile {
+  --call-video-column: min(100% - 2 * var(--space-16), var(--reading-width));
   position: relative;
   flex: none;
   overflow: clip;
   box-sizing: border-box;
-  margin: var(--space-4) var(--space-16) var(--space-8);
+  width: min(var(--call-video-column), max(240px, 40cqh * 16 / 9));
+  margin: var(--space-4) auto var(--space-8);
   aspect-ratio: 16 / 9;
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
@@ -228,7 +244,7 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The strip the tile collapses to once the developer turns video off: one
-   line on the tile's ground, border, and margins, saying so beside the
+   line on the tile's ground, border, and column, saying so beside the
    button that turns it on again, so the call keeps its video's place
    without a picture's height. */
 .call-video-strip {
@@ -237,7 +253,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
-  margin: var(--space-4) var(--space-16) var(--space-8);
+  width: min(100% - 2 * var(--space-16), var(--reading-width));
+  margin: var(--space-4) auto var(--space-8);
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
