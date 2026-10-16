@@ -46,7 +46,16 @@ const MACOS_TERMINAL_TOOLS: MacTerminalTools = {
     "/bin/stty",
     ["-f", tty, "rows", String(rows), "cols", String(cols)],
   ],
-  hangUp: (tty) => ["/usr/bin/pkill", ["-HUP", "-t", tty.replace(/^\/dev\//u, "")]],
+  // Note that macOS's `pkill -t` matches no process on a pseudo-terminal, while `ps -t` lists every one.
+  hangUp: (tty) => [
+    "/bin/sh",
+    [
+      "-c",
+      'ps -o pid= -t "$1" | xargs kill -HUP 2>/dev/null; true',
+      "sh",
+      tty.replace(/^\/dev\//u, ""),
+    ],
+  ],
 };
 
 export interface MacTerminal {
