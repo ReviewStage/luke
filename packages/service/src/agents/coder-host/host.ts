@@ -15,7 +15,7 @@ import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect, Option, type Redacted, Result, type Schema } from "effect";
+import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -458,7 +458,7 @@ const EVE_UNREACHED: EveSessions = {
     Effect.succeed({
       outcome: EVE_RESET_OUTCOME.FAILED,
       status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),
+    }),  stream: () => Stream.empty,
 };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */

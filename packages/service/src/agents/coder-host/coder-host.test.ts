@@ -807,7 +807,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const host = yield* hostOverStore();
         const { agent, admitted } = yield* openAgent(host);
         const db = yield* Database;
-        yield* db.update(codingAgent).set({ planId: null }).where(eq(codingAgent.id, agent.id));
+        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agent.id));
         const read = yield* host
           .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
           .pipe(Effect.provide(reachingRelay()));

@@ -180,16 +180,14 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
-test("the session is told of the plan's other agents in chat and asks there, by the chat's tools and the line a notice opens with, and never through the inbox's", () => {
+test("the session is told of the plan's other agents in chat, by the chat's post and read and the line a notice opens with, and still asks the developer through the inbox", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS);
     assert.ok(instructions.includes("## Other agents on this plan"), brief);
-    for (const tool of Object.values(CHAT_TOOLS))
+    for (const tool of [CHAT_TOOLS.POST, CHAT_TOOLS.READ])
       assert.ok(instructions.includes(tool.name), tool.name);
     assert.ok(instructions.includes(`\`${CHAT_NOTICE_LEAD} ·\``), brief);
-    for (const tool of Object.values(INBOX_TOOLS)) {
-      assert.ok(!instructions.includes(tool.name), `${brief} names ${tool.name}`);
-    }
+    assert.ok(instructions.includes(INBOX_TOOLS.POST.name), brief);
   }
 });
 

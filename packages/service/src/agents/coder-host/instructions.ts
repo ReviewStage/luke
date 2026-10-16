@@ -12,6 +12,7 @@ import { CHAT_TOOLS } from "./chat.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
+import { INBOX_TOOLS } from "./inbox.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 

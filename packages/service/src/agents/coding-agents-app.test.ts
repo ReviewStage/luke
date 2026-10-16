@@ -2835,7 +2835,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
    */
   const openAgents = (eve = fakeEve()) =>
     Effect.gen(function* () {
-      const opened = yield* openPlan({ eve });
+      const opened = yield* openTask({ eve });
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const telling = {
         eveFor: (starter: string) => eve.eve(`Bearer ${starter}`),
@@ -2844,7 +2844,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
       };
       const agents: ChatAgent[] = [];
       for (const at of [0, 1]) {
-        const started = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
+        const started = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
         const sessionId = eve.opened[at]?.sessionId ?? "";
         assert.equal(
           yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
@@ -2853,7 +2853,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         agents.push({
           userId: opened.owner,
           agentId: started.agent.id,
-          planId: opened.plan.id,
+          planId: opened.task.id,
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -2884,7 +2884,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
       /** The chat member an agent's handle names. */
       const memberOf = (handle: string) =>
         Effect.map(
-          memberNamed(opened.owner, opened.plan.workspaceId, handle.slice(1)),
+          memberNamed(opened.owner, opened.task.workspaceId, handle.slice(1)),
           Option.getOrThrow,
         );
       return { ...opened, first, second, handles, post, read, resolve, memberOf };
@@ -3009,7 +3009,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openAgents(eve);
-        const other = yield* startPlan(chat.owner, {
+        const other = yield* startTask(chat.owner, {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
@@ -3112,7 +3112,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const db = yield* Database;
         yield* db
           .update(codingAgent)
-          .set({ planId: null })
+          .set({ taskId: null })
           .where(eq(codingAgent.id, chat.first.agentId));
         const planless = { ...chat.first, planId: null };
         const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
@@ -3154,7 +3154,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok(standing);
 
         const answerer = yield* chat.memberOf(chat.handles.second);
-        const answered = yield* answerAsk(chat.owner, chat.plan.workspaceId, {
+        const answered = yield* answerAsk(chat.owner, chat.task.workspaceId, {
           answererMemberId: answerer.id,
           seq: standing.seq,
           revision: 2,
@@ -3286,7 +3286,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in posted);
         const poster = yield* chat.memberOf(chat.handles.first);
         const [message] = Option.getOrThrow(
-          yield* history(chat.owner, chat.plan.workspaceId, poster.id, {}),
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
         );
         const image = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
         assert.ok(image !== undefined && "attachmentId" in image);
@@ -3294,7 +3294,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const kept = Option.getOrThrow(
           yield* readAttachment(
             chat.owner,
-            chat.plan.workspaceId,
+            chat.task.workspaceId,
             message?.id ?? "",
             image.attachmentId,
           ),
@@ -3311,13 +3311,13 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok("seq" in asked);
         const [ask] = Option.getOrThrow(
-          yield* history(chat.owner, chat.plan.workspaceId, poster.id, { thread: asked.seq }),
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, { thread: asked.seq }),
         );
         const shown = ask?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
         assert.ok(ask !== undefined && shown !== undefined && "attachmentId" in shown);
         yield* chat.post(chat.first, { ...QUEUE_ASK, text: "Which queue? No picture now." });
         assert.deepEqual(
-          yield* readAttachment(chat.owner, chat.plan.workspaceId, ask.id, shown.attachmentId),
+          yield* readAttachment(chat.owner, chat.task.workspaceId, ask.id, shown.attachmentId),
           Option.none(),
           "a picture an ask dropped when posted again is dropped from the store",
         );
@@ -3388,7 +3388,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
       Effect.gen(function* () {
         const chat = yield* openAgents();
         yield* chat.post(chat.first, { text: "Said before the newcomer." });
-        const started = yield* startedAgent(chat.owner, chat.plan.id, chat.ask);
+        const started = yield* startedAgent(chat.owner, chat.task.id, chat.ask);
         const newcomer: ChatAgent = { ...chat.first, agentId: started.agent.id };
         assert.equal(yield* chatDigest(newcomer), undefined);
         const after = yield* chat.post(chat.first, { text: "Said after." });

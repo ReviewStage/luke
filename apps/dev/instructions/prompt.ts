@@ -41,7 +41,7 @@ export default defineDynamic({
       );
     },
     "turn.started": (_event, ctx) =>
-      runWeb(
+      runAgent(
         Effect.gen(function* () {
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return null;

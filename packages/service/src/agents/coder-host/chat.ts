@@ -856,7 +856,7 @@ export function chatDigest(
       const { organizationId, self } = found.value;
       const noticed =
         self.noticeSeq !== null && self.noticeSeq > self.readSeq ? self.noticeSeq : undefined;
-      const read = yield* unreadFor(userId, organizationId, self.id, DIGEST_MESSAGES);
+      const read = yield* unreadFor(userId, organizationId, self.id, { limit: DIGEST_MESSAGES });
       const { messages: unread, more } = Option.getOrElse(read, () => ({
         messages: [],
         more: false,
