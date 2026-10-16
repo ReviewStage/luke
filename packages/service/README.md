@@ -504,10 +504,47 @@ take effect regardless of any cache. The migration that made the table copied
 every row of Linear's own table in as Linear's, and the one after it dropped
 that table.
 
-**The routes** (`src/integrations/integrations-app.ts`):
+**More than one account at a provider.** A Luke account may hold more than
+one account at a provider (two Notion workspaces), each its own row and its
+own grant. Connect keys a grant by connector and subject, so each row keeps
+the subject it asks under (`connect_subject`): the Luke account's own user
+id for the first account at a provider, as every ask was before a second
+was possible, and a minted `luke_acct_…` id for another. Each row also keeps
+the one name the account goes by everywhere (`connection_name`): the
+provider's own for the first (`notion`), the provider and its place for
+another (`notion-2`), minted once (`mintIntegrationConnectionName` in
+`@luke/features/integration-wire`) and read back from the row after. That
+name is the eve connection an agent reaches the account through, a coding
+agent's switch and mention, and the routes' `connection` query, so every
+name stored before a second account was possible keeps naming the first.
+A row also keeps a `label`, the account's name at the provider where
+Connect's grant carries one shaped like no credential, or the developer's
+own; it is an identity at the provider, never a credential, answered to the
+desktop and to no log line, span, counted event, or fixture; and an
+`is_primary` flag, which only what the agents are told of the account reads.
+A provider offers more than one account where its catalog entry names a
+`MULTIPLE_ACCOUNTS_VARIABLE` (Notion, Linear, Slack, Supabase, PostHog,
+Executor), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
+`false`, or `0`, which switches it back to one at once where a provider
+turns out to revoke an earlier grant when a later one completes for the
+same user and client; at most `INTEGRATION_ACCOUNTS_MAX` (five) per provider,
+counting an account connected or expired and a sign-in still within its
+window. A sign-in left past its window holds no place, and adding an account
+lets it go, so its name is free again.
+Deleting the Luke account reads every row's subject before the cascade and
+revokes each.
+
+**The routes** (`src/integrations/integrations-app.ts`). Every route about
+one account reads it from a `connection` query beside the provider, and
+without one means the provider's first account, so a desktop that predates
+more than one sees exactly what it saw before:
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
-  status }, signInFailures?: [{ provider, reason, message? }] }`, each
+  status }, accounts?: [{ provider, connection, label?, primary, status }],
+  addable?: [provider], signInFailures?: [{ provider, connection?, reason,
+  message? }] }`: each provider's first account's word, every account the
+  Luke account holds but one whose first sign-in ended without a grant, the
+  providers it may add another account at, and each failure; each
   status `connected`, `pending`, `expired`, `disconnected`, or
   `unavailable` (no connector for it on this deployment). A sign-in still
   under way, begun within the last fifteen minutes, is settled here by
@@ -523,19 +560,28 @@ that table.
   Connect's error message, cut to 200 characters, where it is shaped like no
   credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
-  `startAuthorization` for the account, with Luke's own user id as the
-  subject and `/api/account/integrations/connected?state=…` as the callback,
-  records the sign-in's one-time state and Connect's verifier, and answers
-  the address. The
-  desktop's host opens it through the native node; no window draws it and
-  nothing logs it.
+  `startAuthorization` for the account under its row's subject, with
+  `/api/account/integrations/connected?state=…` as the callback, records the
+  sign-in's one-time state and Connect's verifier, and answers the address
+  and the account it signs in (`{ url, connection }`). With `add=true` it
+  signs in a new account under a minted subject and the next free name,
+  where the provider offers more than one and the account holds fewer than
+  the most, refused as unavailable otherwise; Linear's asks for its
+  documented `prompt=consent`. The desktop's host opens the address through
+  the native node; no window draws it and nothing logs it.
+- `POST /api/account/integrations/{provider}/rename` names the account a
+  `connection` names, `{ label }` trimmed to between 1 and 64 characters,
+  and `…/primary` makes it the provider's primary and every other account
+  there not, in one statement; each answers `{ account }` as it then stands,
+  and one the account does not hold is `not-found`.
 - `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
   way and nothing else: a first sign-in's row goes, any other row keeps its
   status, and no grant is revoked, so a sign-in that completed just before
   the press stays connected. It answers `{ status }` as it then stands. The
   desktop's Cancel asks it, never a Disconnect.
-- `POST /api/account/integrations/{provider}/disconnect` deletes the row
-  first, then asks Connect to revoke the grant. A failed revoke is logged and
+- `POST /api/account/integrations/{provider}/disconnect` deletes the
+  account's row first, then asks Connect to revoke its grant under that
+  row's subject; every other account at the provider stands. A failed revoke is logged and
   the account is disconnected all the same. Connect revokes at the provider
   where the provider allows it; otherwise its token stands until it expires,
   though Luke no longer uses it. Deleting the account revokes every
@@ -555,8 +601,8 @@ that table.
   the schema gives them, the required first and 64 at most, and none at all where the schema
   cannot be read as an object's (`src/integrations/mcp-tool-parameters.ts`).
   None of it is what a model is handed. It is held in the instance's memory
-  for five minutes per account and provider. A provider the account has not
-  connected is refused as unavailable before any token is read.
+  for five minutes per account and connection. An account not connected is
+  refused as unavailable before any token is read.
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
@@ -581,9 +627,17 @@ none of its parent's connections, so each of the four agents registers one
 starts, which hands the turn every server its role's policy has on
 (`src/agents/agent-runtime/servers.ts`), each the one definition over its provider and
 that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. Luke's brain and its worker are handed every integration; a coding
+`admitDelegated`. Each account the caller holds at a provider, standing
+connected or expired, is handed as a connection of its own under its
+connection name and keyed in eve by its own grant's subject, which its
+token read is held to, so a name a later account takes never reaches it from
+a turn handed the old one, and a provider with none is handed bare, so its first call says how to connect it. Where a
+provider hands more than one account, each description gains one sentence
+naming which account it is, whether it is primary, and the others, and
+asking the agent to say which it used; a developer with one account per
+provider is told the same bytes as before. Luke's brain and its worker are handed every integration; a coding
 agent and its worker are handed every one the developer has not switched off
-for that agent. The
+for that agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
 principal. That matters because a spoken turn runs as the
@@ -601,14 +655,17 @@ asks them to.
 **Transcripts** (`src/integrations/connection-tools.ts`). eve offers a
 connection through `connection_search` and `connection_execute`, and tells a
 remote call as a call of its own nested under the `connection_execute` that
-ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
-the nested call under the provider's fixed name (`linear_remote` for
-Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
-with what the provider answered, before the wrapper's own result. Both the
-names and that envelope are the wire's (`@luke/features/integration-wire`'s
-`INTEGRATION_REMOTE_TOOL` and `integrationRemoteCallSchema`), because the
-desktop draws the nested call as the provider's tool, under the provider's
-mark, and leaves its wrapper's row out. Every name
+ran it, named `<connection>__<tool>` (`linear__list_issues`,
+`notion-2__notion-fetch` for a second Notion account), with id
+`<wrapper>:1`. The relay stores the nested call under the provider's fixed
+name (`linear_remote` for Linear), whose input is `{ remoteTool,
+parentCallId, input }` and, for an account past the provider's first, its
+`connection`, and settles it with what the provider answered, before the
+wrapper's own result. Both the names and that envelope are the wire's
+(`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
+`integrationRemoteCallSchema`), because the desktop draws the nested call as
+the provider's tool, under the provider's mark, and leaves its wrapper's row
+out. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
