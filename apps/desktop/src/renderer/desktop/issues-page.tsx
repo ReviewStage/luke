@@ -128,8 +128,6 @@ function ListPage({
       >
         {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
-        ) : read.issues.length === 0 ? (
-          <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
         ) : onBoard ? (
           <IssueBoard
             issues={read.issues}
@@ -138,6 +136,9 @@ function ListPage({
             focused={focused}
             onOpen={open}
           />
+        ) : read.issues.length === 0 ? (
+          // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
+          <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
         ) : (
           <div className="home-column issues-column">
             <IssueList
@@ -337,7 +338,11 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
           issues={issues}
           focused={cameFrom}
           layout={layout}
-          onLayout={setLayout}
+          onLayout={(chosen) => {
+            // Note that the row the page came back from is let go, so the new layout's row takes no keyboard from the menu.
+            setCameFrom(undefined);
+            setLayout(chosen);
+          }}
           onCompose={onCompose}
         />
       ) : (

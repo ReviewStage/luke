@@ -917,3 +917,30 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
 });
+
+test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
+  const page = mount();
+  await settle();
+
+  assert.deepEqual(columns(page), [
+    ["In Progress0", []],
+    ["Todo0", []],
+    ["Backlog0", []],
+    ["Done0", []],
+    ["Canceled0", []],
+  ]);
+  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+});
+
+test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  act(() => button("Issues").click());
+  await settle();
+
+  showList();
+  await settle();
+
+  assert.ok(page.querySelector(".home-section"), "the list stands");
+  assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+});
