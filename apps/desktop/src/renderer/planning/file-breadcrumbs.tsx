@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MENU_DROP } from "../desktop/action-menu";
 import type { ReadFolder } from "../file-tree/contract";
@@ -25,32 +25,32 @@ import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
  * repository's, so the tree is left out of the screen recording
  * (`ph-no-capture`), as the pane's is.
  *
- * Where the bar has too little room for the whole path, the folders give
- * way first, from the repository's side, then the repository, folded into
- * one "…" crumb that stands for the last of them and names them all in its
- * pill, so no crumb is ever squeezed to a sliver (`useCrumbFit`). Only with
- * every crumb but the file folded and still too little room does the file
- * give way, cut short at its end.
+ * The path gives way in the stylesheet alone, so the bar measures nothing:
+ * every crumb narrows, cut short at its end, the repository and the folders
+ * first, the file's own name last; on a bar narrower than 520px the folders
+ * between the repository and the file's own folder stand as one "…" crumb,
+ * and on one narrower than 300px the repository and every folder do, the
+ * file alone after it; the "…" names what it stands for in its pill and
+ * hangs the tree the last of them would (`planning.css`'s `@container
+ * file-bar`). Both "…" are drawn, and the stylesheet shows the one the bar's
+ * width asks for.
  */
 
 /** What the "…" crumb is called, before the folders it stands for. */
 const FOLDED_LABEL = "Folders";
 
-/** How much of the path the "…" stands for: some folders or none, every folder, or every folder and the repository too. */
-const FOLD = { SOME: "some", FOLDERS: "folders", ALL: "all" } as const;
-
-/** The least room the repository's crumb is cut short to, with every folder folded, before it folds too. */
-const REPOSITORY_LEAST = 64;
+/** Where a "…" crumb's tree is marked open, apart from every crumb's own place in the path. */
+const FOLDED_MIDDLE = -1;
+const FOLDED_ALL = -2;
 
 /** A row of the tree as the compact density draws it, which the box's height is counted in. */
 const ROW_HEIGHT = 24;
 /** The tallest a crumb's tree stands before it scrolls, its width, and the room it keeps from the window's edges. */
 const TREE_BOUNDS = { MAX_HEIGHT: 360, WIDTH: 280, MARGIN: 8, INSET: 4 } as const;
 
-/** A crumb's tree standing open: the tab's file it was opened over, and how many crumbs the bar had folded then; the crumb, by its place in the path; the folder the tree is rooted at; and the tab's file from that folder, which it reveals. */
+/** A crumb's tree standing open: the tab's file it was opened over; the crumb, by its place in the path; the folder the tree is rooted at; and the tab's file from that folder, which it reveals. */
 interface Opened {
   readonly path: string;
-  readonly folded: number;
   readonly at: number;
   readonly folder: string;
   readonly file: string;
@@ -185,101 +185,6 @@ function CrumbTree({
   );
 }
 
-/** Each crumb's width at full length, its chevron included, by its place in the path; and the "…" crumb's, with its own. */
-interface CrumbWidths {
-  readonly crumbs: readonly number[];
-  readonly folded: number;
-}
-
-/** The crumbs' widths as the bar draws them with none folded. */
-function crumbWidths(nav: HTMLElement): CrumbWidths {
-  const width = (element: Element | null) => element?.getBoundingClientRect().width ?? 0;
-  return {
-    crumbs: [...nav.querySelectorAll("li[data-crumb]")].map(width),
-    folded: width(nav.querySelector("li[data-folded-crumb]")),
-  };
-}
-
-/** The room a bar leaves its breadcrumbs: its width less its padding, the other parts it holds, and the gaps between them. */
-function crumbRoom(nav: HTMLElement): number {
-  const bar = nav.parentElement;
-  if (bar === null) return Number.POSITIVE_INFINITY;
-  const style = getComputedStyle(bar);
-  const others = [...bar.children].filter((child) => child !== nav);
-  const taken = others.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
-  const gaps = (Number.parseFloat(style.columnGap) || 0) * others.length;
-  const padding =
-    (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
-  return bar.clientWidth - padding - taken - gaps;
-}
-
-/**
- * How many crumbs to fold into the "…": the fewest that let the rest fit
- * `room`, taken first from the folders, from the repository's side, then
- * the repository itself, the file never. With every folder folded the
- * repository is cut short rather than folded while that leaves it some
- * room to be read in, and folded once it would not; the file is cut short
- * only with nothing left to fold.
- */
-function foldedToFit(widths: CrumbWidths, room: number): number {
-  const { crumbs } = widths;
-  // The folders stand between the repository, first, and the file, last.
-  const folders = Math.max(0, crumbs.length - 2);
-  const order = [...Array.from({ length: folders }, (_, at) => at + 1), 0];
-  let total = crumbs.reduce((sum, width) => sum + width, 0);
-  for (const [folded, at] of order.entries()) {
-    if (total <= room) return folded;
-    if (at === 0 && room - (total - (crumbs[0] ?? 0)) >= REPOSITORY_LEAST) return folded;
-    total -= crumbs[at] ?? 0;
-    if (folded === 0) total += widths.folded;
-  }
-  return order.length;
-}
-
-/**
- * How many crumbs the bar folds, for the repository and path they were
- * fitted to. Each crumb is measured at full length once a path, on the
- * frame it is first drawn with none folded, and the fold is counted again
- * from those widths whenever the bar changes its size and after every
- * render, since what stands beside the path, a commit or a change's
- * counts, may have taken or given room; so no crumb is drawn squeezed and
- * the path is never drawn whole again just to be measured.
- */
-function useCrumbFit(nav: RefObject<HTMLElement | null>, repository: string, path: string): number {
-  const [fit, setFit] = useState({ repository, path, folded: 0 });
-  const widths = useRef<CrumbWidths | undefined>(undefined);
-  // Note that a count that has not changed keeps the state it has, so the refit after a render renders nothing more.
-  const refit = useCallback(() => {
-    const element = nav.current;
-    const measured = widths.current;
-    if (element === null || measured === undefined) return;
-    const folded = foldedToFit(measured, crumbRoom(element));
-    setFit((was) =>
-      was.repository === repository && was.path === path && was.folded === folded
-        ? was
-        : { repository, path, folded },
-    );
-  }, [nav, repository, path]);
-  useLayoutEffect(() => {
-    const element = nav.current;
-    const bar = element?.parentElement;
-    if (element === null || bar === null || bar === undefined) return undefined;
-    widths.current = crumbWidths(element);
-    refit();
-    const observer = new ResizeObserver(refit);
-    observer.observe(bar);
-    return () => observer.disconnect();
-  }, [nav, refit]);
-  useLayoutEffect(refit);
-  return fit.repository === repository && fit.path === path ? fit.folded : 0;
-}
-
-/** How much of a path of `folders` folders the "…" stands for, with `folded` crumbs folded into it. */
-function foldOf(folded: number, folders: number): (typeof FOLD)[keyof typeof FOLD] {
-  if (folded > folders) return FOLD.ALL;
-  return folded === folders ? FOLD.FOLDERS : FOLD.SOME;
-}
-
 /** The chevron before every crumb but the first: the path's punctuation and nothing more. */
 function CrumbChevron(): React.JSX.Element {
   return (
@@ -289,31 +194,33 @@ function CrumbChevron(): React.JSX.Element {
   );
 }
 
+/** How much of the path a "…" stands for: the folders between the repository and the file's own folder, or the repository and every folder. */
+const FOLD = { MIDDLE: "middle", ALL: "all" } as const;
+
+type Fold = (typeof FOLD)[keyof typeof FOLD];
+
 /**
- * The "…" standing for the crumbs folded out of the bar, which names them
- * in its pill and hangs the tree the last of them would. With nothing
- * folded it is still laid out, out of sight and out of reach, so its width
- * is there to be measured.
+ * A "…" standing for crumbs a narrow bar leaves out, which names them in its
+ * pill and hangs the tree the last of them would. It is drawn only on a bar
+ * narrow enough to ask for it, in their place (planning.css).
  */
 function FoldedCrumb({
+  fold,
   folded,
-  first,
   expanded,
   onOpen,
 }: {
-  /** The names it stands for, the repository's first where it is folded too. */
+  fold: Fold;
+  /** The names it stands for, in the path's order. */
   folded: readonly string[];
-  /** Whether it begins the path, the repository folded into it. */
-  first: boolean;
   expanded: boolean;
   onOpen: (opener: HTMLElement) => void;
 }): React.JSX.Element {
   const names = folded.join("/");
-  const standing = folded.length > 0;
   return (
-    <li data-folded-crumb={String(standing)} aria-hidden={!standing} inert={!standing}>
-      {first ? null : <CrumbChevron />}
-      <Tooltip label={standing ? names : undefined}>
+    <li data-folded-crumb={fold}>
+      {fold === FOLD.ALL ? null : <CrumbChevron />}
+      <Tooltip label={names}>
         <button
           type="button"
           className="file-breadcrumb"
@@ -344,12 +251,9 @@ export function FileBreadcrumbs({
   onOpen: (path: string, newTab: boolean) => void;
 }): React.JSX.Element {
   const segments = path.split("/");
-  const nav = useRef<HTMLElement>(null);
-  const folded = useCrumbFit(nav, repository, path);
   const [asked, setOpened] = useState<Opened | undefined>(undefined);
-  // A tree opened over another file, the tab having moved on, or before the
-  // bar folded its crumbs again, its own crumb perhaps folded away, is let go.
-  const opened = asked?.path === path && asked.folded === folded ? asked : undefined;
+  // A tree opened over another file, the tab having moved on, is let go.
+  const opened = asked?.path === path ? asked : undefined;
 
   const close = (returnFocus: boolean) => {
     if (returnFocus) opened?.opener.focus();
@@ -357,22 +261,29 @@ export function FileBreadcrumbs({
   };
 
   // The repository roots its tree at the root; any other crumb at the folder it stands in.
-  const open = (at: number, opener: HTMLElement) => {
+  const open = (at: number, opener: HTMLElement, mark = at) => {
     if (opened?.opener === opener) return close(false);
     const depth = Math.max(0, at - 1);
     setOpened({
       path,
-      folded,
-      at,
+      at: mark,
       folder: folderOf(segments, depth),
       file: segments.slice(depth).join("/"),
       opener,
     });
   };
 
+  // The folders between the repository and the file's own folder, which a narrow bar draws as the "…".
+  const folders = segments.length - 1;
+  const middle = Math.max(0, folders - 1);
   const crumb = (name: string, at: number) => (
     // Note that a crumb is keyed by the path it ends, since a name may stand twice in one.
-    <li key={folderOf(segments, at)} data-crumb={at}>
+    <li
+      key={folderOf(segments, at)}
+      data-crumb={at}
+      data-middle={String(at >= 1 && at <= middle && middle > 1)}
+      data-folder={String(at < segments.length)}
+    >
       {at === 0 ? null : <CrumbChevron />}
       <button
         type="button"
@@ -387,28 +298,27 @@ export function FileBreadcrumbs({
     </li>
   );
 
-  // The folders stand between the repository and the file; those folded,
-  // and then the repository, give way to the "…", which hangs the tree the
-  // last of them would.
-  const folders = segments.length - 1;
-  const repositoryFolded = folded > folders;
-  const foldedFolders = Math.min(folded, folders);
   return (
-    <nav
-      ref={nav}
-      className="file-breadcrumbs"
-      aria-label="Path"
-      data-fold={foldOf(folded, folders)}
-    >
+    <nav className="file-breadcrumbs" aria-label="Path">
       <ol>
-        {repositoryFolded ? null : crumb(repository, 0)}
-        <FoldedCrumb
-          folded={[...(repositoryFolded ? [repository] : []), ...segments.slice(0, foldedFolders)]}
-          first={repositoryFolded}
-          expanded={folded > 0 && opened?.at === foldedFolders}
-          onOpen={(opener) => open(foldedFolders, opener)}
-        />
-        {segments.map((name, index) => (index < foldedFolders ? null : crumb(name, index + 1)))}
+        {folders > 0 ? (
+          <FoldedCrumb
+            fold={FOLD.ALL}
+            folded={[repository, ...segments.slice(0, folders)]}
+            expanded={opened?.at === FOLDED_ALL}
+            onOpen={(opener) => open(folders, opener, FOLDED_ALL)}
+          />
+        ) : null}
+        {crumb(repository, 0)}
+        {middle > 1 ? (
+          <FoldedCrumb
+            fold={FOLD.MIDDLE}
+            folded={segments.slice(0, middle)}
+            expanded={opened?.at === FOLDED_MIDDLE}
+            onOpen={(opener) => open(middle, opener, FOLDED_MIDDLE)}
+          />
+        ) : null}
+        {segments.map((name, index) => crumb(name, index + 1))}
       </ol>
       {opened === undefined ? null : (
         <CrumbTree
