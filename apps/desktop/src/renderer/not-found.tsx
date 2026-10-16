@@ -19,6 +19,7 @@ export const NOT_FOUND_THING = {
   AGENT: "agent",
   INBOX_ITEM: "Inbox item",
   AUTOMATION: "automation",
+  PERSON: "profile",
 } as const;
 
 type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THING];

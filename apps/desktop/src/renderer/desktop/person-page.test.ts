@@ -190,11 +190,14 @@ let inboxRefused = false;
 let automationsRefused = false;
 /** Whether the Inbox's reads are still out, answering nothing yet. */
 let inboxHeld = false;
+/** Every text the page asked the window to copy, in order. */
+let copied: string[] = [];
 
 beforeEach(() => {
   inboxRefused = false;
   automationsRefused = false;
   inboxHeld = false;
+  copied = [];
   window.localStorage.clear();
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -206,6 +209,10 @@ beforeEach(() => {
           request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
           request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
         if (inbox && inboxHeld) return new Promise(() => undefined);
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         }
@@ -460,7 +467,7 @@ test("the reader's own page offers Edit profile, which opens Settings' Profile, 
   assert.doesNotMatch(teammate.page.textContent ?? "", /Edit profile/u);
 });
 
-test("More offers a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
+test("More offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
   const { page, opened } = mount(CHARLES.userId);
   await settle();
 
@@ -468,9 +475,9 @@ test("More offers a member's email to copy and, to an owner, the workspace's mem
   const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   assert.deepEqual(
     items.map((item) => item.textContent),
-    ["Copy email", "Manage in workspace settings"],
+    ["Copy link", "Copy email", "Manage in workspace settings"],
   );
-  act(() => items[1]?.click());
+  act(() => items[2]?.click());
   assert.deepEqual(opened.settings, [
     { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
   ]);
@@ -487,10 +494,43 @@ test("Their tasks in sidebar turns the sidebar back from its archived tasks to t
   assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
 });
 
-test("someone who left offers no More: no email to copy, and no row in Settings to manage", async () => {
+test("someone who left offers only their page's link in More: no email to copy, and no row in Settings to manage", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+    ["Copy link"],
+  );
+});
+
+test("Copy link copies their page's link under the slug of the workspace it stands in, and says Link copied", async () => {
+  const { page } = mountWith(
+    {
+      workspaces: [{ ...ACME, slug: "acme" }],
+      personView: {
+        ...plansControl().personView,
+        userId: CHARLES.userId,
+        workspaceId: ACME.id,
+      },
+    },
+    CHARLES.userId,
+  );
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => button(document.body, "Copy link").click());
+  await settle();
+
+  assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+});
+
+test("a page for someone neither the members nor those who left name, as a link from outside the workspace opens, says it is not found", async () => {
+  const { page } = mount("user-stranger");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Not found/u);
   assert.equal(page.querySelector('button[aria-label="More"]'), null);
 });
 

@@ -957,6 +957,30 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   ]);
 });
 
+test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⌥⌘C copies their page's link in the workspace it opened in", async () => {
+  const copied = installClipboard();
+  const [acme] = ON_AGENT_TAB.workspaces;
+  openPalette(
+    plansControl({
+      workspaces: ON_AGENT_TAB.workspaces,
+      workspace: acme,
+      inboxView: { ...plansControl().inboxView, open: true },
+      personView: {
+        ...plansControl().personView,
+        userId: "user-charles",
+        workspaceId: acme?.id,
+      },
+    }),
+  );
+  type("copy link");
+  const listed = rows().filter((row) => row.startsWith("Copy link to "));
+  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+  await act(async () => undefined);
+
+  assert.deepEqual(listed, ["Copy link to profile"]);
+  assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+});
+
 test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
   openPalette(plansControl());
   type("copy link");

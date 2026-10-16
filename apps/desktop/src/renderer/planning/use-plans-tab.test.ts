@@ -774,6 +774,23 @@ test("a Luke link to an automation's run opens its editor naming the run, which 
   });
 });
 
+test("a Luke link to a person opens their page in the workspace its slug names, in the place of the Inbox", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => tab.control().inboxView.onOpen());
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.PERSON, userId: "user-charles" },
+    }),
+  );
+
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().personView.userId, "user-charles");
+  assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
+});
+
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;

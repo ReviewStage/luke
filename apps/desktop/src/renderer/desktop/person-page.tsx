@@ -1,5 +1,6 @@
 import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -19,13 +20,21 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
-import { EllipsisIcon, ListFilterIcon, MailIcon, SettingsIcon, UsersIcon } from "lucide-react";
+import {
+  EllipsisIcon,
+  LinkIcon,
+  ListFilterIcon,
+  MailIcon,
+  SettingsIcon,
+  UsersIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
-import { useCopyToast } from "../copy-feedback";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { useOpenSettings } from "../open-settings";
 import { lineSubject } from "../planning/agent-ref";
 import { InboxItemRow } from "../planning/inbox-list";
@@ -147,11 +156,13 @@ const MORE = "More";
  */
 function PersonActions({
   plans,
+  userId,
   person,
   shared,
   onShowTasks,
 }: {
   plans: PlansControl;
+  userId: string;
   person: Actor;
   /** Whether the workspace is shared, which alone filters the sidebar by creator. */
   shared: boolean;
@@ -169,7 +180,12 @@ function PersonActions({
     workspace !== undefined &&
     (workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN);
   const email = member?.email;
+  // Their link names the workspace their page stands in, by its slug where it has one.
+  const homeId = plans.personView.workspaceId ?? workspace?.id;
+  const home = plans.workspaces.find((each) => each.id === homeId);
+  const link = linkOf({ kind: LINK_PLACE.PERSON, userId }, home?.slug ?? homeId ?? "");
   const actions: MenuAction[][] = [
+    [{ label: LINK_COPY.LABEL, icon: <LinkIcon />, onSelect: () => copy(link, LINK_COPY.COPIED) }],
     ...(email === undefined
       ? []
       : [
@@ -360,13 +376,32 @@ function PersonColumn({
     );
   };
   const name = headName(person);
+  // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
+  if (
+    person.kind === ACTOR_KIND.SOMEONE &&
+    person.reason === SOMEONE_REASON.UNNAMED &&
+    members !== undefined &&
+    former !== undefined
+  ) {
+    return (
+      <section className="automations-view" aria-label="Profile">
+        <NotFound thing={NOT_FOUND_THING.PERSON} />
+      </section>
+    );
+  }
   return (
     <section className="automations-view" aria-label={name}>
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">{name}</h1>
         </div>
-        <PersonActions plans={plans} person={person} shared={shared} onShowTasks={showTasks} />
+        <PersonActions
+          plans={plans}
+          userId={userId}
+          person={person}
+          shared={shared}
+          onShowTasks={showTasks}
+        />
       </header>
       <div className="home-scroll">
         <div className="home-column person-column">
