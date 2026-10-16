@@ -424,7 +424,7 @@ function composed(
                 : `Setup exited ${setUp.exitCode ?? "on a signal"}, so the run command did not start.`,
           });
         }
-        yield* markSetUp(git, place, sha, setup);
+        yield* repositoryLock(place.clone).withPermits(1)(markSetUp(git, place, sha, setup));
       }
       yield* tell(slot, { phase: PR_RUN_PHASE.RUNNING, sha, message: `LUKE_PORT=${port}` });
       const ended = yield* runIn(slot, runId, place.folder, commands.run, port);

@@ -377,17 +377,18 @@ function branchStands(tool: GitTool, clone: string, branch: string) {
 /**
  * A branch name for the pull request's worktree that the clone holds no
  * branch of yet: its head branch's own where Git takes it, else
- * `pr-<number>`, else that with a count. Note that an existing branch is
+ * `pr-<number>`, else that with the commit's short id. Note that an existing branch is
  * never taken over, because the worktree is made with `-b`, which moves no
  * branch that already points somewhere.
  */
-function branchFor(tool: GitTool, clone: string, number: number, headRef: string) {
+function branchFor(tool: GitTool, clone: string, number: number, fetched: FetchedHead) {
   return Effect.gen(function* () {
-    const formed = yield* git(tool, { clone }, ["check-ref-format", "--branch", headRef]);
+    const formed = yield* git(tool, { clone }, ["check-ref-format", "--branch", fetched.headRef]);
+    // The last name carries the commit itself, which no branch of an earlier checkout can already hold.
     const candidates = [
-      ...(formed.exitCode === 0 ? [headRef] : []),
+      ...(formed.exitCode === 0 ? [fetched.headRef] : []),
       `pr-${number}`,
-      ...Array.from({ length: 8 }, (_, at) => `pr-${number}-${at + 2}`),
+      `pr-${number}-${fetched.sha.slice(0, 12)}`,
     ];
     for (const candidate of candidates) {
       if (!(yield* branchStands(tool, clone, candidate))) return candidate;
@@ -508,7 +509,7 @@ function addWorktree(
 ): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.uninterruptible(
     Effect.gen(function* () {
-      const branch = yield* branchFor(tool, place.clone, place.number, fetched.headRef);
+      const branch = yield* branchFor(tool, place.clone, place.number, fetched);
       if (branch === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
       // A worktree whose folder went away without Git hearing of it would hold its branch, so the clone's list is pruned first.
       yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
@@ -638,7 +639,13 @@ export function markSetUp(
   setupCommand: string,
 ): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
-    yield* git(tool, { clone: place.clone }, ["config", setupKey(place.number), setupCommand]);
+    // Note that the commit is marked only once the command is, so a mark that failed halfway asks for setup again rather than skipping it.
+    const noted = yield* git(tool, { clone: place.clone }, [
+      "config",
+      setupKey(place.number),
+      setupCommand,
+    ]);
+    if (noted.exitCode !== 0) return;
     yield* git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.number).SET_UP, sha]);
   });
 }
