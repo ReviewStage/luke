@@ -19,7 +19,10 @@
     border: 1px solid transparent;
     border-radius: var(--luke-control-radius);
     background: transparent;
-    color: var(--luke-color-text-body);
+    /* The look's ink, named so an unavailable chip can fade it whatever
+       look it wears. */
+    --luke-chip-ink: var(--luke-color-text-body);
+    color: var(--luke-chip-ink);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
@@ -60,7 +63,7 @@
     [aria-expanded="true"]
   ) {
     background: var(--luke-color-fill-selected);
-    color: var(--luke-color-text);
+    --luke-chip-ink: var(--luke-color-text);
   }
 
   .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(
@@ -77,13 +80,13 @@
     border-color: var(--luke-color-border);
     border-radius: var(--luke-radius-full);
     background: var(--luke-color-fill-hover);
-    color: var(--luke-color-text-muted);
+    --luke-chip-ink: var(--luke-color-text-muted);
   }
 
   /* The site's muted ink holds AA on its page's ground and not on a fill,
      so a pill there names its thing in the text's own ink. */
   [data-luke-profile="web"] .luke-chip[data-look="pill"] {
-    color: var(--luke-color-text);
+    --luke-chip-ink: var(--luke-color-text);
   }
 
   .luke-chip[data-look="pill"]:where(
@@ -91,7 +94,7 @@
     [aria-expanded="true"]
   ) {
     background: var(--luke-color-fill-strong);
-    color: var(--luke-color-text);
+    --luke-chip-ink: var(--luke-color-text);
   }
 
   /* A field is a settings row's value, inside an outlined button's
@@ -100,7 +103,7 @@
     justify-content: flex-start;
     padding: 0 var(--luke-space-8) 0 var(--luke-space-12);
     border-color: var(--luke-color-border);
-    color: var(--luke-color-text);
+    --luke-chip-ink: var(--luke-color-text);
   }
 
   .luke-chip[data-look="field"] > .luke-chip-name {
@@ -115,10 +118,13 @@
     opacity: 0.45;
   }
 
-  /* What it holds fades rather than its ink being restated, so its words,
-     its marks, and its chevron fade alike from whatever ink its look draws
-     them in. */
-  .luke-chip[aria-disabled="true"] > * {
+  /* Its words fade from the look's own ink, whether they stand bare or in
+     a name, and its marks and chevron fade with them. */
+  .luke-chip[aria-disabled="true"] {
+    color: color-mix(in srgb, var(--luke-chip-ink) 45%, transparent);
+  }
+
+  .luke-chip[aria-disabled="true"] > svg {
     opacity: 0.45;
   }
 
