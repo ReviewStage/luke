@@ -25,6 +25,7 @@ import {
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { taskWorkspace } from "../../github/workspace-repository.js";
+import { logStoreFailure } from "../../http/store-failure.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
@@ -300,9 +301,19 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       Option.getOrUndefined,
     );
 
-  /** Whether Chat is on for the plan: asked of the account that owns it, whoever is speaking; off where no plan stands. */
+  /**
+   * Whether Chat is on for the plan: asked of the account that owns it,
+   * whoever is speaking; off where no plan stands. Note that a read that
+   * failed is logged and read as off, because the planning tools and the
+   * turn's opening must stand whether or not the preferences can be read.
+   */
   const chatOnFor = (task: StoredTask | undefined) =>
-    task === undefined ? Effect.succeed(false) : chatEnabledFor(task.ownerId);
+    task === undefined
+      ? Effect.succeed(false)
+      : chatEnabledFor(task.ownerId).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.orElseSucceed(() => false),
+        );
 
   /** The tools a conversation's turns are offered, the chat's only where Chat is on for its plan. */
   const offeredFor = (admitted: AdmittedConversation) =>

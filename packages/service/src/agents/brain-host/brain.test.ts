@@ -30,6 +30,7 @@ import {
 } from "ai";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -39,6 +40,7 @@ import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   SCRIPTED_BRAIN_REPLY,
+  SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_POST,
   SCRIPTED_POSTED_REPLY,
   SCRIPTED_READ,
@@ -630,6 +632,35 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           assert.equal(text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
           assert.equal(text.includes(header), false);
         }
+      }),
+  );
+});
+
+it.layer(getTestDB())("the planning model where the account's preferences cannot be read", (it) => {
+  it.effect(
+    "a turn still opens and a planning tool still runs, with Chat read as off and offered no chat tool",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, conversationId } = yield* savedTaskWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        // The preferences are unreadable from here on, as a store failure would leave them.
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`ALTER TABLE account_preference RENAME TO account_preference_unreadable`;
+        const standing = yield* admitted(host, session);
+
+        const offered = (yield* host.toolDeclarationsFor(standing)).map(
+          (declared) => declared.name,
+        );
+        assert.ok(offered.length > 0);
+        assert.equal(
+          offered.some((name) => Object.values<string>(CHAT_TOOL).includes(name)),
+          false,
+        );
+        const opened = (yield* host.standingContext(standing)).text;
+        assert.equal(opened.includes("[chat since the last planning call]"), false, opened);
+        // A repository read runs and answers in its own words, here that the plan names no repository.
+        const read = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
+        assert.ok(read.startsWith(SCRIPTED_NOT_READ_REPLY), read);
       }),
   );
 });
