@@ -451,6 +451,21 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
   background: var(--selected);
 }
 
+/* An agent named on a call's row (`transcript-blocks.tsx`'s
+   `AgentCallChip`): its mention's chip, but no target of its own, since
+   the row it stands on is the one that opens the agent and hangs its card.
+   So it takes the row's pointer, and lifts as the row is hovered or
+   reached from the keyboard, anywhere on it, as a chip lifts under its own
+   hover. Note that the lift is what keeps it seen, because its resting
+   fill is the row's hover fill, into which it would otherwise sink. */
+.tool-agent-chip {
+  cursor: inherit;
+}
+
+:is(button, summary):is(:hover, :focus-visible) .tool-agent-chip {
+  background: var(--selected);
+}
+
 .mention-chip-glyph {
   display: inline-grid;
   flex: none;

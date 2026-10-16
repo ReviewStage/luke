@@ -93,6 +93,7 @@ import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
 import { callHeading, useMinute } from "./task-time";
 import {
+  calledAgent,
   cardTitle,
   delegationView,
   loadedSkill,
@@ -273,6 +274,8 @@ interface DelegatedWorker {
 export interface TranscriptCards {
   readonly target: (target: ToolTarget) => ReactNode;
   readonly worker: (worker: DelegatedWorker) => ReactNode;
+  /** One of the place's agents as its tab wears it, which a call about the agent names it by (`calledAgentActor`); none where the place does not list it. */
+  readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
   /** The task whose plan an agent was handed, which its card's sender line names; none where the place knows no task. */
   readonly task?: BriefTask | undefined;
 }
@@ -295,13 +298,39 @@ export interface DelegationDoors {
   jobs?: WorkerJobs | undefined;
 }
 
-/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it. */
+/**
+ * The agent a call about one names, as its row's chip wears it: its tab's
+ * own tile and name where the place lists the agent, else the title the
+ * call's answer gives it on the bare agent mark, as an agent of another
+ * task is named; nothing where neither is known, as a start's before it
+ * answers, whose row keeps its own words.
+ */
+function calledAgentActor(
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
+  cards: TranscriptCards | undefined,
+): Actor | undefined {
+  const called = calledAgent(part);
+  if (called === undefined) return undefined;
+  const listed = called.id === undefined ? undefined : cards?.agent?.(called.id);
+  if (listed !== undefined || called.title === undefined) return listed;
+  return {
+    kind: ACTOR_KIND.AGENT,
+    agentId: called.id,
+    name: called.title,
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  };
+}
+
+/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it. */
 function ToolCallView({
   part,
   jobs,
+  cards,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   jobs?: WorkerJobs | undefined;
+  cards?: TranscriptCards | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   return (
@@ -313,6 +342,7 @@ function ToolCallView({
         provider={view.provider}
         subject={view.subject}
         description={view.description}
+        agent={calledAgentActor(part, cards)}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -470,11 +500,14 @@ function OpeningCallView({
   part,
   hint,
   card,
+  cards,
   onOpen,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   hint: string;
   card?: ReactNode;
+  /** What names an agent a call is about by its chip; none where only the call's answer does. */
+  cards?: TranscriptCards | undefined;
   onOpen: () => void;
 }): ReactNode {
   const view = toolCallView(part);
@@ -483,6 +516,7 @@ function OpeningCallView({
       callId={part.callId}
       kind={view.kind}
       subject={view.subject}
+      agent={calledAgentActor(part, cards)}
       state={part.state}
       hint={hint}
       card={card}
@@ -526,6 +560,7 @@ function AgentPartView({
             part={part}
             hint={TARGET_HINT[target.kind]}
             card={delegation?.cards?.target(target)}
+            cards={delegation?.cards}
             onOpen={() => openTarget(target)}
           />
         );
@@ -536,7 +571,7 @@ function AgentPartView({
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
       ) : (
-        <ToolCallView part={part} jobs={delegation?.jobs} />
+        <ToolCallView part={part} jobs={delegation?.jobs} cards={delegation?.cards} />
       );
     }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
