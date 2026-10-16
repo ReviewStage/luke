@@ -208,7 +208,7 @@ test("once the workspace disconnects Linear, the chip says what the address says
   assert.deepEqual(chips(container), [["ENG-1/start-a-plan-from-linear", null]]);
 });
 
-/** The notes of the card a chip hangs: its key and state, who it is with, and its address. */
+/** The notes of the card a chip hangs: its key and state, who it is with, and its address where Linear answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   act(() => {
@@ -222,12 +222,11 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   return notes;
 }
 
-test("a Linear issue's card says who it is assigned to, as the workspace's Linear answers it", async () => {
+test("a Linear issue's card says who it is assigned to, as the workspace's Linear answers it, in place of its address", async () => {
   const { container } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR);
 
   assert.deepEqual(cardNotes(container.querySelector(".mention-chip") ?? undefined), [
     "ENG-1 · In Progress",
     "Assigned to Sam Okafor",
-    ISSUE,
   ]);
 });

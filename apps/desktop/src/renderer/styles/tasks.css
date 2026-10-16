@@ -1669,34 +1669,6 @@ button.file-ref:hover .file-ref-path {
   color: var(--review-tone);
 }
 
-/* The reviews that said something, folded under their count until opened. */
-.changes-comments {
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.changes-comments > summary {
-  padding: var(--space-6) var(--space-12);
-  cursor: default;
-}
-
-.changes-comments-count {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.changes-comments > ul {
-  display: flex;
-  max-height: 40vh;
-  flex-direction: column;
-  gap: var(--space-8);
-  margin: 0;
-  padding: 0 var(--space-12) var(--space-8);
-  overflow-y: auto;
-  list-style: none;
-}
-
 .changes-comment-head {
   display: flex;
   min-width: 0;
@@ -1721,15 +1693,343 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
-/* A review's words, cut at two lines and faded where they run on. */
-.changes-comment-words {
-  display: -webkit-box;
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
+   bar, wearing the pull request's standing as a pill in its own colour and
+   its branches quiet beside it, over the page read top to bottom in one
+   scroller, its sections each under a quiet heading.
+
+   It keeps to the panel's top row's two edges, so the tab reads down from
+   the strip above it: whatever is boxed or edged (the pill, the merge box,
+   the checks, a comment) stands at the row's inset, where a tab's chip
+   does, and every word and glyph at the content inset, where a tab's glyph
+   does, a box holding its own at a row's inset within; the bar's last
+   control ends where the row's last control ends. A boxed thing's hairline
+   counts toward its inset (`--boxed-inset`), so what it holds lands on the
+   content inset to the pixel. */
+.pull-request-tab {
+  --boxed-inset: calc(var(--row-inset) - 1px);
+}
+
+.pull-request-bar,
+.pull-request-tab .file-view-bar {
+  gap: var(--control-gap);
+  padding-inline: var(--column-inset);
+}
+
+/* The files' strip of who the pull request names stands on no box, so its
+   words start at the content inset. */
+.pull-request-tab .changes-people {
+  padding-inline: var(--content-inset) var(--column-inset);
+}
+
+/* The view the switch shows fills the room under the bar, the other kept
+   drawn but hidden, so switching back draws what it last read. */
+.pull-request-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pull-request-view[hidden] {
+  display: none;
+}
+
+.pull-request-bar .segmented {
+  flex: 0 0 auto;
+}
+
+.pull-request-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--boxed-inset);
+  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
+  color: var(--pull-request-tone);
+  font-weight: 600;
+}
+
+/* The branches it merges, quiet in the code face under the title. */
+.pull-request-branches {
   margin: var(--space-2) 0 0;
-  padding-left: 21px; /* off-scale: past an inline actor's 16px mark and its 5px gap */
+  min-width: 0;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-page {
+  min-height: 0;
+  flex: 1;
+  padding: var(--space-12) var(--column-inset) var(--space-24);
+  overflow-y: auto;
+}
+
+/* In the side panel, the page keeps to the reading measure a transcript
+   keeps to, so a panel filling the window reads in one column. */
+.side-panel-content .pull-request-page {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The words that stand on the page rather than in a box, at the content
+   inset. */
+.pull-request-title,
+.pull-request-page .pull-request-branches,
+.changes-people.pull-request-people,
+.pull-request-heading,
+.pull-request-none,
+.pull-request-section > .pull-request-words {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
   user-select: text;
+}
+
+.pull-request-number {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* Who opened it and its reviewers, in the Changes tab's voice, standing on
+   the page rather than across it. */
+.changes-people.pull-request-people {
+  padding-block: var(--space-6) 0;
+  border-bottom: 0;
+}
+
+.pull-request-quiet {
+  color: var(--text-tertiary);
+}
+
+/* Whether it would merge as it stands, boxed as GitHub's own box is, its
+   glyph in the colour of what it means: ready green, a wait amber, and
+   something to fix red. */
+.pull-request-merge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 0;
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.pull-request-merge > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--merge-tone);
+}
+
+[data-merge-tone="ready"] {
+  --merge-tone: var(--state-complete);
+}
+
+[data-merge-tone="waiting"] {
+  --merge-tone: var(--state-attention);
+}
+
+[data-merge-tone="blocked"] {
+  --merge-tone: var(--danger);
+}
+
+.pull-request-section {
+  margin-top: var(--space-20);
+}
+
+.pull-request-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pull-request-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.pull-request-none {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+/* The checks, one boxed list, each row opening the check's page. */
+.pull-request-checks {
+  margin: 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  list-style: none;
+}
+
+.pull-request-checks > li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-check {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--boxed-inset);
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+button.pull-request-check {
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-check:hover {
+  background: var(--raised);
+}
+
+.pull-request-check-glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--check-tone);
+}
+
+.pull-request-check-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+[data-check-state="passed"] {
+  --check-tone: var(--state-complete);
+}
+
+[data-check-state="failed"] {
+  --check-tone: var(--danger);
+}
+
+[data-check-state="pending"] {
+  --check-tone: var(--state-attention);
+}
+
+[data-check-state="skipped"] {
+  --check-tone: var(--text-tertiary);
+}
+
+.pull-request-check-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-check-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Words written on GitHub, drawn at the transcript's own size, a step over
+   the page's quiet lines, its headings no more than a step above that
+   (`PANEL_MARKDOWN_COMPONENTS`). */
+.pull-request-words {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+/* The comments and reviews, oldest first, each boxed under its head. */
+.pull-request-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-entry {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  font-size: 12.5px;
+}
+
+/* A task list stands as GitHub draws one: its boxes in the bullets' place. */
+.pull-request-words ul:has(> li > input[type="checkbox"]) {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pull-request-words li > input[type="checkbox"] {
+  margin: 0 var(--space-6) 0 0;
+  vertical-align: middle;
+}
+
+/* A picture GitHub's rendering names, read through the service: as wide as
+   the words around it at most, at its own shape, and a quiet box of a
+   screenshot's shape while it is read. */
+.pull-request-picture {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--space-4);
+  vertical-align: middle;
+}
+
+.pull-request-picture-waiting {
+  display: inline-block;
+  width: min(100%, 240px);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--space-4);
+  background: var(--raised);
+  vertical-align: middle;
+}
+
+.pull-request-entry .changes-comment-state {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* The earlier entries a read left on GitHub, counted where they would stand. */
+.pull-request-earlier {
+  margin: 0 0 var(--space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: underline;
 }
 
 .file-tab-snippet-label {
@@ -2139,6 +2439,24 @@ button.file-ref:hover .file-ref-path {
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
   white-space: nowrap;
+}
+
+/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot): how long
+   it worked, then its Copy and Copy link to the right of it, as a sent
+   message's line holds them under its bubble. Note that the room above is
+   the row's rather than the worked line's, because the buttons are taller
+   than the words and centring them would push the words down. */
+.agent-turn-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin-top: var(--space-4);
+}
+
+.agent-turn-foot > [data-worked] {
+  min-width: 0;
+  margin-top: 0;
 }
 
 /* The room under the transcript for the composer, with no rule between

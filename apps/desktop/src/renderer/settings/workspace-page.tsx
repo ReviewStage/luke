@@ -45,6 +45,7 @@ import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
 import { ReadFailed, SettingsGroup } from "./settings-group";
@@ -1527,6 +1528,7 @@ function ShownWorkspace({
         <WorkspaceGitHub workspace={workspace} />
         <WorkspaceLinear workspace={workspace} />
       </SettingsGroup>
+      <MacRepositoriesGroup workspaceId={workspace.id} />
       <LeaveGroup
         workspace={workspace}
         members={members.read}

@@ -918,14 +918,30 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
 const SENT_ACTIONS_CLASS = "static border-0 bg-transparent p-0 shadow-none";
 
 /**
+ * The line a finished turn ends on: how long it worked and when it ended,
+ * then its Copy and Copy link beside it, set as a sent message's are under
+ * its bubble rather than floated over the turn's corner. A turn still
+ * running offers no Copy, because its words are not yet whole.
+ */
+function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
+  if (workedFor === null && copy === null) return null;
+  return (
+    <div className="agent-turn-foot" data-turn-foot="">
+      {workedFor}
+      {copy}
+    </div>
+  );
+}
+
+/**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble, with a quiet line
  * under it holding its Copy and Copy link and, at the bubble's edge, who
- * sent it and when; or one of the agent's own turns, with a copy of its
- * words under it where it has any, ending once it has finished on how long
- * it worked and when it ended. A line that reached a turn while it ran is
- * drawn inside it, as its own bubble between the work before it and the
- * work after it.
+ * sent it and when; or one of the agent's own turns, ending once it has
+ * finished on a line saying how long it worked and when it ended, with the
+ * Copy and Copy link of its words beside it where it has any. A line that
+ * reached a turn while it ran is drawn inside it, as its own bubble between
+ * the work before it and the work after it.
  */
 export function AgentMessage({
   message,
@@ -1056,9 +1072,19 @@ export function AgentMessage({
             {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : workedFor}
-        {words === "" || said || !ends ? null : (
-          <CopyMessageAction words={words} messageId={message.id} />
+        {said || !ends ? null : (
+          <TurnFoot
+            workedFor={workedFor}
+            copy={
+              words === "" || moving ? null : (
+                <CopyMessageAction
+                  words={words}
+                  messageId={message.id}
+                  className={SENT_ACTIONS_CLASS}
+                />
+              )
+            }
+          />
         )}
       </Message>
     );
@@ -1395,6 +1421,7 @@ export function AgentTab({
   shown,
   onOpenSubagent,
   onOpenChanges,
+  onOpenPullRequest,
   onOpenTarget,
   cards,
   onHeld,
@@ -1414,6 +1441,8 @@ export function AgentTab({
   cards?: TranscriptCards | undefined;
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;
+  /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
+  onOpenPullRequest?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -1504,6 +1533,7 @@ export function AgentTab({
           openGitHub,
           copy: copyWithToast,
           openChanges: onOpenChanges,
+          openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}
         delegationStarts={shown ? transcript.delegations : undefined}

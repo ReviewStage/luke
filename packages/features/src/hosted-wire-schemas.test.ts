@@ -17,6 +17,7 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
+import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
@@ -87,6 +88,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
+    codingAgentOverviewAnswerSchema: codingAgentWire.codingAgentOverviewAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
@@ -153,6 +155,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
+    codingAgentOverviewAnswerViewSchema: codingAgentView.codingAgentOverviewAnswerViewSchema,
+    codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
+    githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
+    codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
     codingAgentInboxParamsSchema: codingAgentView.codingAgentInboxParamsSchema,
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
@@ -209,6 +215,15 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
     integrationRemoteCallSchema: integrationWire.integrationRemoteCallSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
+  "issue-wire": {
+    issueStatusSchema: issueWire.issueStatusSchema,
+    issuePrioritySchema: issueWire.issuePrioritySchema,
+    issueSchema: issueWire.issueSchema,
+    issueListAnswerSchema: issueWire.issueListAnswerSchema,
+    issueAnswerSchema: issueWire.issueAnswerSchema,
+    issueCreateRequestSchema: issueWire.issueCreateRequestSchema,
+    issueChangeRequestSchema: issueWire.issueChangeRequestSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof issueWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,

@@ -9,8 +9,10 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentPage,
   type CodingAgentSummary,
+  MERGE_STATE,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -109,6 +111,27 @@ const CHANGES = {
       },
     ],
     truncated: false,
+  },
+};
+
+/** That pull request as its Pull request tab draws it. */
+const OVERVIEW = {
+  pullRequest: {
+    number: 123,
+    title: "Send the invite once",
+    url: "https://github.com/acme/relay/pull/123",
+    state: PULL_REQUEST_STATE.OPEN,
+    html: "<p>Sends the invite once.</p>",
+    cut: false,
+    base: "main",
+    head: "luke/invite-once",
+    createdAt: 1_800_000_000_000,
+    mergedAt: null,
+    merge: MERGE_STATE.CLEAN,
+    checks: [],
+    reviewers: [],
+    conversation: [],
+    earlier: 0,
   },
 };
 
@@ -261,6 +284,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`changes:${agentId}`);
         return CHANGES;
+      }),
+    overview: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview:${agentId}`);
+        return OVERVIEW;
+      }),
+    githubImage: (agentId, src) =>
+      Effect.sync(() => {
+        asked.push(`github-image:${agentId}:${src}`);
+        return { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
     readProviderKeys: () =>
       Effect.sync(() => {
@@ -493,6 +526,17 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: AGENT_ID }),
+      OVERVIEW,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, {
+        agentId: AGENT_ID,
+        src: "https://camo.githubusercontent.com/abc",
+      }),
+      { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
         taskId: TASK_ID,
         after: INBOX_CURSOR_START,
@@ -559,6 +603,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
+      `overview:${AGENT_ID}`,
+      `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,

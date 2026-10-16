@@ -32,6 +32,20 @@ that wrote it is signed in. The files attached to such a message stay in
 memory only.
 None of it is sent anywhere.
 
+**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
+Luke, in a tab of its side panel, on this Mac. Its shell clones the repository
+from GitHub into Luke's application data the first time, with your own git
+login, fetches the agent's pushed branch, checks it out in a worktree there,
+runs the run command you set for that repository if you set one, and stays
+open for you to type in. It runs as your macOS user in your login shell, and
+reaches what you can. Each repository's run command is kept in this Mac's
+settings, under Settings › Workspace › Repositories, and never sent anywhere;
+what the terminal prints and what you type pass only between Luke's windows
+on this Mac, are held in memory up to the latest 256 KB of output while the
+tab stays open, and are never written to disk, logged, counted, or recorded.
+Closing the tab, or quitting Luke, hangs up the terminal and everything it
+started on it; the clone and the worktree stay until you delete them.
+
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
 to can each run any shell command on your Mac, at once and without asking you,
@@ -365,16 +379,25 @@ An inbox item's line reference is read the same way, at the
 commit the agent named, for the lines on the item and the File tab it opens;
 nothing of the file is stored.
 
-**A coding agent's changes.** A coding agent's Changes tab shows its pull
-request's changed files. Each time the tab opens, our service reads them from
-GitHub with a token the Luke GitHub App mints for that one repository on the
-workspace's installation: each file's name and patch, for up to 300
-files, leaving out a patch over 100,000 characters. It stores none of it, and
-Luke holds it in memory while the tab is open, never on disk, except that
-downloading the patch writes it where you save it. Wherever Luke names
-someone on GitHub, as the tab does who opened and reviewed the pull request,
-it draws them by their GitHub avatar, which your Mac loads straight from
-GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
+**A coding agent's pull request.** A coding agent's Pull request tab shows its
+pull request as GitHub holds it, in two views. Each time a view first opens, or
+you refresh it, our service reads it from GitHub with a token the Luke GitHub
+App mints for that one repository on the workspace's installation. The overview
+reads its title, branches, and whether it would merge; its description and up
+to its 100 newest comments and reviews, each whole with its author, as GitHub
+renders them; the name, App, state, and times of up to 100 checks on its head;
+and its reviewers. An image in the description or a comment is read by our
+service too, never by your Mac: an upload with the same one-repository token,
+through a fresh signed address GitHub gives for it, and any other image through
+GitHub's own image proxy, each up to 8 MB; other images are shown as links.
+Files changed reads each changed file's name and patch, for up to 300 files,
+leaving out a patch over 100,000 characters. It stores none of it, and Luke
+holds it in memory while the tab is open, never on disk, except that
+downloading a patch writes it where you save it. Wherever Luke names someone on
+GitHub, as the tab does who opened, reviewed, and commented on the pull
+request, it draws them by their GitHub avatar, which your Mac loads straight
+from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP
+address.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
@@ -978,12 +1001,16 @@ only when you press Send.
   agent's pull request, or a check fails on an agent's branch, GitHub tells
   our service the same way; our service reads who did it by their GitHub
   login, the pull request's number and branch, the link to the review,
-  comment, or failed commit, a review's verdict, and when, never what the
-  review or comment says, and sends that to the agents on that pull request
-  as a message, which their transcript keeps under that login until the
-  task is deleted. The agent then reads the review or comment itself with
-  the App's token, and what it reads lands in its transcript like any other
-  command's output. Our service also reads from GitHub, through
+  comment, or failed commit, a review's verdict, when, and what the review
+  or comment says; for a review it also reads that review's inline comments
+  from GitHub, each with its file and line, with a token the App mints for
+  the repository on the workspace's installation. It sends that to the
+  agents on that pull request as a message, which their transcript keeps
+  under that login until the task is deleted, and which reaches the model
+  that runs the agent like any other message. Whatever the message cut
+  short, or a failed check, the agent reads itself with the App's token,
+  and what it reads lands in its transcript like any other command's
+  output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
   open, a pull request's changed files for the Changes tab, a repository's
   skills, and the number, title, link, and state of a pull request or an
@@ -1062,7 +1089,8 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac is kept with that Mac's settings. Our service
+switch for commands on your Mac and each repository's run command for Run
+are kept with that Mac's settings. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and

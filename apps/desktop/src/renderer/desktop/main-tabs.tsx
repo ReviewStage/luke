@@ -380,6 +380,7 @@ export function MainTabStrip({
   inbox,
   actionsSlot,
   onOpenTerminal,
+  onOpenOnMac,
 }: {
   task: TaskSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`task-card.tsx`). */
@@ -407,6 +408,8 @@ export function MainTabStrip({
   actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
   onOpenTerminal: (agentId: string) => void;
+  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository. */
+  onOpenOnMac?: ((agentId: string) => void) | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -487,6 +490,8 @@ export function MainTabStrip({
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
       onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
+      onOpenOnMac:
+        agent === undefined || onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
@@ -567,7 +572,8 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
  * `onOpenDelegation`, its Changes chip its pull request's changes,
- * through `onOpenChanges`, and a call about something drawn in a tab of its
+ * through `onOpenChanges`, its pull request's chip the pull request,
+ * through `onOpenPullRequest`, and a call about something drawn in a tab of its
  * own that tab, through `onOpenTarget`, each such row hanging that tab's
  * card (`cards`).
  */
@@ -578,6 +584,7 @@ export function MainTabContent({
   views,
   onOpenDelegation,
   onOpenChanges,
+  onOpenPullRequest,
   onOpenTarget,
   cards,
 }: {
@@ -594,6 +601,8 @@ export function MainTabContent({
   ) => void;
   /** Opens the agent's changes in the side panel, by the agent; none where no side panel stands to show them. */
   onOpenChanges?: ((agentId: string) => void) | undefined;
+  /** Opens the agent's pull request in the side panel, by the agent; none where no side panel stands to show it. */
+  onOpenPullRequest?: ((agentId: string) => void) | undefined;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
@@ -621,6 +630,9 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
+      onOpenPullRequest={
+        onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
+      }
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}

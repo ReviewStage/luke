@@ -8,6 +8,7 @@ import { sentLineStands } from "@luke/database/models/message-reads";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import { readTask } from "@luke/database/models/task-store";
 import {
+  type AwaitingLineMetadata,
   type LineSender,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
@@ -32,7 +33,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -48,7 +49,9 @@ import { codingAgentStatusOf } from "./status.js";
  * to eve and onto the row (`attached-files.ts`), and so does what the words
  * mention of the plan, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
- * are another coding agent's, which hand none; the writer fences the write against the caller
+ * are another coding agent's or a reviewer's, which hand none, or an
+ * automation's run, which hands only those its automation's own prompt
+ * mentions; the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
@@ -72,12 +75,20 @@ import { codingAgentStatusOf } from "./status.js";
  * nothing, since every list leaves it out until it is brought back.
  */
 
-/** The developer's words, the files they attached where they did, the key the send is made under, which a repeat carries again, and what sent them, which the row keeps and eve is not told. */
+/**
+ * The developer's words, the files they attached where they did, the key the
+ * send is made under, which a repeat carries again, and what sent them, which
+ * the row keeps and eve is not told; and who the row says wrote it, the
+ * developer's typed ask unless a chat notice names its poster.
+ */
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly sender: LineSender;
+  readonly metadata?: AwaitingLineMetadata | undefined;
+  /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
+  readonly serverWords?: string | undefined;
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */
@@ -147,10 +158,14 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
-  const reads = yield* hostedStoreOrUnavailable(
-    readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
-  );
-  const mentioned = mentionedContext(line.text, task?.task, reads);
+  // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention.
+  const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
+  const reads = reviewers
+    ? NO_MENTIONED_READS
+    : yield* hostedStoreOrUnavailable(
+        readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
+      );
+  const mentioned = reviewers ? undefined : mentionedContext(line.text, task?.task, reads);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const handOver = eve
@@ -178,11 +193,13 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.
   const services = yield* Effect.context<DatabaseServices>();
-  // Note that another coding agent's line hands no server, because which servers an agent is handed is its developer's to switch, never another agent's.
+  // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, and an automation's
+  // run hands only what its own prompt mentions, because which servers an agent is handed is its developer's to switch,
+  // never another agent's, a reviewer's, or a webhook caller's.
   const servers =
-    line.sender.kind === MESSAGE_SENDER.AGENT
+    line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
-      : mentionedServers(line.text, task?.task.repository ?? null);
+      : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
   const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
     Effect.catchCause((cause) =>
       Effect.as(

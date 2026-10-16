@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      full_checks:
+        description: Run ./scripts/check.sh even when CI already passed the commit on main
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -40,6 +45,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      checks: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
@@ -108,7 +114,41 @@ jobs:
             ' "$VERSION"
           } >> "$GITHUB_ENV"
 
+      # A tag names a commit the merge queue already ran every check on, so
+      # the release asks GitHub whether it did rather than running them again:
+      # the commit must be on main with every check main's rules require green
+      # (`scripts/release/verify-ci.mjs`), and a tag on any other commit stops
+      # here. A rehearsal may build a branch CI never passed, so for one the
+      # answer decides whether ./scripts/check.sh runs, as `full_checks` can
+      # ask for outright. The repository checks run either way: they take
+      # seconds and hold the version and its changelog entry together.
+      - name: Confirm CI passed the commit on main
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if node scripts/release/verify-ci.mjs "$GITHUB_REPOSITORY" "$GITHUB_SHA"; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            echo "error: a release tag must name a commit merged to main with every required check green" >&2
+            exit 1
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run repository checks
+        if: ${{ steps.ci.outputs.passed == 'true' && !inputs.full_checks }}
+        run: ./scripts/repository-checks.sh
+
+      # The Chromium @luke/ui's browser tests run in, at the build its pinned
+      # `playwright` names: bootstrap.sh leaves it to each CI job that runs
+      # them, and check.sh does when it runs.
+      - name: Install the browser tests' Chromium
+        if: ${{ steps.ci.outputs.passed != 'true' || inputs.full_checks }}
+        run: pnpm --filter @luke/ui exec playwright install chromium
+
+      - name: Run every check
+        if: ${{ steps.ci.outputs.passed != 'true' || inputs.full_checks }}
         run: ./scripts/check.sh
 
       - name: Import Developer ID certificate

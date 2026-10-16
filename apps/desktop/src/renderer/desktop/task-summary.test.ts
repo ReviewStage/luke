@@ -162,7 +162,7 @@ function hover(control: Element): void {
 /** The agent named in the Changes card the pull request's row hangs. */
 function cardAgent(page: HTMLElement): HTMLButtonElement {
   const row = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.includes("Changes: Expiry job"),
+    each.textContent?.includes("Pull request: Expiry job"),
   );
   assert.ok(row, "the pull request has a row");
   hover(row);

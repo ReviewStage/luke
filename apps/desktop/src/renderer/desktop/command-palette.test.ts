@@ -591,7 +591,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   assert.deepEqual(listed, []);
 });
 
-test("an agent's Changes row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
+test("an agent's Pull request row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
   const agent = {
     id: "agent-7",
     planId: "plan-1",
@@ -636,7 +636,7 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
       }),
     }),
   );
-  const changes = "Changes: Invoice export · #42 · Billing usage alerts";
+  const changes = "Pull request: Invoice export · #42 · Billing usage alerts";
   type("#42");
   assert.ok(rows().includes(changes), "found by its pull request's number");
   type("CSV");
@@ -698,7 +698,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   );
 
   type("#42");
-  const changes = rows().filter((row) => row.startsWith("Changes"));
+  const changes = rows().filter((row) => row.startsWith("Pull request"));
   type("Show board");
   const board = rows().filter((row) => row.startsWith("Show board"));
   chooseFilter("Files");

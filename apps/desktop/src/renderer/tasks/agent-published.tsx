@@ -3,7 +3,8 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
-import { CopyIcon } from "@luke/ui";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { CopyIcon, ProviderMark } from "@luke/ui";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
@@ -26,10 +27,13 @@ import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
  * thing the agent made rather than a setting the quiet model chip at the
  * foot's other end picks: one for its pull request, its mark
  * (`pull-request-mark.tsx`) and its number in the mark's colour; or, with
- * a branch and no pull request yet, one naming the branch. A press of
- * either opens it on GitHub, the pull request or the branch compared, and
- * a right-click offers what a press does not: copying the branch's name or
- * the command that checks it out. The row wears the same mark and says the
+ * a branch and no pull request yet, one naming the branch. A press of the
+ * pull request's opens its Pull request tab in the side panel
+ * (`agent-pull-request-tab.tsx`) where a panel takes it, and GitHub's page
+ * otherwise; a press of the branch's opens it compared on GitHub; and a
+ * right-click offers what a press does not: the pull request on GitHub,
+ * where the press opened its tab, and copying the branch's name or the
+ * command that checks it out. The row wears the same mark and says the
  * number and title, that the checks failed where they did, the lines added
  * and removed, and where the pull request stands only where that changes what the developer would
  * do; a press of it opens the pull request. Nothing here is drawn before
@@ -47,14 +51,33 @@ export interface PublishedDoors {
   copy: (words: string, label: string) => void;
   /** Opens the agent's changes in a tab of the side panel's own; none where the view stands in no panel. */
   openChanges?: (() => void) | undefined;
+  /** Opens the agent's pull request in a tab of the side panel's own; none where the view stands in no panel. */
+  openPullRequest?: (() => void) | undefined;
 }
 
 const MENU_LABEL = "Branch actions";
 const CHECKS_FAILING = "Checks failing";
 
-/** What the chip's right-click offers for a branch: its name and the command that checks it out, each to the clipboard. */
-function branchActions(branch: string, doors: PublishedDoors): MenuAction[][] {
+/** What the chip's right-click offers: the pull request on GitHub where a press opens its tab instead, then the branch's name and the command that checks it out, each to the clipboard. */
+function branchActions(
+  branch: string,
+  doors: PublishedDoors,
+  onGitHub: string | undefined,
+): MenuAction[][] {
+  const github: MenuAction[][] =
+    onGitHub === undefined
+      ? []
+      : [
+          [
+            {
+              label: "Open on GitHub",
+              icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+              onSelect: () => doors.openGitHub(onGitHub),
+            },
+          ],
+        ];
   return [
+    ...github,
     [
       {
         label: "Copy branch name",
@@ -90,7 +113,7 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
   );
 }
 
-/** What the box's foot wears for what stands: the pull request's chip, else the branch's, else nothing; a press opens it on GitHub, a right-click offers the branch's copies. */
+/** What the box's foot wears for what stands: the pull request's chip, else the branch's, else nothing; a press opens the pull request's tab, or the page on GitHub, and a right-click offers the rest. */
 export function PublishedChip({
   published,
   doors,
@@ -105,9 +128,10 @@ export function PublishedChip({
   const label = pullRequest !== null ? pullRequestMarkLabel(pullRequest) : (branch ?? "");
   // Named in the hint too, since a narrow composer draws the chip's mark alone.
   const opens = pullRequest !== null ? pullRequestNumberLabel(pullRequest) : (branch ?? "");
+  const inPanel = pullRequest === null ? undefined : doors.openPullRequest;
   return (
     <>
-      <Tooltip label={`Open ${opens} on GitHub`}>
+      <Tooltip label={inPanel === undefined ? `Open ${opens} on GitHub` : `Show ${opens}`}>
         <Chip
           look={CHIP_LOOK.PILL}
           className="agent-published-chip"
@@ -116,7 +140,8 @@ export function PublishedChip({
           aria-label={label}
           onClick={() => {
             menu.close(false);
-            doors.openGitHub(url);
+            if (inPanel === undefined) doors.openGitHub(url);
+            else inPanel();
           }}
           onContextMenu={branch === null ? undefined : menu.contextMenu()}
         >
@@ -126,7 +151,7 @@ export function PublishedChip({
       {menu.drawn === undefined || branch === null ? null : (
         <ActionMenu
           menu={menu.drawn}
-          groups={branchActions(branch, doors)}
+          groups={branchActions(branch, doors, inPanel === undefined ? undefined : url)}
           label={MENU_LABEL}
           onClose={menu.close}
         />

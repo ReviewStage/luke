@@ -1,0 +1,10 @@
+/* styles.css -- every shared component's stylesheet, in the order they
+   cascade, each in the `components` layer.
+
+   The layer is where a shared control's own rules sit between the two that
+   surround it in every app: above the element resets (the desktop's
+   `base.css`, the site's Tailwind preflight, both in `base`) and below
+   utilities, so a reset never undoes a control and an app's own rule always
+   can. An app imports this after its reset and before its utilities. */
+
+@import "./components/text/text.css";

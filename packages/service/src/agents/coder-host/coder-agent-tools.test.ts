@@ -31,6 +31,7 @@ import {
   CODING_AGENT_STATUS,
 } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -843,14 +844,31 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   const bob = agents.teammates.userId;
   const rows = Array.from({ length: 3_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
   const shown = Option.getOrThrow(
-    await database.run(writePage(bob, plans.billing, { title: "Seats", html: "<h1>One</h1>" })),
+    await database.run(
+      writePage(
+        bob,
+        plans.billing,
+        { title: "Seats", html: "<h1>One</h1>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
+    ),
   );
   await database.run(
-    writePage(bob, plans.billing, { pageId: shown.id, title: "Seats by month", html: rows }),
+    writePage(
+      bob,
+      plans.billing,
+      { pageId: shown.id, title: "Seats by month", html: rows },
+      { kind: PAGE_SHOWER.LUKE },
+    ),
   );
   const elsewhere = Option.getOrThrow(
     await database.run(
-      writePage(agents.otherWorkspaces.userId, plans.elsewhere, { title: "Theirs", html: "<p/>" }),
+      writePage(
+        agents.otherWorkspaces.userId,
+        plans.elsewhere,
+        { title: "Theirs", html: "<p/>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
     ),
   );
   const page = (answer: WireRecord) => (isRecord(answer.page) ? answer.page : {});

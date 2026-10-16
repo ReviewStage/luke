@@ -54,6 +54,7 @@ import {
   WingFace,
 } from "@luke/ui";
 import type { Example } from "../examples";
+import { CatalogSection } from "../section";
 
 /**
  * artwork.tsx -- the production artwork `@luke/ui` draws from `@luke/brand`'s
@@ -118,14 +119,12 @@ const GLYPHS = Object.entries({
 function Artwork(): React.JSX.Element {
   return (
     <>
-      <section className="catalog-section" aria-labelledby="artwork-face">
-        <h2 id="artwork-face">Face</h2>
+      <CatalogSection id="artwork-face" title="Face">
         <div className="catalog-face">
           <WingFace />
         </div>
-      </section>
-      <section className="catalog-section" aria-labelledby="artwork-glyphs">
-        <h2 id="artwork-glyphs">Glyphs</h2>
+      </CatalogSection>
+      <CatalogSection id="artwork-glyphs" title="Glyphs">
         <ul className="catalog-tiles">
           {GLYPHS.map(([name, Glyph]) => (
             <li key={name} className="catalog-tile">
@@ -136,9 +135,8 @@ function Artwork(): React.JSX.Element {
             </li>
           ))}
         </ul>
-      </section>
-      <section className="catalog-section" aria-labelledby="artwork-marks">
-        <h2 id="artwork-marks">Provider marks</h2>
+      </CatalogSection>
+      <CatalogSection id="artwork-marks" title="Provider marks">
         <ul className="catalog-tiles">
           {Object.values(MARK_PROVIDER).map((provider) => (
             <li key={provider} className="catalog-tile">
@@ -147,7 +145,7 @@ function Artwork(): React.JSX.Element {
             </li>
           ))}
         </ul>
-      </section>
+      </CatalogSection>
     </>
   );
 }

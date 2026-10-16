@@ -19,11 +19,9 @@ import type { ReactNode } from "react";
 import { ActorLine, ActorRef, ActorStack, type StackFace } from "../actor-ref";
 import { useMemberDirectory } from "../member-directory";
 import { AgentCard, type AgentSubject } from "./agent-ref";
-import { RelativeTime } from "./relative-time";
-import { useMinute } from "./task-time";
 
 /**
- * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, its reviewers as a facepile wearing where each stands, who authored its commits, and its reviews that said something.
+ * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, its reviewers as a facepile wearing where each stands, and who authored its commits.
  *
  * GitHub names everyone by an account of its own; the window names each as
  * the actor they are to the reader (`githubActor`). Luke's own App's bot is
@@ -104,6 +102,28 @@ function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span className="review-state" data-review-state={state}>
       {REVIEW_GLYPHS[state]}
+    </span>
+  );
+}
+
+/** Someone the pull request names, by their face and name, hanging their card, as every actor is drawn. */
+export function PersonRef({
+  person,
+  agent,
+}: {
+  person: GitHubPerson;
+  agent: PullRequestAgent;
+}): React.JSX.Element {
+  const { actor, card } = useNamer(agent)(person);
+  return <ActorRef actor={actor} card={card} />;
+}
+
+/** Where a review left its reviewer, its glyph in its colour beside the words for it. */
+export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Element {
+  return (
+    <span className="changes-comment-state" data-review-state={state}>
+      <ReviewBadge state={state} />
+      {REVIEW_WORDS[state]}
     </span>
   );
 }
@@ -220,56 +240,5 @@ export function PullRequestPeople({
         </ActorLine>
       )}
     </div>
-  );
-}
-
-/** One review that said something: who, where it left them and when, then the start of its words. */
-function ReviewComment({
-  comment,
-  agent,
-  now,
-}: {
-  comment: NonNullable<CodingAgentChangesPeople["comments"]>[number];
-  agent: PullRequestAgent;
-  now: number;
-}): React.JSX.Element {
-  const { actor, card } = useNamer(agent)(comment.by);
-  return (
-    <li className="changes-comment">
-      <span className="changes-comment-head">
-        <ActorRef actor={actor} card={card} />
-        <span className="changes-comment-state" data-review-state={comment.state}>
-          <ReviewBadge state={comment.state} />
-          {REVIEW_WORDS[comment.state]}
-        </span>
-        <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-      </span>
-      <p className="changes-comment-words">{comment.excerpt}</p>
-    </li>
-  );
-}
-
-/** The reviews that said something, folded under their count until opened, oldest first; nothing where none did. */
-export function ReviewComments({
-  comments,
-  agent,
-}: {
-  comments: CodingAgentChangesPeople["comments"];
-  agent: PullRequestAgent;
-}): React.JSX.Element | null {
-  const now = useMinute();
-  if (comments === undefined || comments.length === 0) return null;
-  return (
-    <details className="changes-comments ph-no-capture">
-      <summary>
-        Review comments <span className="changes-comments-count">{comments.length}</span>
-      </summary>
-      <ul>
-        {comments.map((comment, index) => (
-          // Note that the reviews are listed once per read, oldest first, so a review is keyed by where it stands.
-          <ReviewComment key={index} comment={comment} agent={agent} now={now} />
-        ))}
-      </ul>
-    </details>
   );
 }

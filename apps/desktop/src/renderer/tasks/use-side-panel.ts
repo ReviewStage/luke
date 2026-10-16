@@ -1,20 +1,23 @@
 import type { CodeRef } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
-  changesLabelOf,
   type FileStripTab,
   inTaskOrder,
   isAgentTab,
   isChangesTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  type MacTerminalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
+  pullRequestLabelOf,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -25,7 +28,8 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**
@@ -59,8 +63,12 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
- * nowhere, so a launch opens none. An agent's Changes tab, opened from the
- * Changes chip at its tab's foot, the "+", the plan's summary, or ⌘K, is
+ * nowhere, so a launch opens none. An agent's Pull request tab, kept as
+ * `changes` for the tab that once showed its files alone, opened from the
+ * pull request's chip or the Changes chip at its tab's foot, the "+", the
+ * plan's summary, or ⌘K, shows the pull request's overview or its files
+ * (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
+ * window's life and kept nowhere, and is
  * the one kind besides the fixed three kept as they are: one per agent,
  * since each agent works in a sandbox and a pull request of its own, it is
  * opened on the plan it was opened on and held to that plan's agents, and
@@ -91,8 +99,11 @@ import { MAIN_TAB } from "./use-main-tabs";
  * does, kept with the plan's other choices so it holds across a launch;
  * only where none does, its neighbour (`replacementOf`). Closing the last
  * shuts the panel too, as an editor's secondary side bar goes once its last
- * view closes, and leaves full screen with it; the toggle shows it again,
- * empty, offering the tabs closed in place.
+ * view closes, and leaves full screen with it. Whether the panel is open is
+ * the window's, but it is drawn only while the strip beside it holds a tab,
+ * so a plan with none shows no panel and the next plan that holds one shows
+ * it again. Shown on purpose with none, by ⌘T or the toggle, it stands
+ * empty, offering the tabs closed in place, until it is hidden.
  *
  * A tab of any kind is dragged or moved from the keyboard to any place in
  * the strip, among tabs of every kind, as an editor's are. The plan keeps
@@ -177,7 +188,8 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | MacTerminalStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -202,6 +214,14 @@ export interface OpenFile {
 
 /** A file a File tab showed, as its history holds it to show again. */
 type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "commit">;
+
+/** What an agent's Pull request tab shows: the pull request's page, or its changed files. */
+export const PULL_REQUEST_VIEW = {
+  OVERVIEW: "overview",
+  FILES: "files",
+} as const;
+
+export type PullRequestView = (typeof PULL_REQUEST_VIEW)[keyof typeof PULL_REQUEST_VIEW];
 
 /** Which way a File tab's history is walked. */
 export const FILE_HISTORY_STEP = {
@@ -398,6 +418,10 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on each plan, by plan. */
   readonly lastTerminals: Readonly<Record<string, string>>;
+  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  readonly pullRequestViews: Readonly<Record<string, PullRequestView>>;
+  /** The open tabs of this Mac's terminals, by agent, in the order opened. */
+  readonly macTerminals: readonly MacTerminalStripTab[];
   readonly tasks: Readonly<Record<string, TaskTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -454,6 +478,7 @@ const FIRST_LAUNCH: SidePanelState = {
 
 /** What the panel and its toggle draw, and their presses. */
 export interface SidePanelControl {
+  /** Whether the panel is drawn: open, and its strip holding a tab or it asked for with none. */
   open: boolean;
   /** Whether the open panel fills the work column in the document's place. */
   fullScreen: boolean;
@@ -486,6 +511,10 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
+  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  pullRequestViews: Readonly<Record<string, PullRequestView>>;
+  /** Chooses what an agent's Pull request tab shows, its tab open or not. */
+  onPullRequestView: (agentId: string, view: PullRequestView) => void;
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -715,7 +744,7 @@ function agentPinLabel(tab: PinnableTab, labels: ReadonlyMap<string, string>): s
   if (isAgentTab(tab)) return labels.get(tab.agent);
   if (!isChangesTab(tab)) return undefined;
   const agent = labels.get(tab.changes);
-  return agent === undefined ? undefined : changesLabelOf(agent);
+  return agent === undefined ? undefined : pullRequestLabelOf(agent);
 }
 
 /** The state with each agent, and each agent's Changes, pinned on the plan named as `labels` names the agent, and the state as it is where every one already was. */
@@ -801,8 +830,12 @@ function withTab(held: HeldState, tab: SidePanelTab, taskId: string | undefined)
     isTerminalTab(tab) && taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
       ? { ...held.lastTerminals, [taskId]: tab.terminal }
       : held.lastTerminals;
-  const chosen = open ?? tab;
+  const macTerminals = isMacTerminalTab(tab)
+    ? [...held.macTerminals.filter((each) => !sameTab(each, tab)), tab]
+    : held.macTerminals;
+  const chosen = isMacTerminalTab(tab) ? tab : (open ?? tab);
   return opened === held &&
+    macTerminals === held.macTerminals &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
@@ -810,7 +843,7 @@ function withTab(held: HeldState, tab: SidePanelTab, taskId: string | undefined)
     lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, macTerminals, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -987,6 +1020,14 @@ export function drawsTerminal(
   return drawn.taskAgents?.includes(tab.terminal) === true;
 }
 
+/** Whether the plan draws the agent's tab of a terminal of this Mac: once its agents are read and the agent is among them, as a Terminal tab (`drawsTerminal`). */
+export function drawsMacTerminal(
+  tab: MacTerminalStripTab,
+  drawn: Pick<DrawnTabs, "taskAgents">,
+): boolean {
+  return drawn.taskAgents?.includes(tab.macTerminal) === true;
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -1017,6 +1058,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.macTerminals.filter((each) => drawsMacTerminal(each, drawn)),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
 }
@@ -1079,7 +1121,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
           : isTerminalTab(tab)
             ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-            : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+            : isMacTerminalTab(tab)
+              ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
+              : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1211,7 +1255,7 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
 /** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, any Changes tab's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) return TAB_WORDS.CHANGES;
+  if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
   if (tab === MAIN_TAB.INBOX) return TAB_WORDS.INBOX;
   return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
 }
@@ -1259,6 +1303,8 @@ function settled(state: SidePanelState): HeldState {
     pages: [],
     terminals: [],
     lastTerminals: {},
+    pullRequestViews: {},
+    macTerminals: [],
     tasks: currentTasks(state.tasks),
     pins:
       pins === undefined
@@ -1356,6 +1402,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isMacTerminalTab(kept)) return drawsMacTerminal(kept, drawn) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
@@ -1414,18 +1461,25 @@ export function useSidePanel(
   const [moved, setMoved] = useState<HeldState | undefined>(undefined);
   const [fullScreen, setFullScreen] = useState(false);
   const [newTabAsked, setNewTabAsked] = useState(false);
+  // The plan, or the agent's page, the panel was shown on with no tab, by ⌘T or the toggle.
+  const [emptyShownOn, setEmptyShownOn] = useState<string | undefined>(undefined);
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
-  // A panel shut, by its toggle or by its last tab closing, shows again
-  // beside the document and with no ask of its "+" standing.
-  if (!state.open && (fullScreen || newTabAsked)) {
-    setFullScreen(false);
-    setNewTabAsked(false);
-  }
+  // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
+  const { tell } = useAct();
+  const heldMacTerminals = useRef(kept.macTerminals);
+  useEffect(() => {
+    for (const tab of heldMacTerminals.current) {
+      if (!kept.macTerminals.some((each) => sameTab(each, tab))) {
+        tell(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
+      }
+    }
+    heldMacTerminals.current = kept.macTerminals;
+  }, [kept.macTerminals, tell]);
   // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>
@@ -1500,25 +1554,52 @@ export function useSidePanel(
     }
   }, [staged, kept]);
 
-  const onToggle = useCallback(() => {
-    update((held) => ({ ...held, open: !held.open }));
+  const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
+  // Open is the window's, so a plan whose strip is empty hides the panel
+  // without forgetting it was open, and the next plan with a tab shows it.
+  const shown = state.open && (strip.length > 0 || emptyShownOn === taskId);
+  // A panel shut, by its toggle or by its last tab closing, or hidden by a
+  // plan with no tab, shows again beside the document and with no ask of
+  // its "+" standing; one shut, or whose plan was left, is shown empty only
+  // when asked again.
+  if (!shown && (fullScreen || newTabAsked)) {
     setFullScreen(false);
     setNewTabAsked(false);
-  }, [update]);
+  }
+  if (emptyShownOn !== undefined && (!state.open || emptyShownOn !== taskId)) {
+    setEmptyShownOn(undefined);
+  }
+
+  // Note that showing a strip with no tab shows the panel empty, offering
+  // in place what its "+" does, since there is nothing of the plan's to
+  // show: the plan's page chooses a tab first (`useTasksTab`).
+  const onToggle = useCallback(() => {
+    setFullScreen(false);
+    setNewTabAsked(false);
+    if (shown) {
+      update((held) => ({ ...held, open: false }));
+      setEmptyShownOn(undefined);
+      return;
+    }
+    update((held) => (held.open ? held : { ...held, open: true }));
+    if (strip.length === 0) setEmptyShownOn(taskId);
+  }, [update, shown, strip.length, taskId]);
   const onSetOpen = useCallback(
     (open: boolean) => {
       update((held) => (held.open === open ? held : { ...held, open }));
       if (open) return;
       setFullScreen(false);
       setNewTabAsked(false);
+      setEmptyShownOn(undefined);
     },
     [update],
   );
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
+    setEmptyShownOn(taskId);
     setNewTabAsked(true);
-  }, [update]);
+  }, [update, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
@@ -1602,6 +1683,15 @@ export function useSidePanel(
       update((held) => withNoteFolded(held, path, callId, folded)),
     [update],
   );
+  const onPullRequestView = useCallback(
+    (agentId: string, view: PullRequestView) =>
+      update((held) =>
+        held.pullRequestViews[agentId] === view
+          ? held
+          : { ...held, pullRequestViews: { ...held.pullRequestViews, [agentId]: view } },
+      ),
+    [update],
+  );
   const onMove = useCallback(
     (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
@@ -1653,9 +1743,8 @@ export function useSidePanel(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
   );
-  const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   return {
-    open: state.open,
+    open: shown,
     tabs,
     strip,
     order: orderOn(state, taskId),
@@ -1667,11 +1756,13 @@ export function useSidePanel(
     pages: state.pages,
     terminals: state.terminals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
+    pullRequestViews: state.pullRequestViews,
+    onPullRequestView,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,
-    fullScreen: state.open && fullScreen,
-    newTabAsked: state.open && newTabAsked,
+    fullScreen: shown && fullScreen,
+    newTabAsked: shown && newTabAsked,
     onToggle,
     onSetOpen,
     onToggleFullScreen,

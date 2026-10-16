@@ -29,6 +29,7 @@ import {
 import { SkillFiles } from "../tasks/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
+import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
@@ -37,9 +38,9 @@ import { ActionMenu, useActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
-  changesTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  showPullRequest,
   taskCards,
   useColumnFocus,
   useSidePanelDrawing,
@@ -271,7 +272,9 @@ export function DesktopAgentPage({
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
   const openChanges = (changed: string) =>
-    sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
+    showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
+  const openPullRequest = (published: string) =>
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.OVERVIEW);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
@@ -363,6 +366,7 @@ export function DesktopAgentPage({
                       views={views}
                       onOpenDelegation={openDelegation}
                       onOpenChanges={openChanges}
+                      onOpenPullRequest={openPullRequest}
                       onOpenTarget={openTarget}
                       cards={cards}
                     />

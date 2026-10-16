@@ -24,7 +24,8 @@ import { TranscriptWords } from "./transcript-blocks";
  * plan's words says what the workspace's GitHub App answers for it: a bare
  * link is called by the repository's name, the number, and the title, a
  * labelled one keeps its label, and each wears GitHub's mark for where it
- * stands and says it in words. Each is read by repository and number through
+ * stands and says it in words, its card saying its key, its state, and a
+ * pull request's lines added and removed in place of its address. Each is read by repository and number through
  * the plan's workspace, nothing is asked where that workspace has no active
  * installation, and one the App answers nothing for stays as its address
  * says. Synthetic workspace, plan, pull requests, and issues.
@@ -151,6 +152,8 @@ async function drawn(text: string, workspace: Workspace) {
                       url: MERGED,
                       state: PULL_REQUEST_STATE.MERGED,
                       author: "octo-dev",
+                      additions: 120,
+                      deletions: 30,
                     }
                   : null,
               }
@@ -267,7 +270,7 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
   );
 });
 
-/** The notes of the card a chip hangs: its key and state, who it is with, and its address. */
+/** The notes of the card a chip hangs: its key and state, with a pull request's lines, who it is with, and its address where GitHub answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   act(() => {
@@ -281,14 +284,15 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   return notes;
 }
 
-test("a pull request's and an issue's cards say who opened them, as the workspace's GitHub App answers it; one GitHub names no author of names no one", async () => {
+test("a pull request's and an issue's cards say who opened them, as the workspace's GitHub App answers it, and a pull request's the lines it adds and removes, in place of their address; one GitHub names no author of names no one, and one the App does not reach still says its address", async () => {
   const { container } = await drawn(
-    `Lands after ${MERGED}, and see ${OPEN_ISSUE} and ${SHELVED_ISSUE}.`,
+    `Lands after ${MERGED}, and see ${OPEN_ISSUE}, ${SHELVED_ISSUE}, and ${UNREACHED}.`,
     ACME_WITH_GITHUB,
   );
-  const [pullRequest, opened, shelved] = container.querySelectorAll(".mention-chip");
+  const [pullRequest, opened, shelved, unreached] = container.querySelectorAll(".mention-chip");
 
-  assert.deepEqual(cardNotes(pullRequest), ["relay#42 · Merged", "Opened by octo-dev", MERGED]);
-  assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev", OPEN_ISSUE]);
-  assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned", SHELVED_ISSUE]);
+  assert.deepEqual(cardNotes(pullRequest), ["relay#42 · Merged · +120 −30", "Opened by octo-dev"]);
+  assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev"]);
+  assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned"]);
+  assert.deepEqual(cardNotes(unreached), [UNREACHED]);
 });

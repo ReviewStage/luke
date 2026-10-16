@@ -31,18 +31,26 @@ export type MessageRole = (typeof MESSAGE_ROLE)[keyof typeof MESSAGE_ROLE];
 
 export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROLE));
 
-/** Who wrote a message: the developer, Luke's own judgment, the voice model, or a child run. */
+/**
+ * Who wrote a message: the developer, Luke's own judgment, the voice model,
+ * or a child run; or, for a line a chat notice wrote, which kind of chat
+ * member posted what it tells: a coding agent, a plan's planner, or a person.
+ */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
   BRAIN: "brain",
   VOICE_MODEL: "voice_model",
   CHILD: "child",
+  AGENT: "agent",
+  PLANNER: "planner",
+  HUMAN: "human",
 } as const;
 
-/** How a developer's ask arrived. */
+/** How a developer's ask arrived, or that a chat notice carried the line. */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
   VOICE: "voice",
+  CHAT: "chat",
 } as const;
 
 /**
@@ -88,11 +96,12 @@ const nonNegativeInteger = EffectSchema.Finite.check(
 const spanInstant = nonNegativeInteger;
 
 /**
- * A user row is one of three things, and the shape says which: the
- * developer's typed ask, a spoken ask cut from a voice session, or an
- * observation the brain wrote down for itself. Three structs rather than one
- * with every field optional, so an observation carrying a channel or a typed
- * ask carrying a voice session has no shape to arrive in.
+ * A user row is one of four things, and the shape says which: the
+ * developer's typed ask, a spoken ask cut from a voice session, a chat
+ * notice steered into a coding agent, or an observation the brain wrote down
+ * for itself. Four structs rather than one with every field optional, so an
+ * observation carrying a channel or a typed ask carrying a voice session has
+ * no shape to arrive in.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
@@ -126,6 +135,26 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
 
 const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(coherentSpan));
 
+/**
+ * A chat notice is a line the chat steered into a coding agent's turn on a
+ * member's behalf: which kind of member posted the message it tells, the
+ * message's place in its workspace's chat sequence, and the poster's handle.
+ * The words are the notice the chat wrote, never the developer's, so a
+ * reader that names the developer's task passes this row by.
+ */
+const CHAT_NOTICE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literals([
+    MESSAGE_AUTHOR.AGENT,
+    MESSAGE_AUTHOR.PLANNER,
+    MESSAGE_AUTHOR.HUMAN,
+  ]),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.CHAT),
+  chat_seq: nonNegativeInteger,
+  from: identifier,
+});
+
+export type ChatNoticeMetadata = EffectSchema.Schema.Type<typeof CHAT_NOTICE_METADATA>;
+
 /** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
@@ -134,12 +163,17 @@ const OBSERVATION_METADATA = EffectSchema.Struct({
 
 type ObservationMetadata = EffectSchema.Schema.Type<typeof OBSERVATION_METADATA>;
 
-export type UserMessageMetadata = TypedAskMetadata | SpokenAskMetadata | ObservationMetadata;
+export type UserMessageMetadata =
+  | TypedAskMetadata
+  | SpokenAskMetadata
+  | ChatNoticeMetadata
+  | ObservationMetadata;
 
 /** What a user row says about itself. */
 export const USER_MESSAGE_METADATA = EffectSchema.Union([
   TYPED_ASK_METADATA,
   SPOKEN_ASK_METADATA,
+  CHAT_NOTICE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 

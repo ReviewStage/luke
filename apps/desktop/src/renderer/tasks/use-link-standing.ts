@@ -15,7 +15,7 @@ import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /**
- * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, and who it is with, read through the workspace's own connection.
+ * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one the place drawing them names, as the window's Inbox
@@ -57,7 +57,7 @@ export interface LinkStanding {
   readonly key: string;
   readonly title: string;
   readonly state: string | undefined;
-  readonly pullRequest: { readonly number: number; readonly state: PullRequestState } | undefined;
+  readonly pullRequest: StandingPullRequest | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
   /** Who it is with, as its card says it: who opened a pull request or a GitHub issue, or who a Linear issue is assigned to; none where its provider named no one. */
   readonly byline: string | undefined;
@@ -71,6 +71,13 @@ function openedBy(login: string | undefined): string | undefined {
 /** What a card says of who a Linear issue is assigned to. */
 function assignedTo(name: string | undefined): string | undefined {
   return name === undefined ? undefined : `Assigned to ${name}`;
+}
+
+/** A pull request as its chip draws it: its number and state for its mark, and the lines it adds and removes for its card, where the service answered them. */
+interface StandingPullRequest {
+  readonly number: number;
+  readonly state: PullRequestState;
+  readonly lines: { readonly additions: number; readonly deletions: number } | undefined;
 }
 
 /** A pull request's state in words, as its chip says it. */
@@ -202,7 +209,15 @@ function readStanding(
           key,
           title: pullRequest.title,
           state: PULL_REQUEST_WORDS[pullRequest.state],
-          pullRequest: { number: pullRequest.number, state: pullRequest.state },
+          pullRequest: {
+            number: pullRequest.number,
+            state: pullRequest.state,
+            // Note that an older service answers no lines, so its card draws none.
+            lines:
+              pullRequest.additions === undefined || pullRequest.deletions === undefined
+                ? undefined
+                : { additions: pullRequest.additions, deletions: pullRequest.deletions },
+          },
           issue: undefined,
           byline: openedBy(pullRequest.author),
         },

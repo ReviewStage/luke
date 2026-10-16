@@ -1,4 +1,5 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
 /**
  * examples.ts -- every example the catalog draws, in the order its index lists them.
@@ -15,4 +16,4 @@ export interface Example {
   readonly Render: () => React.JSX.Element;
 }
 
-export const EXAMPLES: readonly Example[] = [ARTWORK_EXAMPLE];
+export const EXAMPLES: readonly Example[] = [ARTWORK_EXAMPLE, TYPOGRAPHY_EXAMPLE];

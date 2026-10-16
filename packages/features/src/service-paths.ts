@@ -76,6 +76,12 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
+  /**
+   * A workspace's issues: list them, the most recently changed first, where
+   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
+   * declares the bodies.
+   */
+  ISSUES: "/api/issues",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -552,6 +558,16 @@ export function agentPullRequestPath(agentId: string): string {
 /** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
 export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
+}
+
+/** One agent's pull request as its Pull request tab draws it (GET): its description, checks, reviewers, and conversation as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview`;
+}
+
+/** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
+export function agentGitHubImagePath(agentId: string, src: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
 }
 
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */

@@ -3,6 +3,7 @@ import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-s
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
@@ -525,7 +526,7 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   },
   {
     ...SHOW_PAGE_TOOL,
-    run: (call, input) => runShowPage(call.task, input),
+    run: (call, input) => runShowPage(call.task, input, { kind: PAGE_SHOWER.LUKE }),
   },
   {
     ...LIST_AGENTS_TOOL,

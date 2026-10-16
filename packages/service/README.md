@@ -1481,7 +1481,11 @@ fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
 The MCP servers the action switches off (`disabledServers`) are switched off
 for the run's new agent, as a Start's draft switches them off; every other
-server the owner connected is handed to it.
+server the owner connected is handed to it. A server mentioned in the
+automation's own prompt is handed to the run's first turn whatever its
+switch says, as a Start's prompt hands it, and a run sent to the same agent
+hands its next turn the same; a server mentioned in a webhook's body or a
+GitHub event's title, words an outsider wrote, is handed to none.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
 the next firing tries again. The newest failed run of each of the owner's

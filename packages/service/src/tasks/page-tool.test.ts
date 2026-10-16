@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { PAGE_SHOWER, type PageShower } from "@luke/features/page-wire";
 import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
@@ -55,8 +56,11 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
   return { sandbox, reads };
 }
 
-const show = (binding: PageToolBinding, input: WireBoundaryInput) =>
-  runShowPage(binding, unparsedWire(input));
+/** Luke, who shows a page from a call. */
+const LUKE: PageShower = { kind: PAGE_SHOWER.LUKE };
+
+const show = (binding: PageToolBinding, input: WireBoundaryInput, shownBy: PageShower = LUKE) =>
+  runShowPage(binding, unparsedWire(input), shownBy);
 
 const readAccepted = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -72,18 +76,19 @@ const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, re
 
 it.layer(getTestDB())("show_page", (it) => {
   it.effect(
-    "inline HTML makes a page, named again it takes the next version, and the answer carries the mention the page is named by and never the HTML",
+    "inline HTML makes a page, named again it takes the next version, each kept as shown by who showed it, and the answer carries the mention the page is named by and never the HTML",
     () =>
       Effect.gen(function* () {
         const task = yield* openTask;
         const first = yield* show(task, { title: "Invite funnel", html: FUNNEL });
         const page = shownPage(first);
+        const agent: PageShower = { kind: PAGE_SHOWER.AGENT, agentId: randomUUID() };
         const second = shownPage(
-          yield* show(task, {
-            title: "Invite funnel, by week",
-            html: `${FUNNEL}<p>v2</p>`,
-            page: page.id,
-          }),
+          yield* show(
+            task,
+            { title: "Invite funnel, by week", html: `${FUNNEL}<p>v2</p>`, page: page.id },
+            agent,
+          ),
         );
 
         assert.deepEqual(first, {
@@ -96,15 +101,18 @@ it.layer(getTestDB())("show_page", (it) => {
         });
         assert.deepEqual(second, { id: page.id, version: 2 });
         assert.deepEqual(
-          (yield* listPages(task.userId, task.taskId)).map(({ id, title, version }) => ({
+          (yield* listPages(task.userId, task.taskId)).map(({ id, title, version, shownBy }) => ({
             id,
             title,
             version,
+            shownBy,
           })),
-          [{ id: page.id, title: "Invite funnel, by week", version: 2 }],
+          [{ id: page.id, title: "Invite funnel, by week", version: 2, shownBy: agent }],
         );
-        const stored = yield* readPageVersion(task.userId, task.taskId, page.id, 1);
-        assert.equal(Option.getOrThrow(stored).html, FUNNEL);
+        const stored = Option.getOrThrow(
+          yield* readPageVersion(task.userId, task.taskId, page.id, 1),
+        );
+        assert.deepEqual([stored.html, stored.shownBy], [FUNNEL, LUKE]);
       }),
   );
 

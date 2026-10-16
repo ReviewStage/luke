@@ -2,17 +2,28 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { experimentsOn } from "@luke/settings/testing";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { handState } from "#testing/app-state";
+import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { useWindowHistory, type WindowHistory } from "./navigation-history";
 import { PANEL_TAB } from "./panel-tabs";
-import type { LeaveAsk, TasksControl } from "./tasks/use-tasks-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type LeaveAsk,
+  type TasksControl,
+} from "./tasks/use-tasks-tab";
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -37,7 +48,8 @@ function mount(initial: TasksControl) {
   }
   const container = document.createElement("div");
   document.body.append(container);
-  act(() => createRoot(container).render(createElement(Probe)));
+  // Each window reads its state under a registry of its own, as the window's root provides one.
+  act(() => createRoot(container).render(onRegistry(AtomRegistry.make(), createElement(Probe))));
   return {
     history: () => {
       assert.ok(history);
@@ -45,6 +57,30 @@ function mount(initial: TasksControl) {
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
   };
+}
+
+/** Lets every promise settled so far run its continuations, the window's state among them. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** The window on the Automations page given, of the workspace given, each page it is asked to open recorded in `opened`. */
+function onAutomations(
+  page: AutomationsPlace | undefined,
+  opened: (AutomationsPlace | undefined)[],
+  workspaceId = "workspace-acme",
+): TasksControl {
+  return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+    automationsView: {
+      open: page !== undefined,
+      place: page ?? { kind: AUTOMATIONS_PAGE.LIST },
+      onOpen: (place) => opened.push(place),
+      onClose: () => undefined,
+    },
+  });
 }
 
 test("a launch that reopens the plan last open leaves nothing behind it to go back to", () => {
@@ -178,4 +214,77 @@ test("a person's page opened again with a newer name keeps that name in its step
   act(() => window.history().onBack());
 
   assert.deepEqual(reopened, ["Lee Chen"]);
+});
+
+test("an automation opened from the Automations list is a step of its own, which Back leaves for the list", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
+  );
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
+});
+
+test("the automation a new automation's page made takes that page's step, so Back from it returns to the list it was opened from", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
+  const made = { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID, created: true } as const;
+  window.stand(onAutomations(made, opened));
+
+  act(() => window.history().onBack());
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  act(() => window.history().onForward());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }, made]);
+});
+
+test("another automation opened over a new automation's page, as a notification opens one, is a visit after it, which Back leaves for the new page", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.NEW }]);
+});
+
+test("an automation's page is of the workspace it stood in, so once another is listed Back passes over it", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  const linked = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-of-platform" } as const;
+  window.stand(onAutomations(linked, opened, "workspace-platform"));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
+});
+
+test("a deleted automation's page is passed over by Back, which returns to the page before it", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  const kept = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-kept" } as const;
+  window.stand(onAutomations(kept, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST, deleted: AUTOMATION_ID }, opened));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [kept]);
 });

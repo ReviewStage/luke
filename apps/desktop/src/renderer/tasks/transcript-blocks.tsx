@@ -22,6 +22,7 @@ import {
 } from "@luke/features/turn-rows";
 import { cn, ProviderMark } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
+import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
@@ -56,8 +57,20 @@ import {
   TimerIcon,
   WrenchIcon,
 } from "lucide-react";
-import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
-import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
+import {
+  type ComponentProps,
+  createContext,
+  Fragment,
+  type ReactNode,
+  useContext,
+  useMemo,
+} from "react";
+import {
+  type Components,
+  defaultRehypePlugins,
+  defaultRemarkPlugins,
+  type ExtraProps,
+} from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
@@ -345,6 +358,79 @@ const TRANSCRIPT_COMPONENTS: Components = {
   [LINK_GLUE.TAG]: LinkGlueElement,
   img: () => null,
 };
+
+/**
+ * How a picture GitHub's rendering names is drawn by the place drawing the
+ * words: its own image, read through the service, or nothing where the
+ * place draws none, which draws its link instead.
+ */
+export type GitHubPictureDrawer = (src: string, alt: string) => ReactNode | undefined;
+
+/** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
+export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): ReactNode {
+  const words = alt === "" ? UNNAMED_PICTURE : alt;
+  return (
+    <TranscriptLink href={src === "" ? undefined : src} words={words}>
+      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      {words}
+    </TranscriptLink>
+  );
+}
+
+/**
+ * The steps GitHub's rendering is drawn through: the library's own HTML
+ * parse, GitHub's dress reshaped into the window's own while its classes
+ * still say what each part is (`@luke/ui/github-html`), then the library's
+ * own sanitizer, GitHub's own allowlist, and its link hardening.
+ */
+const GITHUB_REHYPE_PLUGINS = [
+  defaultRehypePlugins.raw,
+  githubShapes,
+  defaultRehypePlugins.sanitize,
+  defaultRehypePlugins.harden,
+].filter((plugin) => plugin !== undefined);
+
+/** The one markdown step GitHub's rendering takes: handed over whole, as HTML. */
+const GITHUB_REMARK_PLUGINS = [wholeRendering];
+
+/**
+ * Words GitHub rendered (`body_html`), drawn as a transcript's words are,
+ * at the panel's scale, their code and tables the transcript's, their links
+ * the transcript's: GitHub's own HTML read through the library's parse and
+ * sanitizer, never set as HTML. Mentions, references, emoji, task lists,
+ * and folded details stand as GitHub rendered them. A picture is the
+ * place's to draw (`picture`), and stands as its link where it draws none.
+ */
+export function GitHubWords({
+  html,
+  picture,
+}: {
+  html: string;
+  picture: GitHubPictureDrawer;
+}): ReactNode {
+  const components = useMemo<Components>(
+    () => ({
+      ...TRANSCRIPT_COMPONENTS,
+      img: ({ src, alt }) => {
+        const address = String(src ?? "");
+        const words = String(alt ?? "");
+        return picture(address, words) ?? <GitHubPictureLink src={address} alt={words} />;
+      },
+    }),
+    [picture],
+  );
+  return (
+    <MessageResponse
+      mode="static"
+      components={components}
+      remarkPlugins={GITHUB_REMARK_PLUGINS}
+      rehypePlugins={GITHUB_REHYPE_PLUGINS}
+      normalizeHtmlIndentation={false}
+    >
+      {html}
+    </MessageResponse>
+  );
+}
 
 /**
  * An element of the transcript's own the words are drawn with, as a skill

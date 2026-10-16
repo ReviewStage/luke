@@ -23,39 +23,23 @@
      shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
-  --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   /* A sidebar row's words at rest, a step under the primary ink and clear of
      the time's tertiary, so the open, hovered, and unread rows stand out by
      going up to the primary. */
   --sidebar-ink: rgba(255, 255, 255, 0.7);
   --desktop-well: #0f0f12;
-  /* What floats over the window, a menu or a dialog:
-     the sidebar's step above the ground in the dark, where lighter is nearer,
-     and white in the light, where a shadow says it instead. */
-  --surface-popover: var(--desktop-sidebar);
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
-  /* One control's box, corner, and glyph, spent by every button and tab in
-     the top rows and the title bar, so a row of them reads as one. */
-  --control-height: 30px;
-  --control-radius: 8px;
-  --control-glyph: 15px;
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
-  /* The spacing scale: every padding, margin, and gap in the window is one of
-     these steps or a name below built from them (docs/DESIGN.md). */
-  --space-2: 2px;
-  --space-4: 4px;
-  --space-6: 6px;
-  --space-8: 8px;
-  --space-12: 12px;
-  --space-16: 16px;
-  --space-20: 20px;
-  --space-24: 24px;
-  --space-32: 32px;
-  --space-40: 40px;
-  --space-48: 48px;
+  /* The spacing scale, one control's box, corner, and glyph, the gaps
+     between controls and sections, a page's inset, and a menu's rows are the
+     desktop profile's roles in `@luke/ui` (`tokens/profiles.css`), read here
+     by their old names (`--space-8`, `--control-height`, `--page-inset`, …)
+     through its aliases (`tokens/legacy.css`). Every padding, margin, and gap
+     in the window is one of those steps or a name below built from them
+     (docs/DESIGN.md). */
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
      top row's first and last control, Settings' page list. */
   --column-inset: var(--space-12);
@@ -65,26 +49,14 @@
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */
   --content-inset: calc(var(--column-inset) + var(--row-inset));
-  /* Between a glyph and the words beside it, in a row, a tab, or a button. */
-  --glyph-gap: var(--space-8);
-  /* Between two controls in a row, and between two items of a list. */
-  --control-gap: var(--space-8);
+  /* Between two items of a list. */
   --list-gap: var(--space-2);
-  /* Between a column's groups: Luke, New plan, and the plans. */
-  --section-gap: var(--space-16);
-  /* A page's content from its column's edges: the document, the call bar
-     under it, the home page, and a Settings page. */
-  --page-inset: var(--space-40);
   /* Every menu and popover draws from one set: the --surface-popover ground
      inside a --hairline-strong edge, this corner and shadow, and its items
      this inset from its edge, each row this tall and its glyph this big. The
      corner is a row's own and the inset together, so a highlighted row
      follows the menu's curve wherever it meets it. */
-  --menu-inset: var(--space-4);
-  --menu-row-height: 32px;
-  --menu-row-radius: 6px;
   --menu-glyph: 16px;
-  --menu-radius: calc(var(--menu-row-radius) + var(--menu-inset));
   --menu-shadow: 0 12px 32px var(--shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
@@ -125,9 +97,6 @@
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
-  /* A destructive act's own button, filled: deep enough to carry white words,
-     where the panel's lighter red is drawn as text. */
-  --danger-fill: #d4373a;
   /* A find's matches in a tab's text: each one tinted, the one it is at
      filled, in the yellow and orange a browser's find draws them in, with
      dark words on the fill so the match reads in either appearance. */
@@ -160,11 +129,9 @@
    (`DESKTOP_WINDOW.BACKGROUND`). */
 @media (prefers-color-scheme: light) {
   :root {
-    --desktop-ground: #fcfcfc;
     --desktop-sidebar: #f3f3f4;
     --sidebar-ink: rgba(0, 0, 0, 0.68);
     --desktop-well: #f8f8f9;
-    --surface-popover: #fff;
     --find-match: rgba(255, 204, 0, 0.42);
     --attention-mark-ground: #a65400;
     --workspace-hue-1: #4a5fc0;
@@ -7102,6 +7069,13 @@ button.automation-run:hover {
   color: var(--text-secondary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Words under a card's name wrap anywhere rather than run past the card
+   or under its corner, as a long agent's name on a page's card would. */
+.card-sub > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .card-corner {

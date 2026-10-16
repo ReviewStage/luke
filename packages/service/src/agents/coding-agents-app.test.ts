@@ -77,6 +77,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -507,7 +508,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task: plan, eve, ask } = yield* openTask();
-        const shown = yield* writePage(owner, plan.id, { title: "Chart", html: "<h1>Chart</h1>" });
+        const shown = yield* writePage(
+          owner,
+          plan.id,
+          { title: "Chart", html: "<h1>Chart</h1>" },
+          { kind: PAGE_SHOWER.LUKE },
+        );
         assert.ok(Option.isSome(shown));
         const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: plan.repository })}.`;
         const idempotencyKey = randomUUID();
@@ -1843,10 +1849,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, task: plan, ask, sent } = yield* startedAgent(eve, { running: true });
         const other = yield* startedAgentOf(owner, plan.id, ask);
         yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
-        const shown = yield* writePage(owner, plan.id, {
-          title: "Invites by week",
-          html: "<h1>Invites by week</h1>",
-        });
+        const shown = yield* writePage(
+          owner,
+          plan.id,
+          {
+            title: "Invites by week",
+            html: "<h1>Invites by week</h1>",
+          },
+          { kind: PAGE_SHOWER.LUKE },
+        );
         assert.ok(Option.isSome(shown));
         const place = { workspace: "acme", repository: plan.repository };
         const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: plan.id, agentId: other.agent.id }, "Store", place)}.`;
@@ -1934,6 +1945,35 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.match(part.text, /The coding agent "Stranger": not found in your workspace\./u);
         assert.ok(!part.text.includes(`id \`${foreign.agent.id}\``), part.text);
+      }),
+  );
+
+  it.effect(
+    "a message mentioning people hands a member of the agent's workspace by their role, never their email, and someone of another workspace the sender is also in as not a member",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, sent } = yield* startedAgent(eve, { running: true });
+        // The sender and the other account share a second workspace, which is not the agent's.
+        const elsewhere = yield* openWorkspace(other);
+        yield* joinWorkspace(elsewhere, owner);
+        const place = { workspace: "acme", repository: task.repository };
+        const mention = (userId: string, name: string) =>
+          mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, name, place);
+        const words = `Ask ${mention(owner, "Me")} and ${mention(other, "Stranger")}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const part = message[1];
+        assert.ok(part?.type === "text");
+        assert.match(
+          part.text,
+          /The developer pointed you at [^\n]+, an owner of your workspace\./u,
+        );
+        assert.ok(!part.text.includes("@"), part.text);
+        assert.match(part.text, /The person "Stranger": not a member of your workspace\./u);
       }),
   );
 

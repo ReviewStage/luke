@@ -4,6 +4,7 @@ import { writePage } from "@luke/database/models/plan-pages";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   PAGE_BOUNDS,
+  type PageShower,
   type PageWrite,
   pageHtmlSchema,
   pageTitleSchema,
@@ -209,10 +210,11 @@ const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) 
     ),
   );
 
-/** One call of `show_page` under the plan the service bound, answered as the result the model reads. */
+/** One call of `show_page` under the plan the service bound, by who makes it, Luke or a coding agent, answered as the result the model reads. */
 export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,
+  shownBy: PageShower,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
     const read = readInput(input);
@@ -226,7 +228,7 @@ export function runShowPage(
       page === undefined
         ? { title, html: html.success }
         : { title, html: html.success, pageId: page };
-    const written = yield* writePage(binding.userId, binding.taskId, write).pipe(
+    const written = yield* writePage(binding.userId, binding.taskId, write, shownBy).pipe(
       Effect.tapError(logStoreFailure),
       Effect.option,
     );

@@ -51,16 +51,37 @@ export const pageWriteSchema = EffectSchema.Struct({
 
 export type PageWrite = typeof pageWriteSchema.Type;
 
+/** Who showed a version of a page: Luke, from a call, or one of the plan's coding agents. */
+export const PAGE_SHOWER = {
+  LUKE: "luke",
+  AGENT: "agent",
+} as const;
+
 /**
- * One page as its plan lists it: its newest version's number and title, and
- * when that version was written, in epoch milliseconds. Every version from
- * one to `version` stands, so the number alone names each earlier one.
+ * Who showed a version of a page: Luke, or a coding agent by its id alone,
+ * so whoever reads it names the agent by what its row says now, as a plan's
+ * agent edits are named (`plan-template.ts`'s `planAgentEditSchema`).
+ */
+export const pageShowerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ kind: EffectSchema.Literal(PAGE_SHOWER.LUKE) }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(PAGE_SHOWER.AGENT), agentId: wireUuidSchema }),
+]);
+
+export type PageShower = typeof pageShowerSchema.Type;
+
+/**
+ * One page as its plan lists it: its newest version's number and title,
+ * when that version was written, in epoch milliseconds, and who showed it.
+ * Every version from one to `version` stands, so the number alone names
+ * each earlier one.
  */
 export const pageLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   title: pageTitleSchema,
   version: pageVersionNumberSchema,
   at: countedNumber,
+  /** Who showed this version; absent for one shown before who showed it was kept, and from a service older than it. */
+  shownBy: EffectSchema.optionalKey(pageShowerSchema),
 });
 
 export type PageLine = typeof pageLineSchema.Type;

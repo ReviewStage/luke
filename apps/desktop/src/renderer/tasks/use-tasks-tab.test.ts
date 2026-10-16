@@ -701,6 +701,35 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
 });
 
+test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else Call", () => {
+  const tab = mount({ shown: true, tasks: OPEN });
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+
+  act(() => panel().onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE }, "as ⇧⌘T opens it");
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.CODE]);
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+
+  // A launch keeps no tab closed to open again, but keeps the kinds closed on the plan.
+  const launched = mount({ shown: true, tasks: OPEN });
+  assert.equal(launched.control().onReopenClosedTab, undefined);
+  assert.equal(launched.control().sidePanel.open, false);
+  act(() => launched.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.CODE });
+
+  window.localStorage.clear();
+  const fresh = mount({ shown: true, tasks: OPEN });
+  assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan holds nothing yet");
+  assert.equal(fresh.control().sidePanel.open, false);
+  act(() => fresh.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -1155,6 +1184,59 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
   assert.equal(tab.control().inboxView.chosen, undefined);
   assert.equal(tab.shownInboxes.at(-1), null);
+});
+
+test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().inboxView.onOpen());
+  const chosen = tab.control().inboxView.chosen;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
+    }),
+  );
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().inboxView.onOpen());
+  const linked = tab.control().inboxView.chosen;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().inboxView.onClose());
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
+  assert.deepEqual(linked, { taskId: "notes", itemId });
+  assert.equal(tab.control().inboxView.chosen, undefined);
+});
+
+test("a link to the Inbox stands on the item last chosen in the workspace it lists, as the sidebar's row does", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.INBOX } }));
+
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+});
+
+test("the Inbox chosen by one account is not stood on by the next to sign in on this Mac", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().inboxView.onClose());
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true, account: "teammate@example.com" });
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(tab.control().inboxView.chosen, undefined);
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {

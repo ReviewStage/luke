@@ -23,17 +23,20 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  githubImageTypeSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -60,6 +63,7 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -96,8 +100,10 @@ import {
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
+  agentGitHubImagePath,
   agentInboxPath,
   agentMessagesPath,
+  agentOverviewPath,
   agentPath,
   agentPicturePath,
   agentPullRequestPath,
@@ -672,6 +678,16 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
+  overview(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
   /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
   inbox(
     taskId: string,
@@ -732,6 +748,33 @@ export class HostedCodingAgentClient {
           );
         }
         return readImage(answer.response);
+      },
+    );
+  }
+
+  /**
+   * One image an agent's pull request's overview names, by the address
+   * GitHub's rendering spelled, fetched under the account: its bytes in
+   * base64 under the type GitHub served; not found where GitHub answers no
+   * image the window draws; unanswered for anything else.
+   */
+  githubImage(
+    agentId: string,
+    src: string,
+  ): Effect.Effect<CodingAgentGitHubImageView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentGitHubImagePath(agentId, src) }),
+      (answer): Effect.Effect<CodingAgentGitHubImageView> => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return Effect.map(
+          imageBodyOf(answer.response, githubImageTypeSchema),
+          (image) => image ?? UNANSWERED,
+        );
       },
     );
   }

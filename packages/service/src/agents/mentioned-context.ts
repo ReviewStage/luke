@@ -7,6 +7,7 @@ import {
   MENTION_KIND,
   type Mention,
   mentionName,
+  type PersonMention,
   type PlanMention,
   type ServerMention,
   sectionAnchors,
@@ -16,6 +17,7 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
@@ -50,7 +52,9 @@ import type { Task } from "@luke/features/task-wire";
  * connections, whose tools it finds by search; a mention says which the
  * developer pointed it at, so it uses that one without hunting for it. The
  * turn the message opens is handed the server whatever the agent's switches
- * (`agent-runtime/servers.ts`), but a message steering a turn already running
+ * (`agent-runtime/servers.ts`), and an automation's run only the servers its
+ * automation's own prompt mentions, never a webhook body's or a GitHub
+ * event's; but a message steering a turn already running
  * reaches one handed only what it started with, so the note says a server
  * not among its connections joins at its next turn. An agent with no plan
  * is handed the notes alone.
@@ -68,6 +72,14 @@ import type { Task } from "@luke/features/task-wire";
  * id, and its version, which `read_page` reads it by and `show_page` writes
  * its next version under, and never its HTML, which the agent reads when it
  * needs it rather than carrying it in every message that names the page.
+ *
+ * A person is named by their account's id, read among the members of the
+ * agent's workspace at the send, and handed as their name and role, so the
+ * agent knows who the developer means, and that no tool of its reaches
+ * them: it names them in what it writes, as their mention, where the work
+ * needs them. Their email is not handed, since nothing the agent does needs
+ * it. Someone the send did not find among the members, who left or was never
+ * in it, is named as not a member.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -94,14 +106,26 @@ export interface MentionedAgent {
   readonly archived: boolean;
 }
 
-/** What the send read of the pages a message mentions on the agent's own plan and the agents it mentions in its workspace, each by its id; one it did not find is absent. */
+/** A member of the workspace a message mentions, as the send read them: their name and their role in it. */
+export interface MentionedPerson {
+  readonly userId: string;
+  readonly name: string;
+  readonly role: WorkspaceRole;
+}
+
+/** What the send read of the pages a message mentions on the agent's own plan and the agents and people it mentions in its workspace, each by its id; one it did not find is absent. */
 export interface MentionedReads {
   readonly pages: ReadonlyMap<string, PageLine>;
   readonly agents: ReadonlyMap<string, MentionedAgent>;
+  readonly people: ReadonlyMap<string, MentionedPerson>;
 }
 
-/** The reads of a message that mentions no page and no agent. */
-export const NO_MENTIONED_READS: MentionedReads = { pages: new Map(), agents: new Map() };
+/** The reads of a message that mentions no page, no agent, and no person. */
+export const NO_MENTIONED_READS: MentionedReads = {
+  pages: new Map(),
+  agents: new Map(),
+  people: new Map(),
+};
 
 /** The room an excerpt leaves in the part for the closing line saying what was left out, which never names a heading. */
 const LEFT_OUT_ROOM = 120;
@@ -175,7 +199,7 @@ function excerptOf({ mention, name }: NamedMention, task: Task): string {
 type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }>;
 
 /** A mention the part hands something for. */
-type Handed = PlanMention | ServerMention | LinesMention | TaskMention;
+type Handed = PlanMention | ServerMention | LinesMention | TaskMention | PersonMention;
 
 /**
  * What a mention of a page is handed as: its title, id, and version, the
@@ -232,6 +256,20 @@ function agentNoteOf(
   return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, plan)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, plan?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
+/** What a member's role is said as. */
+const ROLE_WORDS = {
+  [WORKSPACE_ROLE.OWNER]: "an owner",
+  [WORKSPACE_ROLE.ADMIN]: "an admin",
+  [WORKSPACE_ROLE.MEMBER]: "a member",
+} as const satisfies Record<WorkspaceRole, string>;
+
+/** What a mention of a person is handed as: who they are in the workspace, and that the agent reaches them only by naming them in what it writes. */
+function personNoteOf(userId: string, name: string, reads: MentionedReads): string {
+  const person = reads.people.get(userId);
+  if (person === undefined) return `The person "${name}": not a member of your workspace.`;
+  return `The developer pointed you at ${person.name}, ${ROLE_WORDS[person.role]} of your workspace. No tool of yours reaches them, so where the work needs them, name them in what you write, as the developer's mention of them is written.`;
+}
+
 /** What a mention of a file's lines is handed as: the lines, the commit they were read at, and how to read just those; nothing for a whole file. */
 function linesNoteOf({ path, lines }: LinesMention): string {
   if (lines === undefined) return "";
@@ -267,6 +305,7 @@ function handedMention(mention: Mention, plan: Task | undefined): Handed | undef
     case MENTION_KIND.PAGE:
       return mention.taskId === plan?.id ? mention : undefined;
     case MENTION_KIND.AGENT:
+    case MENTION_KIND.PERSON:
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
@@ -316,6 +355,8 @@ function sameMention(first: Handed, second: Handed): boolean {
         second.kind === MENTION_KIND.AGENT &&
         first.agentId.toLowerCase() === second.agentId.toLowerCase()
       );
+    case MENTION_KIND.PERSON:
+      return second.kind === MENTION_KIND.PERSON && first.userId === second.userId;
   }
 }
 
@@ -333,6 +374,8 @@ function handedAs(
       return pageNoteOf(mention.pageId, name, reads);
     case MENTION_KIND.AGENT:
       return agentNoteOf(mention.agentId, name, reads, plan);
+    case MENTION_KIND.PERSON:
+      return personNoteOf(mention.userId, name, reads);
     case MENTION_KIND.FILE:
       return linesNoteOf(mention);
     case MENTION_KIND.SERVER:
@@ -342,22 +385,25 @@ function handedAs(
   }
 }
 
-/** The pages of a plan and the agents words mention, by id. */
+/** The pages of a plan, and the agents and people words mention, by id. */
 export interface MentionedIds {
   readonly pages: readonly string[];
   readonly agents: readonly string[];
+  readonly people: readonly string[];
 }
 
-/** The pages of the plan, where there is one, and the agents on any task or none, that the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
+/** The pages of the plan, where there is one, the agents on any task or none, and the people, that the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
 export function mentionedIds(words: string, plan: Task | undefined): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
+  const people = new Set<string>();
   for (const { mention } of handedMentionsIn(words, plan?.repository ?? null)) {
     if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
+    if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);
   }
-  return { pages: [...pages], agents: [...agents] };
+  return { pages: [...pages], agents: [...agents], people: [...people] };
 }
 
 /** The MCP servers the words mention, by connection name, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
@@ -377,7 +423,7 @@ export function mentionedServers(words: string, repository: string | null): read
  * The part a message hands its agent beside its words: the plan or each of
  * its sections the words mention, as it stands in `plan`, the agent's own
  * plan as the send read it, each of its pages and each of the workspace's
- * agents they mention, as the send read them into `reads`, and a note for
+ * agents and people they mention, as the send read them into `reads`, and a note for
  * each MCP server or tool they mention; nothing where they mention none of
  * these. An agent with no plan is handed the notes and the agents alone.
  */
