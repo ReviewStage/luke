@@ -28,6 +28,7 @@ import {
   githubReaching,
   type InstallationFixture,
   openGithubUser,
+  type SentToGitHub,
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
@@ -143,6 +144,13 @@ const relayInstallation = (id: number): InstallationFixture => ({
     { owner: "octo-org", name: "ledger", updatedAt: "2026-10-03T00:00:00Z" },
   ],
 });
+
+/** The permissions of every token GitHub was asked to mint for a repository, in the order asked. */
+function repositoryMints(sent: readonly SentToGitHub[]): readonly unknown[] {
+  return sent
+    .filter((one) => one.url.endsWith("/access_tokens") && "repositories" in JSON.parse(one.body))
+    .map((one) => JSON.parse(one.body).permissions);
+}
 
 const OTHER_INSTALLATION: InstallationFixture = {
   id: 3,
@@ -638,6 +646,84 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
         assert.notEqual(row.accessToken, standingGithubRow(0).accessToken);
         assert.notEqual(row.refreshToken, standingGithubRow(0).refreshToken);
       }),
+  );
+
+  it.effect(
+    "a repository token is kept for the instance's next asks of its workspace, a write token is minted afresh at every ask, and another workspace asking the same repository is answered by its own reach alone",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(200);
+        const fake = githubReaching([relay]);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const bare = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const app = yield* GitHubApp;
+        const ask = <A, E, R>(read: Effect.Effect<A, E, R>) =>
+          read.pipe(Effect.provide(fake.layer));
+
+        const first = yield* ask(app.repositoryPullRequestToken(workspace, "octo-org/relay"));
+        const again = yield* ask(app.repositoryPullRequestToken(workspace, "octo-org/relay"));
+        const read = yield* ask(app.repositoryReadToken(workspace, "octo-org/relay"));
+        yield* ask(app.repositoryWriteToken(workspace, "octo-org/relay"));
+        yield* ask(app.repositoryWriteToken(workspace, "octo-org/relay"));
+        const elsewhere = yield* ask(app.repositoryPullRequestToken(bare, "octo-org/relay"));
+
+        assert.ok(Option.isSome(first) && Option.isSome(again) && Option.isSome(read));
+        assert.equal(Redacted.value(again.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.ok(Option.isNone(elsewhere));
+        assert.deepEqual(repositoryMints(fake.sent), [
+          { contents: "read", pull_requests: "read" },
+          { contents: "read" },
+          { contents: "write", pull_requests: "write" },
+          { contents: "write", pull_requests: "write" },
+        ]);
+        // The installation is read and its repositories listed once, for every mint after the first.
+        assert.equal(fake.sent.filter((sent) => sent.url.endsWith("/installations/200")).length, 1);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a mint GitHub refused, a repository not yet reached, and a token GitHub expires within the margin are never kept: the next ask asks GitHub again",
+    () =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const relay = relayInstallation(202);
+        const repositories = [...relay.repositories];
+        let refusing = true;
+        const fake = githubReaching([{ ...relay, repositories }], undefined, {}, (sent) => {
+          if (!sent.url.endsWith("/access_tokens") || !("repositories" in JSON.parse(sent.body))) {
+            return undefined;
+          }
+          if (refusing) return Response.json({ message: "Bad Gateway" }, { status: 502 });
+          return Response.json(
+            {
+              token: GITHUB_FIXTURE_INSTALLATION_TOKEN,
+              expires_at: new Date(now + 5 * 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        });
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const app = yield* GitHubApp;
+        const ask = (fullName: string) =>
+          app.repositoryReadToken(workspace, fullName).pipe(Effect.provide(fake.layer));
+
+        const refused = yield* Effect.flip(ask("octo-org/relay"));
+        refusing = false;
+        const soonExpiring = yield* ask("octo-org/relay");
+        const again = yield* ask("octo-org/relay");
+        const unreached = yield* ask("octo-org/beacon");
+        repositories.push({ owner: "octo-org", name: "beacon" });
+        const reached = yield* ask("octo-org/beacon");
+
+        assert.equal(refused._tag, "GitHubUnavailable");
+        assert.ok(Option.isSome(soonExpiring) && Option.isSome(again));
+        assert.ok(Option.isNone(unreached));
+        assert.ok(Option.isSome(reached));
+        assert.equal(repositoryMints(fake.sent).length, 4);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 });
 

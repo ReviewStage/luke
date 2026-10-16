@@ -19,6 +19,20 @@
  * Luke is what the installation reaches, whoever they are on GitHub, and
  * what an agent pushes is pushed as the App.
  *
+ * A function instance keeps what it reached and minted, so a tab reading
+ * one pull request a few times a minute does not read the installation,
+ * list its repositories, and mint a token for every request: a repository a
+ * workspace's installation reaches is kept for `KEPT.REACH_TTL` under the
+ * workspace and the repository as asked, and a token minted for one
+ * repository under the workspace, the installation, the repository, and
+ * the permissions it is cut to, until shortly before GitHub expires it. A
+ * token is still minted for the one repository alone, with the permissions
+ * it always had, and a reach is kept only under the workspace that reached
+ * it, so nothing kept crosses workspaces. A failure, and a repository not
+ * reached, are never kept. A write token leaves for a sandbox's whole run
+ * rather than for one request, so it is minted afresh with its whole hour
+ * every time it is asked for.
+ *
  * A connect is confirmed once on the installer's own say: GitHub's guidance
  * for the Setup URL is that its `installation_id` is not to be trusted
  * alone, and that the installation is to be checked against the user who
@@ -66,12 +80,15 @@ import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { and, desc, eq } from "drizzle-orm";
 import {
+  Cache,
   Clock,
   Config,
   ConfigProvider,
   Context,
   Data,
+  Duration,
   Effect,
+  Exit,
   Layer,
   Option,
   Redacted,
@@ -167,6 +184,27 @@ const INSTALLATION_TOKEN_PERMISSIONS = {
 
 type InstallationTokenPermissions =
   (typeof INSTALLATION_TOKEN_PERMISSIONS)[keyof typeof INSTALLATION_TOKEN_PERMISSIONS];
+
+/**
+ * What one function instance keeps of what the App reached and minted. A
+ * reach is kept briefly, since an installation's repositories change on
+ * GitHub without a word to the instance; an installation token lives an
+ * hour from its mint
+ * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app),
+ * and is kept until `TOKEN_MARGIN` before GitHub's `expires_at` for it, and
+ * never past the hour, so a request handed one does not watch it expire
+ * mid-flight.
+ */
+const KEPT = {
+  CAPACITY: 1_024,
+  REACH_TTL: Duration.minutes(5),
+  TOKEN_LIFETIME: Duration.hours(1),
+  TOKEN_MARGIN: Duration.minutes(10),
+} as const;
+
+/** Whether a repository token is kept for the instance's later asks, or minted afresh for each, as a write token leaving for a sandbox's whole run is. */
+const TOKEN_KEEPING = { KEPT: "kept", FRESH: "fresh" } as const;
+type TokenKeeping = (typeof TOKEN_KEEPING)[keyof typeof TOKEN_KEEPING];
 
 /** The mint as GitHub takes it: the repositories by name, none for every one, and the permissions the token is cut to. */
 interface InstallationTokenRequest {
@@ -325,6 +363,26 @@ type ReachResult = Result.Result<
   { readonly installation: GitHubInstallation; readonly repository: GitHubRepository },
   GitHubRepositoryUnreached
 >;
+
+/** One repository of one workspace as asked, which is what a reach is kept under. */
+class ReachKey extends Data.Class<{
+  readonly organizationId: string;
+  readonly fullName: string;
+}> {}
+
+/** One repository token as minted: for whom, through which installation, for which repository, cut to what. */
+class TokenKey extends Data.Class<{
+  readonly organizationId: string;
+  readonly installationId: number;
+  readonly repository: string;
+  readonly permissions: InstallationTokenPermissions;
+}> {}
+
+/** A token as minted, and how long it is kept: until the margin before its expiry, or no time where it is that near already. */
+interface KeptToken {
+  readonly token: Redacted.Redacted;
+  readonly keepFor: Duration.Duration;
+}
 
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
 export interface GitHubRepositoryToken {
@@ -533,7 +591,7 @@ export class GitHubApp extends Context.Service<GitHubApp, GitHubAppService>()("G
     settings: GitHubAppSettings | undefined,
     missing: readonly string[] = [],
   ): Layer.Layer<GitHubApp> {
-    return Layer.succeed(GitHubApp, githubAppService(settings, missing));
+    return Layer.effect(GitHubApp, githubAppService(settings, missing));
   }
 }
 
@@ -589,8 +647,11 @@ const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSch
 const ExchangedTokenSchema = Schema.Struct({ access_token: Schema.String });
 const ExchangeAnswerSchema = Schema.Union([ExchangedTokenSchema, TokenRefusalSchema]);
 
-/** GitHub's answer to a token mint, read for the token alone. */
-const InstallationTokenSchema = Schema.Struct({ token: Schema.String });
+/** GitHub's answer to a token mint, read for the token and when it expires. */
+const InstallationTokenSchema = Schema.Struct({
+  token: Schema.String,
+  expires_at: Schema.DateFromString,
+});
 
 /** A user as GitHub records one, read as far as a commit identity goes; the name is null where the account set none. */
 const UserSchema = Schema.Struct({
@@ -1042,7 +1103,7 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
 function githubAppService(
   settings: GitHubAppSettings | undefined,
   missing: readonly string[],
-): GitHubAppService {
+): Effect.Effect<GitHubAppService> {
   const signingKey = settings === undefined ? undefined : privateKeyOf(settings.privateKey);
   const ready: Effect.Effect<ReadySettings, GitHubAppNotConfigured> =
     settings === undefined || signingKey === undefined
@@ -1086,7 +1147,7 @@ function githubAppService(
       return Option.some(installationOf(record));
     }).pipe(Effect.scoped);
 
-  /** A token minted as the App on the installation, cut as asked. */
+  /** A token minted as the App on the installation, cut as asked, with the instant GitHub expires it. */
   const mint = (installationId: number, request: InstallationTokenRequest) =>
     Effect.gen(function* () {
       const jwt = yield* appJwt;
@@ -1096,7 +1157,7 @@ function githubAppService(
           (response) => readBody(response, InstallationTokenSchema),
         ),
       );
-      return Redacted.make(minted.token);
+      return { token: Redacted.make(minted.token), expiresAt: minted.expires_at.getTime() };
     });
 
   /**
@@ -1170,7 +1231,7 @@ function githubAppService(
   ) =>
     Effect.flatMap(
       mint(reached.id, { permissions: INSTALLATION_TOKEN_PERMISSIONS.LIST }),
-      (token) => repositoriesOnInstallationToken(token, enough),
+      (minted) => repositoriesOnInstallationToken(minted.token, enough),
     );
 
   /**
@@ -1231,24 +1292,22 @@ function githubAppService(
     Effect.map(reach(organizationId, fullName), Result.getSuccess);
 
   /**
-   * A token minted as the App for the one repository the workspace reaches,
-   * cut to the permissions chosen for its installation; none where it does
-   * not reach it, or where its installation grants none of what the token is
-   * for, since GitHub refuses a mint naming a permission not granted.
+   * A token minted for the key's one repository, by its name, which is one
+   * repository on the installation's one account, and how long it is kept:
+   * until `KEPT.TOKEN_MARGIN` before GitHub expires it, and never past its
+   * hour, whatever clock GitHub's `expires_at` was read against.
    */
-  const repositoryToken = (
-    organizationId: string,
-    fullName: string,
-    permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions | undefined,
-  ) =>
+  const repositoryTokenOf = (key: TokenKey) =>
     Effect.gen(function* () {
-      const reached = yield* reachableRepository(organizationId, fullName);
-      if (Option.isNone(reached)) return Option.none();
-      const { installation: on, repository } = reached.value;
-      const permissions = permissionsOn(on);
-      if (permissions === undefined) return Option.none();
-      const token = yield* mint(on.id, { repositories: [repository.name], permissions });
-      return Option.some({ repository, token });
+      const minted = yield* mint(key.installationId, {
+        repositories: [key.repository],
+        permissions: key.permissions,
+      });
+      const now = yield* Clock.currentTimeMillis;
+      const lasts = Math.min(minted.expiresAt - now, Duration.toMillis(KEPT.TOKEN_LIFETIME));
+      const keepFor = Duration.millis(Math.max(lasts - Duration.toMillis(KEPT.TOKEN_MARGIN), 0));
+      const kept: KeptToken = { token: minted.token, keepFor };
+      return kept;
     });
 
   /**
@@ -1289,100 +1348,161 @@ function githubAppService(
       ),
     );
 
-  return {
-    installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
-    botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
-    appJwt,
-    installation,
-    authorizeUrl: (request) =>
+  /**
+   * The kept reads of one instance, and what answers through them. Note
+   * that only a mint reads the kept reach: what answers a member whether a
+   * repository is reached, and why not, reads GitHub afresh.
+   */
+  return Effect.gen(function* () {
+    const reaches = yield* Cache.makeWith(
+      (key: ReachKey) => reach(key.organizationId, key.fullName),
+      {
+        capacity: KEPT.CAPACITY,
+        requireServicesAt: "lookup",
+        timeToLive: (exit) =>
+          Exit.isSuccess(exit) && Result.isSuccess(exit.value) ? KEPT.REACH_TTL : Duration.zero,
+      },
+    );
+    const tokens = yield* Cache.makeWith(repositoryTokenOf, {
+      capacity: KEPT.CAPACITY,
+      requireServicesAt: "lookup",
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? exit.value.keepFor : Duration.zero),
+    });
+
+    /**
+     * A token minted as the App for the one repository the workspace
+     * reaches, cut to the permissions chosen for its installation, kept as
+     * asked; none where it does not reach it, or where its installation
+     * grants none of what the token is for, since GitHub refuses a mint
+     * naming a permission not granted.
+     */
+    const repositoryToken = (
+      organizationId: string,
+      fullName: string,
+      permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions | undefined,
+      keeping: TokenKeeping = TOKEN_KEEPING.KEPT,
+    ) =>
       Effect.gen(function* () {
-        const app = yield* ready;
-        const challenge = yield* Effect.promise(() => generateCodeChallenge(request.codeVerifier));
-        const url = new URL(GITHUB_AUTHORIZE_ENDPOINT);
-        url.searchParams.set("client_id", app.clientId);
-        url.searchParams.set("redirect_uri", request.redirectUri);
-        url.searchParams.set("state", request.state);
-        url.searchParams.set("code_challenge", challenge);
-        url.searchParams.set("code_challenge_method", PKCE_METHOD);
-        return url.toString();
-      }),
-    authorizedInstallations: (returned) =>
-      Effect.gen(function* () {
-        const app = yield* ready;
-        const token = yield* exchangeCode(app, returned);
-        if (Option.isNone(token)) return Option.none();
-        const installations = yield* installationsOnToken(token.value);
-        yield* revokeToken(app, token.value);
-        return Option.some(installations);
-      }),
-    workspaceRepositories: (organizationId) =>
-      Effect.gen(function* () {
-        const live = yield* liveWorkspaceInstallations(organizationId);
-        if (live.length === 0) return Option.none();
-        const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
-        return Option.some(combinedRepositories(listed.flat()));
-      }),
-    workspaceRepository: (organizationId, fullName) =>
-      Effect.map(
-        reachableRepository(organizationId, fullName),
-        Option.map((reached) => reached.repository),
-      ),
-    repositoryReach: (organizationId, fullName) =>
-      Effect.map(
-        reach(organizationId, fullName),
-        Result.map((reached) => reached.repository),
-      ),
-    repositoryReadToken: (organizationId, fullName) =>
-      repositoryToken(organizationId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
-    repositoryPullRequestToken: (organizationId, fullName) =>
-      repositoryToken(organizationId, fullName, (on) =>
-        on.ciReadable
-          ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
-          : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
-      ),
-    repositoryIssueToken: (organizationId, fullName) =>
-      repositoryToken(organizationId, fullName, (on) =>
-        on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
-      ),
-    repositoryCiReadable: (organizationId, fullName) =>
-      Effect.map(
-        reachableRepository(organizationId, fullName),
-        (reached) => Option.isSome(reached) && reached.value.installation.ciReadable,
-      ),
-    repositoryWriteToken: (organizationId, fullName) =>
-      repositoryToken(organizationId, fullName, (on) =>
-        on.ciReadable
-          ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
-          : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
-      ),
-    userPusher: (userId, fullName) =>
-      Effect.gen(function* () {
-        const token = yield* userToken(userId);
-        const account = yield* Effect.scoped(
-          Effect.flatMap(send(githubRead("/user", token)), (response) =>
-            readBody(response, UserSchema),
-          ),
-        );
-        const [owner = "", name = ""] = fullName.split("/");
-        const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
-        const repository = yield* Effect.scoped(
-          Effect.flatMap(send(githubRead(path, token)), (response) =>
-            response.status === GITHUB_HTTP_STATUS.NOT_FOUND
-              ? Effect.succeed(Option.none())
-              : Effect.map(readBody(response, RepositoryPermissionsSchema), Option.some),
-          ),
-        );
-        const pushes = Option.isSome(repository) && repository.value.permissions?.push === true;
-        return pushes ? Option.some({ user: userOf(account), token }) : Option.none();
-      }),
-    appBot: (token) =>
-      Effect.gen(function* () {
-        const app = yield* ready;
-        const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
-        return userOf(yield* readBody(response, UserSchema));
-      }).pipe(Effect.scoped),
-    userToken,
-  };
+        const reached = yield* Cache.get(reaches, new ReachKey({ organizationId, fullName }));
+        if (Result.isFailure(reached)) return Option.none();
+        const { installation: on, repository } = reached.success;
+        const permissions = permissionsOn(on);
+        if (permissions === undefined) return Option.none();
+        const key = new TokenKey({
+          organizationId,
+          installationId: on.id,
+          repository: repository.name,
+          permissions,
+        });
+        const { token } =
+          keeping === TOKEN_KEEPING.KEPT
+            ? yield* Cache.get(tokens, key)
+            : yield* repositoryTokenOf(key);
+        return Option.some({ repository, token });
+      });
+
+    const service: GitHubAppService = {
+      installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
+      botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
+      appJwt,
+      installation,
+      authorizeUrl: (request) =>
+        Effect.gen(function* () {
+          const app = yield* ready;
+          const challenge = yield* Effect.promise(() =>
+            generateCodeChallenge(request.codeVerifier),
+          );
+          const url = new URL(GITHUB_AUTHORIZE_ENDPOINT);
+          url.searchParams.set("client_id", app.clientId);
+          url.searchParams.set("redirect_uri", request.redirectUri);
+          url.searchParams.set("state", request.state);
+          url.searchParams.set("code_challenge", challenge);
+          url.searchParams.set("code_challenge_method", PKCE_METHOD);
+          return url.toString();
+        }),
+      authorizedInstallations: (returned) =>
+        Effect.gen(function* () {
+          const app = yield* ready;
+          const token = yield* exchangeCode(app, returned);
+          if (Option.isNone(token)) return Option.none();
+          const installations = yield* installationsOnToken(token.value);
+          yield* revokeToken(app, token.value);
+          return Option.some(installations);
+        }),
+      workspaceRepositories: (organizationId) =>
+        Effect.gen(function* () {
+          const live = yield* liveWorkspaceInstallations(organizationId);
+          if (live.length === 0) return Option.none();
+          const listed = yield* Effect.forEach(live, (one) => repositoriesOf(one));
+          return Option.some(combinedRepositories(listed.flat()));
+        }),
+      workspaceRepository: (organizationId, fullName) =>
+        Effect.map(
+          reachableRepository(organizationId, fullName),
+          Option.map((reached) => reached.repository),
+        ),
+      repositoryReach: (organizationId, fullName) =>
+        Effect.map(
+          reach(organizationId, fullName),
+          Result.map((reached) => reached.repository),
+        ),
+      repositoryReadToken: (organizationId, fullName) =>
+        repositoryToken(organizationId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
+      repositoryPullRequestToken: (organizationId, fullName) =>
+        repositoryToken(organizationId, fullName, (on) =>
+          on.ciReadable
+            ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
+            : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
+        ),
+      repositoryIssueToken: (organizationId, fullName) =>
+        repositoryToken(organizationId, fullName, (on) =>
+          on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
+        ),
+      repositoryCiReadable: (organizationId, fullName) =>
+        Effect.map(
+          reachableRepository(organizationId, fullName),
+          (reached) => Option.isSome(reached) && reached.value.installation.ciReadable,
+        ),
+      repositoryWriteToken: (organizationId, fullName) =>
+        repositoryToken(
+          organizationId,
+          fullName,
+          (on) =>
+            on.ciReadable
+              ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
+              : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
+          TOKEN_KEEPING.FRESH,
+        ),
+      userPusher: (userId, fullName) =>
+        Effect.gen(function* () {
+          const token = yield* userToken(userId);
+          const account = yield* Effect.scoped(
+            Effect.flatMap(send(githubRead("/user", token)), (response) =>
+              readBody(response, UserSchema),
+            ),
+          );
+          const [owner = "", name = ""] = fullName.split("/");
+          const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+          const repository = yield* Effect.scoped(
+            Effect.flatMap(send(githubRead(path, token)), (response) =>
+              response.status === GITHUB_HTTP_STATUS.NOT_FOUND
+                ? Effect.succeed(Option.none())
+                : Effect.map(readBody(response, RepositoryPermissionsSchema), Option.some),
+            ),
+          );
+          const pushes = Option.isSome(repository) && repository.value.permissions?.push === true;
+          return pushes ? Option.some({ user: userOf(account), token }) : Option.none();
+        }),
+      appBot: (token) =>
+        Effect.gen(function* () {
+          const app = yield* ready;
+          const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
+          return userOf(yield* readBody(response, UserSchema));
+        }).pipe(Effect.scoped),
+      userToken,
+    };
+    return service;
+  });
 }
 
 /** A value under the same rule as `HostedEnvironment`'s: trimmed, and a blank one is absent. */
@@ -1405,7 +1525,7 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
  */
 export const githubAppFromEnvironment: Layer.Layer<GitHubApp, Config.ConfigError> = Layer.effect(
   GitHubApp,
-  Effect.map(
+  Effect.flatMap(
     Config.all({
       appId: Config.option(Config.String(GITHUB_APP_ENVIRONMENT.APP_ID)),
       slug: Config.option(Config.String(GITHUB_APP_ENVIRONMENT.SLUG)),
