@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -37,10 +38,17 @@ import {
   taskRowsCreatedBy,
   taskRowTime,
 } from "@luke/ui/task-list-model";
+import {
+  placeWrites,
+  sectionEntries,
+  sectionOrder,
+  workspaceSections,
+} from "@luke/ui/task-sections-model";
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import {
   FactoryIcon,
+  FolderPlusIcon,
   HouseIcon,
   InboxIcon,
   ListTodoIcon,
@@ -79,6 +87,12 @@ import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
+import {
+  type DrawnSection,
+  SidebarSections,
+  TASKS_DROP_ZONE,
+  useSectionDialogs,
+} from "./sidebar-sections";
 import {
   SidebarSectionHead,
   TaskViewOptions,
@@ -196,6 +210,8 @@ interface RowContext {
   readonly faces: boolean;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
+  /** Hears a plan's row let go over a section, or over Tasks, while the account keeps sections; none while it does not. */
+  readonly dropOut: ((taskId: string, zone: string, at: number) => void) | undefined;
 }
 
 /**
@@ -215,8 +231,19 @@ function TaskRows({
   repository?: (row: TaskRow) => string | undefined;
   face?: boolean;
 }): React.JSX.Element {
+  // Note that the rows keep the view's order, so a row is dragged only out of them, into a section.
+  const { dropOut } = context;
+  const drag = useRowDrag(undefined, {
+    onDropOut:
+      dropOut === undefined
+        ? undefined
+        : (from, zone, at) => {
+            const row = rows[from];
+            if (row?.kind === TASK_ROW.TASK) dropOut(row.plan.id, zone, at);
+          },
+  });
   return (
-    <ul className="sidebar-tasks">
+    <ul className="sidebar-tasks" onPointerDown={drag}>
       {rows.map((row) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
@@ -1043,6 +1070,57 @@ function SidebarAutomationsRow({
   );
 }
 
+/** The listed workspace's sections as the sidebar draws them, and the tasks standing in any of them, which Tasks leaves out. */
+interface SectionedTasks {
+  readonly sections: readonly DrawnSection[];
+  readonly taskIds: ReadonlySet<string>;
+}
+
+/**
+ * The account's sections in the workspace, each with the tasks of `free`,
+ * the listed tasks no pin holds, it keeps, in its order. A task in a
+ * section that stands elsewhere, pinned or archived, is no row of it,
+ * and comes back to it once it stands free again. None while the account
+ * keeps no sections here.
+ */
+function sectionedTasks(
+  tasks: TasksControl,
+  workspaceId: string | undefined,
+  free: readonly TaskSummary[],
+): SectionedTasks {
+  if (workspaceId === undefined) return { sections: [], taskIds: new Set() };
+  const state = tasks.taskSections;
+  const byId = new Map(free.map((plan) => [plan.id, plan]));
+  const sections = workspaceSections(state, workspaceId).map((section): DrawnSection => {
+    const entries = sectionOrder(state, section.id).filter((entry) => byId.has(entry.taskId));
+    const held = entries.flatMap((entry) => byId.get(entry.taskId) ?? []);
+    return { section, entries, tasks: held };
+  });
+  const standing = new Set(sections.map((drawn) => drawn.section.id));
+  const taskIds = new Set(
+    [...sectionEntries(state).values()]
+      .filter((entry) => standing.has(entry.sectionId) && byId.has(entry.taskId))
+      .map((entry) => entry.taskId),
+  );
+  return { sections, taskIds };
+}
+
+/** New section, at the head of Tasks while the account keeps sections: it opens the section dialog in the listed workspace. */
+function NewSectionButton({ onNew }: { onNew: () => void }): React.JSX.Element {
+  return (
+    <Tooltip label="New section">
+      <button
+        type="button"
+        className="icon-button sidebar-view-options"
+        aria-label="New section"
+        onClick={onNew}
+      >
+        <FolderPlusIcon className="icon-button-glyph" />
+      </button>
+    </Tooltip>
+  );
+}
+
 /** What the sidebar is drawn from. */
 interface DesktopSidebarProps {
   sidebar: SidebarCollapse;
@@ -1169,6 +1247,7 @@ function SidebarColumn({
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1270,6 +1349,25 @@ function SidebarColumn({
       row.pin.at === chosenPin.at,
   );
   const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
+  // The account's own sections stand while its experiment is on, a workspace is listed, and the archived tasks are not shown.
+  const sectionsShown =
+    sectionsOn && tasks.signedIn && tasks.workspace !== undefined && !archive.shown;
+  const sectioned = sectionedTasks(
+    tasks,
+    sectionsShown ? tasks.workspace?.id : undefined,
+    tasks.listed.tasks.filter((plan) => plan.pinnedAt === undefined),
+  );
+  const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
+  const dropTask = (taskId: string, zone: string, at: number) => {
+    if (zone === TASKS_DROP_ZONE) {
+      if (!sectioned.taskIds.has(taskId)) return;
+      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
+      return;
+    }
+    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    if (target === undefined) return;
+    tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
+  };
   const { chosen } = overlay;
   const context: RowContext = {
     tasks,
@@ -1287,6 +1385,7 @@ function SidebarColumn({
     faces: createdBy === undefined,
     archived: archive.shown,
     inSight: overlay.inSight,
+    dropOut: sectionsShown ? dropTask : undefined,
   };
   // A pinned tab is on show where its task is open and its column shows it:
   // an agent's or the Inbox in the task's own column, any other in the side panel. The
@@ -1311,7 +1410,9 @@ function SidebarColumn({
   // The agents with no plan stand among the plans, the archived ones among the archived.
   const unpinnedPlans = archive.shown
     ? listedRows.archived
-    : listedRows.tasks.filter((plan) => plan.pinnedAt === undefined);
+    : listedRows.tasks.filter(
+        (plan) => plan.pinnedAt === undefined && !sectioned.taskIds.has(plan.id),
+      );
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
@@ -1336,8 +1437,12 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
+  const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
+    (folds.sectionFolded(section.id) ? held.filter((plan) => current(plan.id)) : held).map(taskRow),
+  );
   const drawn = [
     ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
+    ...sectionsDrawn,
     ...drawnTasks(sections, folds, currentRow),
   ];
   // Moving up and down the list as it reads: down from the home page, where
@@ -1443,9 +1548,48 @@ function SidebarColumn({
             onOpenTab={chosen(openPinnedTab)}
           />
         ) : null}
-        <nav className="sidebar-group" aria-label={archive.shown ? "Archived tasks" : "Tasks"}>
+        {sectioned.sections.length > 0 ? (
+          <SidebarSections
+            sections={sectioned.sections}
+            context={{
+              tasks,
+              dialogs: sectionDialogs,
+              current,
+              inSight: overlay.inSight,
+              folded: folds.sectionFolded,
+              onToggle: folds.toggleSection,
+              row: (plan) => (
+                <SidebarTask
+                  key={plan.id}
+                  tasks={tasks}
+                  task={plan}
+                  current={context.marked(plan.id, undefined)}
+                  open={current(plan.id)}
+                  unread={unread(plan)}
+                  now={now}
+                  face={context.faces}
+                  onOpen={() => context.onOpen(plan.id)}
+                />
+              ),
+              onDropTask: dropTask,
+            }}
+          />
+        ) : null}
+        <nav
+          className="sidebar-group"
+          aria-label={archive.shown ? "Archived tasks" : "Tasks"}
+          data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
+        >
           {tasks.signedIn ? (
             <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
+              {sectionsShown && tasks.workspace !== undefined ? (
+                <NewSectionButton
+                  onNew={chosen(() => {
+                    const { workspace } = tasks;
+                    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                  })}
+                />
+              ) : null}
               <TaskViewOptions
                 shown={tasks.shown && overlay.inSight}
                 control={taskView}
@@ -1536,6 +1680,7 @@ function SidebarColumn({
           onSignOut={onSignOut}
         />
       </ColumnFoot>
+      {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>

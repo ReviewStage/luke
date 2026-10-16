@@ -67,14 +67,18 @@ describe("a task dropped into a section", () => {
       [2, [TASK(1), TASK(2), TASK(9), TASK(3)]],
       [3, [TASK(1), TASK(2), TASK(3), TASK(9)]],
     ] as const) {
-      const writes = placeWrites(state, TASK(9), LAUNCH, to, 20);
+      const writes = placeWrites(sectionOrder(state, LAUNCH), TASK(9), LAUNCH, to, 20);
       assert.deepEqual(tasksIn(applyAll(state, writes, 20), LAUNCH), expected);
     }
   });
 
   it("leaves the section it stood in, and Tasks takes it back out of any", () => {
     const state = launchWithThree();
-    const moved = applyAll(state, placeWrites(state, TASK(2), LATER, 0, 20), 20);
+    const moved = applyAll(
+      state,
+      placeWrites(sectionOrder(state, LATER), TASK(2), LATER, 0, 20),
+      20,
+    );
     assert.deepEqual(tasksIn(moved, LAUNCH), [TASK(1), TASK(3)]);
     assert.deepEqual(tasksIn(moved, LATER), [TASK(2)]);
 
@@ -88,9 +92,13 @@ describe("a task dropped into a section", () => {
 
   it("dragged within its own section moves there, and again from where it landed", () => {
     const state = launchWithThree();
-    const once = applyAll(state, entryMoveWrites(state, LAUNCH, 0, 2), 20);
+    const once = applyAll(state, entryMoveWrites(sectionOrder(state, LAUNCH), LAUNCH, 0, 2), 20);
     assert.deepEqual(tasksIn(once, LAUNCH), [TASK(2), TASK(3), TASK(1)]);
-    const twice = applyAll(once, placeWrites(once, TASK(1), LAUNCH, 0, 21), 21);
+    const twice = applyAll(
+      once,
+      placeWrites(sectionOrder(once, LAUNCH), TASK(1), LAUNCH, 0, 21),
+      21,
+    );
     assert.deepEqual(tasksIn(twice, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
   });
 });
@@ -112,11 +120,7 @@ describe("a section", () => {
   });
 
   it("deleted takes its tasks out of every section and leaves the others' standing", () => {
-    const state = applyAll(
-      launchWithThree(),
-      placeWrites(launchWithThree(), TASK(9), LATER, 0, 20),
-      20,
-    );
+    const state = applyAll(launchWithThree(), placeWrites([], TASK(9), LATER, 0, 20), 20);
     const deleted = applySectionWrite(state, { kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }, 21);
     assert.deepEqual(
       deleted.entries.map((entry) => entry.taskId),

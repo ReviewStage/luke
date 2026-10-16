@@ -1727,6 +1727,142 @@ ul.actor-stack {
   opacity: 1;
 }
 
+/* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
+   Each is dragged among the others by its header, on the rows' own timing,
+   and lifted while held as a row is. */
+.sidebar-sections {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-sections > .sidebar-sections-item {
+  position: relative;
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
+  z-index: 3;
+  border-radius: 9px;
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-sidebar);
+  box-shadow: 0 4px 12px var(--shadow);
+  transition: none;
+}
+
+.sidebar-sections[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* A section's emoji stands where a glyph would, in the glyph's square. */
+.sidebar-section-emoji {
+  display: grid;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* An open section with nothing in it says how to fill it, under its header. */
+.sidebar-section-empty {
+  margin: 0;
+  padding: var(--space-4) var(--row-inset) var(--space-6)
+    calc(var(--row-inset) + var(--control-glyph) + var(--space-8));
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* The section, or Tasks, a row is carried over is washed while it is, and a
+   line stands where the row would land among a section's tasks. */
+[data-row-drop][data-drop-target="true"] {
+  border-radius: 9px;
+  background: var(--raised);
+}
+
+.sidebar-tasks > .sidebar-task-item:is([data-drop-before="true"], [data-drop-after="true"])::after {
+  position: absolute;
+  right: var(--row-inset);
+  left: var(--row-inset);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--focus-ring);
+  content: "";
+  pointer-events: none;
+}
+
+.sidebar-tasks > .sidebar-task-item[data-drop-before="true"]::after {
+  top: -2px;
+}
+
+.sidebar-tasks > .sidebar-task-item[data-drop-after="true"]::after {
+  bottom: -2px;
+}
+
+/* The section dialog's icons: none, each glyph, and a few emoji, one row
+   that wraps, the one chosen ringed, and a field for any other emoji. */
+.section-icon-picker {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.section-icon-legend {
+  margin-bottom: var(--space-4);
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.section-icon-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.section-icon-choice {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.section-icon-choice svg {
+  width: 15px;
+  height: 15px;
+}
+
+.section-icon-choice:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.section-icon-choice[aria-pressed="true"] {
+  border-color: var(--focus-ring);
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.section-emoji-field {
+  font-size: 13px;
+}
+
 /* A pinned repository says so after its name, quietly, since the pin is
    what holds it above groups updated more lately. */
 .sidebar-repository-pinned {

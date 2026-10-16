@@ -153,14 +153,18 @@ export function sectionMoveWrites(
   }));
 }
 
-/** The writes that stand the task at `from` among a section's tasks, as drawn, at `to`. */
+/**
+ * The writes that stand the task at `from` among a section's tasks as the
+ * sidebar draws them, `order`, at `to`. Only the drawn tasks are counted,
+ * since a task in the section that stands elsewhere, pinned or archived, is
+ * no row the pointer passed.
+ */
 export function entryMoveWrites(
-  state: TaskSections,
+  order: readonly TaskSectionEntry[],
   sectionId: string,
   from: number,
   to: number,
 ): TaskSectionWrite[] {
-  const order = sectionOrder(state, sectionId);
   return [...pinPositionsForMove(order, from, to, entryPlace)].map(([entry, position]) => ({
     kind: TASK_SECTION_WRITE.PLACE,
     taskId: entry.taskId,
@@ -171,25 +175,24 @@ export function entryMoveWrites(
 
 /**
  * The writes that put the task in the section at `to` among the tasks it
- * holds as drawn, the task left out of the count, from another section or
- * from none; a task already in the section is moved within it. The task's
- * own write comes first, so it stands in the section before any neighbour
- * is given a new place beside it. A task new to the section dropped on top
+ * draws, `order`, the task left out of the count, from another section or
+ * from none; a task already among them is moved within it. The task's own
+ * write comes first, so it stands in the section before any neighbour is
+ * given a new place beside it. A task new to the section dropped on top
  * needs no place, since one never dragged stands on top.
  */
 export function placeWrites(
-  state: TaskSections,
+  order: readonly TaskSectionEntry[],
   taskId: string,
   sectionId: string,
   to: number,
   now: number,
 ): TaskSectionWrite[] {
-  const standing = sectionOrder(state, sectionId);
-  const from = standing.findIndex((entry) => entry.taskId === taskId);
-  const at = Math.max(0, Math.min(to, standing.length - (from < 0 ? 0 : 1)));
-  if (from >= 0) return entryMoveWrites(state, sectionId, from, at);
+  const from = order.findIndex((entry) => entry.taskId === taskId);
+  const at = Math.max(0, Math.min(to, order.length - (from < 0 ? 0 : 1)));
+  if (from >= 0) return entryMoveWrites(order, sectionId, from, at);
   const moving: TaskSectionEntry = { taskId, sectionId, addedAt: now };
-  const positions = pinPositionsForMove([moving, ...standing], 0, at, entryPlace);
+  const positions = pinPositionsForMove([moving, ...order], 0, at, entryPlace);
   const ownPosition = positions.get(moving);
   const first: TaskSectionWrite = {
     kind: TASK_SECTION_WRITE.PLACE,

@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   ConfirmDialog,
@@ -42,9 +43,10 @@ import { useMinute } from "../tasks/task-time";
 import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useAppState } from "../use-app-state";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { useAppState, useExperiment } from "../use-app-state";
+import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
+import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
 import { TaskNameField, useTaskRename } from "./task-name-field";
 
@@ -67,7 +69,9 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  * menu; a sidebar row also offers both as buttons at its end on hover.
  * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
- * reader started.
+ * reader started. Move to section, beside Pin and Archive while the account
+ * has sections on, puts the task in one of the reader's own sections, a new
+ * one, or none (`sidebar-sections.tsx`).
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
  * over the window that names the task and offers Archive as the way to keep
  * it, whichever door it was chosen from. Under the items, pressed by nothing,
@@ -188,8 +192,10 @@ function taskActionGroups(
     askMove: (() => void) | undefined;
     copy: (words: string, label: string) => void;
     read: ReadMark;
+    /** Move to section, where the account keeps sections and the task may stand in one. */
+    section: MenuEntry | undefined;
   },
-): MenuAction[][] {
+): MenuEntry[][] {
   const { region } = tasks;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === taskId;
   const task = taskOf(tasks, taskId);
@@ -218,9 +224,9 @@ function taskActionGroups(
     icon: <ExternalIcon />,
     onSelect: () => tasks.onOpenOnGitHub(taskId),
   };
-  const groups: MenuAction[][] = [
+  const groups: MenuEntry[][] = [
     [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
-    placeActions(tasks, task),
+    [...placeActions(tasks, task), ...(doors.section === undefined ? [] : [doors.section])],
     [
       ...(archived ? [] : [change]),
       ...move,
@@ -327,6 +333,13 @@ function useTaskMenu(
   const moving = useMoveTaskDialog(tasks, plan);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useActionMenu(tasks.shown && doors.drawn);
+  // Note that an archived task stands in no section, so it is offered none until it is brought back.
+  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
+  const section =
+    sectionsOn && plan !== undefined && plan.archivedAt === undefined
+      ? moveToSectionEntry(tasks, plan, sections.askNew)
+      : undefined;
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
@@ -338,6 +351,7 @@ function useTaskMenu(
           askDelete: deletion.ask,
           askMove: moving.ask,
           copy,
+          section,
           read: {
             unread: doors.unread,
             onMark: (unread) => {
@@ -355,6 +369,7 @@ function useTaskMenu(
         question={deleteQuestion(name, plan?.archivedAt !== undefined)}
       />
       {moving.dialog}
+      {sections.dialog}
     </>
   );
   return { deletion, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
