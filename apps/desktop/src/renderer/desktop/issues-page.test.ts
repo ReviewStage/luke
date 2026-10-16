@@ -227,15 +227,31 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Each group's heading and its rows' identifiers and titles, top to bottom. */
+/** Each group's heading and its rows' identifiers and titles, top to bottom, whether the page stands as a board or a list; a board's empty columns are left out. */
 function groups(page: HTMLElement): [string, string[]][] {
-  return [...page.querySelectorAll(".home-section")].map((group) => [
-    group.querySelector(".home-section-title")?.textContent ?? "",
-    [...group.querySelectorAll(".sidebar-task-item")].map(
-      (row) =>
-        `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
-    ),
+  return [...page.querySelectorAll(".home-section, [data-issue-column]")]
+    .map((group): [string, string[]] => [
+      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
+      [...group.querySelectorAll(".sidebar-task-item")].map(
+        (row) =>
+          `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
+      ),
+    ])
+    .filter(([, rows]) => rows.length > 0);
+}
+
+/** The board's columns, each its heading and its cards' identifiers, left to right. */
+function columns(page: HTMLElement): [string, string[]][] {
+  return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
+    column.querySelector(".factory-head")?.textContent ?? "",
+    [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
+}
+
+/** The page laid out as the list, through its View options. */
+function showList(): void {
+  act(() => button("View options").click());
+  act(() => menuItem("List").click());
 }
 
 /** The page opened on one issue, its own read answered. */
@@ -267,7 +283,7 @@ function button(name: string): HTMLButtonElement {
 function menuItem(name: string): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLButtonElement>(
-      '[role="menu"]:not([data-leaving]) [role="menuitem"]',
+      '[role="menu"]:not([data-leaving]) :is([role="menuitem"], [role="menuitemcheckbox"])',
     ),
   ].find((each) => each.textContent === name);
   assert.ok(found, `no menu item ${name}`);
@@ -573,6 +589,7 @@ test("the list stands in the window's own frame: the Automations page's view and
   standing = [issue(1)];
   const page = mount();
   await settle();
+  showList();
 
   assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
   assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
@@ -819,4 +836,84 @@ test("a filing answered once another workspace is listed puts away no card of th
   await settle();
 
   assert.equal(composerField()?.value, "Meant for Initech");
+});
+
+test("the page opens as a board: a column for every status in the list's order, an empty one saying so, each counted and its cards sorted as the list sorts", async () => {
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE }),
+    issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.URGENT }),
+  ];
+  const page = mount();
+  await settle();
+
+  assert.deepEqual(columns(page), [
+    ["In Progress0", []],
+    ["Todo2", ["ACME-3", "ACME-2"]],
+    ["Backlog0", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled0", []],
+  ]);
+  assert.equal(
+    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
+    "No issues",
+  );
+  assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
+});
+
+test("on the board ↓ and ↑ move down a column, ← and → to the nearest card of the next column holding any, and Return opens the card reached", async () => {
+  standing = [
+    issue(1, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.HIGH }),
+    issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { status: ISSUE_STATUS.DONE }),
+  ];
+  const page = mount();
+  await settle();
+  const reached = () =>
+    document.activeElement?.closest("[data-issue-id]")?.getAttribute("data-issue-id");
+
+  press("ArrowDown", window);
+  const first = reached();
+  press("ArrowDown");
+  const down = reached();
+  press("ArrowRight");
+  const across = reached();
+  press("ArrowLeft");
+  const back = reached();
+  press("ArrowUp");
+  const up = reached();
+  const card = document.activeElement;
+  assert.ok(card instanceof HTMLButtonElement, "a card holds the keyboard");
+  act(() => card.click());
+  await settle();
+
+  assert.deepEqual(
+    [first, down, across, back, up],
+    [issue(1).id, issue(2).id, issue(3).id, issue(1).id, issue(1).id],
+  );
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+  assert.ok(page.querySelector("[aria-label='Issue title']"));
+});
+
+test("View options lays the page out as the list and back as the board, and an issue opened from either goes back to it", async () => {
+  standing = [issue(1)];
+  const page = mount();
+  await settle();
+
+  showList();
+  const listed = page.querySelector(".home-section") !== null;
+  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
+  assert.ok(row);
+  act(() => row.click());
+  await settle();
+  act(() => button("Issues").click());
+  await settle();
+  const stillListed = page.querySelector(".home-section") !== null;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
+
+  assert.ok(listed, "List lays the page out as the list");
+  assert.ok(stillListed, "the list is what the page goes back to");
+  assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
+  assert.equal(page.querySelector(".home-section"), null);
 });

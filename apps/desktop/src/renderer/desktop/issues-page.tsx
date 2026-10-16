@@ -1,6 +1,13 @@
 import { ISSUE_CALL_FAILURE, type IssueCallFailure } from "@luke/features/issue-view";
+import type { Issue } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { ListTodoIcon, PlusIcon } from "lucide-react";
+import {
+  ListIcon,
+  ListTodoIcon,
+  PlusIcon,
+  SlidersHorizontalIcon,
+  SquareKanbanIcon,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -10,7 +17,9 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { commandKeyshortcuts } from "../tooltip";
+import { commandKeyshortcuts, Tooltip } from "../tooltip";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
 import { IssueList } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
@@ -18,7 +27,7 @@ import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
 
 /**
- * issues-page.tsx -- the window's Issues page: the listed workspace's issues, grouped by where each stands, and a new one filed by typing its title.
+ * issues-page.tsx -- the window's Issues page: the listed workspace's issues on a board of a column for each status, or listed under a heading for each, and a new one filed from a card.
  *
  * It stands in the plan's place beside the sidebar, as the Automations page
  * does, and its sidebar row is marked while it does. It is an experiment
@@ -40,6 +49,17 @@ function typedInto(element: HTMLElement): boolean {
   return element.isContentEditable || element.closest(TYPED_INTO) !== null;
 }
 
+/** How the page lays its issues out: a board of a column for each status, as it opens, or the list under a heading for each. */
+const ISSUES_LAYOUT = {
+  BOARD: "board",
+  LIST: "list",
+} as const;
+
+type IssuesLayout = (typeof ISSUES_LAYOUT)[keyof typeof ISSUES_LAYOUT];
+
+/** What the toolbar's layout menu is called. */
+const VIEW_OPTIONS = "View options";
+
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
 
@@ -55,11 +75,15 @@ function ListPage({
   plans,
   issues,
   focused,
+  layout,
+  onLayout,
   onCompose,
 }: {
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
   focused: string | undefined;
+  layout: IssuesLayout;
+  onLayout: (layout: IssuesLayout) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
 }): React.JSX.Element {
@@ -69,7 +93,11 @@ function ListPage({
   const workspace = plans.workspace;
   const { read, reload } = issues;
   const [root, setRoot] = useState<HTMLElement | null>(null);
-  useRowKeys(root, plans.shown);
+  const onBoard = layout === ISSUES_LAYOUT.BOARD;
+  useRowKeys(root, plans.shown && !onBoard);
+  useBoardKeys(root, plans.shown && onBoard);
+  const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
+  const workspaceName = workspace?.name ?? "";
   return (
     <section ref={setRoot} className="automations-view" aria-label="Issues">
       <header className="desktop-toolbar">
@@ -79,6 +107,7 @@ function ListPage({
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
+          <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
           <button
             type="button"
             className="toolbar-button bordered-button"
@@ -91,24 +120,81 @@ function ListPage({
           </button>
         </div>
       </header>
-      <div className="automations-scroll scroll-fade-top">
+      {/* The board scrolls in Factory's own scroller, whose width stacks its columns on a narrow window. */}
+      <div
+        className={
+          onBoard ? "factory-scroll scroll-fade-top" : "automations-scroll scroll-fade-top"
+        }
+      >
         {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : read.issues.length === 0 ? (
           <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
+        ) : onBoard ? (
+          <IssueBoard
+            issues={read.issues}
+            workspaceName={workspaceName}
+            now={now}
+            focused={focused}
+            onOpen={open}
+          />
         ) : (
           <div className="home-column issues-column">
             <IssueList
               issues={read.issues}
-              workspaceName={workspace?.name ?? ""}
+              workspaceName={workspaceName}
               now={now}
               focused={focused}
-              onOpen={(issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id })}
+              onOpen={open}
             />
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+/** The toolbar's button that drops the menu of how the page lays its issues out, the choice checked, as the Inbox's View options does. */
+function ViewOptions({
+  shown,
+  layout,
+  onLayout,
+}: {
+  shown: boolean;
+  layout: IssuesLayout;
+  onLayout: (layout: IssuesLayout) => void;
+}): React.JSX.Element {
+  const menu = useActionMenu(shown);
+  const choices: MenuAction[] = [
+    {
+      label: "Board",
+      icon: <SquareKanbanIcon />,
+      checked: layout === ISSUES_LAYOUT.BOARD,
+      onSelect: () => onLayout(ISSUES_LAYOUT.BOARD),
+    },
+    {
+      label: "List",
+      icon: <ListIcon />,
+      checked: layout === ISSUES_LAYOUT.LIST,
+      onSelect: () => onLayout(ISSUES_LAYOUT.LIST),
+    },
+  ];
+  return (
+    <>
+      <Tooltip label={VIEW_OPTIONS}>
+        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
+          <SlidersHorizontalIcon className="icon-button-glyph" />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={[choices]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -212,6 +298,8 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
   const issues = useIssues(workspace?.id);
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState(false);
+  // Note that the layout is the page's own, so an issue opened from it goes back to it.
+  const [layout, setLayout] = useState<IssuesLayout>(ISSUES_LAYOUT.BOARD);
   const pages = useRef<HTMLDivElement>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
@@ -244,7 +332,14 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
   return (
     <div ref={pages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
-        <ListPage plans={plans} issues={issues} focused={cameFrom} onCompose={onCompose} />
+        <ListPage
+          plans={plans}
+          issues={issues}
+          focused={cameFrom}
+          layout={layout}
+          onLayout={setLayout}
+          onCompose={onCompose}
+        />
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
         <DetailPage
