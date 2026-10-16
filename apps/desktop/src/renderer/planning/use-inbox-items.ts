@@ -38,7 +38,7 @@ export interface InboxItemsControl {
   readonly failed: boolean;
   /** Whether a listed plan has changed since its items were last read, and no read of it has failed: its items may be older than it. */
   readonly pending: boolean;
-  /** The listed plans whose items are read as of main's latest word of them, so an item they do not hold is not theirs. */
+  /** The plans whose items are read as of main's latest word of them, or read and listed no more, so an item they do not hold is not theirs. */
   readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
 }
@@ -106,10 +106,12 @@ export function useInboxItems(input: {
   const pending = holdings.some(
     ({ planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
   );
+  // Note that a plan main lists no more has no newer read on its way, so its last read stands.
   const current = new Set(
-    holdings
-      .filter(({ planId, updatedAt }) => reads.get(planId)?.at === updatedAt)
-      .map(({ planId }) => planId),
+    [...reads].flatMap(([planId, read]) => {
+      const holding = holdings.find((each) => each.planId === planId);
+      return holding === undefined || holding.updatedAt === read.at ? [planId] : [];
+    }),
   );
   return {
     items,

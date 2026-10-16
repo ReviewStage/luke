@@ -1895,3 +1895,22 @@ test("a link to an agent's item newer than the agent's last read waits for the r
     "Retry the flaky job?",
   );
 });
+
+test("an item a link names under an agent nothing waits on any more, read before, is not found by that read though the agent's own read fails", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
+  pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  await settle();
+  agentReadFails = true;
+  act(() => setPlanless([]));
+  act(() =>
+    chooseFromOutside({
+      agentId: SECOND_AGENT,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+});

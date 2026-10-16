@@ -28,7 +28,7 @@ export interface PlanlessInboxItems {
   readonly items: ReadonlyMap<string, readonly InboxItem[]>;
   /** Whether an agent's last read did not answer, so the list offers to try again. */
   readonly failed: boolean;
-  /** The agents whose items are read as of main's latest word of what waits on them, so an item they do not hold is not theirs. */
+  /** The agents whose items are read as of main's latest word of what waits on them, or read and waited on no more, so an item they do not hold is not theirs. */
   readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
 }
@@ -127,10 +127,12 @@ export function usePlanlessInboxItems(
     () => new Map([...reads].map(([agentId, read]) => [agentId, read.items])),
     [reads],
   );
+  // Note that an agent nothing waits on any more has no newer read on its way, so its last read stands.
   const current = new Set(
-    [...standing]
-      .filter(([agentId, waitingIds]) => sameItems(reads.get(agentId)?.waitingIds, waitingIds))
-      .map(([agentId]) => agentId),
+    [...reads.keys()].filter((agentId) => {
+      const waitingIds = standing.get(agentId);
+      return waitingIds === undefined || sameItems(reads.get(agentId)?.waitingIds, waitingIds);
+    }),
   );
   return {
     items,
