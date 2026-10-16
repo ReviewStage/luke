@@ -173,9 +173,8 @@ interface RowContext {
 
 /**
  * One group's plans, each a row of the sidebar showing the time the list's
- * order chooses. A row says what its group does not: its repository's name
- * where `repository` names one, and a teammate's face unless `face` is off,
- * as under a group by creator.
+ * order chooses: its repository's name where `repository` names one, and a
+ * teammate's face unless `face` is off, as under a group by creator.
  */
 function PlanRows({
   rows,
@@ -471,17 +470,15 @@ function RepositorySection({
  * One creator's tasks under a header naming them by face, the reader's own
  * as You, a former member's on the quiet outline, folded and kept as a
  * repository's group is. The face is the group's to say, so the rows wear
- * none, and say their repository instead, which the group does not.
+ * none, and name no repository either, which the row's card names.
  */
 function CreatorSection({
   group,
   folds,
-  repositoryOf,
   context,
 }: {
   group: CreatorGroup;
   folds: FoldedGroups;
-  repositoryOf: (plan: PlanSummary) => string | undefined;
   context: RowContext;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
@@ -498,9 +495,7 @@ function CreatorSection({
         count={group.plans.length}
         onToggle={() => folds.toggleCreator(group.creatorId)}
       />
-      {rows.length === 0 ? null : (
-        <PlanRows rows={rows} context={context} repository={repositoryOf} face={false} />
-      )}
+      {rows.length === 0 ? null : <PlanRows rows={rows} context={context} face={false} />}
     </div>
   );
 }
@@ -564,8 +559,9 @@ function drawnTasks(
 
 /**
  * The Tasks section's groups as the view draws them. A row says what its
- * group does not: under a repository's header a teammate's face; under a
- * creator's its repository; in one run both.
+ * group does not: under a repository's header a teammate's face; in one run
+ * its repository and the face. Under a creator's header it says neither,
+ * its repository left to its card.
  */
 function TaskGroups({
   sections,
@@ -608,7 +604,6 @@ function TaskGroups({
               key={group.creatorId ?? NO_REPOSITORY}
               group={group}
               folds={folds}
-              repositoryOf={repositoryOf}
               context={context}
             />
           ))}
