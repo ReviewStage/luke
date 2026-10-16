@@ -6,8 +6,9 @@ import { closeEveryMacTerminal, type MacTerminalTools, startMacTerminal } from "
 /**
  * A terminal of this Mac over this system's own `script`: the script runs on
  * a real terminal, takes what is typed, follows a resize, says how it ended,
- * and a close hangs up what it started. The test machine's `script` and
- * `stty` take Linux's arguments, which the tools seam hands in.
+ * and a close hangs up what it started. On a Mac it runs on macOS's own
+ * tools as Luke starts them; elsewhere `script` and `stty` take Linux's
+ * arguments, which the tools seam hands in.
  */
 
 const LINUX_TOOLS: MacTerminalTools = {
@@ -26,7 +27,8 @@ function open(script: (ttyFile: string) => string) {
   });
   const terminal = startMacTerminal({
     build: script,
-    tools: LINUX_TOOLS,
+    // On a Mac, its own tools as Luke starts them; elsewhere, the Linux ones.
+    tools: process.platform === "darwin" ? undefined : LINUX_TOOLS,
     onOutput: (bytes) => {
       printed += Buffer.from(bytes).toString("utf8");
       for (const waiter of waiters.splice(0)) {
@@ -143,29 +145,3 @@ test("a terminal that cannot start says why and ends, and Luke goes on", async (
   assert.equal(code, null);
   assert.match(printed, /Could not start a terminal: .*ENOENT/u);
 });
-
-// This Mac's own `script`, as Luke starts it: under a parent whose pipes are sockets, as Node's are on macOS.
-test.runIf(process.platform === "darwin")(
-  "on macOS the script runs on a real terminal, takes what is typed, and says how it ended",
-  async () => {
-    let printed = "";
-    let typed: (data: string) => void = () => undefined;
-    const ended = new Promise<number | null>((resolve) => {
-      const terminal = startMacTerminal({
-        build: (ttyFile) =>
-          [`tty > ${ttyFile}`, "tty", "read line", 'echo "got:$line"', "exit 3", ""].join("\n"),
-        onOutput: (bytes) => {
-          printed += Buffer.from(bytes).toString("utf8");
-        },
-        onExit: resolve,
-      });
-      typed = (data) => terminal.write(data);
-    });
-    typed("hello\n");
-
-    assert.equal(await ended, 3);
-    assert.match(printed, /\/dev\/ttys\d+/u);
-    assert.match(printed, /got:hello/u);
-    assert.doesNotMatch(printed, /Operation not supported/u);
-  },
-);
