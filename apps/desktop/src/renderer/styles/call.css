@@ -156,16 +156,25 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
-   the top of the call's Call tab, at the tab's width less the transcript's
-   own gutter and at the 16:9 the avatar is rendered in, on the card's
-   ground, border, and corner, so the tile reads as the call card grown into
-   a picture. It keeps its height as the transcript under it scrolls. */
+   the top of the call's Call tab, at the 16:9 the avatar is rendered in, on
+   the card's ground, border, and corner, so the tile reads as the call card
+   grown into a picture. It keeps its height as the transcript under it
+   scrolls. However wide the tab is, the tile keeps to the transcript's
+   column, centred over it, and no taller than about two fifths of the
+   window (70vh wide at 16:9), so a wide, short tab still leaves the
+   transcript room; 240px is as narrow as its still frame stays readable.
+   The strip shares the width, so the toggle stays put when video goes off. */
+.call-video-tile,
+.call-video-strip {
+  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 70vh));
+  margin: var(--space-4) auto var(--space-8);
+}
+
 .call-video-tile {
   position: relative;
   flex: none;
   overflow: clip;
   box-sizing: border-box;
-  margin: var(--space-4) var(--space-16) var(--space-8);
   aspect-ratio: 16 / 9;
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
@@ -237,7 +246,6 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
-  margin: var(--space-4) var(--space-16) var(--space-8);
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
