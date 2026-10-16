@@ -15,8 +15,10 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -180,6 +182,8 @@ let automations: readonly AutomationSummary[] = [];
 let copied: string[] = [];
 /** Each agent with no plan as a read of its own page answers it. */
 let pageAgents = new Map<string, CodingAgentSummary>();
+/** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
+let imageReads: (() => void)[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -199,6 +203,7 @@ beforeEach(() => {
   automations = [];
   copied = [];
   pageAgents = new Map();
+  imageReads = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -240,6 +245,16 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+          return new Promise((resolve) =>
+            imageReads.push(() =>
+              resolve({
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+              }),
+            ),
+          );
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
           const { agentId, after } = request.payload;
@@ -631,6 +646,36 @@ test("the keyboard's ring on a crumb of the pane's path and on an option of the 
       `nothing cuts ${control.textContent}'s ring off`,
     );
   }
+  styles.remove();
+});
+
+test("an image an item shows is drawn as a plan's picture is, no wider than its card and no taller than a screenful, and a press opens it over the window", async () => {
+  const styles = await layWindowStyles();
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
+    alt: "The pull request tab",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [shot] }, RETRY]);
+  const { page } = mount();
+  await settle();
+  // The image lands once its item's own read does, as the pane's read holds the items it is kept for.
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  const picture = page.querySelector<HTMLImageElement>("[data-inbox-image] img");
+  assert.ok(picture, "the item draws its image");
+  assert.equal(picture.alt, "The pull request tab");
+  const drawn = getComputedStyle(picture);
+  assert.deepEqual([drawn.maxWidth, drawn.maxHeight], ["100%", "520px"]);
+  const press = page.querySelector<HTMLButtonElement>(
+    'button[aria-label="Enlarge The pull request tab"]',
+  );
+  assert.ok(press, "the image is pressed to enlarge it");
+  act(() => press.click());
+  assert.equal(
+    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+    "The pull request tab.png",
+  );
   styles.remove();
 });
 

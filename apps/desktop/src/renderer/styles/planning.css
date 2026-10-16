@@ -3801,25 +3801,10 @@ button.inbox-option:hover:not(:disabled) {
   color: var(--text-secondary);
 }
 
-/* An image block on the Inbox (`inbox-pane.tsx`): the picture the
-   agent took, at the card's own reading width and no wider than itself, a
-   press on it opening the attached-file viewer. The spinner's room stands
-   in for it while its bytes are read, so the card does not jump. */
-.inbox-image {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  cursor: zoom-in;
-  overflow: clip;
-}
-
-.inbox-image img {
-  display: block;
-  max-width: 100%;
-  height: auto;
+/* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
+   words, below, whose room around it is the card's gap between blocks. */
+[data-inbox-image] > .picture-block {
+  margin: 0;
 }
 
 /* A picture in written words (`picture-block.tsx`): its own block, at its
@@ -4190,10 +4175,4 @@ button.picture-frame {
 .inbox-field-input {
   font-size: 13px;
   letter-spacing: 0;
-}
-
-.inbox-image-pending {
-  display: flex;
-  align-items: center;
-  min-height: var(--space-24);
 }

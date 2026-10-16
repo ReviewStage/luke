@@ -21,6 +21,7 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
+import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -38,9 +39,10 @@ import {
 import { useAutomation } from "../automation-directory";
 import { PlanRef } from "../desktop/plan-card";
 import { usePerson } from "../member-directory";
+import { PictureBlock } from "../picture-block";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
-import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
+import { BusyLabel, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
@@ -95,10 +97,11 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * browser where it is a web page, code as the Code tab draws a card
  * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
  * through the File tab's own read and opened there in the File tab, and an
- * image the agent took in its sandbox, drawn at the pane's own width from
- * the bytes the host fetched under the account (`use-plan-inbox.ts`) and
- * opened larger over the window by a press, in the viewer an attached file
- * opens in (`attachment-viewer.tsx`). What the item asks for closes the
+ * image the agent took in its sandbox, drawn from the bytes the host fetched
+ * under the account (`use-plan-inbox.ts`) as a plan's or a transcript's
+ * picture is (`picture-block.tsx`), up to the pane's width and no taller
+ * than theirs, and opened larger over the window by a press, in the viewer
+ * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
  * message: a choice's options, one perhaps recommended, pressed one at a
  * time or several where the choice allows; a form's fields, each the
  * control Settings draws for its type; nothing for the rest. While the item
@@ -285,11 +288,12 @@ function CodeBlock({
 }
 
 /**
- * An image block: the picture at the card's width once its bytes are held,
- * pressed to open it larger over the window; a spinner while they are read,
- * and a line with Retry where the read did not answer. The block asks for
- * its image as it is first drawn, so a picture inside a card no one opened
- * is never fetched.
+ * An image block: the picture drawn as a plan's picture is, at its own size
+ * up to the card's width and a screenful's height, once its bytes are held,
+ * pressed to open it larger over the window; that block's quiet box while
+ * they are read, and a line with Retry where the read did not answer. The
+ * block asks for its image as it is first drawn, so a picture inside a card
+ * no one opened is never fetched.
  */
 function ImageBlock({
   itemId,
@@ -311,9 +315,7 @@ function ImageBlock({
   }, [held, itemId, block.attachmentId, onImage]);
   if (image === undefined) {
     return (
-      <div className="inbox-image-pending" data-inbox-image-pending="">
-        <Spinner label="Loading image" size={SPINNER_SIZE.INLINE} />
-      </div>
+      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={block.alt} caption={undefined} />
     );
   }
   if ("failed" in image) {
@@ -325,14 +327,12 @@ function ImageBlock({
   }
   return (
     <>
-      <button
-        type="button"
-        className="inbox-image"
-        aria-label={`Open ${block.alt}`}
-        onClick={() => setViewing(true)}
-      >
-        <img src={image.url} alt={block.alt} />
-      </button>
+      <PictureBlock
+        state={{ kind: PICTURE_STATE.READY, url: image.url }}
+        alt={block.alt}
+        caption={undefined}
+        onOpen={() => setViewing(true)}
+      />
       {viewing ? (
         <AttachmentViewer
           files={[viewerFile(block, image.url)]}
