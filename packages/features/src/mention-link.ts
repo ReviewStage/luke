@@ -566,8 +566,8 @@ function insideIndented(text: string, at: number): boolean {
   return false;
 }
 
-/** Whether the index stands in code, where markdown draws no link: a fenced block, an indented block, or a code span. */
-function insideCode(text: string, at: number): boolean {
+/** Whether the index stands in code, where markdown draws no link and no picture: a fenced block, an indented block, or a code span. */
+export function insideCode(text: string, at: number): boolean {
   return insideFence(text, at) || insideIndented(text, at) || insideSpan(text, at);
 }
 

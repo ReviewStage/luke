@@ -403,6 +403,14 @@ test("a correction that rewords a picture's alt text and caption, or moves it wi
   );
 });
 
+test("a correction that puts a picture in code, where it draws no picture, is not taken", () => {
+  for (const text of ["```md\n" + PICTURE_LINE + "\n```", `\`${PICTURE_LINE}\``]) {
+    const note: PlanNote = { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text };
+
+    assert.deepEqual(applyNotesToText(PICTURED, [note]), { text: PICTURED, missed: note }, text);
+  }
+});
+
 test("deleting the line a picture stands on is a retraction, and is taken, while a deletion within it is not", () => {
   const taken = applyNotesToText(PICTURED, [
     { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text: "" },

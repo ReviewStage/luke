@@ -1,5 +1,5 @@
 import { isLinkHome, LINK_HOME } from "./link-home.js";
-import { encodeMention, MENTION_KIND } from "./mention-link.js";
+import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
 
 /**
  * plan-attachment-link.ts -- a plan's picture as its address on tryluke.dev: written, read back, and found in a plan's text.
@@ -128,10 +128,12 @@ export function planPictureMarkdown(
 /**
  * The address of every picture a text draws, `![alt](<address>`, of any
  * plan, in order, each copy apart; an address standing as a link or as
- * bare words draws no picture and is not among them.
+ * bare words, or a picture's line standing in code, a fenced or indented
+ * block or a code span, draws no picture and is not among them.
  */
 export function planPicturesIn(text: string): readonly string[] {
-  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap(([, address]) =>
-    address === undefined ? [] : [address],
-  );
+  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap((match) => {
+    const address = match[1];
+    return address === undefined || insideCode(text, match.index) ? [] : [address];
+  });
 }
