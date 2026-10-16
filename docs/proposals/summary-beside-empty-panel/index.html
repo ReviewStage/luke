@@ -297,6 +297,7 @@ function lookOf(planId, id) {
   const kind = KINDS.find((each) => each.id === id);
   if (kind) return kind;
   if (id === "overview") return { id, label: "Overview", icon: "overview" };
+  if (id.startsWith("term:")) return { id, label: "Terminal", icon: "term" };
   return [...plan.changes, ...plan.subagents, ...plan.files].find((each) => each.id === id);
 }
 
@@ -332,7 +333,7 @@ function closeTab(id) {
 
 function togglePanel() {
   const tabs = state.tabs[state.plan];
-  if (state.option === "a" && !panelShown()) {
+  if (state.option === "a" && !panelShown() && tabs.length === 0) {
     // Show panel on an empty strip reopens a tab first.
     const plan = PLANS[state.plan];
     const pick = state.closed[state.plan][0] ?? plan.used[0] ?? "call";
@@ -404,7 +405,7 @@ function noTabsList(planId) {
   ];
   return rows.join("") + more
     .filter(([, list]) => list.length)
-    .map(([heading, list]) => `<p class="section-heading">${heading}</p>${list.map((each) => rowButton({ ...each, onPick: "toast" })).join("")}`)
+    .map(([heading, list]) => `<p class="section-heading">${heading}</p>${list.map((each) => rowButton({ ...each, onPick: "open" })).join("")}`)
     .join("");
 }
 
