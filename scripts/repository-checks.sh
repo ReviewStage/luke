@@ -534,13 +534,22 @@ fi
 # a tracked file may hold no literal in the shape of a live provider key, a
 # GitHub token, a Slack token, an AWS access key id, or a private key block:
 # a test that needs one builds it at run time or uses a low-entropy fake.
+# Note that git grep answers 1 for no match and more for a scan that failed,
+# which must fail the check rather than pass it, and that a hit is named by its
+# file and line alone, so the literal never reaches a CI log.
+provider_shaped_status=0
 provider_shaped_literals=$(git -C "$LUKE_REPO_ROOT" grep -nIE \
     -e 'sk_live_[0-9A-Za-z]{24,}' \
     -e 'gh[pousr]_[A-Za-z0-9]{36}' \
     -e 'github_pat_[A-Za-z0-9_]{22,}' \
     -e 'xox[baprs]-[0-9]+-' \
     -e 'AKIA[0-9A-Z]{16}' \
-    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' || true)
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' | cut -d: -f1,2) || provider_shaped_status=$?
+if ((provider_shaped_status > 1)); then
+    printf 'error: the scan for provider-shaped literals could not run (git grep exited %s)\n' \
+        "$provider_shaped_status" >&2
+    exit 1
+fi
 if [[ -n "$provider_shaped_literals" ]]; then
     printf 'error: a tracked file holds a literal shaped like a provider credential; use a low-entropy fake or build the value at run time:\n%s\n' \
         "$provider_shaped_literals" >&2
