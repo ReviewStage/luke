@@ -9,6 +9,7 @@ import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
 import type { AvatarState } from "@luke/voice/avatar";
+import type { NotificationsStatus } from "@luke/voice/settings-controls";
 import type { VoiceView } from "@luke/voice/voice-view";
 import {
   isRecord,
@@ -190,12 +191,12 @@ export interface AppInboxSlice {
 }
 
 /**
- * Whether macOS refused the last notification Luke posted, which is the only
+ * What macOS answered the last notification Luke posted, which is the only
  * word Electron gives of notifications being off for Luke in System Settings:
- * false until one is refused, and again once one is shown.
+ * unknown until one is shown or refused, and kept for the launch alone.
  */
 interface AppNotificationsSlice {
-  refused: boolean;
+  status: NotificationsStatus;
 }
 
 /**

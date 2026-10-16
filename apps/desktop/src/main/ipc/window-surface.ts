@@ -42,6 +42,8 @@ interface WindowSurfaceDependencies {
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
   openExternal: (url: string) => Promise<void>;
+  /** Posts Settings' test notification now. */
+  testNotification: () => void;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: ActSender["sender"], name: string, text: string) => Promise<boolean>;
 }
@@ -51,6 +53,7 @@ type WindowSurfaceActKind =
   | typeof ACT_KIND.MICROPHONE_REQUEST
   | typeof ACT_KIND.MICROPHONE_ROUTE
   | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
+  | typeof ACT_KIND.NOTIFICATIONS_TEST
   | typeof ACT_KIND.CONTACT_EMAIL
   | typeof ACT_KIND.WINDOW_SAVE_FILE;
 
@@ -97,7 +100,10 @@ export function windowSurfaceActRows(
     },
     // The pane that lists every app's notifications, Luke's among them.
     [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: () =>
-      dependencies.openExternal("x-apple.systempreferences:com.apple.preference.notifications"),
+      dependencies.openExternal(
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+      ),
+    [ACT_KIND.NOTIFICATIONS_TEST]: () => dependencies.testNotification(),
     [ACT_KIND.CONTACT_EMAIL]: () => dependencies.openExternal(CONTACT_MAILTO),
     [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }, sender) => {
       if (!sender.panel) throw new ActRefused({ message: ACT[ACT_KIND.WINDOW_SAVE_FILE].refusal });

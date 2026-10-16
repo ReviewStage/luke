@@ -490,6 +490,8 @@ export const ACT_KIND = {
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
+  /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
+  NOTIFICATIONS_TEST: "notifications.test",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
@@ -1365,6 +1367,7 @@ export const ACT = {
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
+  [ACT_KIND.NOTIFICATIONS_TEST]: press("Could not post a notification on this system."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's task forward on this system."),

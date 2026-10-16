@@ -6,6 +6,7 @@ import type { HostBootstrap } from "@luke/host/host-operator";
 import { idleUpdateSnapshot } from "@luke/host/update-service";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { DesktopConfig } from "./services/desktop-config";
 
@@ -177,7 +178,7 @@ export function initialAppState(
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], plans: [], planless: [], automations: [] },
-    notifications: { refused: false },
+    notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };
 }

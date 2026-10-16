@@ -53,6 +53,8 @@ export interface DesktopServices {
   readonly windows: WindowService;
   /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
   readonly notices: AgentNotices;
+  /** Posts Settings' test notification now, whose click brings Luke's window forward. */
+  readonly testNotification: () => void;
   /** Luke's avatar as the host holds it, which the panel's acts reach. */
   readonly avatar: AvatarLink;
   /**
@@ -234,6 +236,16 @@ export function composeDesktop(
       // handed to the panels' toast. Whose inbox is read follows the
       // document's account, which the launch's bootstrap writes as well as
       // every change after it.
+      const noticeDoors = electronNoticeDoors({
+        toPanels: windows.toastAgentEnd,
+        inboxToPanels: windows.toastInboxItem,
+        onAnswered: (status) => {
+          if (state.snapshot().notifications.status !== status) {
+            state.update({ notifications: { status } });
+          }
+        },
+        report: config.report,
+      });
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
         readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
@@ -271,21 +283,7 @@ export function composeDesktop(
           windows.showInboxItem(item);
         },
         report: config.report,
-      }).pipe(
-        Effect.provideService(
-          AgentNoticeDoors,
-          electronNoticeDoors({
-            toPanels: windows.toastAgentEnd,
-            inboxToPanels: windows.toastInboxItem,
-            onRefused: (refused) => {
-              if (state.snapshot().notifications.refused !== refused) {
-                state.update({ notifications: { refused } });
-              }
-            },
-            report: config.report,
-          }),
-        ),
-      );
+      }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // The agents with no plan each list read carries are the notices' to
       // hold, as every answer naming an agent is. A note that throws is
       // reported rather than left to end the fiber, which would never resume.
@@ -346,6 +344,7 @@ export function composeDesktop(
         operator,
         windows,
         notices,
+        testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
         avatar,
         run,
       };
