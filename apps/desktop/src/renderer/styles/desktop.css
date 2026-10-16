@@ -4347,22 +4347,208 @@ button.integration-tool-head:hover,
   box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
 }
 
-/* The agent's byline names it in the thread's own ink, as a message's sender is named. */
-.inbox-byline-agent {
+/* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
+   as a plan leads with its title: the title at a document heading's size,
+   then a muted line of its agent, when it asked, and where it stands, over a
+   hairline that parts it from the comments. */
+.inbox-subject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.inbox-subject-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.inbox-subject-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.inbox-subject-agent {
   display: flex;
   min-width: 0;
   color: var(--text-primary);
+}
+
+/* An item waiting on the developer wears the attention mark beside its
+   words, in the primary ink, since it is the one standing that asks for a
+   hand; a settled one says where it stands in the line's muted ink. */
+.inbox-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.inbox-standing[data-status="open"] {
+  color: var(--text-primary);
+}
+
+/* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
+   its writer's face in a column of its own, a list row's 20px, then its
+   name and when on one line and its words under it, and a line down from
+   the face to the next comment's, as an issue's timeline joins them. */
+.inbox-thread {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-comment {
+  --inbox-face: 20px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
+  column-gap: var(--space-12);
+  padding-bottom: var(--space-20);
+}
+
+.inbox-comment:last-child {
+  padding-bottom: 0;
+}
+
+.inbox-comment:not(:last-child)::before {
+  position: absolute;
+  top: calc(var(--inbox-face) + var(--space-6));
+  bottom: var(--space-6);
+  left: calc(var(--inbox-face) / 2 - 1px);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+  content: "";
+}
+
+.inbox-comment-face {
+  display: flex;
+  height: var(--inbox-face);
+}
+
+.inbox-comment-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inbox-comment-head {
+  display: flex;
+  min-width: 0;
+  min-height: var(--inbox-face);
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* The writer is named by name alone in the thread's own ink, since their
+   face already stands in the column beside it. */
+.inbox-comment-name {
+  display: flex;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 500;
 }
 
-/* The pane's words under the agent's byline start where its name does, past
-   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). They clip
-   what runs past them, as a message does, though not the keyboard's ring on
-   an option laid edge to edge in them. */
-.inbox-indent {
+.inbox-comment-name .actor-ref > .actor-mark {
+  display: none;
+}
+
+.inbox-comment-when {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-4);
+}
+
+/* A comment's words are set as a message's are, and clip what runs past
+   them as a message does, though not the keyboard's ring on an option laid
+   edge to edge in them. */
+.inbox-comment-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
-  padding-left: 21px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.625;
+}
+
+/* What the developer picked leads their comment as a chip, a check and the
+   option's label, so the pick is said once. */
+.inbox-pick {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 1px var(--space-6);
+  border-radius: 6px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inbox-pick svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* What a settled item offered, folded to one line as the transcript folds a
+   finished step (`inbox-pane.tsx`'s `Offered`): its chevron turns down once
+   it is opened, on transform alone. */
+.inbox-offered > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  cursor: default;
+  list-style: none;
+}
+
+.inbox-offered > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inbox-offered > summary:hover {
+  color: var(--text-primary);
+}
+
+.inbox-offered > summary svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-offered[open] > summary {
+  margin-bottom: var(--space-6);
+}
+
+.inbox-offered[open] > summary svg {
+  transform: rotate(90deg);
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
