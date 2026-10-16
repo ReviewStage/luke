@@ -33,7 +33,7 @@ import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { Tooltip } from "./tooltip";
 
 /**
- * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation on a solid rounded square.
+ * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile.
  *
  * A person's circle holds their sign-in picture once it loads, and the first
  * letter of their name on the hue read off their id until then and where it
@@ -43,8 +43,9 @@ import { Tooltip } from "./tooltip";
  * an App's bot on a square, its robot until the avatar loads. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its clock,
- * each on one solid neutral fill, never the ground showing through, so a
- * tile reads as the same object on any surface. A disc is one size per place
+ * each its glyph alone on the ground beneath it, as a tab's is. In a
+ * facepile (`ActorStack`) each stands on one solid neutral tile instead,
+ * so the face it overlaps never shows through it. A disc is one size per place
  * (`ACTOR_SIZE`), so a byline, a facepile, and a list row read level
  * whoever is in them. Named in a line, an actor is its mark and its name as
  * one target that hangs its card (`ActorRef`); a press opens what has a
@@ -182,9 +183,12 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
 export function ActorMark({
   actor,
   size = ACTOR_SIZE.INLINE,
+  tiled = false,
 }: {
   actor: Actor;
   size?: ActorSize;
+  /** Whether a square stands on its solid tile rather than bare, as a facepile's overlapping faces do. */
+  tiled?: boolean;
 }): React.JSX.Element {
   return (
     <span
@@ -192,6 +196,7 @@ export function ActorMark({
       data-kind={actor.kind}
       data-bot={actor.kind === ACTOR_KIND.GITHUB && actor.bot ? "true" : undefined}
       data-size={size}
+      data-tiled={tiled ? "true" : undefined}
       aria-hidden="true"
     >
       <Face actor={actor} />
@@ -505,7 +510,7 @@ function CardedFace({ actor, face }: { actor: Actor; face: StackFace }): React.J
   return (
     <Tooltip label={name} card={face.card ?? actorCard(actor)}>
       <li className="actor-stack-face" aria-label={name}>
-        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled />
         {face.badge === undefined ? null : (
           <span className="actor-stack-badge" aria-hidden="true">
             {face.badge}
@@ -555,7 +560,8 @@ function MoreFaces({
 
 /**
  * Many actors as a facepile: the first `drawn`, each cut from the ground
- * behind it by a ring of that ground, then how many more where `counted`;
+ * behind it by a ring of that ground, a square on its solid tile, then how
+ * many more where `counted`;
  * a place whose words beside the pile already count them, "5 can edit",
  * draws no pill. Handed `faces`, one for each actor, each face hangs its
  * card, the actor's own where the face names none, wears its badge, and is
@@ -584,7 +590,7 @@ export function ActorStack({
       <span className="actor-stack" aria-hidden="true">
         {actors.slice(0, drawn).map((actor, index) => (
           // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
-          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} />
+          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} tiled />
         ))}
         {more}
       </span>
