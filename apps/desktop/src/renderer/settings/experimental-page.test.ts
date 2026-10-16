@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { VIDEO_AVATAR } from "@luke/features/video-avatar";
+import { VIDEO_AVATAR, VIDEO_AVATAR_COVER_ORIGIN } from "@luke/features/video-avatar";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import {
   type AppSettingField,
@@ -150,7 +150,7 @@ test("signed out, the page says to sign in rather than drawing switches no accou
   assert.equal(page.textContent, "Sign in to try experiments.");
 });
 
-test("with Video calls on, its avatar is chosen beneath its switch, and the choice is written to this Mac", async () => {
+test("with Video calls on, its avatar is chosen in its card beneath its switch, each with its face, and the choice is written to this Mac", async () => {
   const experiments = experimentsOn(EXPERIMENT.VIDEO_CALLS);
   const page = draw({
     entries: EXPERIMENTS,
@@ -161,9 +161,11 @@ test("with Video calls on, its avatar is chosen beneath its switch, and the choi
 
   const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Default"]');
   assert.ok(chip, "the avatar is a choice, the deployment's own at first");
-  // It stands right under the Video calls switch, before the next experiment's.
-  const rows = [...page.querySelectorAll(".settings-row strong")].map((label) => label.textContent);
-  assert.deepEqual(rows.slice(0, 3), ["Video calls", "Avatar", "Automations"]);
+  // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
+  const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
+    [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
+  );
+  assert.deepEqual(cards, [["Video calls", "Avatar"], ["Automations"], ["Factory"]]);
 
   await act(async () => chip.click());
   const options = [...document.querySelectorAll('[role="option"]')];
@@ -171,6 +173,13 @@ test("with Video calls on, its avatar is chosen beneath its switch, and the choi
     options.map((option) => option.textContent),
     ["Default", "Atlas", "Caspian", "Cassidy", "Celia", "Cosmo", "Lyra", "Orion", "Selene"],
   );
+  // Each stock avatar shows its face from Keyframe's storage; the deployment's default has none to show.
+  const pictures = options.map((option) => option.querySelector("img")?.getAttribute("src"));
+  assert.equal(pictures[0], undefined);
+  assert.equal(pictures.slice(1).length, 8);
+  for (const picture of pictures.slice(1)) {
+    assert.ok(picture?.startsWith(`${VIDEO_AVATAR_COVER_ORIGIN}/personas/`), String(picture));
+  }
   const celia = options.find((option) => option.textContent === "Celia");
   assert.ok(celia instanceof HTMLElement);
   await act(async () => celia.click());
@@ -186,4 +195,5 @@ test("with Video calls off, no avatar is offered", () => {
   });
 
   assert.equal(page.querySelector('[aria-label^="Avatar"]'), null);
+  assert.equal(page.querySelectorAll(".settings-card").length, EXPERIMENTS.length);
 });

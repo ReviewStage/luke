@@ -8,6 +8,26 @@ import { PickerRow } from "./picker-row";
 const NO_MATCH = "Nothing matches.";
 
 /**
+ * An option's picture, or an empty disc of the same size where a set whose
+ * other options have pictures leaves this one without, so every label in the
+ * menu starts at one edge. The picture says nothing the label does not, so it
+ * is hidden from a reader, and no referrer is sent with its fetch.
+ */
+function OptionPicture({ src }: { src: string | undefined }): React.JSX.Element {
+  if (src === undefined) return <span className="settings-option-picture" aria-hidden="true" />;
+  return (
+    <img
+      className="settings-option-picture"
+      src={src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
+/**
  * A settings pop-up: its name, optional why, and one value from a small fixed
  * set, picked from the app's own menu with no search, since a set this short
  * is read whole. The visible name names the chip and the why describes it.
@@ -26,7 +46,8 @@ export function SelectRow<Value extends string | number>({
   label: string;
   detail?: string | undefined;
   value: Value;
-  options: readonly { value: Value; label: string }[];
+  /** Each option's token and words, and the address of its picture where the set has faces. */
+  options: readonly { value: Value; label: string; picture?: string | undefined }[];
   parse: (raw: string) => Value | undefined;
   /** The id a pressed search result lands on: marked on the chip itself, which then takes the keyboard. */
   anchor?: string;
@@ -42,6 +63,7 @@ export function SelectRow<Value extends string | number>({
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value);
+  const pictured = options.some((option) => option.picture !== undefined);
   const detailId = useId();
   return (
     <>
@@ -59,7 +81,12 @@ export function SelectRow<Value extends string | number>({
         describedBy={detail ? detailId : undefined}
         value={String(value)}
         valueLabel={chosen?.label ?? String(value)}
-        rows={options.map((option) => ({ id: String(option.value), label: option.label }))}
+        valueIcon={pictured ? <OptionPicture src={chosen?.picture} /> : undefined}
+        rows={options.map((option) => ({
+          id: String(option.value),
+          label: option.label,
+          ...(pictured ? { icon: <OptionPicture src={option.picture} /> } : undefined),
+        }))}
         noMatch={NO_MATCH}
         anchor={anchor}
         disabled={busy || Boolean(restBusy)}

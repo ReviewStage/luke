@@ -315,6 +315,29 @@
   width: 200px;
 }
 
+/* An option's picture, a face such as an avatar's, drawn round in a glyph's
+   slot ahead of its words: in the menu the slot sizes it, and on the chip it
+   stands at the chip's own glyph size. A cover is a portrait, so it is cropped
+   toward its top, where the face is. An option without one keeps the disc's
+   room, empty, so the menu's labels start in one line. */
+.settings-option-picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--section-fill);
+  object-fit: cover;
+  object-position: center 20%;
+  outline: 1px solid var(--hairline);
+  outline-offset: -1px; /* off-scale */
+}
+
+.chip .settings-option-picture {
+  width: 16px;
+  height: 16px;
+}
+
 /* The menu hangs from the chip's trailing edge, where the column is, and
    stands above the chip instead where the window leaves more room there.
    Its list is capped to that room, so the menu never runs off the window's

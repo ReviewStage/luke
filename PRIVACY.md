@@ -867,7 +867,11 @@ only when you press Send.
   receives is Luke's alone. Our service logs only whether a session started, the
   Keyframe server it opened on, and, when one could not, why, and keeps, with
   the call's record, when each session started and ended, its length, and why it
-  ended. Keyframe keeps what it receives under its own retention policy.
+  ended. Keyframe keeps what it receives under its own retention policy. The
+  Avatar menu under Video calls shows each stock avatar's photo, which your
+  Mac loads straight from Keyframe's public storage as the menu is drawn, so
+  Keyframe sees your Mac's IP address then, as any site serving an image does;
+  no referrer and nothing of yours is sent with it.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash

@@ -12,7 +12,6 @@ import {
 } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
 import { FlaskConicalIcon } from "lucide-react";
-import { Fragment } from "react";
 import { useAct } from "../act";
 import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";
@@ -32,9 +31,14 @@ import type { SettingsWrites } from "./writes";
  * row's Send feedback opens the window's feedback dialog about that
  * experiment. With none standing, the page keeps its place and draws the
  * empty state the empty Inbox draws, so a link or a search result that lands
- * here never lands on nothing. An experiment with stored settings of its
- * own, such as the avatar Video calls shows, draws them beneath its switch,
- * from the schema section named for it, while the schema says they stand.
+ * here never lands on nothing.
+ *
+ * Each experiment is a card of its own, its switch first. One with stored
+ * settings of its own, such as the avatar Video calls shows, draws them in
+ * its card beneath the switch, from the schema section named for it, while
+ * the schema says they stand: so they appear as the switch is turned on, and
+ * read as that experiment's rather than the page's. The card wears no title,
+ * since its switch already names the experiment.
  */
 
 /** What the empty page says, under its title. */
@@ -77,7 +81,7 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
   );
 }
 
-/** The page: each experiment's row, or the empty state while none stands; a note while signed out. */
+/** The page: each experiment's card, or the empty state while none stands; a note while signed out. */
 export function ExperimentalPage({
   entries,
   experiments,
@@ -103,11 +107,11 @@ export function ExperimentalPage({
     );
   }
   return (
-    <SettingsGroup>
+    <>
       {entries.map((entry) => {
         const section = sectionOf(entry.key);
         return (
-          <Fragment key={entry.key}>
+          <SettingsGroup key={entry.key}>
             <ExperimentRow entry={entry} on={experimentOn(experiments, entry.key)} />
             {section !== undefined && view !== undefined ? (
               <SchemaSettingRows
@@ -117,9 +121,9 @@ export function ExperimentalPage({
                 writes={writes}
               />
             ) : null}
-          </Fragment>
+          </SettingsGroup>
         );
       })}
-    </SettingsGroup>
+    </>
   );
 }

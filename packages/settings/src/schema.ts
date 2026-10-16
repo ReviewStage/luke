@@ -3,6 +3,7 @@ import {
   VIDEO_AVATAR,
   VIDEO_AVATAR_LIST,
   VIDEO_AVATAR_NAME,
+  videoAvatarCover,
 } from "@luke/features/video-avatar";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
@@ -156,6 +157,8 @@ export const APP_SETTING_SCHEMA = {
     values: VIDEO_AVATAR_LIST,
     token: (avatar) => avatar,
     optionLabel: (avatar) => VIDEO_AVATAR_NAME[avatar],
+    // Each stock avatar's face, loaded from Keyframe as the menu draws it.
+    optionPicture: videoAvatarCover,
     guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
     default: VIDEO_AVATAR.DEFAULT,
     page: SETTINGS_PAGE.EXPERIMENTAL,

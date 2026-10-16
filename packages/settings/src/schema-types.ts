@@ -115,10 +115,12 @@ export interface SettingsVisibility {
   accountDrawn: boolean;
 }
 
-/** One option a row's control draws: the token it stores by, and the words it shows. */
+/** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */
 export interface SettingOption {
   value: string;
   label: string;
+  /** The address of a small picture drawn ahead of the words, such as an avatar's face. */
+  picture?: string;
 }
 
 /**

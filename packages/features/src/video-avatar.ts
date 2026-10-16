@@ -37,6 +37,39 @@ export type VideoAvatar = (typeof VIDEO_AVATAR)[keyof typeof VIDEO_AVATAR];
 /** Every avatar, in the order the setting offers them: the default first, then Keyframe's library by name. */
 export const VIDEO_AVATAR_LIST: readonly VideoAvatar[] = Object.values(VIDEO_AVATAR);
 
+/**
+ * Where Keyframe serves its stock avatars' cover photos, which the setting's
+ * menu loads from there as it opens. The panel's Content Security Policy
+ * names this origin and no other of Keyframe's (`apps/desktop/src/renderer/index.html`).
+ */
+export const VIDEO_AVATAR_COVER_ORIGIN = "https://storage-public.keyframelabs.com";
+
+/**
+ * Each stock avatar's cover photo, as Keyframe's avatar library shows it.
+ * Note that a cover's path is not always its persona's id (Cosmo's is not),
+ * so each address is kept whole rather than built from the id.
+ */
+const VIDEO_AVATAR_COVER = {
+  [VIDEO_AVATAR.ATLAS]: "/personas/81b834ee-8aaa-4796-861e-5b206f6e1bff/cover.jpg",
+  [VIDEO_AVATAR.CASPIAN]: "/personas/b5a52072-3beb-4578-80c1-4bfa580f68c4/cover.jpg",
+  [VIDEO_AVATAR.CASSIDY]: "/personas/de49f8e0-572c-40b0-8e46-893d6ec72eda/cover.jpg",
+  [VIDEO_AVATAR.CELIA]: "/personas/fbf30421-c647-49f8-8440-b748c01201fe/cover.jpg",
+  [VIDEO_AVATAR.COSMO]: "/personas/d889c3fd-473f-4a80-aca9-7d28b24b1592/cover.jpeg",
+  [VIDEO_AVATAR.LYRA]: "/personas/b6dad089-2dd4-4012-9f6c-53b8aec8d4f5/cover.jpeg",
+  [VIDEO_AVATAR.ORION]: "/personas/9b3988bd-8b4e-43ca-aef2-90da70dba2c0/cover.jpg",
+  [VIDEO_AVATAR.SELENE]: "/personas/37fc1a9e-144e-4447-8df1-f4cb4dd76914/cover.jpg",
+} as const satisfies Record<Exclude<VideoAvatar, typeof VIDEO_AVATAR.DEFAULT>, string>;
+
+/**
+ * The address of an avatar's cover photo on Keyframe's storage, or nothing
+ * for the default, whose persona is the deployment's to name and so has no
+ * cover this build knows.
+ */
+export function videoAvatarCover(avatar: VideoAvatar): string | undefined {
+  if (avatar === VIDEO_AVATAR.DEFAULT) return undefined;
+  return `${VIDEO_AVATAR_COVER_ORIGIN}${VIDEO_AVATAR_COVER[avatar]}`;
+}
+
 /** Each avatar as the setting's menu words it. */
 export const VIDEO_AVATAR_NAME = {
   [VIDEO_AVATAR.DEFAULT]: "Default",
