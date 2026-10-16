@@ -1,0 +1,34 @@
+/* display.css -- the site's marketing display styles, named apart from the
+   product's type roles: a page's hero, a page's own heading, a document's
+   title and its section heads, and the wordmark beside the mark.
+
+   They are the site's alone, so they are set under the web profile and read
+   by the public pages; the window has no display type. */
+
+[data-luke-profile="web"] {
+  /* The landing page's one line, which steps down once on a phone. */
+  --luke-display-hero-size: 2.25rem;
+  --luke-display-hero-size-narrow: 1.75rem;
+  --luke-display-hero-leading: 1.1;
+  --luke-display-hero-weight: 600;
+  --luke-display-hero-tracking: -0.02em;
+
+  /* A public page's own heading: About's, a changelog release's. */
+  --luke-display-page-size: 2rem;
+  --luke-display-page-leading: 1.15;
+  --luke-display-page-weight: 600;
+  --luke-display-page-tracking: -0.02em;
+
+  /* A long-form document's title and its section heads (privacy, the changelog's body). */
+  --luke-display-document-size: 2rem;
+  --luke-display-document-leading: 1.15;
+  --luke-display-document-section-size: 1.125rem;
+  --luke-display-document-weight: 650;
+  --luke-display-document-tracking: -0.02em;
+  --luke-display-document-section-tracking: -0.01em;
+
+  /* "Luke" beside the mark, in the wordmark's face. */
+  --luke-display-wordmark-size: 1rem;
+  --luke-display-wordmark-weight: 700;
+  --luke-display-wordmark-tracking: -0.01em;
+}

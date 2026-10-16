@@ -1,6 +1,7 @@
-/* tokens.css -- every shared token in the order a sheet needs them: the base scale, the profiles' roles, the palettes, then each app's old names over them. */
+/* tokens.css -- every shared token in the order a sheet needs them: the base scale, the profiles' roles, the palettes, the site's display styles, then each app's old names over them. */
 
 @import "./scale.css";
 @import "./profiles.css";
 @import "./palettes.css";
+@import "./display.css";
 @import "./legacy.css";
