@@ -409,7 +409,7 @@ export function AgentChangesTab({
     </>
   );
   return (
-    <div className="file-view ph-no-capture" {...room.marks}>
+    <div className="file-view ph-no-capture" {...room.root}>
       <FileViewBar
         path={{
           path: shownFile.path,

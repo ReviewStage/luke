@@ -131,7 +131,7 @@ export function TerminalTab({
     <div
       className="terminal-tab file-view ph-no-capture"
       data-state={session.state.kind}
-      {...room.marks}
+      {...room.root}
     >
       <header className="file-view-bar">
         <span className="terminal-tab-title">

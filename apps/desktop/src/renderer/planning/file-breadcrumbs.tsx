@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MENU_DROP } from "../desktop/action-menu";
 import type { ReadFolder } from "../file-tree/contract";
@@ -47,9 +47,10 @@ const ROW_HEIGHT = 24;
 /** The tallest a crumb's tree stands before it scrolls, its width, and the room it keeps from the window's edges. */
 const TREE_BOUNDS = { MAX_HEIGHT: 360, WIDTH: 280, MARGIN: 8, INSET: 4 } as const;
 
-/** A crumb's tree standing open: the tab's file it was opened over; the crumb, by its place in the path; the folder the tree is rooted at; and the tab's file from that folder, which it reveals. */
+/** A crumb's tree standing open: the tab's file it was opened over, and how many crumbs the bar had folded then; the crumb, by its place in the path; the folder the tree is rooted at; and the tab's file from that folder, which it reveals. */
 interface Opened {
   readonly path: string;
+  readonly folded: number;
   readonly at: number;
   readonly folder: string;
   readonly file: string;
@@ -239,23 +240,37 @@ function foldedToFit(widths: CrumbWidths, room: number): number {
  * How many crumbs the bar folds, for the repository and path they were
  * fitted to. Each crumb is measured at full length once a path, on the
  * frame it is first drawn with none folded, and the fold is counted again
- * from those widths whenever the bar changes its size, so no crumb is drawn
- * squeezed and the path is never drawn whole again just to be measured.
+ * from those widths whenever the bar changes its size and after every
+ * render, since what stands beside the path, a commit or a change's
+ * counts, may have taken or given room; so no crumb is drawn squeezed and
+ * the path is never drawn whole again just to be measured.
  */
 function useCrumbFit(nav: RefObject<HTMLElement | null>, repository: string, path: string): number {
   const [fit, setFit] = useState({ repository, path, folded: 0 });
+  const widths = useRef<CrumbWidths | undefined>(undefined);
+  // Note that a count that has not changed keeps the state it has, so the refit after a render renders nothing more.
+  const refit = useCallback(() => {
+    const element = nav.current;
+    const measured = widths.current;
+    if (element === null || measured === undefined) return;
+    const folded = foldedToFit(measured, crumbRoom(element));
+    setFit((was) =>
+      was.repository === repository && was.path === path && was.folded === folded
+        ? was
+        : { repository, path, folded },
+    );
+  }, [nav, repository, path]);
   useLayoutEffect(() => {
     const element = nav.current;
     const bar = element?.parentElement;
     if (element === null || bar === null || bar === undefined) return undefined;
-    const widths = crumbWidths(element);
-    const refit = () =>
-      setFit({ repository, path, folded: foldedToFit(widths, crumbRoom(element)) });
+    widths.current = crumbWidths(element);
     refit();
     const observer = new ResizeObserver(refit);
     observer.observe(bar);
     return () => observer.disconnect();
-  }, [nav, repository, path]);
+  }, [nav, refit]);
+  useLayoutEffect(refit);
   return fit.repository === repository && fit.path === path ? fit.folded : 0;
 }
 
@@ -332,8 +347,9 @@ export function FileBreadcrumbs({
   const nav = useRef<HTMLElement>(null);
   const folded = useCrumbFit(nav, repository, path);
   const [asked, setOpened] = useState<Opened | undefined>(undefined);
-  // A tree opened over another file, the tab having moved on, is let go.
-  const opened = asked?.path === path ? asked : undefined;
+  // A tree opened over another file, the tab having moved on, or before the
+  // bar folded its crumbs again, its own crumb perhaps folded away, is let go.
+  const opened = asked?.path === path && asked.folded === folded ? asked : undefined;
 
   const close = (returnFocus: boolean) => {
     if (returnFocus) opened?.opener.focus();
@@ -346,6 +362,7 @@ export function FileBreadcrumbs({
     const depth = Math.max(0, at - 1);
     setOpened({
       path,
+      folded,
       at,
       folder: folderOf(segments, depth),
       file: segments.slice(depth).join("/"),

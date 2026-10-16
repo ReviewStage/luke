@@ -90,6 +90,32 @@ test("a Changes tab draws no tree beside the diff, its count under the diff, unt
   assert.ok(!treeDrawn(), "a press on the diff takes the tree down");
 });
 
+test("Escape pressed on the tree's toggle takes down the tree it opened over the diff, and goes no further", async () => {
+  const tab = await drawChangesTab();
+  const toggle = () =>
+    [...tab.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(drawn) ??
+    assert.fail("a toggle is drawn");
+  const treeDrawn = () => {
+    const tree = tab.querySelector('[aria-label="Changed files"]');
+    return tree !== null && drawn(tree);
+  };
+  let escaped = false;
+  const heard = () => {
+    escaped = true;
+  };
+  document.addEventListener("keydown", heard);
+
+  await act(async () => toggle().click());
+  assert.ok(treeDrawn(), "the tree stands over the diff");
+  act(() => {
+    toggle().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  document.removeEventListener("keydown", heard);
+
+  assert.ok(!treeDrawn(), "Escape takes the tree down");
+  assert.equal(escaped, false, "the window hears no Escape of its own");
+});
+
 test("a Changes tab numbers its diff on the new side alone, a removed line by its tint", async () => {
   const tab = await drawChangesTab();
   assert.deepEqual(diffLines(tab), [

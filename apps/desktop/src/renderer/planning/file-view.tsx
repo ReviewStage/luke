@@ -219,13 +219,14 @@ export interface PaneRoom {
   readonly toggles: PaneToggles;
   /** Takes down the pane standing over the tab, as a file chosen in it does. */
   readonly closeOver: () => void;
-  /** What the view's root wears, which the stylesheet places the pane by. */
-  readonly marks: { readonly "data-pane-beside": string; readonly "data-pane-over": string };
-  /** The handlers of the box the pane stands in: a press beside the pane standing over the tab, or Escape, takes it down. */
-  readonly body: {
-    readonly onPointerDown: (event: React.PointerEvent) => void;
+  /** What the view's root wears: the marks the stylesheet places the pane by, and Escape anywhere in the view, its bar's toggle included, taking down the pane standing over the tab. */
+  readonly root: {
+    readonly "data-pane-beside": string;
+    readonly "data-pane-over": string;
     readonly onKeyDown: (event: React.KeyboardEvent) => void;
   };
+  /** What the box the pane stands in wears: a press beside the pane standing over the tab takes it down. */
+  readonly body: { readonly onPointerDown: (event: React.PointerEvent) => void };
 }
 
 /**
@@ -250,17 +251,20 @@ export function usePaneRoom(shown: {
     drawn: beside.drawn || over,
     toggles: { ...shown, over, onToggleOver: () => setOver((was) => !was) },
     closeOver,
-    marks: { "data-pane-beside": String(beside.drawn), "data-pane-over": String(over) },
+    root: {
+      "data-pane-beside": String(beside.drawn),
+      "data-pane-over": String(over),
+      onKeyDown: (event) => {
+        if (!over || event.key !== "Escape" || event.nativeEvent.isComposing) return;
+        // Note that the Escape is stopped here, because the window's own would leave the view.
+        event.stopPropagation();
+        setOver(false);
+      },
+    },
     body: {
       onPointerDown: (event) => {
         if (!over || !(event.target instanceof Node) || pane.current?.contains(event.target))
           return;
-        setOver(false);
-      },
-      onKeyDown: (event) => {
-        if (!over || event.key !== "Escape" || event.nativeEvent.isComposing) return;
-        // Note that the Escape is stopped here, because the window's own would close the panel.
-        event.stopPropagation();
         setOver(false);
       },
     },
@@ -502,7 +506,7 @@ export function FileView({
     onBrowse(path, newTab);
   };
   return (
-    <div className="file-view" {...tree.marks}>
+    <div className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
         path={{
