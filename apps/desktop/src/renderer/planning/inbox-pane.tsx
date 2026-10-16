@@ -20,10 +20,10 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
+import { BackIcon, ChevronRightIcon } from "@luke/ui";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
-import { CheckIcon, ClockIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
@@ -956,8 +956,8 @@ function AutomationCrumb({
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
   const known = useAutomation(holder.automationId ?? undefined);
-  // Note that the agents no automation names stand under no automation, so their crumb wears the coding agents' glyph, as their group's header does.
-  const icon = holder.automationId === null ? <CodingAgentsIcon /> : <ClockIcon />;
+  // Note that the agents no automation names stand under no automation, so their crumb wears the Factory's glyph, where every agent is listed, as their group's header does.
+  const icon = holder.automationId === null ? <FactoryIcon aria-hidden="true" /> : <ClockIcon />;
   return (
     <Tooltip
       label={holder.name}

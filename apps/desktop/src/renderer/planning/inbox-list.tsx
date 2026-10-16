@@ -1,9 +1,14 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { CodingAgentsIcon, DocumentIcon } from "@luke/ui";
+import { DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
+import {
+  ArrowDownNarrowWideIcon,
+  FactoryIcon,
+  InboxIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
@@ -256,8 +261,9 @@ export function InboxItemRow({
 /**
  * A holder's group header: a plan's document glyph and name; an
  * automation's clock tile, wearing how its last run went and hanging its
- * card where the window reads the automation; and the coding agents' glyph
- * for the agents no automation names, since that group names no one actor.
+ * card where the window reads the automation; and the Factory's glyph, the
+ * sidebar's row listing every agent, for the agents no automation names,
+ * since that group names no one actor.
  * A press folds the group, as every group header's does.
  */
 function HolderHeader({
@@ -279,7 +285,13 @@ function HolderHeader({
     return <SidebarGroupHeader glyph={<DocumentIcon />} name={holder.plan.name} {...shared} />;
   }
   if (holder.automationId === null) {
-    return <SidebarGroupHeader glyph={<CodingAgentsIcon />} name={holder.name} {...shared} />;
+    return (
+      <SidebarGroupHeader
+        glyph={<FactoryIcon aria-hidden="true" />}
+        name={holder.name}
+        {...shared}
+      />
+    );
   }
   const actor =
     known === undefined

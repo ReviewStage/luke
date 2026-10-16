@@ -39,6 +39,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
+import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -168,6 +169,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const panels = new PanelManager({
     runMode,
+    instance: config.instance,
     mediaDuck: native.mediaDuck,
     preloadPath,
     rendererHtmlPath,
@@ -209,6 +211,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     placementPath: path.join(config.stateRoot, "call-window.json"),
   });
   const callPresence = new CallWindowPresence(callWindow);
+  /** What stops a development build's renderer errors reaching the terminal; nothing until the start begins it. */
+  let stopRendererErrors = (): void => undefined;
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -356,7 +360,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     pendingWaits.add(wait);
   }
   const hotkeys = new HotkeyRegistrar({
-    registersGlobalKeys: runMode.registersGlobalKeys,
+    // Note that a named development instance claims no system-wide key,
+    // because it runs beside the plain one and two Lukes cannot share a chord:
+    // whichever launched first would take it from the other.
+    registersGlobalKeys: runMode.registersGlobalKeys && config.instance === undefined,
     // A voice stands only when the host says one does.
     hasCredentials: () => operator.voiceAvailable(),
     host: {
@@ -506,6 +513,22 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
         run(pageResponse(request.url, operator.host.tasksPage)),
       );
+      // A development build writes its windows' errors where the run's own
+      // lines go, from before the first window opens, and offers their
+      // developer tools; the menu bar draws none in a packaged build. Note
+      // that a capture run is offered none either, because its windows are
+      // opened without them (`hardenedWebPreferences`).
+      if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
+      if (runMode.takesFocus) {
+        config.showMenuBar({
+          developerTools: {
+            onOpenVoiceWindow: () =>
+              voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+            onOpenCallWindow: () =>
+              callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+          },
+        });
+      }
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();
@@ -527,6 +550,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     stop: async () => {
       config.appLinks.close();
+      stopRendererErrors();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
       app.removeListener("browser-window-focus", panelFocused);

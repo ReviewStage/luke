@@ -83,6 +83,11 @@ const readShown = Schema.decodeUnknownOption(
   }),
 );
 
+/** A start's planning, read back where it names one. */
+const readPlanningNamed = Schema.decodeUnknownOption(
+  Schema.Struct({ planning: Schema.optionalKey(Schema.Boolean) }),
+);
+
 /** A voice command's payload, read back as the act's own schema admits it. */
 const readVoiceCommand = Schema.decodeUnknownOption(
   Schema.Struct({ command: Schema.Literals(Object.values(VOICE_COMMAND)) }),
@@ -413,14 +418,14 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   await act(async () => {
     note = await tab
       .control()
-      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId, true);
   });
   assert.ok(note, "a refusal says why");
   assert.equal(tab.control().newPlan.open, true, "a refusal keeps the dialog");
   await act(async () => {
     note = await tab
       .control()
-      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId, true);
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newPlan.open, false, "a plan started closes the dialog");
@@ -1000,9 +1005,9 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
     plans: tab.control().listed.plans.map((plan) => plan.id),
     archived: tab.control().listed.archived.map((plan) => plan.id),
   };
-  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId, true);
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().newPlan.start("Usage", "acme/relay", tab.control().newPlan.workspaceId);
+  await tab.control().newPlan.start("Usage", "acme/relay", tab.control().newPlan.workspaceId, true);
 
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
@@ -1445,7 +1450,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
 test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
-  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId, true);
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(
@@ -1453,6 +1458,20 @@ test("before the workspaces are read every plan is listed and New plan names no 
     ["notes", "alerts", "billing"],
   );
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
+});
+
+test("New plan with Plan off asks for a task without planning, and with it on names no planning, as every start did before", async () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
+
+  await tab.control().newPlan.start("Typo", null, tab.control().newPlan.workspaceId, false);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId, true);
+
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => Option.getOrUndefined(readPlanningNamed(asked.payload))?.planning),
+    [false, undefined],
+  );
 });
 
 test("Settings' GitHub row is the connection main's view holds, its Connect and Disconnect ask main, and a refused Disconnect says why", async () => {

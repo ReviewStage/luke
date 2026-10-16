@@ -382,9 +382,9 @@ export function LukeCard({
 
 /** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
-  [SOMEONE_REASON.FORMER]: "No longer in this workspace. Their edits stay in the plan's history.",
+  [SOMEONE_REASON.FORMER]: "No longer in this workspace.",
   [SOMEONE_REASON.UNNAMED]: "Luke can't say who made this change.",
-  [SOMEONE_REASON.EARLIER]: "The plan as it stood before its history began.",
+  [SOMEONE_REASON.EARLIER]: "The plan before its history began.",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
@@ -394,13 +394,15 @@ function SomeoneCard({
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
+  // Note that a named former member's head already says "Former member".
+  const note = former && actor.name !== undefined ? undefined : SOMEONE_NOTES[actor.reason];
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
-      <CardNote>{SOMEONE_NOTES[actor.reason]}</CardNote>
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }

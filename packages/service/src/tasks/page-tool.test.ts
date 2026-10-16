@@ -27,7 +27,7 @@ const openTask = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  return { userId, taskId: task.id };
+  return { userId, taskId: task.id, workspaceId: task.workspaceId };
 });
 
 /** A sandbox holding the files given by absolute path, each read as one stream, recording every path asked for. */
@@ -72,7 +72,7 @@ const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, re
 
 it.layer(getTestDB())("show_page", (it) => {
   it.effect(
-    "inline HTML makes a page, named again it takes the next version, and the answer never carries the HTML",
+    "inline HTML makes a page, named again it takes the next version, and the answer carries the mention the page is named by and never the HTML",
     () =>
       Effect.gen(function* () {
         const task = yield* openTask;
@@ -88,7 +88,11 @@ it.layer(getTestDB())("show_page", (it) => {
 
         assert.deepEqual(first, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
-          page: { id: page.id, version: 1 },
+          page: {
+            id: page.id,
+            version: 1,
+            mention: `[@Invite funnel](https://tryluke.dev/workspace-${task.workspaceId}/plan/${task.taskId}/page/${page.id})`,
+          },
         });
         assert.deepEqual(second, { id: page.id, version: 2 });
         assert.deepEqual(

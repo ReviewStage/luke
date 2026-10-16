@@ -7,6 +7,7 @@ import {
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
+  encodeMention,
   MENTION_KIND,
   type MentionPlace,
   mentionMarkdown,
@@ -19,6 +20,7 @@ import {
   MENTIONED_BOUNDS,
   type MentionedAgent,
   mentionedContext,
+  mentionedIds,
   mentionedServers,
 } from "./mentioned-context.js";
 
@@ -381,8 +383,6 @@ const PAGE_ID = "3b9a0c1d-2e4f-4a6b-8c0d-1e2f3a4b5c6d";
 
 const OTHER_AGENT_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b";
 
-const PAGE_HTML = "<!doctype html>\n<h1>Invites by week</h1>\n<p>Code: ```x```</p>";
-
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
@@ -406,18 +406,16 @@ const OTHER_AGENT: MentionedAgent = {
 };
 
 const READS = {
-  pages: new Map([
-    [PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000, html: PAGE_HTML }],
-  ]),
+  pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000 }]]),
   agents: new Map([[OTHER_AGENT_ID, OTHER_AGENT]]),
 };
 
-test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close, of tildes", () => {
+test("a page of the plan the words mention is handed by its title, id, and version, with how to read it and how to revise it, and never its HTML", () => {
   const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, TASK, READS);
 
   assert.equal(
     part,
-    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place. Its HTML as it stands:\n\n~~~html\n${PAGE_HTML}\n~~~`,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. Read it as the developer saw it with \`read_page\`, \`pageId: "${PAGE_ID}"\`, and \`version: 3\`, or leave the version out for its newest. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place.`,
   );
 });
 
@@ -504,44 +502,6 @@ test("a page the send did not find on the plan is named as gone, an agent it did
   assert.equal(elsewhere, undefined);
 });
 
-test("a long page is cut on a line to its bound, saying how much was left out", () => {
-  const long = Array.from({ length: 2_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
-  const part =
-    mentionedContext(`See ${page("Rows")}.`, TASK, {
-      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Rows", version: 1, at: 0, html: long }]]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
-  assert.match(part, /\n… \(\d+ more characters\)\n```$/u);
-});
-
-test("a page whose HTML holds a long run of backticks is still handed, its fence and HTML inside the page's bound", () => {
-  const ticks = "`".repeat(11_000);
-  const part =
-    mentionedContext(`See ${page("Ticks")}.`, TASK, {
-      pages: new Map([
-        [PAGE_ID, { id: PAGE_ID, title: "Ticks", version: 1, at: 0, html: `<pre>${ticks}</pre>` }],
-      ]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.match(part, /the page "Ticks"/u);
-  assert.match(part, /\n~~~html\n<pre>`+<\/pre>\n~~~$/u);
-  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
-});
-
-test("a page whose cut-off end holds long runs of both fence characters still hands its kept beginning in a short fence", () => {
-  const html = `<h1>Chart</h1>\n${"`".repeat(6_000)}${"~".repeat(6_000)}`;
-  const part =
-    mentionedContext(`See ${page("Chart")}.`, TASK, {
-      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Chart", version: 1, at: 0, html }]]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.match(part, /\n```html\n<h1>Chart<\/h1>\n… \(\d+ more characters\)\n```$/u);
-});
-
 test("an agent whose task is archived is handed as taking no message, and one mentioned in upper case is found as the store holds it", () => {
   const onArchived = { ...OTHER_AGENT, task: { id: TASK.id, name: "Rollout", archived: true } };
   const reads = { pages: new Map(), agents: new Map([[OTHER_AGENT_ID, onArchived]]) };
@@ -552,4 +512,54 @@ test("an agent whose task is archived is handed as taking no message, and one me
   assert.match(part, /"Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\)/u);
   assert.match(part, /Its task is archived, so it takes no message\./u);
   assert.doesNotMatch(part, /message_agent/u);
+});
+
+/** A section's address as its heading's ⋯ "Copy link" copies it, bare. */
+const bareSection = (heading: string) =>
+  encodeMention({ kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: anchorOf(heading) }, PLACE);
+
+test("a section's bare address in the words is handed the section as it stands, written alone, as its own label, or between angle brackets", () => {
+  const address = bareSection("Rollout");
+  const handed = `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`;
+
+  for (const words of [
+    `Do what ${address} says.`,
+    `Do what [${address}](${address}) says.`,
+    `Do what <${address}> says.`,
+  ]) {
+    assert.equal(mentionedContext(words, TASK), handed, words);
+  }
+});
+
+test("a gone section's bare address is named by its anchor, and a page's or an agent's bare address is read as its mention", () => {
+  const pageAddress = encodeMention(
+    { kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId: PAGE_ID },
+    PLACE,
+  );
+  const agentAddress = encodeMention(
+    { kind: MENTION_KIND.AGENT, taskId: TASK.id, agentId: OTHER_AGENT_ID },
+    PLACE,
+  );
+  const words = `See ${bareSection("Old flow")}, ${pageAddress} and ${agentAddress}.`;
+
+  assert.match(
+    mentionedContext(words, TASK) ?? "",
+    /The section "old-flow": no longer in the plan\./u,
+  );
+  assert.deepEqual(mentionedIds(words, TASK), { pages: [PAGE_ID], agents: [OTHER_AGENT_ID] });
+});
+
+test("a bare GitHub page of the plan's repository, a bare Linear issue, a bare address in code, and one a link or picture holds between angle brackets are handed nothing and bring in no server", () => {
+  for (const words of [
+    `Fix https://github.com/${TASK.repository}/blob/HEAD/src/app.ts as it stands.`,
+    `Fix [https://github.com/${TASK.repository}/tree/HEAD/src](https://github.com/${TASK.repository}/tree/HEAD/src).`,
+    `Fix ${ISSUE_URL} first.`,
+    `Fix <${ISSUE_URL}> first.`,
+    `Run \`open ${bareSection("Rollout")}\` to see it.`,
+    `See [the rollout](https://example.com/?next=${bareSection("Rollout")}).`,
+    `See [the rollout](<${bareSection("Rollout")}>) and ![its diagram](<${bareSection("Rollout")}>).`,
+  ]) {
+    assert.equal(mentionedContext(words, TASK), undefined, words);
+    assert.deepEqual(mentionedServers(words, TASK.repository), [], words);
+  }
 });

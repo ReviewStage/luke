@@ -18,9 +18,11 @@ import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { LinkWorkspaceProvider } from "../copy-link-item";
+import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SummaryButton,
   type SummaryLayout,
+  summaryHolds,
   TaskSummary,
   useSummaryLayout,
   useSummaryPin,
@@ -33,7 +35,8 @@ import type { HeldTranscripts } from "./strip-tabs";
  * gives the plan's column the keys, and whose card previews the running
  * agent's latest step while the plan's column shows that agent. A column too
  * narrow to spare the rail draws none, and the toolbar's button hangs the
- * card in its place. Synthetic agents and pull requests throughout.
+ * card in its place. A plan with nothing to list draws neither the summary
+ * nor its button. Synthetic agents and pull requests throughout.
  */
 
 const RUN_STARTED = 5_000;
@@ -87,6 +90,7 @@ const HELD: HeldTranscripts = {
 /** The summary pinned beside the document, its card hung by nothing. */
 const PINNED: SummaryLayout = {
   mode: "column",
+  holds: true,
   wide: true,
   card: undefined,
   onToggle: () => undefined,
@@ -220,20 +224,23 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
 });
 
+/** What the plan's own inbox holds in these tests: nothing. */
+const NO_INBOX = { open: [], settled: [] };
+
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function PlanColumn(): React.JSX.Element {
+function PlanColumn({ plans }: { plans: PlansControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  const layout = useSummaryLayout(pin, column, false);
+  const layout = useSummaryLayout(pin, column, false, summaryHolds(plans, NO_INBOX));
   return createElement(
     "div",
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
-      plans: plansControl(),
+      plans,
       layout,
       cardId: "summary-card",
-      inbox: { open: [], settled: [] },
+      inbox: NO_INBOX,
       held: HELD,
       repository: "acme/relay",
       onOpenAgent: () => undefined,
@@ -241,16 +248,22 @@ function PlanColumn(): React.JSX.Element {
   );
 }
 
-/** The plan's column drawn `width` pixels wide, and a way to lay it out again at another width. */
-function columnAt(width: number) {
+/** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
+function columnAt(width: number, plans: PlansControl = plansControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));
   const page = document.body.appendChild(document.createElement("div"));
   root = createRoot(page);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PlanColumn))));
+  const draw = (shown: PlansControl) =>
+    act(() =>
+      root?.render(onRegistry(AtomRegistry.make(), createElement(PlanColumn, { plans: shown }))),
+    );
+  draw(plans);
   return {
     page,
     rail: () => page.querySelector('aside[aria-label="Summary"]'),
+    toggle: () => page.querySelector('button[aria-label$="summary"]'),
+    redraw: draw,
     widen: (to: number) => {
       measured.mockReturnValue(DOMRect.fromRect({ width: to }));
       act(() => relayout());
@@ -291,4 +304,22 @@ test("the pinned summary's rows fade under the toolbar above it and over the cal
   } finally {
     sheets.remove();
   }
+});
+
+test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {
+  const listed = plansControl();
+  const bare = plansControl({ sidePanel: { ...listed.sidePanel, used: [] } });
+  for (const width of [1200, 600, 280]) {
+    const column = columnAt(width, bare);
+    assert.equal(column.rail(), null, `no summary at ${width}px`);
+    assert.equal(column.toggle(), null, `no toolbar button at ${width}px`);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    vi.restoreAllMocks();
+  }
+
+  const column = columnAt(1200, bare);
+  column.redraw(listed);
+  assert.equal(column.rail()?.getAttribute("data-mode"), "column");
+  assert.ok(column.toggle(), "the toolbar's button stands");
 });

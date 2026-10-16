@@ -124,11 +124,9 @@ const ROLE_DETAIL = {
 /** What an admin's role menu says under Admin, which only the owner invites. */
 const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 
-/** What the invitations say where none is pending: to the workspace's one member, and to a team. */
-const INVITATIONS_EMPTY = {
-  ALONE: "Only you so far. Invite someone by email, then send them the link Luke makes.",
-  NONE: "No invitations waiting. Luke sends no mail: copy each new invitation's link and send it yourself.",
-} as const;
+/** What the invitations say where none is pending, with the one fact a reader cannot guess: Luke mails no one. */
+const INVITATIONS_EMPTY =
+  "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
 
 /** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
 const READ_FAILED = {
@@ -146,12 +144,10 @@ const READ_FAILED = {
  */
 const LEAVE_WORDS = {
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
-  BODY: "You lose access to its tasks, agents, and Inbox until someone invites you again.",
-  PLANS: (name: string) => `Tasks you wrote stay in ${name}, for its members to keep.`,
-  AGENTS:
-    "Agents you started stay in its history, named as a former member, and any still working stop.",
+  PLANS: (name: string) => `Tasks you wrote stay in ${name}.`,
+  AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
-  INVITATIONS: "Invitations you sent stay valid: they're the workspace's.",
+  INVITATIONS: "Invitations you sent stay valid.",
   AUTOMATIONS_NAMED: (names: readonly string[]) =>
     names.length === 1
       ? `An automation you created stops running: ${names[0]}.`
@@ -177,7 +173,7 @@ const ROLE_ACT = {
 const TRANSFER_WORDS = {
   VERB: "Transfer ownership",
   RUNNING: "Transferring",
-  BODY: "The admin you choose becomes its owner, and you become an admin. You can leave once it's done.",
+  BODY: "The admin you choose becomes its owner, and you become an admin.",
   ONE_BODY: (name: string) =>
     `You become an admin. ${name} can then change anyone's role and remove anyone, you included.`,
 } as const;
@@ -534,7 +530,7 @@ function MemberLeave({
         confirm={leave}
         question={{
           title: `Leave ${workspace.name}?`,
-          body: LEAVE_WORDS.BODY,
+          body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
           running: "Leaving",
         }}
@@ -820,13 +816,10 @@ function RoleChip({
 function Invitations({
   workspaceId,
   owner,
-  alone,
 }: {
   workspaceId: string;
   /** Whether the reader owns the workspace, the one role that invites an admin. */
   owner: boolean;
-  /** Whether the reader is the workspace's one member, which the empty list's line says. */
-  alone: boolean;
 }): React.JSX.Element {
   const { act } = useAct();
   const copy = useCopyToast();
@@ -945,9 +938,7 @@ function Invitations({
       ) : pending === undefined ? (
         <Reading label="Loading the invitations" />
       ) : pending.length === 0 ? (
-        <p className="settings-card-line settings-note">
-          {alone ? INVITATIONS_EMPTY.ALONE : INVITATIONS_EMPTY.NONE}
-        </p>
+        <p className="settings-card-line settings-note">{INVITATIONS_EMPTY}</p>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
@@ -1190,7 +1181,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           confirm={disconnect}
           question={{
             title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again. Plans already started from one keep what they read.",
+            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}
@@ -1427,7 +1418,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
-          body: "Its members see its letter in its place until a photo is uploaded again.",
           verb: "Remove",
           running: "Removing",
         }}
@@ -1525,11 +1515,7 @@ function ShownWorkspace({
       </SettingsGroup>
       {managesWorkspace(workspace) ? (
         <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
-          <Invitations
-            workspaceId={workspace.id}
-            owner={workspace.role === WORKSPACE_ROLE.OWNER}
-            alone={(workspace.memberCount ?? 2) <= 1}
-          />
+          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
         </SettingsGroup>
       ) : null}
       <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>

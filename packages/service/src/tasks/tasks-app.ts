@@ -487,6 +487,9 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       ...(started.success.name === undefined ? undefined : { name: started.success.name }),
       repository,
       ...(issue === undefined ? undefined : { linearIssue: issue }),
+      ...(started.success.planning === undefined
+        ? undefined
+        : { planning: started.success.planning }),
     }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan: task } satisfies TaskAnswer);

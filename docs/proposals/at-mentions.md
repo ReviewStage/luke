@@ -1163,7 +1163,8 @@ VoiceOver, since CI can't see the Mac.
 | 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
 | links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
 | 10 | The task's pages and other agents in the `@` list, by their Luke links | merged, #3031 |
-| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | this PR |
+| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | #3064 |
+| 13 | `read_page`; a page mention hands its reference and `read_page`, never its HTML | this PR |
 
 ## 9. Risks
 

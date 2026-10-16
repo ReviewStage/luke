@@ -1,6 +1,6 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
-import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { changesLabelOf, PR_RUN_LABEL, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon, PlayIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
@@ -88,12 +88,12 @@ export interface KindLook {
 
 /**
  * A coding agent's mark at rest: the mark of the harness its model runs in,
- * or the Coding agents glyph where Luke knows no harness for it. A place
+ * or its empty box (`AgentPlaceholderIcon`) until Luke knows the harness. A place
  * offering the agent wears it inside `AgentGlyph`; one that knows nothing
  * of where it stands, as a revision's author, wears it bare.
  */
 export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
-  return provider === undefined ? <CodingAgentsIcon /> : <HarnessMark provider={provider} />;
+  return provider === undefined ? <AgentPlaceholderIcon /> : <HarnessMark provider={provider} />;
 }
 
 /**

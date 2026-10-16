@@ -162,14 +162,20 @@ export function TerminalTab({
             models={agents.models}
             session={{
               ...session,
-              // A shell chosen in the list standing over the screen takes the list down, to show the shell.
+              // A shell chosen in the list floating over the screen takes the list down, to show the shell.
               onChoose: (id) => {
                 room.closeOver();
                 session.onChoose(id);
               },
+              // So does a shell started there, which the screen shows.
+              onCreate: () => {
+                room.closeOver();
+                session.onCreate();
+              },
             }}
             onOpenAgent={onOpenAgent}
             pane={room.beside.pane}
+            float={room.pane}
             leaving={room.beside.leaving}
             surfaceOpen={shown}
           />

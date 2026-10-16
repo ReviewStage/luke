@@ -44,13 +44,13 @@ const LANDING_CARD = {
     badge: "Requested",
     settled: true,
     title: "Your request went to the organization's owner",
-    body: "Once an owner installs Luke, its repositories appear in Luke. You can close this tab.",
+    body: "You can close this tab.",
   },
   [GITHUB_INSTALL_STATUS.NOT_FOUND]: {
     badge: "Not completed",
     settled: false,
     title: "Luke could not confirm the installation",
-    body: "Return to Luke and choose Connect GitHub again in Settings › Workspace.",
+    body: "Return to Luke and choose Connect GitHub again.",
   },
   [GITHUB_INSTALL_STATUS.UNAVAILABLE]: {
     badge: "Not completed",

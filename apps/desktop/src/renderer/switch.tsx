@@ -22,6 +22,8 @@ interface SwitchButtonProps {
   onMouseDown?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** The switch's accessible name. */
   label: string;
+  /** The button's id, where a visible label beside it names it by `htmlFor`. */
+  id?: string | undefined;
   /** The id of the words that say what the switch does, where some stand beside it. */
   describedBy?: string | undefined;
   disabled?: boolean | undefined;
@@ -56,10 +58,12 @@ export function Switch(props: SwitchButtonProps | SwitchDrawingProps): React.JSX
       </span>
     );
   }
-  const { checked, onChange, onMouseDown, label, describedBy, disabled, anchor, className } = props;
+  const { checked, onChange, onMouseDown, label, id, describedBy, disabled, anchor, className } =
+    props;
   return (
     <button
       type="button"
+      id={id}
       role="switch"
       aria-checked={checked}
       aria-label={label}

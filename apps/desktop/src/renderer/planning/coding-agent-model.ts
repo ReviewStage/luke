@@ -5,12 +5,14 @@ import {
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
+  type CodingAgentArchivedBy,
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
@@ -174,6 +176,41 @@ const ACTOR_STATE_OF_GLYPH = {
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
+/** Who archived an agent, and why, as its card and its archived banner say it. */
+export interface ArchivedByReading {
+  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean". */
+  readonly words: string;
+  readonly reason: string | undefined;
+}
+
+/** What names an agent that archived another whose title the service kept empty. */
+const UNNAMED_ARCHIVER = "another agent";
+
+/**
+ * Who archived an agent, as the reader reads it: the member who did, or
+ * Luke or the archiving agent and the member they acted for, "you" for the
+ * reader's own account, the member left out once their account is gone;
+ * and the reason they gave.
+ */
+export function archivedByReading(
+  by: CodingAgentArchivedBy,
+  readerId: string | undefined,
+): ArchivedByReading {
+  const member =
+    by.member === undefined ? undefined : by.member.userId === readerId ? "you" : by.member.name;
+  const forMember = member === undefined ? "" : ` for ${member}`;
+  const archiver =
+    by.by === CODING_AGENT_ARCHIVER.MEMBER
+      ? member
+      : by.by === CODING_AGENT_ARCHIVER.LUKE
+        ? `Luke${forMember}`
+        : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
+  return {
+    words: archiver === undefined ? "Archived" : `Archived by ${archiver}`,
+    reason: by.reason,
+  };
+}
+
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },
@@ -190,7 +227,9 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Luke, an automation, or the GitHub login GitHub
+ * face, a former member, Luke, an automation, another coding agent of the
+ * workspace by its name on the mark of no known harness, since the service
+ * keeps no more of it than its name, or the GitHub login GitHub
  * told the agent of, a person's circle by their avatar or an App's bot's
  * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
@@ -208,6 +247,14 @@ export function lineSender(
   if (sentBy === undefined) return undefined;
   if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
     return undefined;
+  }
+  if (sentBy.agent === true) {
+    return {
+      kind: ACTOR_KIND.AGENT,
+      name: sentBy.name,
+      provider: undefined,
+      state: ACTOR_STATE.REST,
+    };
   }
   switch (sentBy.kind) {
     case CODING_AGENT_SENDER.LUKE:
@@ -1004,28 +1051,6 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
 }
 
 /**
- * The coding agents an agent's own calls started, by id, in the order its
- * transcript holds them: each `start_agent` that answered an agent. A tab
- * that sees one it had not reads its plan's agents again, as the plan does
- * when Luke starts one, since nothing else tells the list.
- */
-export function startedAgentIds(messages: readonly CodingAgentMessage[]): readonly string[] {
-  return messages.flatMap(agentParts).flatMap((part) => startedAgentOf(part) ?? []);
-}
-
-/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
-export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
-}
-
-/** Whether a part is a delegation to a worker (`delegates`). */
-export function isDelegation(
-  part: AgentPart,
-): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
-  return part.kind === AGENT_PART.TOOL && delegates(part);
-}
-
-/**
  * The coding agent a call started, read off its answer, which is the agent
  * its row opens; nothing for any other call, one still running, or a start
  * refused, which answers no agent.
@@ -1039,6 +1064,37 @@ export function startedAgentOf(part: AgentPart): string | undefined {
   }
   const target = toolTarget(part);
   return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
+}
+
+/** The calls that change which agents a task holds and which of them stand archived: a start, an archive, and an unarchive. */
+const AGENT_LIST_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.START_AGENT,
+  RETIRED_TOOL.START_CODING_AGENT,
+  AGENT_TOOL.ARCHIVE_AGENT,
+  AGENT_TOOL.UNARCHIVE_AGENT,
+]);
+
+/** The answered calls of a transcript that change the task's agents or which stand archived, by call id: what the agents are read again on as each lands. */
+export function agentListCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages
+    .flatMap(agentParts)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TOOL && AGENT_LIST_TOOLS.has(part.tool) && part.output !== undefined
+        ? [part.callId]
+        : [],
+    );
+}
+
+/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
+  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
+}
+
+/** Whether a part is a delegation to a worker (`delegates`). */
+export function isDelegation(
+  part: AgentPart,
+): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return part.kind === AGENT_PART.TOOL && delegates(part);
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
@@ -1452,6 +1508,8 @@ export interface SentLine {
   readonly attachments: readonly CodingAgentAttachment[];
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
+  /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
+  readonly steers: boolean;
 }
 
 /** The developer's own rows of a transcript, which a sent line is read back as one of. */

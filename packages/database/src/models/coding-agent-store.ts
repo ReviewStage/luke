@@ -23,9 +23,11 @@ import {
   eq,
   exists,
   gt,
+  ilike,
   inArray,
   isNotNull,
   isNull,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -760,17 +762,37 @@ const findAgentsOfTask = SqlSchema.findAll({
     ),
 });
 
+/** A `LIKE` pattern finding the words anywhere, its own `%`, `_`, and `\\` matched as themselves. */
+function containing(words: string): string {
+  return `%${words.replace(/[\\%_]/gu, (special) => `\\${special}`)}%`;
+}
+
+/** The condition that an agent's title, or its task's name, holds the words, whatever their case. */
+function agentNamed(words: string): SQL | undefined {
+  const pattern = containing(words);
+  return or(
+    ilike(codingAgent.title, pattern),
+    exists(
+      queryBuilder
+        .select({ one: task.id })
+        .from(task)
+        .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
+    ),
+  );
+}
+
 const findAgentsOfWorkspace = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     organizationId: Schema.String,
     repository: Schema.NullOr(Schema.String),
     planId: Schema.NullOr(Schema.String),
+    words: Schema.NullOr(Schema.String),
     includeArchived: Schema.Boolean,
     limit: Schema.Number,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, organizationId, repository, planId, includeArchived, limit }) =>
+  execute: ({ userId, organizationId, repository, planId, words, includeArchived, limit }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
@@ -781,6 +803,7 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
             eq(AGENT_WORKSPACE, organizationId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
             planId === null ? undefined : eq(codingAgent.taskId, planId),
+            words === null ? undefined : agentNamed(words),
             // Note that a repository is matched as GitHub matches one, its case aside.
             repository === null
               ? undefined
@@ -1078,8 +1101,9 @@ export function listCodingAgents(
 /**
  * The workspace's agents, on a plan or with none, by any member, newest
  * started first, an archived one left out unless `includeArchived` asks,
- * only those on the repository named where one is and on the plan named
- * where one is, and at most `limit`; a workspace the account is not in has
+ * only those on the repository named where one is, on the plan named
+ * where one is, and whose title or task's name holds the words where some
+ * are given, and at most `limit`; a workspace the account is not in has
  * none.
  */
 export function listWorkspaceCodingAgents(
@@ -1088,6 +1112,7 @@ export function listWorkspaceCodingAgents(
   options: {
     readonly repository?: string;
     readonly planId?: string;
+    readonly words?: string;
     readonly includeArchived?: boolean;
     readonly limit: number;
   },
@@ -1097,6 +1122,7 @@ export function listWorkspaceCodingAgents(
     organizationId,
     repository: options.repository ?? null,
     planId: options.planId ?? null,
+    words: options.words ?? null,
     includeArchived: options.includeArchived ?? false,
     limit: options.limit,
   });

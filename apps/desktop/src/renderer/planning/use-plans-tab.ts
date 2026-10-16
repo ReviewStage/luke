@@ -1,4 +1,5 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
@@ -138,7 +139,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -272,7 +273,11 @@ export const AUTOMATIONS_PAGE = {
 
 export type AutomationsPlace =
   | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
-  | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.NEW;
+      /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
+      readonly preset?: AutomationPresetName;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.EDIT;
       readonly automationId: string;
@@ -504,11 +509,12 @@ export interface PlansControl {
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the plan starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
+      planning: boolean,
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
@@ -1014,14 +1020,12 @@ export function usePlansTab(input: {
     () => workerCallIds(workRowsOf(viewed.conversation, false)),
     [viewed.conversation],
   );
-  // An agent Luke started in the call is in the work before it is in the
-  // list, so the list is read again as its start answers, and the tab
-  // appears as it does after a Start; a start already in the work when the
-  // plan opens is read with the plan.
-  const startedByLuke = useMemo(
-    () => startedAgentCallIds(viewed.conversation),
-    [viewed.conversation],
-  );
+  // An agent Luke started, archived, or brought back in the call moves in
+  // the work before it moves in the list, so the list is read again as the
+  // call answers, and the tab appears or leaves as it does after a Start or
+  // an Archive; a call already in the work when the plan opens is read with
+  // the plan.
+  const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
   const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
     planId: undefined,
     ids: new Set(),
@@ -1772,11 +1776,15 @@ export function usePlansTab(input: {
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
-  // which main leaves for this question to end or keep.
+  // which main leaves for this question to end or keep. A start without
+  // planning opens no call, so it asks nothing about the one standing; it
+  // names its planning only where it is off, so a request with planning is
+  // the one every service has read.
   const startPlan = (
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
+    planning: boolean,
     linearIssueId?: string,
   ): Promise<string | undefined> =>
     act(ACT_KIND.TASKS_START, {
@@ -1784,13 +1792,14 @@ export function usePlansTab(input: {
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(linearIssueId === undefined ? undefined : { linearIssueId }),
+      ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
         if ("failure" in answer) return startFailureNote(answer.failure);
         setNewPlanAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (callingNow.current) {
+        if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
         }
@@ -1814,6 +1823,7 @@ export function usePlansTab(input: {
               taskNameOfIssue(issue),
               repositoriesIn(listedLinear.id).recent[0] ?? null,
               listedLinear.id,
+              true,
               issue.id,
             ),
         };

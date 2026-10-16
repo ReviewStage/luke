@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
@@ -159,6 +160,22 @@ it.layer(getTestDB())("a plan's starting name", (it) => {
         Option.getOrUndefined(yield* readTask(owner, unnamed.id))?.task.name,
         "Untitled",
       );
+    }),
+  );
+});
+
+it.layer(getTestDB())("a plan's starting text", (it) => {
+  it.effect("a plan starts as the template, and one started without planning starts empty", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const organizationId = yield* openWorkspace(owner);
+      const planned = yield* createTask(owner, { organizationId });
+      const unplanned = yield* createTask(owner, { organizationId, planning: false });
+
+      const opened = (taskId: string) =>
+        Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.document);
+      assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
+      assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
     }),
   );
 });

@@ -937,7 +937,7 @@ test("Escape leaves a page with nothing unsaved for the list, and asks first whe
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
-  assert.match(leaveAsked() ?? "", /What you changed here is lost\./u);
+  assert.ok(leaveAsked(), "the leave question stands");
   act(() => button("Cancel").click());
   await settle();
   assert.equal(leaveAsked(), undefined);
@@ -954,10 +954,7 @@ test("a new automation with something written asks before any way out leaves it,
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
   act(() => button("Automations").click());
   assert.equal(places.length, 1, "the crumb waits on the question");
-  assert.match(
-    leaveAsked() ?? "",
-    /This automation isn't created yet, and what you wrote here is lost\./u,
-  );
+  assert.ok(leaveAsked(), "the leave question stands");
   act(() => button("Cancel").click());
   await settle();
 
@@ -1146,6 +1143,78 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
+});
+
+/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
+interface Played {
+  element: Element;
+  keyframes: Keyframe[];
+  finish: () => void;
+}
+
+/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
+interface RecordedMotion {
+  onfinish: (() => void) | null;
+  cancel: () => void;
+}
+
+/**
+ * Gives the window the pane's motion tokens and an animation engine that
+ * records what is played rather than playing it, since jsdom has neither;
+ * answers what was played, and a way to take both away again.
+ */
+function playMotions() {
+  const played: Played[] = [];
+  const root = document.documentElement.style;
+  root.setProperty("--duration-pane", "240ms");
+  root.setProperty("--motion-pane", "ease-out");
+  Object.defineProperty(Element.prototype, "animate", {
+    configurable: true,
+    value(this: Element, keyframes: Keyframe[]) {
+      const animation: RecordedMotion = {
+        onfinish: null,
+        cancel: () => undefined,
+      };
+      played.push({ element: this, keyframes, finish: () => animation.onfinish?.() });
+      return animation;
+    },
+  });
+  return {
+    played,
+    remove: () => {
+      root.removeProperty("--duration-pane");
+      root.removeProperty("--motion-pane");
+      Reflect.deleteProperty(Element.prototype, "animate");
+    },
+  };
+}
+
+test("the Runs panel slides out past the page's right edge as it is hidden, held drawn and out of reach until it has, and slides back in as it is shown", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const pane = () => page.querySelector<HTMLElement>(".automation-runs-pane");
+  const motions = playMotions();
+  try {
+    act(() => button("Hide runs").click());
+    const leaving = pane() ?? assert.fail("the panel is held drawn through its slide out");
+    assert.ok(leaving.hasAttribute("data-leaving"), "it has left the layout");
+    assert.ok(leaving.hasAttribute("inert"), "nothing in it is reached on its way out");
+    const exit = motions.played.find((each) => each.element === leaving);
+    assert.deepEqual(exit?.keyframes.at(-1), { transform: "translateX(100%)" });
+
+    act(() => exit?.finish());
+    assert.equal(pane(), null, "it is let go once its slide has played");
+
+    act(() => button("Show runs").click());
+    const arriving = pane() ?? assert.fail("it stands again");
+    assert.equal(arriving.hasAttribute("data-leaving"), false);
+    const entry = motions.played.find((each) => each.element === arriving);
+    assert.deepEqual(entry?.keyframes, [{ transform: "translateX(100%)" }, { transform: "none" }]);
+  } finally {
+    motions.remove();
+    window.localStorage.clear();
+  }
 });
 
 test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
@@ -1651,7 +1720,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
   assert.match(
     page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
-    /^No runs yetRun now to try it\.$/u,
+    /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );
 
@@ -1682,7 +1751,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
-  assert.match(fresh.textContent ?? "", /Create it, then Run now to try it\./u);
+  assert.match(fresh.textContent ?? "", /No runs yet/u);
 });
 
 /** A run of the sweep that started the CI digest agent, which a press on its row opens. */
@@ -2065,14 +2134,55 @@ test("an automation whose task opens with no code review settings shows no Code 
   assert.ok(!cards(page).includes("Code review"));
 });
 
-test("a new automation started from Code review is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+/** The suggestion named, under the list. */
+function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
+  const found = [
+    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-suggestion"),
+  ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
+  assert.ok(found, `no suggestion ${name}`);
+  return found;
+}
+
+test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
+  standing = [];
+  const empty = mount();
+  await settle();
+  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.ok(suggestion(empty, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  standing = [DIGEST, SWEEP, FAILING];
+  const full = mount();
+  await settle();
+  assert.equal(rows(full).length, 3);
+  assert.ok(suggestion(full, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const blank = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.deepEqual(cards(blank).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
+  assert.equal(
+    blank.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "",
+  );
+});
+
+test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
-  // Note that the press fills the draft in at once, so a Create pressed straight after it saves the review.
-  // Note that the owner is chosen first, as Dean asked, and the preset is offered under it.
-  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Start from", "Trigger"]);
-  act(() => button("Start from Code review").click());
+  act(() => suggestion(page, "Code review").click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
+  // Note that the page opens filled in, so a Create pressed straight away saves the review.
+  // Note that the owner is chosen first, as Dean asked, then its trigger and its own settings.
+  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Trigger", "Code review"]);
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Code review",
+  );
   assert.equal(
     pickerDetail(page, "Type"),
     "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",

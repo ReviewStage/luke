@@ -1805,6 +1805,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
+  assert.ok(
+    others.querySelector(".sidebar-repository-glyph .lucide-factory"),
+    "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
+  );
 
   const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
   assert.ok(mark, "the planless agent's row hangs its card");
@@ -1835,6 +1839,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(
     stray?.querySelector(".lucide-clock") === null,
     "the crumb of the agents no automation names wears no automation's clock",
+  );
+  assert.ok(
+    stray?.querySelector(".lucide-factory"),
+    "it wears the Factory's glyph, as its group does",
   );
 });
 

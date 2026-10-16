@@ -38,7 +38,7 @@ import {
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -63,10 +63,11 @@ import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
+import { type HoverPane, useHoverPane } from "./hover-pane";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SidebarAgent } from "./sidebar-agent";
-import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -813,98 +814,32 @@ function SidebarInboxRow({
   );
 }
 
-/** The layers that answer their own Escape before a floating sidebar is put away. */
-const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
-
 /** What the sidebar is drawn with while it floats, or could. */
-interface FloatingSidebar {
-  readonly ref: React.RefObject<HTMLElement | null>;
+interface FloatingSidebar extends HoverPane {
   /** Whether the sidebar is on screen: pinned, or floating over the work. */
   readonly inSight: boolean;
-  /** A choice made in the sidebar, which puts a floating sidebar away once made. */
-  readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
-  readonly onPress: () => void;
-  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
-  readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+}
+
+/** Where a sidebar opened from away takes the keyboard: the row it marks, else New plan. */
+function sidebarFocus(sidebar: HTMLElement): HTMLElement | null {
+  return (
+    sidebar.querySelector<HTMLElement>('[aria-current="page"]') ??
+    sidebar.querySelector<HTMLElement>(".sidebar-new-plan")
+  );
 }
 
 /**
- * The floating sidebar's doors: a press in a peek opens it, the pointer
- * leaving a peek puts it away, though not for the toggle standing over its
- * head, and Escape puts it away while no menu in it took the key first,
- * wherever the keyboard stands, a peek leaving it in the work under it.
- * Opened from away, it takes the keyboard, which Escape gives back. It goes
- * with the sidebar, so a menu's way to Settings or a version history, or
- * any other way off the plans, leaves it away for their return.
+ * The floating sidebar's doors (`hover-pane.ts`), the pointer leaving a peek
+ * for the toggle standing over its head leaving it out. It goes with the
+ * sidebar, so a menu's way to Settings or a version history, or any other
+ * way off the plans, leaves it away for their return.
  */
 function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
-  const ref = useRef<HTMLElement | null>(null);
-  const handBack = useRef<HTMLElement | null>(null);
-  const was = useRef(sidebar.overlay);
-  const { overlay, onOverlay } = sidebar;
-  const floating = overlay !== SIDEBAR_OVERLAY.CLOSED;
-  useEffect(() => {
-    const from = was.current;
-    was.current = overlay;
-    const held = ref.current;
-    if (overlay !== SIDEBAR_OVERLAY.OPEN || from !== SIDEBAR_OVERLAY.CLOSED || held === null) {
-      return;
-    }
-    handBack.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const first =
-      held.querySelector<HTMLElement>('[aria-current="page"]') ??
-      held.querySelector<HTMLElement>(".sidebar-new-plan");
-    first?.focus();
-  }, [overlay]);
-  useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
-  // Note that a floating sidebar need not hold the keyboard, a peek or one a
-  // bare press opened leaving it in the work under it, so Escape is heard at
-  // the window before the work's layers hear it. A key aimed into the
-  // sidebar is left to its own handler, and one aimed into a menu or a
-  // dialog to that layer, which may have been raised from the sidebar.
-  useEffect(() => {
-    if (!floating) return;
-    const putAway = (event: KeyboardEvent) => {
-      const held = ref.current;
-      const target = event.target instanceof Element ? event.target : null;
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
-        return;
-      }
-      event.preventDefault();
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-    };
-    window.addEventListener("keydown", putAway, true);
-    return () => window.removeEventListener("keydown", putAway, true);
-  }, [floating, onOverlay]);
-  return {
-    ref,
-    inSight: !sidebar.collapsed || floating,
-    chosen:
-      (go) =>
-      (...args) => {
-        go(...args);
-        if (floating) onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      },
-    onPress: () => {
-      if (overlay === SIDEBAR_OVERLAY.PEEK) onOverlay(SIDEBAR_OVERLAY.OPEN);
-    },
-    onPointerLeave: (event) => {
-      if (overlay !== SIDEBAR_OVERLAY.PEEK) return;
-      const to = event.relatedTarget;
-      if (to instanceof Element && to.closest(".title-bar-controls") !== null) return;
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-    },
-    onKeyDown: (event) => {
-      if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
-      // Note that the window's layered Escape stands down for a key already taken.
-      event.preventDefault();
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      handBack.current?.focus();
-      handBack.current = null;
-    },
-  };
+  const pane = useHoverPane(
+    { state: sidebar.overlay, onState: sidebar.onOverlay },
+    { focusAt: sidebarFocus, stays: ".title-bar-controls" },
+  );
+  return { ...pane, inSight: !sidebar.collapsed || pane.floating };
 }
 
 /**
@@ -1097,11 +1032,12 @@ function NewPlanButton({
  * folds it away. Folded away, it is inert as well as out of sight, so no key
  * reaches a row nobody can see, until it floats open over the work
  * (`sidebar-collapse.ts`). A floating sidebar is put away by a choice in it,
- * by Escape, or once the pointer leaves a peek; a press in a peek opens it,
- * so a menu it raises outlasts the pointer. Opened from away, it takes the
- * keyboard at the row it marks, else at New plan, and Escape gives the
- * keyboard back where it was. Floating, it has no edge to drag, since only a
- * pinned sidebar is resized.
+ * by Escape, by a press outside, or once the pointer leaves a peek, a press
+ * in it or not, though not for a menu it raised (`hover-pane.ts`). Opened
+ * from away, it takes the keyboard at the row it marks, else at New plan,
+ * holds it there against Tab, and Escape gives the keyboard back where it
+ * was. Floating, it has no edge to drag, since only a pinned sidebar is
+ * resized.
  */
 function SidebarColumn({
   sidebar,
@@ -1321,10 +1257,7 @@ function SidebarColumn({
       ref={overlay.ref}
       className="desktop-sidebar"
       inert={!overlay.inSight}
-      onPointerDown={() => {
-        onPressWithin();
-        overlay.onPress();
-      }}
+      onPointerDown={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
       onKeyDown={overlay.onKeyDown}
     >

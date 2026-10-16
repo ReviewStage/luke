@@ -330,12 +330,20 @@ export function planningActRows(
     // Start plan is the developer's gesture and Luke opens a new plan by
     // greeting it; where the call would first have to ask for the
     // microphone, the plan's own microphone button asks instead, and where
-    // a call already stands the panel asks whether to end it first.
+    // a call already stands the panel asks whether to end it first. A task
+    // started without planning opens no call, since skipping the call is
+    // what that start asked for.
     [ACT_KIND.TASKS_START]: (request, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_START, sender);
+      const calls = request.planning !== false;
       return Effect.tap(host.tasksStart(request), (answer) =>
         Effect.sync(() => {
-          if ("planId" in answer && dependencies.voiceReady() && !dependencies.callStanding()) {
+          if (
+            calls &&
+            "planId" in answer &&
+            dependencies.voiceReady() &&
+            !dependencies.callStanding()
+          ) {
             dependencies.talkAboutPlan(answer.planId);
           }
         }),

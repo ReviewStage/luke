@@ -1,5 +1,4 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
@@ -15,15 +14,9 @@ import {
   pastedLinkMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { placeChipLook } from "@luke/features/place-chip-model";
-import {
-  CallIcon,
-  CodingAgentsIcon,
-  DocumentIcon,
-  GearIcon,
-  ProviderMark,
-  UserIcon,
-} from "@luke/ui";
+import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
+import { planSections } from "@luke/features/plan-document";
+import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -48,6 +41,7 @@ import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
 import { PullRequestMark } from "./pull-request-mark";
+import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
 import { type LinkStanding, useLinkStanding } from "./use-link-standing";
@@ -66,7 +60,9 @@ import { useOpenLink } from "./use-open-link";
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
  * place can open none. An MCP server or one of its tools opens nothing
- * either, wearing its server's mark; a page of an integration's, a Linear
+ * either, wearing its server's mark and hanging its server's row as the
+ * MCP popover draws it, with what the mention does for the agent the words
+ * go to (`server-card.tsx`); a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
  * browser, its card saying its address. A Linear issue's chip, a pull
  * request's, and a GitHub issue's say the state it stands in after their
@@ -155,14 +151,15 @@ export function retargetedMention(
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
 
-/** What a server's card says of it. */
-const SERVER_WORDS = "An MCP server";
-
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
 
-/** What an agent's card says of it, where the place has no card of its tab. */
-const AGENT_WORDS = "A coding agent on this task";
+/** What an agent's card says of it, where the place has no card of its tab: on this task, another, or none. */
+const AGENT_WORDS = {
+  THIS_TASK: "A coding agent on this task",
+  OTHER_TASK: "A coding agent on another task",
+  NO_TASK: "A coding agent on no task",
+} as const;
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
@@ -241,7 +238,7 @@ function MentionGlyph({
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {
-      const look = doors.agentOf?.(mention.agentId);
+      const look = mention.taskId === doors.planId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
         <AgentMark provider={undefined} />
       ) : (
@@ -252,14 +249,14 @@ function MentionGlyph({
 }
 
 /** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
-function noteOf(mention: Mention, state: MentionState): string | undefined {
+function noteOf(mention: Mention, state: MentionState, planId: string): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
-  if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
-  if (mention.kind === MENTION_KIND.TOOL)
-    return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
   if (mention.kind === MENTION_KIND.LINK) return mention.url;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
-  if (mention.kind === MENTION_KIND.AGENT) return AGENT_WORDS;
+  if (mention.kind === MENTION_KIND.AGENT) {
+    if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
+    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+  }
   return undefined;
 }
 
@@ -273,7 +270,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
 function MentionCard({
   mention,
   name,
@@ -290,11 +287,23 @@ function MentionCard({
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
+  if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
+    return (
+      <ServerCard
+        provider={mention.provider}
+        connection={mention.connection}
+        tool={mention.kind === MENTION_KIND.TOOL ? mention.tool : undefined}
+      />
+    );
+  }
+  // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
+    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.planId
+      ? doors.agentOf?.(mention.agentId)?.card
+      : undefined;
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state);
+  const note = noteOf(mention, state, doors.planId);
   return (
     <HoverCard data-mention-card="">
       <CardHead
@@ -321,7 +330,7 @@ function bareName(
   mention: Mention,
   written: string,
   bare: boolean,
-  known: ReturnType<typeof useKnownNames>,
+  known: KnownNames,
   standing: LinkStanding | undefined,
 ): string {
   if (!bare) return written;
@@ -418,7 +427,7 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <CodingAgentsIcon />;
+      return <AgentMark provider={undefined} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
@@ -529,12 +538,42 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label) => linkChip(href, label, doors);
 }
 
-/** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */
-export function pastedMentionNode(words: string, place: MentionPlace): MentionNode | undefined {
+/** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
+export interface PastedNames {
+  readonly known: KnownNames;
+  readonly planId: string;
+  /** The plan's text as the place holds it. */
+  readonly text: () => string;
+}
+
+/** What a pasted address's chip is called: a section of the plan pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
+function pastedName(mention: Mention, said: string, names: PastedNames): string {
+  if (mention.kind !== MENTION_KIND.SECTION)
+    return bareName(mention, said, true, names.known, undefined);
+  if (mention.taskId !== names.planId) return said;
+  const headings = planSections(names.text()).map((section) => section.heading);
+  return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
+}
+
+/**
+ * The mention node words pasted whole stand for: an address of Luke's own,
+ * a plan's, a section's, a page's, or an agent's, by the scheme of the web
+ * or the app's own, named as its bare link's chip is (`pastedName`); or a
+ * page of an integration's, named by its address's readable form; nothing
+ * for any other words, a file of the plan's repository among them.
+ */
+export function pastedMentionNode(
+  words: string,
+  place: MentionPlace,
+  names: PastedNames,
+): MentionNode | undefined {
   const link = pastedLinkMention(words, place.repository);
   return link === undefined
     ? undefined
-    : { name: link.name, target: encodeMention(link.mention, place) };
+    : {
+        name: pastedName(link.mention, link.name, names),
+        target: encodeMention(link.mention, place),
+      };
 }
 
 /** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */

@@ -12,6 +12,7 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -54,6 +55,7 @@ import {
   runListAgents,
   runListTasks,
   runMessageAgent,
+  runReadPage,
   runStartAgent,
   runUnarchiveAgent,
 } from "../coding-agent-tools.js";
@@ -65,6 +67,7 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
+import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
@@ -149,18 +152,23 @@ interface CoderSessionPrompt {
   readonly ciReadable: boolean;
   /** The co-author trailer the prompt handed, where the agent writes as its developer. */
   readonly coAuthor: string | undefined;
+  /** The step the agent's workspace was written under in the prompt's links (`../written-mentions.ts`). */
+  readonly workspace: string;
 }
 
 /**
  * What the coder project keeps of the session's prompt, beside the content
  * address the planning brain keeps (`brain-host/host.ts`): whether the
- * prompt said the repository's CI is readable, and the co-author trailer it
- * handed where it handed one, which are what compose the same text again
- * for a step's estimate of it.
+ * prompt said the repository's CI is readable, the co-author trailer it
+ * handed where it handed one, and the step its links wrote the workspace
+ * under, which are what compose the same text again for a step's estimate
+ * of it; a record kept before the step was keeps none, and its links are
+ * composed under the workspace's id.
  */
 export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly ciReadable?: boolean;
   readonly coAuthor?: string;
+  readonly workspace?: string;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -365,6 +373,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
+    | typeof CODER_TOOL.READ_PAGE
     | typeof CODER_TOOL.LIST_TASKS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -377,6 +386,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.START_AGENT]: runStartAgent,
   [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
+  [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
 } as const;
 
@@ -447,16 +457,18 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     agent: CodingAgent,
     ciReadable: boolean,
     coAuthor: string | undefined,
+    workspace: string,
   ): CoderSessionPrompt => {
     const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
-    const text = coderInstructions(
-      agent.repository,
-      brief,
-      ciReadable,
-      agent.taskId !== null,
-      coAuthor,
-    );
-    return { text, hash: promptHashOf(text), ciReadable, coAuthor };
+    const taskLink =
+      agent.taskId === null
+        ? null
+        : encodeMention(
+            { kind: MENTION_KIND.TASK, taskId: agent.taskId },
+            { workspace, repository: null },
+          );
+    const text = coderInstructions(agent.repository, brief, ciReadable, taskLink, coAuthor);
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace };
   };
 
   /**
@@ -478,7 +490,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const step = agentStepOf(
             event.data.usage,
             {
-              instructions: promptOf(agent, prompt.ciReadable ?? false, prompt.coAuthor).text,
+              instructions: promptOf(
+                agent,
+                prompt.ciReadable ?? false,
+                prompt.coAuthor,
+                prompt.workspace ?? agent.organizationId,
+              ).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
             seams.now(),
@@ -582,8 +599,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.all([
           agentCiReadable(admitted.target, agent),
           agentCoAuthor(admitted.target, agent),
+          // A slug that cannot be read is written as the workspace's id, which finds the same things.
+          workspaceStepOf(admitted.target.userId, agent.organizationId).pipe(
+            Effect.tapError(logStoreFailure),
+            Effect.orElseSucceed(() => agent.organizationId),
+          ),
         ]),
-        ([ciReadable, coAuthor]) => promptOf(agent, ciReadable, coAuthor),
+        ([ciReadable, coAuthor, workspace]) => promptOf(agent, ciReadable, coAuthor, workspace),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),

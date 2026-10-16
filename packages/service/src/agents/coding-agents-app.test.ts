@@ -11,8 +11,10 @@ import {
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
+  archiveCodingAgent,
   readCodingAgent,
   readCodingAgentByKey,
+  renameCodingAgent,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
@@ -595,6 +597,73 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             (yield* listed(owner, {})).status,
           ],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.BAD_REQUEST],
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list leaves an archived agent out, and lists it marked as archived where archived=include asks",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const kept = yield* startedAgentOf(owner, task.id, ask);
+        const put = yield* startedAgentOf(owner, task.id, ask);
+        yield* archiveCodingAgent(owner, put.agent.id, true);
+        const listed = (query: Readonly<Record<string, string>>) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+                (agent) => [agent.id, agent.archivedAt !== undefined],
+              ),
+          );
+        };
+
+        assert.deepEqual(yield* listed({}), [[kept.agent.id, false]]);
+        assert.deepEqual(
+          (yield* listed({ archived: "include" })).toSorted(([first], [second]) =>
+            String(first).localeCompare(String(second)),
+          ),
+          [
+            [kept.agent.id, false],
+            [put.agent.id, true],
+          ].toSorted(([first], [second]) => String(first).localeCompare(String(second))),
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list finds the agents whose title or task's name holds the words, whatever their case, a wildcard in them matched as itself",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const titled = yield* startedAgentOf(owner, task.id, ask);
+        const other = yield* startedAgentOf(owner, task.id, ask);
+        yield* renameCodingAgent(owner, titled.agent.id, "Ledger 100% sweep");
+        yield* renameCodingAgent(owner, other.agent.id, "Unrelated");
+        const found = (words: string) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          url.searchParams.set("words", words);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .agents.map((agent) => agent.id)
+                .toSorted(),
+          );
+        };
+
+        assert.deepEqual(yield* found("LEDGER"), [titled.agent.id]);
+        assert.deepEqual(yield* found("100%"), [titled.agent.id]);
+        assert.deepEqual(yield* found("10_%"), []);
+        assert.deepEqual(
+          yield* found("teammate invitations"),
+          [titled.agent.id, other.agent.id].toSorted(),
+          "the task's name finds every agent on it",
         );
       }),
   );
@@ -1357,6 +1426,36 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "the plan list names the teammate who archived an agent with no plan, as its own page does",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: task.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        yield* ask(
+          request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived: true } }),
+        );
+
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
+        );
+        const by = listed.planlessAgents?.find((each) => each.id === agent.id)?.archivedBy;
+        assert.equal(by?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(by?.member?.userId, other);
+        assert.ok((by?.member?.name ?? "") !== "", JSON.stringify(by));
+      }),
+  );
+
+  it.effect(
     "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
     () =>
       Effect.gen(function* () {
@@ -1575,10 +1674,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
-        // Luke's line from a call and an automation's run's, written as their sends write them.
+        // Luke's line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -1608,6 +1708,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
+          // Another agent is marked as one beside its name, with no kind an older window would refuse.
+          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
@@ -1673,7 +1775,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a page and another agent of the plan hands eve the page by its id with its HTML and the agent by its id and branch, never its conversation",
+    "a message mentioning a page and another agent of the plan hands eve the page by its id and version with how to read it, never its HTML, and the agent by its id and branch, never its conversation",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1699,10 +1801,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(
           part.text,
           new RegExp(
-            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*<h1>Invites by week</h1>`,
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*with \`read_page\`, \`pageId: "${shown.value.id}"\`, and \`version: 1\``,
             "u",
           ),
         );
+        assert.ok(!part.text.includes("<h1>Invites by week</h1>"), part.text);
         assert.match(
           part.text,
           new RegExp(

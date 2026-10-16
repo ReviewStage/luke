@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -128,7 +129,24 @@ async function opened(page?: PlanMentionsValue) {
     });
     await act(async () => undefined);
   };
-  return { container, typeAtEnd, typeAfter, press };
+  /** Words pasted at the end of the text, as the system's clipboard hands them over. */
+  const pasteAtEnd = async (words: string) => {
+    act(() => {
+      editor.view.focus();
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.atEnd(editor.state.doc)));
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          files: [],
+          types: ["text/plain"],
+          getData: (type: string) => (type === "text/plain" ? words : ""),
+        },
+      });
+      editor.view.dom.dispatchEvent(event);
+    });
+    await act(async () => undefined);
+  };
+  return { container, typeAtEnd, typeAfter, press, pasteAtEnd };
 }
 
 /** The list's groups as it draws them: each heading and its rows' names. */
@@ -226,5 +244,58 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
   assert.deepEqual(
     listed(plan.container).map(([group]) => group),
     ["Plan", "Pages", "Agents"],
+  );
+});
+
+test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labelled by its task", async () => {
+  const agent = (id: string, name: string) => ({
+    id,
+    name,
+    actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
+  });
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    agents: [agent("agent-2", "Wire the desktop")],
+    readAgents: () =>
+      Promise.resolve([
+        { ...agent("agent-3", "Bill by seat"), task: { id: "task-billing", name: "Billing" } },
+        agent("agent-4", "Sweep flaky tests"),
+      ]),
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Agents"),
+    ["Agents", ["Wire the desktop", "Bill by seat", "Sweep flaky tests"]],
+  );
+});
+
+test("a section's address pasted whole into the plan is laid in as its chip, called by its heading", async () => {
+  const plan = await opened();
+  const goal = encodeMention(
+    { kind: MENTION_KIND.SECTION, taskId: PLAN.id, anchor: "goal" },
+    { workspace: "acme", repository: PLAN.repository },
+  );
+
+  await plan.typeAtEnd(" See ");
+  await plan.pasteAtEnd(goal);
+
+  const chips = [...plan.container.querySelectorAll(".plan-document-text .mention-chip")];
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Goal"],
   );
 });

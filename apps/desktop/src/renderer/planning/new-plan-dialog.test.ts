@@ -40,6 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   vi.restoreAllMocks();
+  window.localStorage.clear();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
 });
@@ -61,6 +62,7 @@ async function mount(
   chooser: Partial<RepositoryChooser> = {},
 ) {
   const starts: [string, string | null][] = [];
+  const planned: boolean[] = [];
   const control = plansControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -76,8 +78,14 @@ async function mount(
         open,
         preset: preset === undefined ? undefined : { repository: preset },
         repositoriesIn: () => repositories,
-        start: (name: string, repository: string | null) => {
+        start: (
+          name: string,
+          repository: string | null,
+          _workspaceId: string | undefined,
+          planning: boolean,
+        ) => {
           starts.push([name, repository]);
+          planned.push(planning);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -119,6 +127,8 @@ async function mount(
   };
   return {
     starts,
+    /** Whether each start asked for its planning phase. */
+    planned,
     /** Every Settings link the dialog's presses followed. */
     links,
     opener,
@@ -148,9 +158,15 @@ async function mount(
   };
 }
 
-test("the dialog holds the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
+test("the dialog holds the Plan switch, the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
   const card = await mount();
-  assert.deepEqual(card.controls(), ["Task name", "acme/web", "Cancel", "Create task⏎"]);
+  assert.deepEqual(card.controls(), [
+    "Plan with Luke",
+    "Task name",
+    "acme/web",
+    "Cancel",
+    "Create task⏎",
+  ]);
   assert.equal(document.activeElement, card.field());
   assert.equal(
     card.dialog()?.textContent?.includes("Repository"),
@@ -178,6 +194,32 @@ test("the name is optional: with none, or only whitespace, Return and Create tas
     ["", "acme/web"],
     ["", "acme/web"],
   ]);
+});
+
+test("Plan starts on, a task started with it off starts without planning, and the next New task offers it as it was left", async () => {
+  const first = await mount();
+  const planSwitch = () => {
+    const found = document.querySelector<HTMLButtonElement>('[role="switch"]');
+    assert.ok(found, "the Plan switch is drawn");
+    return found;
+  };
+  assert.equal(planSwitch().getAttribute("aria-checked"), "true");
+  act(() => first.button("Create task").click());
+  await settle();
+  const label = document.querySelector<HTMLLabelElement>(`label[for="${planSwitch().id}"]`);
+  assert.ok(label, "the switch has a visible label");
+  act(() => label.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  assert.equal(planSwitch().getAttribute("aria-checked"), "false", "a press on its word turns it");
+  act(() => first.button("Create task").click());
+  await settle();
+  assert.deepEqual(first.planned, [true, false]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const next = await mount();
+  assert.equal(planSwitch().getAttribute("aria-checked"), "false");
+  await next.press("Enter", next.field());
+  assert.deepEqual(next.planned, [false]);
 });
 
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {

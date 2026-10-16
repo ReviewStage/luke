@@ -57,8 +57,9 @@ export const AGENT_TOOL = {
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
-  // An interactive page shown in the plan's side panel.
+  // An interactive page shown in the plan's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
+  READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
   // eve's own durable pause, which a coding agent takes before it checks on its checks or a deploy again.

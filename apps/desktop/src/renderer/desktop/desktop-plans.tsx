@@ -38,7 +38,11 @@ import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
-import { PlanMentions, type PlanMentionsValue } from "../planning/plan-mentions";
+import {
+  PlanMentions,
+  type PlanMentionsValue,
+  useMentionAgentsReader,
+} from "../planning/plan-mentions";
 import { planLinkPlace } from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { CallBar } from "../planning/planning-parts";
@@ -66,7 +70,13 @@ import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
-import { SummaryButton, type SummaryPin, TaskSummary, useSummaryLayout } from "./plan-summary";
+import {
+  SummaryButton,
+  type SummaryPin,
+  summaryHolds,
+  TaskSummary,
+  useSummaryLayout,
+} from "./plan-summary";
 import {
   COLUMN,
   changesTabOf,
@@ -347,7 +357,12 @@ function PlanDocument({
   });
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
+  const summaryLayout = useSummaryLayout(
+    summary,
+    column,
+    plans.sidePanel.fullScreen,
+    summaryHolds(plans, inbox.board),
+  );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
@@ -392,6 +407,16 @@ function PlanDocument({
       ? undefined
       : ([...plans.plans, ...plans.archived].find((each) => each.id === opened.id) ?? opened);
   const stranded = useStrandedPlanBanner(plans, listedOpen);
+  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists, archived ones among them.
+  const mentionTasks = useMemo(
+    () => [...plans.plans, ...plans.archived],
+    [plans.plans, plans.archived],
+  );
+  const readMentionAgents = useMentionAgentsReader(
+    opened?.workspaceId,
+    mentionTasks,
+    plans.agents.models,
+  );
   const openMention = plans.onShowMention;
   const revealed = plans.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -584,6 +609,7 @@ function PlanDocument({
       const name = agentTabLabel(agent, agents.models);
       return { id: agent.id, name, actor: agentActor(agent, name) };
     }),
+    readAgents: readMentionAgents,
     doors: {
       planId: plan.id,
       place: { workspace, repository: plan.repository },

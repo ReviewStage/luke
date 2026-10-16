@@ -506,20 +506,13 @@ export function TerminalIcon(): React.JSX.Element {
 }
 
 /**
- * Two steps and the path between them, lucide's workflow: the coding agents
- * as a group, and an agent whose harness is not known.
- * Note that it is no terminal, because a terminal stands for a shell
- * command alone, and that a transcript's row about the agents draws lucide's
- * own `WorkflowIcon`, the same paths. Outline, like the other pages' glyphs.
+ * The box an agent's mark stands in, held empty: an agent whose harness is
+ * not known yet. Note that it draws nothing rather than a stand-in glyph,
+ * because the harness's mark lands in the same box and a glyph there first
+ * would read as the agent's own; the name beside it says whose it is.
  */
-export function CodingAgentsIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <rect x="3" y="3" width="8" height="8" rx="2" />
-      <path d="M7 11v4a2 2 0 0 0 2 2h4" />
-      <rect x="13" y="13" width="8" height="8" rx="2" />
-    </Glyph>
-  );
+export function AgentPlaceholderIcon(): React.JSX.Element {
+  return <Glyph>{null}</Glyph>;
 }
 
 /** A page with its corner turned down and lines of text on it: the plan's own document. */

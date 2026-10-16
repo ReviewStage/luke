@@ -57,9 +57,10 @@ export const HOSTED_SERVICE_PATH = {
   INBOX: "/api/inbox",
   /**
    * A workspace's agents, on a plan or with none, newest started first and
-   * the archived ones left out, narrowed to one repository where the query
-   * names one (GET), what an automation's Same agent is chosen from; the
-   * plan list's answer (`coding-agent-wire.ts`).
+   * the archived ones left out unless the query asks for them, narrowed to
+   * one repository where the query names one (GET), what an automation's
+   * Same agent and an `@` list's agents are chosen from; the plan list's
+   * answer (`coding-agent-wire.ts`).
    */
   AGENTS: "/api/agents",
   /**

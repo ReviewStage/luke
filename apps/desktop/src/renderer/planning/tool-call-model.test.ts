@@ -474,6 +474,44 @@ test("an agent a call starts, reads, or messages opens its tab while it is on th
   }
 });
 
+test("an archive names the agent its answer titles and opens nothing, its tab being gone, and an unarchive opens the agent it brought back", () => {
+  const call = (tool: string) => ({
+    tool,
+    callId: "call-1",
+    input: { agentId: "agent-2", reason: "Its pull request merged." },
+    output: {
+      status: "accepted",
+      agent: { id: "agent-2", title: "Bill by seat", onYourTask: true },
+      archived: tool === "archive_agent",
+      already: false,
+    },
+  });
+
+  const archived = toolCallView(call("archive_agent"));
+  assert.deepEqual([archived.kind, archived.subject], [CALL_KIND.ARCHIVE_AGENT, "Bill by seat"]);
+  assert.equal(toolTarget(call("archive_agent")), undefined);
+  const back = toolCallView(call("unarchive_agent"));
+  assert.deepEqual([back.kind, back.subject], [CALL_KIND.UNARCHIVE_AGENT, "Bill by seat"]);
+  assert.deepEqual(toolTarget(call("unarchive_agent")), {
+    kind: TOOL_TARGET.AGENT,
+    agent: "agent-2",
+  });
+});
+
+test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
+  const call = (isYourTask: boolean) => ({
+    tool: "read_page",
+    callId: "call-1",
+    input: { pageId: "page-1" },
+    output: { status: "accepted", page: { id: "page-1", title: "Seats by month", isYourTask } },
+  });
+
+  const view = toolCallView(call(true));
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.READ_PAGE, "Seats by month"]);
+  assert.deepEqual(toolTarget(call(true)), { kind: TOOL_TARGET.PAGE, page: "page-1" });
+  assert.equal(toolTarget(call(false)), undefined);
+});
+
 test("a pause names how long it waits, and its answer how long it waited or that a message ended it early", () => {
   const paused = (seconds: number, output?: Record<string, number | boolean>) =>
     toolCallView({ tool: "sleep", input: { seconds }, output });

@@ -10,7 +10,7 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
 | `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
-| `./scripts/run.sh` | Launch against live sessions, replacing any running instance (`--fixture smoke`, `--keep-running`, `--no-trace`) |
+| `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |

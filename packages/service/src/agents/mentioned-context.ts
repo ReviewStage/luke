@@ -2,16 +2,17 @@ import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
+  handedMentionsIn,
+  linkMention,
   MENTION_KIND,
   type Mention,
   mentionName,
-  mentionsIn,
   type PlanMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
 } from "@luke/features/mention-link";
-import type { PageVersion } from "@luke/features/page-wire";
+import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
@@ -20,7 +21,10 @@ import type { Task } from "@luke/features/task-wire";
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
  *
  * A message names things as links whose label starts with `@`
- * (`@luke/features/mention-link`). The words go to the model as written,
+ * (`@luke/features/mention-link`), or as the bare address of a plan, one of
+ * its sections, a page, or an agent, which the window draws as the same chip
+ * and which is handed as the same mention (`handedMentionsIn`); a bare
+ * address of anything else is words. The words go to the model as written,
  * links and all. A file or a folder is the agent's to read from its own
  * checkout, on its own branch, so nothing of it is added here, but for a
  * file's lines the developer picked (`file.ts:12–20`): those are pinned to
@@ -60,9 +64,10 @@ import type { Task } from "@luke/features/task-wire";
  * found. An agent is handed as its task and where its work stands on
  * GitHub, its branch and its pull request, which the agent reads with `gh`
  * and `git`, and as the id `message_agent` reaches it by, and never its
- * conversation, which is its starter's. A page has no read of its own, so
- * its HTML is handed as it stood, cut to its bound, beside its id, which
- * `show_page` writes its next version under.
+ * conversation, which is its starter's. A page is handed as its title, its
+ * id, and its version, which `read_page` reads it by and `show_page` writes
+ * its next version under, and never its HTML, which the agent reads when it
+ * needs it rather than carrying it in every message that names the page.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -70,8 +75,6 @@ export const MENTIONED_BOUNDS = {
   SECTION_CHARS: 4_000,
   /** The most characters of the whole plan the part carries, before its remaining headings. */
   PLAN_CHARS: 12_000,
-  /** The most characters of one page's HTML the part carries. */
-  PAGE_CHARS: 12_000,
   /** The most characters the whole part carries, about six thousand tokens. */
   PART_CHARS: 24_000,
 } as const;
@@ -93,7 +96,7 @@ export interface MentionedAgent {
 
 /** What the send read of the pages a message mentions on the agent's own plan and the agents it mentions in its workspace, each by its id; one it did not find is absent. */
 export interface MentionedReads {
-  readonly pages: ReadonlyMap<string, PageVersion>;
+  readonly pages: ReadonlyMap<string, PageLine>;
   readonly agents: ReadonlyMap<string, MentionedAgent>;
 }
 
@@ -174,65 +177,15 @@ type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }
 /** A mention the part hands something for. */
 type Handed = PlanMention | ServerMention | LinesMention | TaskMention;
 
-/** The longest run of the character the words hold. */
-function longestRun(words: string, character: string): number {
-  let longest = 0;
-  let run = 0;
-  for (const each of words) {
-    run = each === character ? run + 1 : 0;
-    longest = Math.max(longest, run);
-  }
-  return longest;
-}
-
 /**
- * A fence longer than any run of its character the words hold, so the
- * words stay one block inside it: of backticks or of tildes, whichever is
- * the shorter, since a page may hold a long run of either but seldom both.
- */
-function fenceFor(words: string): string {
-  const ticks = longestRun(words, "`");
-  const tildes = longestRun(words, "~");
-  return ticks <= tildes ? "`".repeat(Math.max(3, ticks + 1)) : "~".repeat(Math.max(3, tildes + 1));
-}
-
-/** The room `cutOnLine` may spend past its bound, on the line saying how much it left out. */
-const CUT_NOTE_ROOM = 40;
-
-/** A page's HTML as handed, and the fence it stands between. */
-interface FencedHtml {
-  readonly html: string;
-  readonly fence: string;
-}
-
-/**
- * A page's HTML cut and fenced so the two together stay inside the page's
- * bound: the fence is read off the HTML kept, never runs the cut left out,
- * and the room shrinks until the HTML kept and its fence fit, which it
- * does, since less HTML never needs a longer fence.
- */
-function fencedHtml(html: string): FencedHtml {
-  let room: number = MENTIONED_BOUNDS.PAGE_CHARS;
-  for (;;) {
-    const kept = cutOnLine(html, Math.max(0, room - CUT_NOTE_ROOM));
-    const fence = fenceFor(kept);
-    if (room <= 0 || kept.length + 2 * fence.length <= MENTIONED_BOUNDS.PAGE_CHARS) {
-      return { html: kept, fence };
-    }
-    room = Math.min(room - 1, MENTIONED_BOUNDS.PAGE_CHARS - 2 * fence.length);
-  }
-}
-
-/**
- * What a mention of a page is handed as: its id, which its next version is
- * written under, and its HTML as it stood, cut so the HTML and both its
- * fences together stay inside its bound, however long the fence.
+ * What a mention of a page is handed as: its title, id, and version, the
+ * read that answers its HTML as it stands, and how to write its next
+ * version; never its HTML, which `read_page` answers when the agent wants it.
  */
 function pageNoteOf(pageId: string, name: string, reads: MentionedReads): string {
   const page = reads.pages.get(pageId);
   if (page === undefined) return `The page "${name}": no longer on this task.`;
-  const { html, fence } = fencedHtml(page.html);
-  return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) shown on this task. To change it, show it again with \`${AGENT_TOOL.SHOW_PAGE}\` and \`page: "${page.id}"\`, which writes its next version in its place. Its HTML as it stands:\n\n${fence}html\n${html}\n${fence}`;
+  return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) shown on this task. Read it as the developer saw it with \`${AGENT_TOOL.READ_PAGE}\`, \`pageId: "${page.id}"\`, and \`version: ${page.version}\`, or leave the version out for its newest. To change it, show it again with \`${AGENT_TOOL.SHOW_PAGE}\` and \`page: "${page.id}"\`, which writes its next version in its place.`;
 }
 
 /** How the agent reads another agent's work: its pull request's diff, else its branch's, by the repository the agent shares with it or names. */
@@ -399,7 +352,7 @@ export interface MentionedIds {
 export function mentionedIds(words: string, plan: Task | undefined): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
-  for (const { mention } of mentionsIn(words, plan?.repository ?? null)) {
+  for (const { mention } of handedMentionsIn(words, plan?.repository ?? null)) {
     if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
@@ -410,7 +363,7 @@ export function mentionedIds(words: string, plan: Task | undefined): MentionedId
 /** The MCP servers the words mention, by connection name, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
 export function mentionedServers(words: string, repository: string | null): readonly string[] {
   // Note that the plan's repository is handed, so a page that is a file of it brings in no server.
-  const connections = mentionsIn(words, repository).flatMap(({ mention }) => {
+  const connections = handedMentionsIn(words, repository).flatMap(({ mention }) => {
     if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
       return [mention.connection ?? mention.provider];
     }
@@ -434,11 +387,14 @@ export function mentionedContext(
   reads: MentionedReads = NO_MENTIONED_READS,
 ): string | undefined {
   const named: HandedMention[] = [];
-  for (const { mention, label } of mentionsIn(words, task?.repository ?? null)) {
+  const repository = task?.repository ?? null;
+  for (const { mention, label, target } of handedMentionsIn(words, repository)) {
     const handed = handedMention(mention, task);
     if (handed === undefined) continue;
+    // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
+    const name = linkMention(label, target, repository)?.name ?? mentionName(label);
     if (!named.some((each) => sameMention(each.mention, handed))) {
-      named.push({ mention: handed, name: mentionName(label) });
+      named.push({ mention: handed, name });
     }
   }
   if (named.length === 0) return undefined;

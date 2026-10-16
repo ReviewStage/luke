@@ -65,6 +65,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TITLE_CHARS: 80,
   /** The most characters the reason an agent was archived for may spell: a line of the archived agent's banner, never a report. */
   MAX_ARCHIVE_REASON_CHARS: 500,
+  /** The most characters the words a workspace's agents are found by may spell. */
+  MAX_SEARCH_CHARS: 200,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
   MAX_SERVER_CHARS: 64,
@@ -439,10 +441,12 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, and the repository they are narrowed to, where one is named. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
+  WORDS: "words",
+  ARCHIVED: CODING_AGENT_LIST_QUERY.ARCHIVED,
 } as const;
 
 /** What the list's `archived` query may say. */
@@ -973,11 +977,18 @@ export const CODING_AGENT_SENDER = {
  * service words it, and what kind of sender it is, so the window draws Luke
  * as Luke, an automation as one, and GitHub as the login named; the kind is
  * absent from a service older than it. The window names nobody over the reader's own.
+ * Another coding agent of the workspace is named with no kind and marked
+ * `agent` instead, because a window reads `kind` as one of the words it
+ * knows and would refuse the whole page over a word it was built before,
+ * while it drops a key it does not know: an older build draws the agent as a
+ * sender it cannot place, under its name, and a newer one as an agent.
  */
 const codingAgentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   userId: EffectSchema.optionalKey(EffectSchema.String),
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
+  /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
+  agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
