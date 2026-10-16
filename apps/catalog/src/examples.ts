@@ -3,6 +3,7 @@ import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
 /**
@@ -27,4 +28,5 @@ export const EXAMPLES: readonly Example[] = [
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
+  TEXT_FIELDS_EXAMPLE,
 ];
