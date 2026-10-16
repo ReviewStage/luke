@@ -4,6 +4,7 @@ export * from "./account-provider-key.js";
 export * from "./agent-pin.js";
 export * from "./auth.js";
 export * from "./automation.js";
+export * from "./chat.js";
 export * from "./coding-agent.js";
 export * from "./conversation-attachment.js";
 export * from "./favorite.js";
