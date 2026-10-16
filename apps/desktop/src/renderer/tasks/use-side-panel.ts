@@ -1450,7 +1450,6 @@ export function useSidePanel(
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
-<<<<<<< HEAD
   // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
   const { tell } = useAct();
   const heldMacTerminals = useRef(kept.macTerminals);
@@ -1462,14 +1461,6 @@ export function useSidePanel(
     }
     heldMacTerminals.current = kept.macTerminals;
   }, [kept.macTerminals, tell]);
-  // A panel shut, by its toggle or by its last tab closing, shows again
-  // beside the document and with no ask of its "+" standing.
-  if (!state.open && (fullScreen || newTabAsked)) {
-    setFullScreen(false);
-    setNewTabAsked(false);
-  }
-=======
->>>>>>> a0308ba02 (feat(desktop): a plan with no tab open shows no side panel, and Show panel there opens the tab last closed)
   // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>
