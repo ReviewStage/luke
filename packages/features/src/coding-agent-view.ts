@@ -392,13 +392,6 @@ export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnswe
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
 
-/** What waits across the account past a cursor, as main asks it: where it stands. */
-export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAccountInboxParams = typeof codingAgentAccountInboxParamsSchema.Type;
-
 /** What waits across the account, as main hears it: every open item and the cursor to read on from, or why there is none. */
 export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
   accountInboxAnswerSchema,

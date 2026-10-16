@@ -801,6 +801,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@neon/realtime':
+        specifier: 0.1.1
+        version: 0.1.1(ws@8.21.3)
       '@shikijs/langs':
         specifier: 4.5.0
         version: 4.5.0
@@ -915,6 +918,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@neon/realtime':
+        specifier: 0.1.1
+        version: 0.1.1(ws@8.21.3)
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(ai@7.0.135)(better-auth@1.7.7)(eve@0.74.0)
@@ -2381,6 +2387,15 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@neon/realtime@0.1.1':
+    resolution: {integrity: sha512-YbTaKcq7Vmaw05oEu/1HNbxrtLeHaofnPHptd6QPGZj2M1uZJRJKKrjb+ShH0GpR5fpBlp8S4iZcTW3IsnIoqg==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      ws: ^8.21.2
+    peerDependenciesMeta:
+      ws:
+        optional: true
 
   '@next/env@16.3.1':
     resolution: {integrity: sha512-35G3xwkQUb2oETSDjFXGrVugknoayLFBh7vSE+yAcl9IP2zT9wyGwq7297AYHR11kJld807t5f8AJBs6WBzXsQ==}
@@ -6742,6 +6757,10 @@ packages:
     resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
     engines: {node: '>=4'}
 
+  postgres-array@3.0.4:
+    resolution: {integrity: sha512-nAUSGfSDGOaOAEGwqsRY27GPOea7CNipJPOA7lPbdEpx5Kg3qzdP0AaWC5MlhTWV9s4hFX39nomVZ+C4tnGOJQ==}
+    engines: {node: '>=12'}
+
   postgres-bytea@1.0.1:
     resolution: {integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==}
     engines: {node: '>=0.10.0'}
@@ -8784,6 +8803,12 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
     optional: true
+
+  '@neon/realtime@0.1.1(ws@8.21.3)':
+    dependencies:
+      postgres-array: 3.0.4
+    optionalDependencies:
+      ws: 8.21.3
 
   '@next/env@16.3.1':
     optional: true
@@ -13034,6 +13059,8 @@ snapshots:
       source-map-js: 1.2.1
 
   postgres-array@2.0.0: {}
+
+  postgres-array@3.0.4: {}
 
   postgres-bytea@1.0.1: {}
 

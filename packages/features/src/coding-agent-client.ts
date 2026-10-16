@@ -79,6 +79,7 @@ import {
   inboxAnswerSchema,
   inboxImageTypeSchema,
 } from "./inbox-wire.js";
+import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
@@ -720,6 +721,19 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime: answered at once, never held. Unanswered where the
+   * deployment has no Realtime, and for anything else that went wrong, which
+   * the caller answers by holding its read open as before.
+   */
+  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
+      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
     );
   }
 

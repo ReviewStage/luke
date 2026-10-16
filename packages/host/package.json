@@ -28,8 +28,6 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@shikijs/langs": "4.5.0",
-    "@shikijs/themes": "4.5.0",
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/gateway": "workspace:*",
@@ -38,6 +36,9 @@
     "@luke/settings": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@neon/realtime": "0.1.1",
+    "@shikijs/langs": "4.5.0",
+    "@shikijs/themes": "4.5.0",
     "effect": "catalog:",
     "shiki": "4.5.0",
     "ws": "catalog:"

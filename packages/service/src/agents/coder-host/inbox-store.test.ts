@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { createAutomation } from "@luke/database/models/automation-store";
+import {
+  createAutomation,
+  ownFailedRunsLiveStatement,
+} from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
@@ -23,9 +27,12 @@ import {
   INBOX_STATUS,
   type InboxPost,
 } from "@luke/features/inbox-wire";
+import { accountInboxLiveRowSchemas, accountInboxOfLiveRows } from "@luke/features/live-wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import {
+  accountInboxLiveStatements,
   accountInboxTasks,
   accountWaitingItems,
   answerInboxItem,
@@ -131,7 +138,59 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
 
 const openTasklessAgent = openTasklessAgentOf(false);
 
+/** A live statement run as Realtime runs it, its SQL and its values as they are, and its rows read back under the schema the desktop decodes them with. */
+const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Row, Encoded>) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql.unsafe(statement.sql, [...statement.params]);
+    return yield* Schema.decodeUnknownEffect(Schema.Array(schema))(rows);
+  });
+
+/** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
+const liveAnswerOf = (userId: string, readAt: number) =>
+  Effect.gen(function* () {
+    const parts = Option.getOrThrow(accountInboxLiveStatements(userId));
+    const failedRuns = Option.getOrThrow(ownFailedRunsLiveStatement(userId));
+    return accountInboxOfLiveRows(
+      {
+        items: yield* runLive(parts.items, accountInboxLiveRowSchemas.items),
+        planless: yield* runLive(parts.planless, accountInboxLiveRowSchemas.planless),
+        plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
+        automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
+        failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
+      },
+      readAt,
+    );
+  });
+
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const onPlan = yield* openAgentIn;
+        const { agent: taskless, workspaceId } = yield* openTasklessAgentOf(true);
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* joinWorkspace(onPlan.workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        assert.ok(Result.isSuccess(yield* postInboxItem(onPlan.agent, SETTINGS)));
+        assert.ok(
+          Result.isSuccess(yield* postInboxItem(onPlan.agent, { ...SETTINGS, key: "second" })),
+        );
+        assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
+
+        for (const reader of [onPlan.agent.userId, taskless.userId, teammate, outsider]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          assert.deepEqual(live, { ...held, cursor: "" });
+        }
+        const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        assert.equal(read.items.length + (read.planless?.length ?? 0), 3);
+      }),
+  );
+
   it.effect(
     "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation, by name or id, only to who may read it",
     () =>

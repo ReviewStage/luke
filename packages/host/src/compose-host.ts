@@ -238,6 +238,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const closeCapabilities = Effect.gen(function* () {
       yield* tasks.reset;
       yield* terminals.reset;
+      yield* codingAgents.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
