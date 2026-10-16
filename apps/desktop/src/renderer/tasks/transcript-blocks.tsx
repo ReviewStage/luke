@@ -206,12 +206,12 @@ function wordsOf(node: WordsNode): string {
  * but the web's, so a mention's target would never reach a link of ours.
  * Code holds no link, so a mention in code stays code.
  */
-function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
   const target =
     node.type === "link"
       ? node.url
       : node.type === "linkReference" && node.identifier !== undefined
-        ? definitions.get(node.identifier)
+        ? definitions.get(node.identifier)?.url
         : undefined;
   if (target !== undefined && (mayNameMention(target) || readLink(target) !== undefined)) {
     node.data = {
@@ -223,13 +223,13 @@ function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, strin
   for (const child of node.children ?? []) markMentions(child, definitions);
 }
 
-/** Each link definition in the words, by the label a reference link names it with, the first standing where one is defined twice, as markdown reads them. */
+/** Each link definition in the words, its address and its title, by the label a reference names it with, the first standing where one is defined twice, as markdown reads them. */
 function definitionsIn(
   node: MarkdownNode,
-  found: Map<string, string> = new Map(),
-): Map<string, string> {
+  found: Map<string, MarkdownNode> = new Map(),
+): Map<string, MarkdownNode> {
   if (node.type === "definition" && node.identifier !== undefined && node.url !== undefined) {
-    if (!found.has(node.identifier)) found.set(node.identifier, node.url);
+    if (!found.has(node.identifier)) found.set(node.identifier, node);
   }
   for (const child of node.children ?? []) definitionsIn(child, found);
   return found;
@@ -247,10 +247,11 @@ function definitionsIn(
  * all, which draws a relative one as a placeholder of its own and an
  * absolute one as nothing.
  */
-function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
-  const address =
+function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
+  // A reference's address and caption are its definition's.
+  const source =
     node.type === "image"
-      ? node.url
+      ? node
       : node.type === "imageReference" && node.identifier !== undefined
         ? definitions.get(node.identifier)
         : undefined;
@@ -258,9 +259,9 @@ function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, strin
     node.data = {
       hName: PICTURE_ELEMENT.TAG,
       hProperties: {
-        [PICTURE_ELEMENT.ADDRESS]: address ?? "",
+        [PICTURE_ELEMENT.ADDRESS]: source?.url ?? "",
         [PICTURE_ELEMENT.WORDS]: node.alt ?? "",
-        [PICTURE_ELEMENT.CAPTION]: node.title ?? "",
+        [PICTURE_ELEMENT.CAPTION]: source?.title ?? "",
       },
     };
     return;

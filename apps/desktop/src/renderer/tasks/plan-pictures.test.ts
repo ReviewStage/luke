@@ -312,15 +312,15 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
 test("an agent's plan card draws the plan's pictures once opened, while the agent's own words keep one a link", async () => {
   const planId = "5b8c2d34-7e1f-4a9b-8c6d-0e1f2a3b4c07";
   const asked: string[] = [];
-  standHost(new Set([MOCK]), asked);
+  standHost(new Set([MOCK, SECOND]), asked);
   const address = picture(planId, MOCK);
-  const handed = {
-    id: "plan",
-    role: MESSAGE_ROLE.USER,
-    parts: [
-      { type: "text", text: `# Invites\n\n![Invite email](${address} "The mock Lee shared")` },
-    ],
-  };
+  const plan = [
+    "# Invites",
+    `![Invite email](${address} "The mock Lee shared")`,
+    "![Members page][members]",
+    `[members]: ${picture(planId, SECOND)} "The page today"`,
+  ].join("\n\n");
+  const handed = { id: "plan", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: plan }] };
   const turn = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -343,11 +343,18 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
   await settle();
 
   const card = view.querySelector("[data-task-card]");
-  const image = card?.querySelector(".picture-block img");
-  assert.equal(image?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`);
-  assert.equal(image?.getAttribute("alt"), "Invite email");
-  assert.equal(card?.querySelector(".picture-caption")?.textContent, "The mock Lee shared");
-  assert.deepEqual(asked, [MOCK]);
-  assert.equal(view.querySelectorAll("img").length, 1, "the agent's turn draws no picture");
+  const images = [...(card?.querySelectorAll(".picture-block img") ?? [])];
+  assert.equal(images[0]?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`);
+  assert.deepEqual(
+    images.map((image) => image.getAttribute("alt")),
+    ["Invite email", "Members page"],
+  );
+  assert.deepEqual(
+    [...(card?.querySelectorAll(".picture-caption") ?? [])].map((each) => each.textContent),
+    ["The mock Lee shared", "The page today"],
+    "a reference's caption is its definition's",
+  );
+  assert.deepEqual(asked, [MOCK, SECOND]);
+  assert.equal(view.querySelectorAll("img").length, 2, "the agent's turn draws no picture");
   assert.match(view.textContent ?? "", /Matched the mock\./u);
 });
