@@ -169,8 +169,12 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
 
   await act(async () => chip.click());
   const options = [...document.querySelectorAll('[role="option"]')];
-  const names = options.map(
-    (option) => option.querySelector(".plan-compose-menu-name")?.textContent,
+  // A row's words, without the letter its face stands in with until the photo loads.
+  const names = options.map((option) =>
+    [...option.children]
+      .filter((part) => !part.classList.contains("menu-item-glyph"))
+      .map((part) => part.textContent)
+      .join(""),
   );
   assert.deepEqual(names, [
     "Default",
