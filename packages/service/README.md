@@ -853,6 +853,18 @@ runs every agent without that provider, and neither Settings nor the
 composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
 
+**The workspace Linear connector.** A workspace's own Linear grant, which
+the New plan picker lists issues through and a plan started from an issue
+reads it through, is held on a connector of its own, named by
+`LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
+Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
+server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
+401. So the workspace's must be Connect's own Linear connector
+(`vercel connect create linear`), whose Linear API OAuth tokens the GraphQL
+API takes, and Linear's MCP server takes too, for the agents a workspace's
+grant is handed to. Give it the `read` scope at least, and user subjects.
+Without the variable, no workspace can connect Linear.
+
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
 (`https://mcp.slack.com/.well-known/oauth-authorization-server`: Slack's

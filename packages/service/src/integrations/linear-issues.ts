@@ -3,10 +3,11 @@
  *
  * A workspace's Linear grant is held by Vercel Connect under the
  * workspace's own id as its subject (`integration-connect.ts` takes any
- * subject id), on the same connector the account grants are, and Luke uses
- * it only while the workspace's row stands connected
- * (`workspace-integration-store.ts`). It is a Linear OAuth token, which
- * Linear's GraphQL API takes as a bearer, so the picker's list and the
+ * subject id), on a connector of its own (`WorkspaceLinearConnect`), and
+ * Luke uses it only while the workspace's row stands connected
+ * (`workspace-integration-store.ts`). It is a Linear API OAuth token, which
+ * Linear's GraphQL API takes as a bearer, and which the accounts' connector,
+ * signing in through Linear's MCP server, does not issue, so the picker's list and the
  * issue a plan starts from are read there, with no team filter: whatever
  * the grant reaches, every member of the workspace reads, a private team's
  * issues among them, which is what the admin agreed to on connecting.
@@ -34,8 +35,8 @@ import {
 } from "../http/http-effect.js";
 import {
   INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnect,
   type IntegrationToken,
+  WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import {
   expireWorkspaceIntegration,
@@ -52,7 +53,7 @@ const READ_TIMEOUT = Duration.seconds(10);
 export const LINEAR_READ_FAILURE = {
   /** The workspace has no Linear connected, or the deployment names no Linear connector. */
   NOT_CONNECTED: "not-connected",
-  /** Connect or Linear holds no grant it honours for the workspace any more: an owner or admin connects again. */
+  /** Connect or Linear holds no grant it honors for the workspace any more: an owner or admin connects again. */
   EXPIRED: "expired",
   /** The issue asked for is none the grant reaches. */
   NOT_FOUND: "not-found",
@@ -119,7 +120,7 @@ const QUERY = {
   BY_IDENTIFIER: `query LukeIssueByIdentifier($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`,
 } as const;
 
-/** HTTP statuses Linear answers a token it no longer honours with. */
+/** HTTP statuses Linear answers a token it no longer honors with. */
 const REFUSED_STATUSES: readonly number[] = [401, 403];
 
 /**
@@ -186,7 +187,7 @@ export const workspaceLinearToken = /* @__PURE__ */ Effect.fn("web/workspaceLine
   ): Effect.fn.Return<
     Result.Result<IntegrationToken, LinearReadFailureReason>,
     QueryError | Schema.SchemaError,
-    DatabaseServices | IntegrationConnect
+    DatabaseServices | WorkspaceLinearConnect
   > {
     const row = yield* readWorkspaceIntegration(organizationId, INTEGRATION_PROVIDER.LINEAR);
     if (row?.status === INTEGRATION_ROW_STATUS.EXPIRED) {
@@ -195,7 +196,7 @@ export const workspaceLinearToken = /* @__PURE__ */ Effect.fn("web/workspaceLine
     if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
       return Result.fail(LINEAR_READ_FAILURE.NOT_CONNECTED);
     }
-    const connector = (yield* IntegrationConnect)[INTEGRATION_PROVIDER.LINEAR];
+    const connector = yield* WorkspaceLinearConnect;
     const issued = yield* Effect.result(connector.token(organizationId, { fresh: false }));
     if (Result.isSuccess(issued)) return Result.succeed(issued.success);
     switch (issued.failure.reason) {
@@ -279,7 +280,7 @@ export function throughWorkspaceLinear<A>(
 ): Effect.Effect<
   A,
   LinearReadFailure | QueryError | Schema.SchemaError,
-  DatabaseServices | IntegrationConnect | HttpClient.HttpClient
+  DatabaseServices | WorkspaceLinearConnect | HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
     const token = yield* workspaceLinearToken(organizationId);

@@ -205,8 +205,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honouring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honouring this connection. Ask an owner or admin.",
+  EXPIRED: "Linear stopped honoring this connection. Connect again.",
+  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -1126,7 +1126,7 @@ function LinearCopy({
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honouring it, which opens Linear's
+ * or Connect again once Linear stopped honoring it, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and Manage once one stands, whose menu holds Disconnect, which asks first. A
  * plan already started from an issue keeps what it read.

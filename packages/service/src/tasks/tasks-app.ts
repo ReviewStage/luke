@@ -80,7 +80,10 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import type { IntegrationConnect } from "../integrations/integration-connect.js";
+import type {
+  IntegrationConnect,
+  WorkspaceLinearConnect,
+} from "../integrations/integration-connect.js";
 import {
   linearIssue,
   linearOrRefused,
@@ -297,7 +300,8 @@ export type TasksAppServices =
   | GitHubApp
   | HttpClient.HttpClient
   | ModelCatalog
-  | IntegrationConnect;
+  | IntegrationConnect
+  | WorkspaceLinearConnect;
 
 type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest;
 
