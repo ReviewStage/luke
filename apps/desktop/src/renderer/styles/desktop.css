@@ -5124,6 +5124,7 @@ body:has(.app-stage[data-capture="true"])
    in the room between the sidebar and its runs, then its runs in a panel of
    their own on the right, each scrolling by itself. */
 .automation-editor-layout {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -5143,6 +5144,16 @@ body:has(.app-stage[data-capture="true"])
   min-height: 0;
   max-width: max(280px, calc(100% - 480px)); /* off-scale: the form's reserve, FORM_RESERVE */
   flex: none;
+}
+
+/* The Runs panel on its way out has left the layout, the form already
+   standing in its room, and slides out over the form's edge on its own
+   ground (`usePaneSlide`). */
+.automation-runs-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  background: var(--desktop-ground);
 }
 
 .automation-runs {

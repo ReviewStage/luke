@@ -163,7 +163,7 @@ export function TerminalShells({
   models: readonly CatalogModel[] | undefined;
   session: TerminalSession;
   onOpenAgent: () => void;
-  /** The list's box, which slides in and out (`useTreeSlide`). */
+  /** The list's box, which slides in and out (`usePaneSlide`). */
   pane: RefObject<HTMLElement | null>;
   leaving: boolean;
   /** Whether the tab is on screen: a question asked from the list goes as the panel closes. */

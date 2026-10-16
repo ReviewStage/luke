@@ -2,17 +2,8 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import {
-  Fragment,
-  type ReactNode,
-  type RefObject,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { paneTiming } from "../desktop/pane-motion";
+import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion";
 import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
@@ -41,7 +32,7 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * as breadcrumbs, then at its end the file opened on GitHub, the ⋯ of what
  * is done with it (`file-menu.tsx`), and the tree's toggle, the side
  * panel's own glyph, since the tree is docked on the right as the panel
- * is, and slides in and out as the panel does (`useTreeSlide`). The tab
+ * is, and slides in and out as the panel does (`usePaneSlide`). The tab
  * under it reads the file and tells the bar how the read stands, which is
  * what the GitHub button and the menu offer by. The breadcrumbs are words
  * in the window's own type, as a tab's name is; only the file is code.
@@ -154,66 +145,10 @@ export function TreeToggle({
   );
 }
 
-/** The tree as the view draws it: whether it is drawn, whether on its way out, and its box. */
-interface TreeSlide {
-  drawn: boolean;
-  leaving: boolean;
-  pane: RefObject<HTMLElement | null>;
-}
-
-/**
- * The tree shown and hidden as a pane is (docs/DESIGN.md): it lands in the
- * layout or leaves it at once, so the file takes or gives its room on the
- * frame the toggle is pressed and moves no more, and the tree slides in
- * from the view's right edge, or out past it over the file it uncovers,
- * on the pane's own motion tokens. Each slide starts from wherever one
- * under way had brought it. A closed tree is held drawn through its slide
- * out and let go once it has played; with no motion to play, under reduced
- * motion or a capture run, it is let go before the frame is drawn. The tree
- * a File tab opens with stands at once, since nothing was toggled.
- */
-function useTreeSlide(open: boolean): TreeSlide {
-  const pane = useRef<HTMLElement>(null);
-  const [shown, setShown] = useState(open);
-  const [leaving, setLeaving] = useState(false);
-  if (shown !== open) {
-    setShown(open);
-    setLeaving(!open);
-  }
-  const last = useRef(open);
-  useLayoutEffect(() => {
-    const element = pane.current;
-    if (last.current === open || element === null) return;
-    last.current = open;
-    const timing = paneTiming(element);
-    // Note that the slide under way is read before it is stopped, because
-    // the next one starts from where it had brought the tree, and that it is
-    // stopped even with no motion to play, because an exit's fill would
-    // otherwise hold a tree shown again past the edge.
-    const from = getComputedStyle(element).transform;
-    for (const running of element.getAnimations()) running.cancel();
-    if (timing === undefined) {
-      if (!open) setLeaving(false);
-      return;
-    }
-    if (open) {
-      const start = from === "none" ? "translateX(100%)" : from;
-      element.animate([{ transform: start }, { transform: "none" }], timing);
-      return;
-    }
-    const exit = element.animate([{ transform: from }, { transform: "translateX(100%)" }], {
-      ...timing,
-      fill: "forwards",
-    });
-    exit.onfinish = () => setLeaving(false);
-  }, [open]);
-  return { drawn: open || leaving, leaving, pane };
-}
-
 /** A pane beside a tab, a File tab's tree or a Terminal tab's shells, wherever the panel's width lets it stand. */
 export interface PaneRoom {
   /** The pane beside the tab, open or shut as the panel holds it for every tab of its kind. */
-  readonly beside: TreeSlide;
+  readonly beside: PaneSlide;
   /** Whether the pane is drawn at all, beside the tab or over it. */
   readonly drawn: boolean;
   readonly toggles: PaneToggles;
@@ -231,7 +166,7 @@ export interface PaneRoom {
 
 /**
  * The pane's room. Beside the tab it is open or shut as the panel holds it
- * (`useTreeSlide`); where the panel is too narrow for the tab and the pane
+ * (`usePaneSlide`); where the panel is too narrow for the tab and the pane
  * side by side (`@container side-panel`), the stylesheet draws it over the
  * tab's right edge instead, shut until its own toggle opens it, and only
  * for this tab, since a pane opened over a tab is a glance rather than a
@@ -242,7 +177,7 @@ export function usePaneRoom(shown: {
   readonly open: boolean;
   readonly onToggle: () => void;
 }): PaneRoom {
-  const beside = useTreeSlide(shown.open);
+  const beside = usePaneSlide(shown.open);
   const [over, setOver] = useState(false);
   const closeOver = useCallback(() => setOver(false), []);
   const { pane } = beside;
