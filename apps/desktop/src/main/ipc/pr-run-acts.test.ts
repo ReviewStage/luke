@@ -5,7 +5,7 @@ import {
   PR_RUN_PORT_MESSAGE,
   type PrRunOutcome,
   type PrRunPortOutbound,
-  type PrRunPullRequest,
+  type PrRunTarget,
 } from "@luke/features/pr-run-view";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
@@ -26,7 +26,7 @@ import { type MainPrRunPort, type PrRunActsDependencies, prRunActRows } from "./
  * and only a panel is answered. Synthetic ids and bytes throughout.
  */
 
-const PULL_REQUEST: PrRunPullRequest = {
+const PULL_REQUEST: PrRunTarget = {
   workspaceId: "ws_fixture",
   repository: "octocat/relay",
   number: 7,

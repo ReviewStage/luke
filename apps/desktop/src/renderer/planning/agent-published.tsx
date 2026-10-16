@@ -3,7 +3,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
-import type { PrRunPullRequest } from "@luke/features/pr-run-view";
+import type { PrRunTarget } from "@luke/features/pr-run-view";
 import { CopyIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
@@ -69,10 +69,10 @@ export interface RunOnMacDoors {
   /** The workspace the pull request's repository is reached through. */
   readonly workspaceId: string;
   /** Opens the pull request's run tab and runs it. */
-  readonly run: (pullRequest: PrRunPullRequest) => void;
-  readonly showInFinder: (pullRequest: PrRunPullRequest) => void;
+  readonly run: (pullRequest: PrRunTarget) => void;
+  readonly showInFinder: (pullRequest: PrRunTarget) => void;
   /** Deletes Luke's checkout of it, rejecting with why where it could not. */
-  readonly deleteCheckout: (pullRequest: PrRunPullRequest) => Promise<void>;
+  readonly deleteCheckout: (pullRequest: PrRunTarget) => Promise<void>;
 }
 
 /** What Delete Local Checkout asks first. */
@@ -107,7 +107,7 @@ function branchActions(branch: string, doors: PublishedDoors): MenuAction[][] {
 /** What the menu offers for a pull request on this Mac: run it, show its checkout, and delete it. */
 function runOnMacActions(
   askDelete: () => void,
-  pullRequest: PrRunPullRequest,
+  pullRequest: PrRunTarget,
   doors: RunOnMacDoors,
 ): MenuAction[] {
   return [
@@ -151,7 +151,7 @@ export function PublishedChip({
 }): ReactNode {
   const menu = useActionMenu(true);
   const { runOnMac } = doors;
-  const onMac: PrRunPullRequest | undefined =
+  const onMac: PrRunTarget | undefined =
     runOnMac === undefined || published?.pullRequest == null
       ? undefined
       : {

@@ -10,7 +10,7 @@
 
 import {
   PR_RUN_PORT_CHANNEL,
-  type PrRunPullRequest,
+  type PrRunTarget,
   prRunPortTicketSchema,
 } from "@luke/features/pr-run-view";
 import { isRecord, unparsedWire } from "@luke/wire";
@@ -21,7 +21,7 @@ const readTicket = readEither(prRunPortTicketSchema);
 
 /** Calls back with each run's port as main posts it to this window, until the returned function is called. */
 export function onPrRunPort(
-  callback: (ticket: PrRunPullRequest, port: MessagePort) => void,
+  callback: (ticket: PrRunTarget, port: MessagePort) => void,
 ): () => void {
   const listener = (event: MessageEvent) => {
     // Only the preload, posting to its own window, hands a port in.

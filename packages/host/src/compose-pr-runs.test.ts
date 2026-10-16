@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@luke/credentials";
-import type { PrFetchOutcome } from "@luke/features";
-import type { PrFetchRequest } from "@luke/features/pr-fetch-wire";
+import type { RunSnapshotOutcome } from "@luke/features";
 import {
   PR_RUN_FLOW,
   PR_RUN_PHASE,
@@ -24,8 +24,9 @@ import {
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { unparsedWire, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Queue, Redacted, Result } from "effect";
+import { Effect, Fiber, Layer, Queue, Redacted, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { TestClock } from "effect/testing";
 import { composePrRuns } from "./compose-pr-runs.js";
 import { fixtureGit, fixtureGitTool, pullRequestOrigin } from "./testing/pull-request-origin.js";
 
@@ -45,7 +46,12 @@ const machine = NodeChildProcessSpawner.layer.pipe(
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const ACCOUNT = "developer@luke.test";
-const PULL_REQUEST = { workspaceId: "ws_fixture", repository: "octocat/relay", number: 7 } as const;
+const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const PULL_REQUEST = {
+  workspaceId: "ws_fixture",
+  repository: "octocat/relay",
+  agentId: AGENT,
+} as const;
 const TOKEN = "ghs_fixture_pull_request_token";
 const PORT = 43_210;
 
@@ -57,15 +63,23 @@ interface Heard {
   readonly payload: WireValue;
 }
 
-/** The composer over a fresh origin, a state root, and a service that reads the origin's pull request ref, or the heads it is told to answer. */
-function subject(options: { heads?: () => string | undefined } = {}) {
+/**
+ * The composer over a fresh origin, a state root, and a service that answers
+ * the agent's work as a snapshot: the origin's `main` is where the agent's
+ * work starts, and its `work` branch, where the test's commits land, is the
+ * agent's working tree. A service told so answers waking first, or that the
+ * work is too large.
+ */
+function subject(options: { waking?: number; tooLarge?: boolean } = {}) {
   return Effect.gen(function* () {
     const scratch = yield* temporaryDirectoryScoped("luke-pr-runs-");
     const origin = pullRequestOrigin(path.join(scratch, "origin"));
-    const first = origin.commit({ "README.md": "first\n", ".gitignore": "node_modules/\n" });
-    origin.pointPullRequest(PULL_REQUEST.number, first);
+    const base = origin.commit({ "README.md": "base\n", ".gitignore": "node_modules/\n" });
+    origin.branch("work");
+    const first = origin.commit({ "README.md": "first\n" });
     const heard = yield* Queue.unbounded<Heard>();
-    const asked: PrFetchRequest[] = [];
+    const asked: string[] = [];
+    let waking = options.waking ?? 0;
     const revoked: string[] = [];
     // The workspace's shared commands, as the service keeps them.
     let runs: RepositoryRun[] = [];
@@ -100,17 +114,23 @@ function subject(options: { heads?: () => string | undefined } = {}) {
       },
       freePort: Effect.succeed(PORT),
       client: {
-        fetch: (request) =>
-          Effect.sync((): PrFetchOutcome => {
-            asked.push(request);
-            const head =
-              options.heads?.() ??
-              fixtureGit(origin.folder, ["rev-parse", `refs/pull/${request.prNumber}/head`]);
+        take: (agentId) =>
+          Effect.sync((): RunSnapshotOutcome => {
+            asked.push(agentId);
+            if (waking > 0) {
+              waking -= 1;
+              return { waking: true };
+            }
+            if (options.tooLarge === true) return { tooLarge: 9_000_000 };
+            const head = fixtureGit(origin.folder, ["rev-parse", "HEAD"]);
             return {
-              headSha: head,
-              headRef: "fix-relay",
-              token: Redacted.make(TOKEN),
-              expiresAt: "2026-10-01T01:00:00Z",
+              snapshot: {
+                repository: "octocat/relay",
+                base,
+                branch: "luke/fix-relay",
+                patch: gzipSync(origin.diff(base, head)).toString("base64"),
+                token: Redacted.make(TOKEN),
+              },
             };
           }),
       },
@@ -169,11 +189,12 @@ function subject(options: { heads?: () => string | undefined } = {}) {
       "ws_fixture",
       "octocat",
       "relay",
-      "pr-7",
+      `agent-${AGENT}`,
     );
     return {
       scratch,
       origin,
+      base,
       first,
       composer,
       call,
@@ -223,29 +244,29 @@ it.effect(
 );
 
 it.effect(
-  "a run fetches the head the service read, runs the command from the checkout, and says it succeeded",
+  "a run takes the agent's working tree, runs the command from the checkout, and says it succeeded",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { setCommand, start, until, printed, first, checkout, asked, revoked } =
+        const { setCommand, start, until, printed, base, checkout, asked, revoked } =
           yield* subject();
-        yield* setCommand("git rev-parse HEAD; pwd");
+        yield* setCommand("git rev-parse HEAD^; cat README.md; pwd");
 
         assert.deepEqual(yield* start(), { done: true });
         const running = yield* until([PR_RUN_PHASE.RUNNING, PR_RUN_PHASE.FAILURE]);
         const ended = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
 
         assert.equal(running.phase, PR_RUN_PHASE.RUNNING);
-        assert.equal(running.sha, first);
+        assert.equal(running.sha?.length, 40);
         assert.deepEqual(
           { phase: ended.phase, exitCode: ended.exitCode },
           { phase: PR_RUN_PHASE.SUCCESS, exitCode: 0 },
         );
-        assert.match(printed(), new RegExp(first, "u"));
+        // The checkout stands on the agent's work, its starting commit beneath it.
+        assert.match(printed(), new RegExp(base, "u"));
+        assert.match(printed(), /first/u);
         assert.match(printed(), new RegExp(checkout, "u"));
-        assert.deepEqual(asked, [
-          { workspaceId: "ws_fixture", repository: "octocat/relay", prNumber: 7 },
-        ]);
+        assert.deepEqual(asked, [AGENT]);
         // The token was given back before the command ran, and is in no event.
         assert.deepEqual(revoked, [TOKEN]);
       }),
@@ -269,43 +290,36 @@ it.effect("a command that fails says so with its status", () =>
   ).pipe(Effect.provide(machine)),
 );
 
-it.effect(
-  "a head that moved between the service's read and the fetch is asked for again, never run",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const stale = "0".repeat(40);
-        const answers = [stale];
-        const { setCommand, start, until, asked, first } = yield* subject({
-          heads: () => answers.shift(),
-        });
-        yield* setCommand("true");
-
-        yield* start();
-        const running = yield* until([PR_RUN_PHASE.RUNNING, PR_RUN_PHASE.FAILURE]);
-
-        assert.equal(running.phase, PR_RUN_PHASE.RUNNING);
-        assert.equal(running.sha, first);
-        assert.equal(asked.length, 2);
-      }),
-    ).pipe(Effect.provide(machine)),
-);
-
-it.effect("a head that never matches what was fetched fails without running anything", () =>
+it.effect("a sandbox waking is asked again until it answers, and the run goes on", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const { setCommand, start, until, asked, revoked, checkout } = yield* subject({
-        heads: () => "0".repeat(40),
-      });
+      const { setCommand, start, until, asked } = yield* subject({ waking: 2 });
+      yield* setCommand("true");
+
+      yield* start();
+      const running = yield* Effect.forkChild(until([PR_RUN_PHASE.RUNNING, PR_RUN_PHASE.FAILURE]));
+      // Note that the clock is moved in the run's own steps, since each ask waits two seconds before the next.
+      while (asked.length < 3) yield* TestClock.adjust("2 seconds");
+      const state = yield* Fiber.join(running);
+
+      assert.equal(state.phase, PR_RUN_PHASE.RUNNING);
+      assert.deepEqual(asked, [AGENT, AGENT, AGENT]);
+    }),
+  ).pipe(Effect.provide(machine)),
+);
+
+it.effect("work too large to copy fails without running anything", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { setCommand, start, until, revoked, checkout } = yield* subject({ tooLarge: true });
       yield* setCommand("touch ran");
 
       yield* start();
       const ended = yield* until([PR_RUN_PHASE.RUNNING, PR_RUN_PHASE.FAILURE]);
 
       assert.equal(ended.phase, PR_RUN_PHASE.FAILURE);
-      assert.match(ended.message ?? "", /kept moving/u);
-      assert.equal(asked.length, 3);
-      assert.equal(revoked.length, 3);
+      assert.match(ended.message ?? "", /too large/u);
+      assert.deepEqual(revoked, []);
       assert.equal(existsSync(path.join(checkout, "ran")), false);
     }),
   ).pipe(Effect.provide(machine)),
@@ -356,28 +370,30 @@ it.effect(
 );
 
 it.effect(
-  "a second Run ends the first before the checkout moves to the newest head, and a deletion waits for no run",
+  "a second Run ends the first before the checkout moves to the newest work, and a deletion waits for no run",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { setCommand, start, until, untilPrinted, printed, call, origin, checkout } =
           yield* subject();
-        yield* setCommand("cat README.md; echo $$ >> ../pr-7.pids; echo ready; sleep 60");
+        yield* setCommand("cat README.md; echo $$ >> ../agent.pids; echo ready; sleep 60");
 
         yield* start("conn-1");
         yield* untilPrinted("ready", "conn-1");
         const refused = yield* call(GATEWAY_METHOD.PR_RUNS_DELETE, { ...PULL_REQUEST });
-        const second = origin.commit({ "README.md": "second\n" });
-        origin.pointPullRequest(PULL_REQUEST.number, second);
+        origin.commit({ "README.md": "second\n" });
         yield* start("conn-2");
         const running = yield* until([PR_RUN_PHASE.RUNNING], "conn-2");
         yield* untilPrinted("ready", "conn-2");
 
         assert.deepEqual(refused, { refused: "Stop the run before deleting its local checkout." });
-        assert.equal(running.sha, second);
+        assert.notEqual(running.sha, undefined);
         assert.match(printed("conn-1"), /first/u);
         assert.match(printed("conn-2"), /second/u);
-        const [firstRun = 0, secondRun = 0] = readFileSync(`${checkout}.pids`, "utf8")
+        const [firstRun = 0, secondRun = 0] = readFileSync(
+          `${path.dirname(checkout)}/agent.pids`,
+          "utf8",
+        )
           .trim()
           .split("\n")
           .map(Number);
@@ -462,7 +478,7 @@ it.effect(
 );
 
 it.effect(
-  "setup runs before the run command on a pull request's first Run, and again only when a lockfile changes; the run is handed its port",
+  "setup runs before the run command on an agent's first Run, and again only when a lockfile changes; the run is handed its port",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -473,10 +489,7 @@ it.effect(
         const first = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
         yield* start();
         yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
-        origin.pointPullRequest(
-          PULL_REQUEST.number,
-          origin.commit({ "pnpm-lock.yaml": "lock: 2\n" }),
-        );
+        origin.commit({ "pnpm-lock.yaml": "lock: 2\n" });
         yield* start();
         yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
 

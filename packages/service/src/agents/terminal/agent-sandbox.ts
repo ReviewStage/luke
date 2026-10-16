@@ -61,6 +61,59 @@ export type ShellRefusal =
 
 type ShellEffect<A> = Effect.Effect<Result.Result<A, ShellRefusal>, SandboxUnavailable>;
 
+/** The agent's working tree as a run on a Mac takes it: the commit its work starts from, its branch, and everything since as a gzipped binary patch. */
+export interface WorkingTreeSnapshot {
+  /** Where the agent's branch left the default branch, which GitHub holds. */
+  readonly base: string;
+  /** The branch checked out in the sandbox; null on a detached HEAD. */
+  readonly branch: string | null;
+  /** `git diff --binary` from the base to the working tree, untracked files not ignored included, gzipped and in base64. */
+  readonly patch: string;
+}
+
+/** Why no snapshot could be taken: the sandbox is not running, the patch is past the bound, or the checkout has no base on the default branch. */
+export const SNAPSHOT_REFUSAL = {
+  NOT_RUNNING: "not-running",
+  TOO_LARGE: "too-large",
+  NO_BASE: "no-base",
+} as const;
+
+export type SnapshotRefusal =
+  | { readonly kind: typeof SNAPSHOT_REFUSAL.NOT_RUNNING; readonly sandbox: SandboxState }
+  | { readonly kind: typeof SNAPSHOT_REFUSAL.TOO_LARGE; readonly bytes: number }
+  | { readonly kind: typeof SNAPSHOT_REFUSAL.NO_BASE };
+
+/** The exits the snapshot script ends with where it takes none. */
+const SNAPSHOT_EXIT = { TOO_LARGE: 3, NO_BASE: 4 } as const;
+
+/**
+ * The snapshot script, run with bash in the checkout's folder. A copy of the
+ * index takes in every file, untracked ones too and ignored ones never, so
+ * neither the agent's own index nor its working tree is touched; the patch
+ * runs from the merge base with the default branch's remote ref to that
+ * tree, gzipped, and goes out in base64 after a line for the base and a line
+ * for the branch.
+ */
+const SNAPSHOT_SCRIPT = [
+  "set -euo pipefail",
+  'cd "$1"',
+  'base=$(git merge-base HEAD "refs/remotes/origin/$2" 2>/dev/null) || exit 4',
+  "branch=$(git symbolic-ref --quiet --short HEAD || true)",
+  "index=$(mktemp)",
+  'trap \'rm -f "$index" "$index.patch"\' EXIT',
+  'cp "$(git rev-parse --git-path index)" "$index" 2>/dev/null || true',
+  'GIT_INDEX_FILE="$index" git add -A',
+  'tree=$(GIT_INDEX_FILE="$index" git write-tree)',
+  'git -c core.quotepath=off diff --binary --no-color --no-ext-diff --no-textconv "$base" "$tree" | gzip -9 -c > "$index.patch"',
+  'size=$(wc -c < "$index.patch")',
+  'if [ "$size" -gt "$3" ]; then echo "$size"; exit 3; fi',
+  'printf \'%s\\n%s\\n\' "$base" "$branch"',
+  'base64 < "$index.patch" | tr -d "\\n"',
+].join("\n");
+
+/** A commit's id as Git spells it. */
+const COMMIT_SHA = /^[0-9a-f]{40}$/u;
+
 /** What an attach finds: a running sandbox's PTY, minted for one connection, where the sandbox stands instead, or no such shell in it. */
 type SandboxAttach =
   | {
@@ -87,6 +140,18 @@ export interface AgentSandboxService {
   readonly rename: (sessionId: string, terminalId: string, title: string) => ShellEffect<void>;
   /** A shell ended, with whatever it ran. */
   readonly kill: (sessionId: string, terminalId: string) => ShellEffect<void>;
+  /**
+   * The agent's working tree as it stands now, from the running sandbox's
+   * checkout at `checkout`: its base on `defaultBranch` and a patch of
+   * everything since, no larger than `maxBytes` gzipped; a stopped sandbox is
+   * never woken here.
+   */
+  readonly snapshot: (
+    sessionId: string,
+    checkout: string,
+    defaultBranch: string,
+    maxBytes: number,
+  ) => Effect.Effect<Result.Result<WorkingTreeSnapshot, SnapshotRefusal>, SandboxUnavailable>;
   /** The agent's sandbox resumed from its snapshot, answering where it stands after; one never opened stays starting. */
   readonly resume: (sessionId: string) => Effect.Effect<SandboxState, SandboxUnavailable>;
   /** A connection to the running sandbox's PTY, or where the sandbox stands; a stopped sandbox is never woken here. */
@@ -200,6 +265,31 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
         allow: { "*": [], ...Object.fromEntries(GITHUB_HOSTS.map((host) => [host, transform])) },
       });
     },
+    snapshot: (sessionId, checkout, defaultBranch, maxBytes) =>
+      Effect.gen(function* () {
+        const { state, running } = yield* standing(sessionId);
+        if (running === undefined) {
+          return Result.fail({ kind: SNAPSHOT_REFUSAL.NOT_RUNNING, sandbox: state });
+        }
+        const ran = yield* api.run(running, {
+          command: "bash",
+          args: ["-c", SNAPSHOT_SCRIPT, "luke-snapshot", checkout, defaultBranch, String(maxBytes)],
+        });
+        if (ran.exitCode === SNAPSHOT_EXIT.TOO_LARGE) {
+          return Result.fail({
+            kind: SNAPSHOT_REFUSAL.TOO_LARGE,
+            bytes: Number(ran.stdout.trim()),
+          });
+        }
+        if (ran.exitCode === SNAPSHOT_EXIT.NO_BASE)
+          return Result.fail({ kind: SNAPSHOT_REFUSAL.NO_BASE });
+        const [base = "", branch = "", patch = ""] = ran.stdout.split("\n");
+        // A script that ended otherwise, or wrote anything but its three lines, is an outage the Mac may retry.
+        if (ran.exitCode !== 0 || !COMMIT_SHA.test(base)) {
+          return yield* Effect.fail(new SandboxUnavailable({}));
+        }
+        return Result.succeed({ base, branch: branch === "" ? null : branch, patch });
+      }),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);

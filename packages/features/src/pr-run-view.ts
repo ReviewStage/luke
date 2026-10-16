@@ -1,22 +1,23 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { commitShaSchema, pullRequestNumberSchema } from "./pr-fetch-wire.js";
+
 import { workspaceIdSchema } from "./task-wire.js";
 import { TERMINAL_FLOW } from "./terminal-view.js";
 
 /**
- * pr-run-view.ts -- running a pull request on this Mac: the repository's run command, a run's phases, and the port its output reaches the one panel on.
+ * pr-run-view.ts -- running a coding agent's work on this Mac: a run's target, its phases, and the port its output reaches the one panel on.
  *
- * A repository's setup and run commands are the workspace's, shared by every
- * member (`repository-run-wire.ts`), and never the pull request's. A run is asked of the panel that draws it: main mints a
- * connection for that panel and that pull request, posts the panel a port,
- * and the host fetches the pull request's newest head into Luke's own
- * checkout of it, runs the command there, and hands up what it prints as
+ * A run is named by the agent whose work it runs, with the agent's workspace
+ * and repository. Its setup and run commands are the workspace's, shared by
+ * every member (`repository-run-wire.ts`), and never the agent's. A run is
+ * asked of the panel that draws it: main mints a connection for that panel
+ * and that agent, posts the panel a port, and the host takes the agent's
+ * working tree from its sandbox (`run-snapshot-wire.ts`) into Luke's own
+ * checkout of it, runs the commands there, and hands up what they print as
  * events named by the connection, which main posts on that one port. What a
  * run prints is never an answer, app state, a trace, a counted event, or a
  * file; it is paced to what the tab has drawn by the terminal's watermarks.
- * Every call names its pull request by workspace, repository, and number,
- * and carries nothing of the token the host fetches with.
+ * No call carries anything of the token the host fetches with.
  */
 
 /** The bounds of what a run says. */
@@ -51,14 +52,17 @@ const connectionId = EffectSchema.String.check(
   EffectSchema.isMaxLength(64),
 );
 
-/** One pull request of a workspace's repository, which a run, its checkout, and its tab are named by. */
-export const prRunPullRequestSchema = EffectSchema.Struct({
+/** A commit's id as Git spells it. */
+const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
+
+/** A coding agent whose work is run, with its workspace and repository: what a run, its checkout, and its tab are named by. */
+export const prRunTargetSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   repository: githubRepositoryFullNameSchema,
-  number: pullRequestNumberSchema,
+  agentId: EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f-]{36}$/u)),
 });
 
-export type PrRunPullRequest = typeof prRunPullRequestSchema.Type;
+export type PrRunTarget = typeof prRunTargetSchema.Type;
 
 /** Reading a workspace's shared run commands names the workspace. */
 export const prRunWorkspaceParamsSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
@@ -98,7 +102,7 @@ export type PrRunLocation = typeof prRunLocationSchema.Type;
 /** The host's start: the connection main minted for the asking panel, and the pull request. */
 export const prRunStartParamsSchema = EffectSchema.Struct({
   connectionId,
-  ...prRunPullRequestSchema.fields,
+  ...prRunTargetSchema.fields,
 });
 
 /** A call naming one connection. */
@@ -138,7 +142,7 @@ export const PR_RUN_PORT_MESSAGE = {
 } as const;
 
 /** The ticket a run's port is posted with, naming its pull request. */
-export const prRunPortTicketSchema = prRunPullRequestSchema;
+export const prRunPortTicketSchema = prRunTargetSchema;
 
 /** What main sends on a run's port. */
 export const prRunPortOutboundSchema = EffectSchema.Union([

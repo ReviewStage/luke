@@ -1,5 +1,5 @@
 /**
- * pull-request-origin.ts -- a repository on disk that stands in for GitHub in the pull-request run tests: commits made to order, and a pull request's head ref moved to any of them.
+ * pull-request-origin.ts -- a repository on disk that stands in for GitHub in the run tests: commits made to order on its branches, the patches between them an agent's sandbox would send, and a pull request's head ref moved to any of them.
  *
  * Every Git it runs reads no system or global configuration and names its
  * own author, so a test holds the same on any machine. Synthetic files and
@@ -37,6 +37,10 @@ export function fixtureGit(folder: string, args: readonly string[]): string {
 
 export interface PullRequestOrigin {
   readonly folder: string;
+  /** The binary patch from one commit to another, as an agent's sandbox sends its work. */
+  diff(from: string, to: string): Buffer;
+  /** A branch made at the commit and checked out, where later commits land. */
+  branch(name: string): void;
   /** A commit of the files given over the last one, answered by its id. */
   commit(files: Readonly<Record<string, string>>, message?: string): string;
   /** The pull request's head ref moved to the commit. */
@@ -49,6 +53,14 @@ export function pullRequestOrigin(folder: string): PullRequestOrigin {
   fixtureGit(folder, ["init", "--quiet", "--initial-branch=main"]);
   return {
     folder,
+    diff: (from, to) =>
+      execFileSync("git", ["diff", "--binary", from, to], {
+        cwd: folder,
+        env: { PATH: process.env.PATH ?? "/usr/bin:/bin", ...FIXTURE_GIT_ENVIRONMENT },
+      }),
+    branch: (name) => {
+      fixtureGit(folder, ["checkout", "--quiet", "-b", name]);
+    },
     commit: (files, message = "change") => {
       for (const [file, text] of Object.entries(files)) {
         mkdirSync(path.dirname(path.join(folder, file)), { recursive: true });

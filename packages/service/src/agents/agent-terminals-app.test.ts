@@ -58,6 +58,7 @@ function scriptedSandbox(state: SandboxState) {
       }),
     rename: () => Effect.succeed(Result.succeed(undefined)),
     kill: () => Effect.succeed(Result.succeed(undefined)),
+    snapshot: () => Effect.die("the terminal routes take no snapshot"),
     resume: (sessionId) =>
       Effect.sync(() => {
         asked.push({ what: "resume", sessionId });

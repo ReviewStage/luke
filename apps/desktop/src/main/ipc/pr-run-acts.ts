@@ -22,7 +22,7 @@ import {
   PR_RUN_PORT_MESSAGE,
   type PrRunOutcome,
   type PrRunPortOutbound,
-  type PrRunPullRequest,
+  type PrRunTarget,
   prRunPortInboundSchema,
 } from "@luke/features/pr-run-view";
 import { ACT, ACT_KIND } from "@luke/host/acts";
@@ -55,7 +55,7 @@ export interface MainPrRunPort {
 /** How main reaches a panel's page for its ports. */
 interface PrRunPortSeam {
   /** A fresh channel: main's end, with the other end already posted to the panel under the ticket. */
-  open(sender: WebContents, ticket: PrRunPullRequest): MainPrRunPort;
+  open(sender: WebContents, ticket: PrRunTarget): MainPrRunPort;
   /** Calls `then` once, when the panel's page is gone. */
   whenGone(sender: WebContents, then: () => void): void;
 }
@@ -146,7 +146,7 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
     });
 
   /** The numbers map of a panel's runs of one repository, its page's end watched the first time it draws any. */
-  const drawnOf = (sender: WebContents, pullRequest: PrRunPullRequest) => {
+  const drawnOf = (sender: WebContents, pullRequest: PrRunTarget) => {
     let runs = panels.get(sender);
     if (runs === undefined) {
       const fresh: PanelRuns = new Map();
@@ -166,7 +166,7 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
   };
 
   /** A fresh connection for the panel and the pull request, its port posted and its acks heard, in place of any it drew before. */
-  const opened = (sender: WebContents, pullRequest: PrRunPullRequest) => {
+  const opened = (sender: WebContents, pullRequest: PrRunTarget) => {
     const numbers = drawnOf(sender, pullRequest);
     const earlier = numbers.get(pullRequest.number);
     if (earlier !== undefined) forget(earlier);
@@ -185,7 +185,7 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
   };
 
   /** The panel's connection for the pull request, taken out of its map; none where it draws none. */
-  const takenDrawn = (sender: WebContents, pullRequest: PrRunPullRequest) => {
+  const takenDrawn = (sender: WebContents, pullRequest: PrRunTarget) => {
     const numbers = panels
       .get(sender)
       ?.get(pullRequest.workspaceId)

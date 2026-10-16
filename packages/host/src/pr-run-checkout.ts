@@ -1,46 +1,47 @@
-import { lstat, mkdir, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
 /**
- * pr-run-checkout.ts -- Luke's own checkout of one pull request on this Mac: where it lives, whether it may be refreshed, and the refresh.
+ * pr-run-checkout.ts -- Luke's own checkout of one coding agent's work on this Mac: where it lives, whether it may be refreshed, and the refresh.
  *
  * Every repository has one clone of Luke's own, a bare repository at
  * `<state root>/pr-runs/<account>/<workspace>/<owner>/<name>/repository.git`
  * whose `origin` is the repository's GitHub address, with no credential in
- * it; every pull request run from it is a worktree beside it, `pr-<number>`,
- * on a branch named for the pull request's head branch whose upstream is
- * `refs/pull/<number>/head`, so Git and `gh` read it as the pull request's
- * own checkout. Each segment is held to a shape that cannot climb out of
- * the folder, and nothing else on the Mac is touched, the developer's own
- * working trees least of all. A worktree is kept from run to run, so what
- * setup installed there is there next time.
+ * it; every agent whose work is run from it has a worktree beside it,
+ * `agent-<id>`, on a branch named for the agent's own branch. The agent's
+ * work arrives as a snapshot: the commit it starts from, fetched from
+ * GitHub, and a patch of everything since, which is applied to that commit
+ * in a scratch index of the clone and committed there, so no worktree file
+ * moves until the refresh checks the snapshot out. Each segment is held to a
+ * shape that cannot climb out of the folder, and nothing else on the Mac is
+ * touched, the developer's own working trees least of all. A worktree is
+ * kept from run to run, so what setup installed there is there next time.
  *
  * A refresh never discards anything the developer or a run left. A folder
  * Luke did not make, a worktree moved off the commit Luke last put there (a
  * commit made in it, another branch checked out), and one with edits to
- * tracked files are refused before anything is fetched; a newest commit that
- * adds a file the worktree already holds untracked or ignored is refused
- * before anything is checked out; and Git's own `reset --keep` refuses
- * whatever else it would overwrite. Each refusal says to delete the local
- * checkout to start over. A fetch goes into the clone's object store, which
- * moves no file, and the step that moves the worktree is never interrupted.
+ * tracked files are refused before anything is fetched; a snapshot that adds
+ * a file the worktree already holds untracked or ignored is refused before
+ * anything is checked out; and Git's own `reset --keep` refuses whatever
+ * else it would overwrite. Each refusal says to delete the local checkout to
+ * start over. The step that moves the worktree is never interrupted.
  *
  * Whether the run needs its setup is answered beside the commit: a worktree
  * never set up needs it, as does one last set up with another setup
  * command, and one set up before needs it again only where the newest
- * commit changes a lockfile or a package manifest since.
+ * snapshot changes a lockfile or a package manifest since.
  *
  * Every Git this module runs reads no system or global configuration, no
  * hooks, no credential helper but the one a fetch is handed, and no
  * file-system monitor, so nothing configured elsewhere on the Mac runs in it
  * or sees what it fetches with. Submodules are not fetched and Git LFS
- * content is not smudged: a checkout holds the repository's own files and
- * LFS pointer files.
+ * content is not smudged.
  */
 
-/** The folder under the state root that every pull request's checkout lives in. */
+/** The folder under the state root that every agent's checkout lives in. */
 export const PR_RUNS_FOLDER = "pr-runs";
 
 /** The clone's own folder beside the worktrees. */
@@ -79,23 +80,26 @@ const SEGMENT = {
   WORKSPACE: /^[A-Za-z0-9_-]{1,128}$/u,
   OWNER: /^[a-z0-9](?:-?[a-z0-9]){0,38}$/u,
   NAME: /^(?!\.{1,2}$)[a-z0-9_.-]{1,100}$/u,
+  AGENT: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
 } as const;
 
-/** The pull request a checkout is for, under the account signed in. */
+/** The agent a checkout is for, with its workspace and repository, under the account signed in. */
 export interface CheckoutOwner {
   readonly accountEmail: string;
   readonly workspaceId: string;
   /** `owner/name`, as GitHub spells it. */
   readonly repository: string;
-  readonly number: number;
+  /** The coding agent whose work is run. */
+  readonly agentId: string;
 }
 
-/** Where a pull request's checkout lives: the folder every checkout lives under, the repository's clone, and the pull request's worktree. */
+/** Where an agent's checkout lives: the folder every checkout lives under, the repository's clone, and the agent's worktree. */
 export interface CheckoutPlace {
   readonly root: string;
   readonly clone: string;
   readonly folder: string;
-  readonly number: number;
+  /** The agent whose work the worktree holds, which names Luke's refs for it. */
+  readonly agentId: string;
 }
 
 /** The Git this module runs, and the environment it runs under in place of the app's own. */
@@ -114,7 +118,7 @@ interface GitRun {
 /** Why a checkout cannot be refreshed, as the developer reads it. */
 export const CHECKOUT_REFUSAL = {
   NOT_LUKES:
-    "The folder Luke keeps this pull request's checkout in holds something Luke did not put there. Delete the local checkout to start over.",
+    "The folder Luke keeps this agent's checkout in holds something Luke did not put there. Delete the local checkout to start over.",
   MOVED:
     "The local checkout has commits or a branch of its own, which a refresh would leave behind. Delete the local checkout to start over.",
   EDITED:
@@ -125,13 +129,15 @@ export const CHECKOUT_REFUSAL = {
 /** A step's result: where it got to, or why it stopped, in the developer's words. */
 export type CheckoutStep<A> = { readonly ok: A } | { readonly refused: string };
 
-/** The pull request's head as a fetch found it: its commit, and its head branch's name. */
+/** The agent's work as a snapshot made it: its commit in the clone, and the agent's branch's name. */
 export interface FetchedHead {
   readonly sha: string;
   readonly headRef: string;
+  /** Whether `headRef` is the agent's own branch, which its worktree's branch then follows on `origin`. */
+  readonly ownBranch: boolean;
 }
 
-/** A fetch of the pull request's head into the clone. */
+/** A snapshot of the agent's work made in the clone. */
 export type FetchInto = (
   clone: string,
 ) => Effect.Effect<CheckoutStep<FetchedHead>, never, ChildProcessSpawner.ChildProcessSpawner>;
@@ -176,27 +182,17 @@ const HARDENED_ENVIRONMENT = {
   LC_ALL: "C",
 } as const;
 
-/** The fetch refspec that brings one pull request's head to `origin`'s own refs, which `git pull` in its worktree merges. */
-function pullRefspec(number: number): string {
-  return `+refs/pull/${number}/head:refs/remotes/origin/pull/${number}`;
+/** Where the clone's configuration keeps the setup command an agent's setup last finished with. */
+function setupKey(agentId: string): string {
+  return `luke.agent-${agentId}.setup`;
 }
 
-/** What matches that refspec among `origin`'s fetch lines, for replacing or removing it alone. */
-function pullRefspecPattern(number: number): string {
-  return `^\\+refs/pull/${number}/head:`;
-}
-
-/** Where the clone's configuration keeps the setup command a pull request's setup last finished with. */
-function setupKey(number: number): string {
-  return `luke.pr-${number}.setup`;
-}
-
-/** The refs Luke keeps in the clone for one pull request. */
-function lukeRefs(number: number) {
-  const base = `refs/luke/pr/${number}`;
+/** The refs Luke keeps in the clone for one agent. */
+function lukeRefs(agentId: string) {
+  const base = `refs/luke/agent/${agentId}`;
   return {
-    /** The head its last fetch found. */
-    FETCHED: `${base}/fetched`,
+    /** The commit its last snapshot starts from. */
+    BASE: `${base}/base`,
     /** The commit Luke last put its worktree on. */
     HEAD: `${base}/head`,
     /** The commit its setup last finished on. */
@@ -204,7 +200,7 @@ function lukeRefs(number: number) {
   } as const;
 }
 
-/** The checkout's folders for the pull request, or nothing where a segment is not of its shape. */
+/** The checkout's folders for the agent, or nothing where a segment is not of its shape. */
 export function checkoutPlace(stateRoot: string, owner: CheckoutOwner): CheckoutPlace | undefined {
   const account = owner.accountEmail.toLowerCase();
   const [repositoryOwner = "", name = "", extra] = owner.repository.toLowerCase().split("/");
@@ -214,16 +210,15 @@ export function checkoutPlace(stateRoot: string, owner: CheckoutOwner): Checkout
     SEGMENT.OWNER.test(repositoryOwner) &&
     SEGMENT.NAME.test(name) &&
     extra === undefined &&
-    Number.isSafeInteger(owner.number) &&
-    owner.number >= 1;
+    SEGMENT.AGENT.test(owner.agentId);
   if (!shaped) return undefined;
   const root = path.join(stateRoot, PR_RUNS_FOLDER);
   const repositoryFolder = path.join(root, account, owner.workspaceId, repositoryOwner, name);
   return {
     root,
     clone: path.join(repositoryFolder, CLONE_FOLDER),
-    folder: path.join(repositoryFolder, `pr-${owner.number}`),
-    number: owner.number,
+    folder: path.join(repositoryFolder, `agent-${owner.agentId}`),
+    agentId: owner.agentId,
   };
 }
 
@@ -290,6 +285,7 @@ function git(
   tool: GitTool,
   at: { readonly clone: string } | { readonly worktree: string },
   args: readonly string[],
+  extra: Readonly<Record<string, string>> = {},
 ): Effect.Effect<GitRun, never, ChildProcessSpawner.ChildProcessSpawner> {
   const onClone = "clone" in at;
   const cwd = onClone ? at.clone : at.worktree;
@@ -300,7 +296,7 @@ function git(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(tool.path, [...pinned, ...HARDENED_FLAGS, ...args], {
         cwd,
-        env: { ...tool.environment, ...HARDENED_ENVIRONMENT, ...ceiling },
+        env: { ...tool.environment, ...HARDENED_ENVIRONMENT, ...ceiling, ...extra },
         extendEnv: false,
         stdin: "ignore",
       });
@@ -375,20 +371,20 @@ function branchStands(tool: GitTool, clone: string, branch: string) {
 }
 
 /**
- * A branch name for the pull request's worktree that the clone holds no
- * branch of yet: its head branch's own where Git takes it, else
- * `pr-<number>`, else that with the commit's short id. Note that an existing branch is
+ * A branch name for the agent's worktree that the clone holds no
+ * branch of yet: the agent's own branch's name where Git takes it, else
+ * `agent-<id>`, else that with the commit's short id. Note that an existing branch is
  * never taken over, because the worktree is made with `-b`, which moves no
  * branch that already points somewhere.
  */
-function branchFor(tool: GitTool, clone: string, number: number, fetched: FetchedHead) {
+function branchFor(tool: GitTool, clone: string, agentId: string, fetched: FetchedHead) {
   return Effect.gen(function* () {
     const formed = yield* git(tool, { clone }, ["check-ref-format", "--branch", fetched.headRef]);
     // The last name carries the commit itself, which no branch of an earlier checkout can already hold.
     const candidates = [
       ...(formed.exitCode === 0 ? [fetched.headRef] : []),
-      `pr-${number}`,
-      `pr-${number}-${fetched.sha.slice(0, 12)}`,
+      `agent-${agentId.slice(0, 8)}`,
+      `agent-${agentId.slice(0, 8)}-${fetched.sha.slice(0, 12)}`,
     ];
     for (const candidate of candidates) {
       if (!(yield* branchStands(tool, clone, candidate))) return candidate;
@@ -417,7 +413,7 @@ function worktreeStanding(
     if (kind !== "folder" || (yield* entryKind(path.join(place.folder, ".git"))) !== "file") {
       return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
     }
-    const placed = yield* commitOf(tool, place.clone, lukeRefs(place.number).HEAD);
+    const placed = yield* commitOf(tool, place.clone, lukeRefs(place.agentId).HEAD);
     if (placed === undefined) return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
     const head = yield* git(tool, { worktree: place.folder }, ["rev-parse", "--verify", "HEAD"]);
     const branch = yield* git(tool, { worktree: place.folder }, [
@@ -485,12 +481,12 @@ function setupNeeded(
 ) {
   return Effect.gen(function* () {
     if (setupCommand === null) return false;
-    const setUp = yield* commitOf(tool, place.clone, lukeRefs(place.number).SET_UP);
+    const setUp = yield* commitOf(tool, place.clone, lukeRefs(place.agentId).SET_UP);
     if (setUp === undefined) return true;
     const ranWith = yield* git(tool, { clone: place.clone }, [
       "config",
       "--get",
-      setupKey(place.number),
+      setupKey(place.agentId),
     ]);
     if (ranWith.exitCode !== 0 || ranWith.stdout.replace(/\n$/u, "") !== setupCommand) return true;
     if (setUp === sha) return false;
@@ -501,7 +497,7 @@ function setupNeeded(
   });
 }
 
-/** The worktree made on the fetched commit, on a branch of its own whose upstream is the pull request; never interrupted halfway. */
+/** The worktree made on the snapshot's commit, on a branch of its own following the agent's on `origin`; never interrupted halfway. */
 function addWorktree(
   tool: GitTool,
   place: CheckoutPlace,
@@ -509,7 +505,7 @@ function addWorktree(
 ): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.uninterruptible(
     Effect.gen(function* () {
-      const branch = yield* branchFor(tool, place.clone, place.number, fetched);
+      const branch = yield* branchFor(tool, place.clone, place.agentId, fetched);
       if (branch === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
       // A worktree whose folder went away without Git hearing of it would hold its branch, so the clone's list is pruned first.
       yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
@@ -531,18 +527,15 @@ function addWorktree(
           refused: `Git could not make the local checkout (${lastLine(added.stderr)}).`,
         };
       }
-      // The clone's `origin` fetches the pull request's own ref too, so `git pull` in the worktree finds the upstream it merges.
+      // Note that the branch follows the agent's own on `origin`, so `git pull` there brings what the agent pushed.
       const upstream: readonly (readonly string[])[] = [
-        ["config", `branch.${branch}.remote`, "origin"],
-        ["config", `branch.${branch}.merge`, `refs/pull/${place.number}/head`],
-        [
-          "config",
-          "--replace-all",
-          "remote.origin.fetch",
-          pullRefspec(place.number),
-          pullRefspecPattern(place.number),
-        ],
-        ["update-ref", lukeRefs(place.number).HEAD, fetched.sha],
+        ...(fetched.ownBranch
+          ? [
+              ["config", `branch.${branch}.remote`, "origin"],
+              ["config", `branch.${branch}.merge`, `refs/heads/${fetched.headRef}`],
+            ]
+          : []),
+        ["update-ref", lukeRefs(place.agentId).HEAD, fetched.sha],
       ];
       for (const step of upstream) {
         if ((yield* git(tool, { clone: place.clone }, step)).exitCode !== 0) {
@@ -575,7 +568,7 @@ function moveWorktree(
       }
       const named = yield* git(tool, { clone: place.clone }, [
         "update-ref",
-        lukeRefs(place.number).HEAD,
+        lukeRefs(place.agentId).HEAD,
         sha,
       ]);
       if (named.exitCode !== 0) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
@@ -585,7 +578,7 @@ function moveWorktree(
 }
 
 /**
- * The pull request's worktree brought to the commit `fetchInto` fetches:
+ * The agent's worktree brought to the snapshot `fetchInto` makes:
  * made where there is none, refreshed where it stands with nothing a
  * refresh would lose, refused otherwise. Answers the commit it stands on and
  * whether its setup must run.
@@ -621,7 +614,7 @@ export function refreshCheckout(
       if (colliding === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
       if (colliding.length > 0) {
         return {
-          refused: `The pull request's newest commit adds files the local checkout already holds (${colliding.join(", ")}), which Luke never overwrites. Delete the local checkout to start over.`,
+          refused: `The agent's newest work adds files the local checkout already holds (${colliding.join(", ")}), which Luke never overwrites. Delete the local checkout to start over.`,
         };
       }
       const moved = yield* moveWorktree(tool, place, sha);
@@ -642,28 +635,44 @@ export function markSetUp(
     // Note that the commit is marked only once the command is, so a mark that failed halfway asks for setup again rather than skipping it.
     const noted = yield* git(tool, { clone: place.clone }, [
       "config",
-      setupKey(place.number),
+      setupKey(place.agentId),
       setupCommand,
     ]);
     if (noted.exitCode !== 0) return;
-    yield* git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.number).SET_UP, sha]);
+    yield* git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.agentId).SET_UP, sha]);
   });
 }
 
+/** What every snapshot commit is made under, so the same work on the same base is always the same commit. */
+const SNAPSHOT_COMMIT_ENVIRONMENT = {
+  GIT_AUTHOR_NAME: "Luke",
+  GIT_AUTHOR_EMAIL: "luke@tryluke.dev",
+  GIT_AUTHOR_DATE: "@0 +0000",
+  GIT_COMMITTER_NAME: "Luke",
+  GIT_COMMITTER_EMAIL: "luke@tryluke.dev",
+  GIT_COMMITTER_DATE: "@0 +0000",
+} as const;
+
 /**
- * The pull request's head fetched from `url` into the clone and read back:
- * the commit fetched under the pull request's own ref, whatever it is, which
- * the caller holds to the commit it was told to expect. `configArgs` are
+ * The agent's work made a commit in the clone: the base fetched from `url`
+ * by its id, then `patch` (a binary patch, already unzipped) applied to it in
+ * a scratch index and committed on top. No worktree is touched, and the
+ * patch and the scratch index go once the commit stands. `configArgs` are
  * the credential's own flags, placed after the hardened ones.
  */
-export function fetchPullRequestHead(
+export function snapshotCommit(
   tool: GitTool,
   clone: string,
-  number: number,
-  source: { readonly url: string; readonly configArgs: readonly string[] },
+  agentId: string,
+  source: {
+    readonly url: string;
+    readonly configArgs: readonly string[];
+    readonly base: string;
+    readonly patch: Uint8Array;
+  },
 ): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
-    const fetchedRef = lukeRefs(number).FETCHED;
+    const baseRef = lukeRefs(agentId).BASE;
     const fetched = yield* git(tool, { clone }, [
       ...source.configArgs,
       "fetch",
@@ -672,23 +681,85 @@ export function fetchPullRequestHead(
       "--no-write-fetch-head",
       "--no-recurse-submodules",
       source.url,
-      `+refs/pull/${number}/head:${fetchedRef}`,
+      `+${source.base}:${baseRef}`,
     ]);
     if (fetched.exitCode !== 0) {
       const why = fetched.exitCode === null ? "Git could not be started" : lastLine(fetched.stderr);
-      return { refused: `Luke could not fetch the pull request (${why}).` };
+      return { refused: `Luke could not fetch the agent's starting commit (${why}).` };
     }
-    const sha = yield* commitOf(tool, clone, fetchedRef);
-    return sha === undefined
-      ? { refused: "Luke fetched the pull request but found no commit at its head." }
-      : { ok: sha };
+    if ((yield* commitOf(tool, clone, baseRef)) !== source.base) {
+      return { refused: "Luke fetched the agent's starting commit but found another." };
+    }
+    return yield* Effect.acquireUseRelease(
+      Effect.tryPromise(() => mkdtemp(path.join(tmpdir(), "luke-snapshot-"))).pipe(Effect.orDie),
+      (scratch) => applied(tool, clone, scratch, source),
+      (scratch) =>
+        Effect.ignore(Effect.tryPromise(() => rm(scratch, { recursive: true, force: true }))),
+    );
+  });
+}
+
+/** The patch applied to the base in a scratch index of the clone, and the commit of the tree it makes. */
+function applied(
+  tool: GitTool,
+  clone: string,
+  scratch: string,
+  source: { readonly base: string; readonly patch: Uint8Array },
+) {
+  return Effect.gen(function* () {
+    const index = { GIT_INDEX_FILE: path.join(scratch, "index") };
+    const patchFile = path.join(scratch, "work.patch");
+    const written = yield* Effect.tryPromise(() => writeFile(patchFile, source.patch)).pipe(
+      Effect.as(true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    if (!written)
+      return {
+        refused: "Luke could not hold the agent's work to apply it.",
+      } satisfies CheckoutStep<string>;
+    const read = yield* git(tool, { clone }, ["read-tree", source.base], index);
+    if (read.exitCode !== 0)
+      return { refused: CHECKOUT_REFUSAL.GIT_FAILED } satisfies CheckoutStep<string>;
+    // An agent that changed nothing sends an empty patch, which Git would refuse as no patch at all.
+    if (source.patch.length > 0) {
+      const patched = yield* git(
+        tool,
+        { clone },
+        ["apply", "--cached", "--binary", patchFile],
+        index,
+      );
+      if (patched.exitCode !== 0) {
+        return {
+          refused: `Luke could not apply the agent's work (${lastLine(patched.stderr)}).`,
+        } satisfies CheckoutStep<string>;
+      }
+    }
+    const tree = yield* git(tool, { clone }, ["write-tree"], index);
+    if (tree.exitCode !== 0)
+      return { refused: CHECKOUT_REFUSAL.GIT_FAILED } satisfies CheckoutStep<string>;
+    const committed = yield* git(
+      tool,
+      { clone },
+      [
+        "commit-tree",
+        tree.stdout.trim(),
+        "-p",
+        source.base,
+        "-m",
+        "The coding agent's work, as Luke took it to run",
+      ],
+      SNAPSHOT_COMMIT_ENVIRONMENT,
+    );
+    if (committed.exitCode !== 0)
+      return { refused: CHECKOUT_REFUSAL.GIT_FAILED } satisfies CheckoutStep<string>;
+    return { ok: committed.stdout.trim() } satisfies CheckoutStep<string>;
   });
 }
 
 /**
- * Removes a pull request's checkout, where every folder down to it is a real
- * one, and lets the clone forget it: its worktree, its branch, and Luke's
- * refs for it. The clone stays for the repository's next pull request.
+ * Removes an agent's checkout, where every folder down to it is a real one,
+ * and lets the clone forget it: its worktree, its branch, and Luke's refs
+ * for it. The clone stays for the repository's next agent.
  * Answers whether nothing is left there.
  */
 export function removeCheckout(
@@ -718,17 +789,11 @@ export function removeCheckout(
       }
     }
     if ((yield* entryKind(place.clone)) === "folder") {
-      const refs = lukeRefs(place.number);
-      for (const ref of [refs.FETCHED, refs.HEAD, refs.SET_UP]) {
+      const refs = lukeRefs(place.agentId);
+      for (const ref of [refs.BASE, refs.HEAD, refs.SET_UP]) {
         yield* git(tool, { clone: place.clone }, ["update-ref", "-d", ref]);
       }
-      yield* git(tool, { clone: place.clone }, [
-        "config",
-        "--unset-all",
-        "remote.origin.fetch",
-        pullRefspecPattern(place.number),
-      ]);
-      yield* git(tool, { clone: place.clone }, ["config", "--unset", setupKey(place.number)]);
+      yield* git(tool, { clone: place.clone }, ["config", "--unset", setupKey(place.agentId)]);
     }
     return true;
   });

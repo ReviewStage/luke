@@ -156,6 +156,10 @@
     "dest": "/api/default.js?route=agents/sandbox-resume&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/run-snapshot",
+    "dest": "/api/default.js?route=agents/run-snapshot&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)",
     "dest": "/api/default.js?route=agents/agent&id=$1"
   },
@@ -278,10 +282,6 @@
   {
     "src": "/api/github/installed/authorized",
     "dest": "/api/default.js?route=github/installed/authorized"
-  },
-  {
-    "src": "/api/github/pr-fetch",
-    "dest": "/api/default.js?route=github/pr-fetch"
   },
   {
     "src": "/api/github/repositories",

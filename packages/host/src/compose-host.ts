@@ -4,8 +4,8 @@ import {
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
-  HostedPrFetchClient,
   HostedRepositoryRunClient,
+  HostedRunSnapshotClient,
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
@@ -213,7 +213,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const prRuns = yield* composePrRuns({
       kernel,
       account,
-      client: new HostedPrFetchClient({
+      client: new HostedRunSnapshotClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),

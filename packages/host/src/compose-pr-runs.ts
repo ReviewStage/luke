@@ -1,17 +1,21 @@
+import { gunzipSync } from "node:zlib";
 import { ACCOUNT_STATUS } from "@luke/credentials";
-import { PR_FETCH_REFUSAL, type PrFetchOutcome, type PrFetchRefusal } from "@luke/features";
-import type { PrFetchRequest } from "@luke/features/pr-fetch-wire";
+import {
+  RUN_SNAPSHOT_REFUSAL,
+  type RunSnapshotOutcome,
+  type RunSnapshotRefusal,
+} from "@luke/features";
 import {
   PR_RUN_BOUNDS,
   PR_RUN_FLOW,
   PR_RUN_PHASE,
   type PrRunOutcome,
-  type PrRunPullRequest,
   type PrRunState,
+  type PrRunTarget,
   prRunAckParamsSchema,
   prRunConnectionParamsSchema,
-  prRunPullRequestSchema,
   prRunStartParamsSchema,
+  prRunTargetSchema,
   prRunWorkspaceParamsSchema,
 } from "@luke/features/pr-run-view";
 import {
@@ -32,10 +36,12 @@ import { readEither } from "@luke/wire/effect";
 import {
   Config,
   type Context,
+  Duration,
   Effect,
   Exit,
   FiberMap,
   Latch,
+  Option,
   type Redacted,
   Result,
   type Schema,
@@ -57,12 +63,12 @@ import {
   checkoutPlace,
   type FetchedHead,
   type FetchInto,
-  fetchPullRequestHead,
   type GitTool,
   locateCheckout,
   markSetUp,
   refreshCheckout,
   removeCheckout,
+  snapshotCommit,
 } from "./pr-run-checkout.js";
 import { type CredentialHelperRuntime, servedCredential } from "./pr-run-credential.js";
 import { type RunShell, runPullRequestCommand } from "./pr-run-process.js";
@@ -101,9 +107,6 @@ import type { RunMode } from "./run-mode.js";
  * read, so it backs up into the command rather than into this process.
  */
 
-/** How many times a run asks for the pull request's head when what it fetched was not the head it was told. */
-const MAX_HEAD_ATTEMPTS = 3;
-
 /** The shell a run command runs in where the environment names none: macOS's own default. */
 const DEFAULT_RUN_SHELL = "/bin/zsh";
 
@@ -139,8 +142,8 @@ export const prRunTools = Effect.gen(function* () {
 });
 
 /** The service's side of a run, as this concern asks it. */
-interface PrFetchClient {
-  fetch(request: PrFetchRequest): Effect.Effect<PrFetchOutcome, never, HttpClient.HttpClient>;
+interface RunSnapshotClient {
+  take(agentId: string): Effect.Effect<RunSnapshotOutcome, never, HttpClient.HttpClient>;
 }
 
 /** The workspace's shared setup and run commands, as this concern asks for them. */
@@ -156,7 +159,7 @@ interface RepositoryRunClient {
 export interface PrRunsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive" | "snapshot">;
-  client: PrFetchClient;
+  client: RunSnapshotClient;
   /** The workspace's shared setup and run commands. */
   runs: RepositoryRunClient;
   /** A port no other process holds now, handed to a run as `LUKE_PORT`. */
@@ -185,7 +188,7 @@ interface Viewer {
 
 /** One pull request's runs: who draws them, the run standing, and the lock that serializes them. */
 interface Slot {
-  readonly pullRequest: PrRunPullRequest;
+  readonly pullRequest: PrRunTarget;
   viewer: Viewer | undefined;
   /** The run standing, by the key its fiber is held under; none before the first and after a stop. */
   runId: string | undefined;
@@ -195,22 +198,27 @@ interface Slot {
   readonly lock: Semaphore.Semaphore;
 }
 
-/** The pull request's words, as a refusal names it. */
-function named(pullRequest: PrRunPullRequest): string {
-  return `${pullRequest.repository}#${pullRequest.number}`;
-}
-
-/** Why the service handed no head, in the developer's words. */
-function fetchRefusal(refusal: PrFetchRefusal, pullRequest: PrRunPullRequest): string {
+/** Why the service handed no working tree, in the developer's words. */
+function snapshotRefusal(refusal: RunSnapshotRefusal, target: PrRunTarget): string {
   switch (refusal) {
-    case PR_FETCH_REFUSAL.NOT_FOUND:
-      return `Luke could not find ${named(pullRequest)} in this workspace.`;
-    case PR_FETCH_REFUSAL.NOT_REACHABLE:
-      return `This workspace's GitHub connection does not reach ${pullRequest.repository}.`;
+    case RUN_SNAPSHOT_REFUSAL.NOT_FOUND:
+      return "Luke could not find this coding agent.";
+    case RUN_SNAPSHOT_REFUSAL.NOT_READY:
+      return "The coding agent hasn't started yet, so there is nothing to run.";
+    case RUN_SNAPSHOT_REFUSAL.RETIRED:
+      return "The coding agent is archived.";
+    case RUN_SNAPSHOT_REFUSAL.NOT_REACHABLE:
+      return `This workspace's GitHub connection does not reach ${target.repository}.`;
     default:
-      return "Luke could not reach GitHub to fetch the pull request. Run it again in a moment.";
+      return "Luke could not reach the coding agent's sandbox. Run it again in a moment.";
   }
 }
+
+/** How often, and how many times, a sandbox waking is asked again: about a minute and a half in all. */
+const WAKE = { EVERY: Duration.seconds(2), ATTEMPTS: 45 } as const;
+
+/** The most bytes an unzipped patch may hold, far past any agent's work. */
+const MAX_PATCH_BYTES = 256 * 1024 * 1024;
 
 /** A message held to the bound the wire carries. */
 function bounded(message: string): string {
@@ -241,8 +249,8 @@ function composed(
 ): PrRunsComposer {
   const { kernel, account, client, runs, freePort, revoke, sourceUrl, git, shell, helper } =
     dependencies;
-  /** Every pull request's slot, by workspace, then repository lowercased, then number. */
-  const slots = new Map<string, Map<string, Map<number, Slot>>>();
+  /** Every agent's slot, by the agent. */
+  const slots = new Map<string, Slot>();
   /** The slot each standing connection views. */
   const byConnection = new Map<string, Slot>();
   let runsStarted = 0;
@@ -264,13 +272,8 @@ function composed(
   };
 
   /** The pull request's slot, made the first time it is named. */
-  const slotOf = (pullRequest: PrRunPullRequest): Slot => {
-    const repositories = slots.get(pullRequest.workspaceId) ?? new Map<string, Map<number, Slot>>();
-    slots.set(pullRequest.workspaceId, repositories);
-    const repositoryKey = pullRequest.repository.toLowerCase();
-    const numbers = repositories.get(repositoryKey) ?? new Map<number, Slot>();
-    repositories.set(repositoryKey, numbers);
-    const held = numbers.get(pullRequest.number);
+  const slotOf = (pullRequest: PrRunTarget): Slot => {
+    const held = slots.get(pullRequest.agentId);
     if (held !== undefined) return held;
     const fresh: Slot = {
       pullRequest,
@@ -280,7 +283,7 @@ function composed(
       state: undefined,
       lock: Semaphore.makeUnsafe(1),
     };
-    numbers.set(pullRequest.number, fresh);
+    slots.set(pullRequest.agentId, fresh);
     return fresh;
   };
 
@@ -317,50 +320,75 @@ function composed(
       yield* viewer.caughtUp.await;
     });
 
-  /** The pull request's head fetched into a repository folder on a token the service minted for it, asked again where the head moved meanwhile. */
+  /** The agent's working tree, asked of the service, and asked again while its sandbox wakes. */
+  const taken = (agentId: string) =>
+    Effect.gen(function* () {
+      for (let attempt = 0; attempt < WAKE.ATTEMPTS; attempt += 1) {
+        const outcome = yield* Effect.provide(client.take(agentId), FetchHttpClient.layer);
+        if (!("waking" in outcome)) return outcome;
+        yield* Effect.sleep(WAKE.EVERY);
+      }
+      return { refused: RUN_SNAPSHOT_REFUSAL.UNANSWERED } satisfies RunSnapshotOutcome;
+    });
+
+  /**
+   * The agent's work made a commit in the clone: its working tree taken
+   * from its sandbox, the commit it starts from fetched from GitHub on the
+   * token the service minted for it, and the patch applied on top. The
+   * token is served to Git for the one fetch and revoked after it, whatever
+   * became of it.
+   */
   const fetchInto =
-    (pullRequest: PrRunPullRequest, owner: string): FetchInto =>
+    (target: PrRunTarget, owner: string): FetchInto =>
     (clone) =>
       Effect.gen(function* () {
-        for (let attempt = 0; attempt < MAX_HEAD_ATTEMPTS; attempt += 1) {
-          const grant = yield* Effect.provide(
-            client.fetch({
-              workspaceId: pullRequest.workspaceId,
-              repository: pullRequest.repository,
-              prNumber: pullRequest.number,
-            }),
-            FetchHttpClient.layer,
-          );
-          if ("refused" in grant) return { refused: fetchRefusal(grant.refused, pullRequest) };
-          // Note that a grant that arrived after the account changed is given up unused, because it is the earlier account's.
-          if (accountEmail() !== owner) {
-            yield* revoke(grant.token);
-            return { refused: "The account signed in changed while the pull request was fetched." };
-          }
-          const fetched: CheckoutStep<FetchedHead> = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const configArgs = yield* servedCredential(
-                helper,
-                pullRequest.repository,
-                grant.token,
-              );
-              const head = yield* fetchPullRequestHead(git, clone, pullRequest.number, {
-                url: sourceUrl(pullRequest.repository),
-                configArgs,
-              });
-              return "refused" in head ? head : { ok: { sha: head.ok, headRef: grant.headRef } };
-            }),
-          ).pipe(
-            Effect.catch(() =>
-              Effect.succeed({ refused: "Luke could not hand Git the pull request's token." }),
-            ),
-            Effect.ensuring(revoke(grant.token)),
-          );
-          if ("refused" in fetched || fetched.ok.sha === grant.headSha) return fetched;
+        const outcome = yield* taken(target.agentId);
+        if ("refused" in outcome) return { refused: snapshotRefusal(outcome.refused, target) };
+        if ("tooLarge" in outcome) {
+          return {
+            refused: `The coding agent's changes are too large to copy to this Mac (${Math.round(outcome.tooLarge / 1_000_000)} MB compressed).`,
+          };
         }
-        return {
-          refused: `${named(pullRequest)} kept moving while Luke fetched it. Run it again in a moment.`,
-        };
+        if ("waking" in outcome)
+          return { refused: snapshotRefusal(RUN_SNAPSHOT_REFUSAL.UNANSWERED, target) };
+        const { snapshot } = outcome;
+        // Note that a token that arrived after the account changed is given up unused, because it is the earlier account's.
+        if (accountEmail() !== owner) {
+          yield* revoke(snapshot.token);
+          return { refused: "The account signed in changed while the agent's work was taken." };
+        }
+        const patch = yield* Effect.try(() =>
+          gunzipSync(Buffer.from(snapshot.patch, "base64"), { maxOutputLength: MAX_PATCH_BYTES }),
+        ).pipe(Effect.option);
+        if (Option.isNone(patch)) {
+          yield* revoke(snapshot.token);
+          return { refused: "Luke could not read the coding agent's changes." };
+        }
+        const made: CheckoutStep<FetchedHead> = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const configArgs = yield* servedCredential(helper, target.repository, snapshot.token);
+            const commit = yield* snapshotCommit(git, clone, target.agentId, {
+              url: sourceUrl(target.repository),
+              configArgs,
+              base: snapshot.base,
+              patch: patch.value,
+            });
+            if ("refused" in commit) return commit;
+            return {
+              ok: {
+                sha: commit.ok,
+                headRef: snapshot.branch ?? `agent-${target.agentId.slice(0, 8)}`,
+                ownBranch: snapshot.branch !== null,
+              },
+            };
+          }),
+        ).pipe(
+          Effect.catch(() =>
+            Effect.succeed({ refused: "Luke could not hand Git the repository's token." }),
+          ),
+          Effect.ensuring(revoke(snapshot.token)),
+        );
+        return made;
       }).pipe(Effect.provideContext(services));
 
   /** A command run in the checkout, its output to the tab; answers its status, or nothing where it could not start. */
@@ -473,7 +501,7 @@ function composed(
     Effect.provide(runs.list(workspaceId), FetchHttpClient.layer);
 
   /** The pull request's repository's shared commands, read afresh for each run; why there are none otherwise. */
-  const commandsFor = (pullRequest: PrRunPullRequest) =>
+  const commandsFor = (pullRequest: PrRunTarget) =>
     Effect.map(listed(pullRequest.workspaceId), (all) => {
       if (all === undefined) {
         return {
@@ -491,7 +519,7 @@ function composed(
     });
 
   /** A run started for the connection, or joined where one is still preparing; refused in words where it cannot start. */
-  const start = (connectionId: string, pullRequest: PrRunPullRequest) =>
+  const start = (connectionId: string, pullRequest: PrRunTarget) =>
     Effect.gen(function* () {
       const owner = accountEmail();
       if (!gate() || owner === undefined) {
@@ -538,7 +566,7 @@ function composed(
   };
 
   /** The place of a pull request's checkout under the account signed in, or nothing. */
-  const placeOf = (pullRequest: PrRunPullRequest) => {
+  const placeOf = (pullRequest: PrRunTarget) => {
     const owner = accountEmail();
     return owner === undefined
       ? undefined
@@ -588,11 +616,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PR_RUNS_STOP]: (params) =>
       Effect.gen(function* () {
-        const pullRequest = yield* read(
-          prRunPullRequestSchema,
-          params,
-          "a stop names its pull request",
-        );
+        const pullRequest = yield* read(prRunTargetSchema, params, "a stop names its pull request");
         const slot = slotOf(pullRequest);
         yield* slot.lock.withPermits(1)(stopped(slot));
         return {};
@@ -667,7 +691,7 @@ function composed(
     [GATEWAY_METHOD.PR_RUNS_LOCATE]: (params) =>
       Effect.gen(function* () {
         const pullRequest = yield* read(
-          prRunPullRequestSchema,
+          prRunTargetSchema,
           params,
           "a reveal names its pull request",
         );
@@ -678,7 +702,7 @@ function composed(
     [GATEWAY_METHOD.PR_RUNS_DELETE]: (params) =>
       Effect.gen(function* () {
         const pullRequest = yield* read(
-          prRunPullRequestSchema,
+          prRunTargetSchema,
           params,
           "a deletion names its pull request",
         );
@@ -709,13 +733,9 @@ function composed(
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(fibers);
-    for (const repositories of slots.values()) {
-      for (const numbers of repositories.values()) {
-        for (const slot of numbers.values()) {
-          slot.runId = undefined;
-          slot.viewer = undefined;
-        }
-      }
+    for (const slot of slots.values()) {
+      slot.runId = undefined;
+      slot.viewer = undefined;
     }
     byConnection.clear();
   });

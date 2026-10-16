@@ -131,7 +131,7 @@
     "./github/github-repositories-app": "./src/github/github-repositories-app.js",
     "./github/github-unlink": "./src/github/github-unlink.js",
     "./github/github-webhook-app": "./src/github/github-webhook-app.js",
-    "./github/pr-fetch-app": "./src/github/pr-fetch-app.js",
+    "./agents/run-snapshot-app": "./src/agents/run-snapshot-app.js",
     "./github/repository-runs-app": "./src/github/repository-runs-app.js",
     "./github/pull-requests": "./src/github/pull-requests.js",
     "./github/repository-file": "./src/github/repository-file.js",

@@ -91,6 +91,7 @@ function world(options: {
     start: () => Effect.die("the relay starts nothing"),
     rename: () => Effect.die("the relay renames nothing"),
     kill: () => Effect.die("the relay kills nothing"),
+    snapshot: () => Effect.die("the relay takes no snapshot"),
     resume: () =>
       Effect.sync(() => {
         asked.resumed += 1;

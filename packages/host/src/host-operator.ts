@@ -100,8 +100,8 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import {
   type PrRunLocation,
   type PrRunOutcome,
-  type PrRunPullRequest,
   type PrRunStateEvent,
+  type PrRunTarget,
   prRunLocationSchema,
   prRunOutcomeSchema,
   prRunOutputEventSchema,
@@ -599,21 +599,21 @@ export interface HostOperator {
   prRunSetCommand(params: RepositoryRunSetRequest): Effect.Effect<PrRunOutcome | undefined>;
   /** A pull request run for the connection given, whose port already stands; done or why not. */
   prRunStart(
-    params: PrRunPullRequest & { connectionId: string },
+    params: PrRunTarget & { connectionId: string },
   ): Effect.Effect<PrRunOutcome | undefined>;
   /** A pull request's run drawn again by the connection given, without starting one. */
-  prRunAttach(params: PrRunPullRequest & { connectionId: string }): Effect.Effect<void>;
+  prRunAttach(params: PrRunTarget & { connectionId: string }): Effect.Effect<void>;
   /** A connection's tab out of sight: its run goes on, its output let go. */
   prRunDetach(params: { connectionId: string }): Effect.Effect<void>;
   /** A pull request's run stopped, its checkout kept. */
-  prRunStop(params: PrRunPullRequest): Effect.Effect<void>;
+  prRunStop(params: PrRunTarget): Effect.Effect<void>;
   prRunAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
   /** A connection let go, which stops the run it drew. */
   prRunRelease(params: { connectionId: string }): Effect.Effect<void>;
   /** Where a pull request's checkout stands on disk; none where the host could not answer. */
-  prRunLocate(params: PrRunPullRequest): Effect.Effect<PrRunLocation | undefined>;
+  prRunLocate(params: PrRunTarget): Effect.Effect<PrRunLocation | undefined>;
   /** A pull request's checkout deleted; done or why not. */
-  prRunDelete(params: PrRunPullRequest): Effect.Effect<PrRunOutcome | undefined>;
+  prRunDelete(params: PrRunTarget): Effect.Effect<PrRunOutcome | undefined>;
   /** What a pull request run printed, by its connection. */
   onPrRunOutput(listener: (output: { connectionId: string; data: Uint8Array }) => void): () => void;
   /** Where a pull request run stands, by its connection. */
@@ -629,11 +629,11 @@ function terminalAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Enco
 }
 
 /** A pull request as a call's params carry it. */
-function pullRequestParams(pullRequest: PrRunPullRequest) {
+function pullRequestParams(pullRequest: PrRunTarget) {
   return {
     workspaceId: pullRequest.workspaceId,
     repository: pullRequest.repository,
-    number: pullRequest.number,
+    agentId: pullRequest.agentId,
   };
 }
 

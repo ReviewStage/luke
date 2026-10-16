@@ -4,8 +4,8 @@ import {
   PR_RUN_FLOW,
   PR_RUN_PHASE,
   PR_RUN_PORT_MESSAGE,
-  type PrRunPullRequest,
   type PrRunState,
+  type PrRunTarget,
   prRunPortOutboundSchema,
 } from "@luke/features/pr-run-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -39,7 +39,7 @@ import { useOpenLink } from "./use-open-link";
 const readOutbound = Schema.decodeUnknownOption(prRunPortOutboundSchema);
 
 /** The pull request in the words its tab names it by. */
-function pullRequestWords(pullRequest: PrRunPullRequest): string {
+function pullRequestWords(pullRequest: PrRunTarget): string {
   return `${pullRequest.repository} #${pullRequest.number}`;
 }
 
@@ -66,7 +66,7 @@ function underWay(state: PrRunState | undefined): boolean {
 }
 
 /** The same pull request, its repository's name read without case. */
-function samePullRequest(a: PrRunPullRequest, b: PrRunPullRequest): boolean {
+function samePullRequest(a: PrRunTarget, b: PrRunTarget): boolean {
   return (
     a.workspaceId === b.workspaceId &&
     a.repository.toLowerCase() === b.repository.toLowerCase() &&

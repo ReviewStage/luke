@@ -120,17 +120,17 @@ export {
   type HostedMacCommandClientOptions,
 } from "./mac-command-client.js";
 export {
-  HostedPrFetchClient,
-  type HostedPrFetchClientOptions,
-  PR_FETCH_REFUSAL,
-  type PrFetchGrant,
-  type PrFetchOutcome,
-  type PrFetchRefusal,
-} from "./pr-fetch-client.js";
-export {
   HostedRepositoryRunClient,
   type HostedRepositoryRunClientOptions,
 } from "./repository-run-client.js";
+export {
+  HostedRunSnapshotClient,
+  type HostedRunSnapshotClientOptions,
+  RUN_SNAPSHOT_REFUSAL,
+  type RunSnapshotGrant,
+  type RunSnapshotOutcome,
+  type RunSnapshotRefusal,
+} from "./run-snapshot-client.js";
 export {
   agentMessagesPath,
   agentPullRequestPath,

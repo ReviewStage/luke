@@ -98,13 +98,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
   /**
-   * A pull request's head as GitHub holds it now, with a contents-read token
-   * for its repository alone (POST), which the Mac fetches the pull request
-   * with to run it locally. `pr-fetch-wire.ts` declares the request and the
-   * answer; the answer is the host's alone.
-   */
-  GITHUB_PR_FETCH: "/api/github/pr-fetch",
-  /**
    * How a workspace's repositories are set up and run on a Mac, shared by
    * every member: read (GET, the workspace named by `REPOSITORY_RUNS_QUERY`)
    * and set one repository's (PUT). `repository-run-wire.ts` declares both.
@@ -574,6 +567,11 @@ export function agentTerminalsPath(agentId: string): string {
 /** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
 export function agentTerminalPath(agentId: string, terminalId: string): string {
   return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
+}
+
+/** One agent's working tree taken to run on the Mac (POST), waking its sandbox where it is asleep (`run-snapshot-wire.ts`). */
+export function agentRunSnapshotPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/run-snapshot`;
 }
 
 /** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */

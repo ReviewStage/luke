@@ -96,7 +96,7 @@ import {
 } from "@luke/features/integration-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
-import { prRunPullRequestSchema, prRunWorkspaceParamsSchema } from "@luke/features/pr-run-view";
+import { prRunTargetSchema, prRunWorkspaceParamsSchema } from "@luke/features/pr-run-view";
 import {
   type RepositoryRunsAnswer,
   repositoryRunSetRequestSchema,
@@ -1380,37 +1380,37 @@ export const ACT = {
     refusal: "Could not save the repository's commands.",
   },
   [ACT_KIND.PR_RUN_START]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not run this pull request on this Mac.",
   },
   [ACT_KIND.PR_RUN_ATTACH]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not show the run.",
   },
   [ACT_KIND.PR_RUN_DETACH]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not set the run aside.",
   },
   [ACT_KIND.PR_RUN_STOP]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not stop the run.",
   },
   [ACT_KIND.PR_RUN_CLOSE]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not close the run.",
   },
   [ACT_KIND.PR_RUN_SHOW_IN_FINDER]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "There is no local checkout of this pull request to show.",
   },
   [ACT_KIND.PR_RUN_DELETE_CHECKOUT]: {
-    payload: actSchema(prRunPullRequestSchema),
+    payload: actSchema(prRunTargetSchema),
     result: answersNothing,
     refusal: "Could not delete the local checkout.",
   },
