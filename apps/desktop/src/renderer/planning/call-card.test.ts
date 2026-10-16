@@ -200,6 +200,11 @@ test("the Call and Code tabs' lines fade beneath the call's sticky time, which s
         getComputedStyle(time).height,
         `the ${name} tab's fade starts where the time's band ends`,
       );
+      assert.equal(
+        getComputedStyle(time).whiteSpace,
+        "nowrap",
+        `the ${name} tab's time keeps to one line, so it cannot outgrow its band`,
+      );
     }
   } finally {
     sheets.remove();

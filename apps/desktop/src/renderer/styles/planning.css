@@ -808,8 +808,11 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
 }
 
+/* One line, as a teammate's heading already keeps (`.call-caller`), so a
+   time that would wrap in a narrow panel cannot outgrow the band. */
 .checkpoint-log [data-checkpoint] {
   height: var(--checkpoint-height);
+  white-space: nowrap;
 }
 
 .code-card {
