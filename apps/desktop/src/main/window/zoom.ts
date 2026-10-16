@@ -25,10 +25,16 @@ import type { Point, WebContents } from "electron";
  */
 const TRAFFIC_LIGHTS = { X: 18, Y: 18, SIZE: 14 } as const;
 
-/** One panel window as zoom meets it: its page, and its traffic lights. `BrowserWindow` satisfies it. */
+/**
+ * One panel window as zoom meets it: its page, and its traffic lights where it
+ * has them. `BrowserWindow` satisfies it. Electron types the lights' setter on
+ * every platform but defines it on macOS alone, so off a Mac, as in a Linux
+ * sandbox's fixture run, the window has no lights to move and the setter is
+ * absent.
+ */
 export interface ZoomedWindow {
   readonly webContents: Pick<WebContents, "setZoomFactor">;
-  setWindowButtonPosition(position: Point | null): void;
+  setWindowButtonPosition?(position: Point | null): void;
 }
 
 /**
@@ -66,7 +72,7 @@ export const applyZoomPreference = /* @__PURE__ */ Effect.fn("desktop/applyZoomP
     const factor = zoomFactorOf(preference);
     for (const window of panels.standing()) {
       window.webContents.setZoomFactor(factor);
-      window.setWindowButtonPosition(trafficLightsAt(factor));
+      window.setWindowButtonPosition?.(trafficLightsAt(factor));
     }
   },
 );
