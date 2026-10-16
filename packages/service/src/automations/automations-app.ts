@@ -503,8 +503,15 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
-  const action =
-    asked.action === undefined ? undefined : yield* checkedAction(userId, asked.action);
+  // Note that an action sent without its servers keeps the ones saved, because a desktop from before
+  // them sends the whole action back on a prompt's edit, and would otherwise switch every one back on.
+  const kept =
+    asked.action === undefined ||
+    asked.action.disabledServers !== undefined ||
+    standing.action.disabledServers === undefined
+      ? asked.action
+      : { ...asked.action, disabledServers: standing.action.disabledServers };
+  const action = kept === undefined ? undefined : yield* checkedAction(userId, kept);
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;

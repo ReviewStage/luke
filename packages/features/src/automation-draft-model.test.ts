@@ -200,7 +200,7 @@ test("a save changes only what moved, the task keeping its model, and a draft th
         cron: "0 3 * * 1-5",
         timezone: "America/Los_Angeles",
       },
-      action: { ...SAVED.action, prompt: "Fix the two flakiest tests." },
+      action: { ...SAVED.action, prompt: "Fix the two flakiest tests.", disabledServers: [] },
     },
   );
   assert.deepEqual(
@@ -246,7 +246,7 @@ test("the servers a draft switches off are saved with its task, opened as saved,
   ]);
   assert.equal(changeOf(switched, saved, DEFAULTS), undefined, "the same servers in another order");
   assert.deepEqual(changeOf({ ...switched, disabledServers: [] }, saved, DEFAULTS), {
-    action: SAVED.action,
+    action: { ...SAVED.action, disabledServers: [] },
   });
   assert.equal(
     createRequestOf(
@@ -444,7 +444,11 @@ test("a saved automation opens on where its runs land, and a save sends only the
     },
   );
   assert.deepEqual(changeOf({ ...opened, choice: null }, onAgent, DEFAULTS), {
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: SAVED.action.prompt },
+    action: {
+      kind: AUTOMATION_ACTION.CODING_AGENT,
+      prompt: SAVED.action.prompt,
+      disabledServers: [],
+    },
   });
   assert.equal(
     changeOf({ ...opened, agentId: null }, onAgent, DEFAULTS),

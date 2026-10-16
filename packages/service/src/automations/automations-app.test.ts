@@ -40,6 +40,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -549,6 +550,55 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(resumed.enabled, true);
         assert.equal(resumed.pausedReason, null);
         assert.equal(resumed.nextRunAt, scheduled.nextRunAt);
+      }),
+  );
+
+  it.effect(
+    "an edit whose action names no servers keeps the ones switched off, as a desktop from before sends it, and one that names none on switches every one back",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const made = weekdays(plan.id);
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: {
+              ...made,
+              action: { ...made.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] },
+            },
+          }),
+        );
+
+        const edited = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(automation.id), owner, {
+            method: "PATCH",
+            body: {
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage, then fix one." },
+            },
+          }),
+        ).automation;
+        assert.equal(edited.action.prompt, "Triage, then fix one.");
+        assert.deepEqual(edited.action.disabledServers, [INTEGRATION_PROVIDER.SENTRY]);
+
+        const cleared = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(automation.id), owner, {
+            method: "PATCH",
+            body: {
+              action: {
+                kind: AUTOMATION_ACTION.CODING_AGENT,
+                prompt: "Triage, then fix one.",
+                disabledServers: [],
+              },
+            },
+          }),
+        ).automation;
+        assert.deepEqual(cleared.action.disabledServers ?? [], []);
       }),
   );
 

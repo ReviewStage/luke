@@ -508,7 +508,8 @@ export function changeOf(
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
   if (triggerMoved) change.trigger = draftTrigger(draft);
-  if (actionMoved) change.action = actionOf(draft);
+  // Note that a change names its servers even where none are off, because a change that names none keeps the saved ones.
+  if (actionMoved) change.action = { ...actionOf(draft), disabledServers: draft.disabledServers };
   if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
     change.target = targetOf(draft);
   }

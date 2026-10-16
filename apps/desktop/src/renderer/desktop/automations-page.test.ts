@@ -782,7 +782,9 @@ test("an edit says it is unsaved and saves only what moved", async () => {
   assert.deepEqual(changes, [
     {
       automationId: SWEEP.id,
-      change: { action: { ...SWEEP.action, prompt: "Fix the two flakiest tests." } },
+      change: {
+        action: { ...SWEEP.action, prompt: "Fix the two flakiest tests.", disabledServers: [] },
+      },
     },
   ]);
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
@@ -1171,7 +1173,9 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   assert.deepEqual(changes, [
     {
       automationId: onEvent.id,
-      change: { action: { ...onEvent.action, prompt: "Reproduce the bug first." } },
+      change: {
+        action: { ...onEvent.action, prompt: "Reproduce the bug first.", disabledServers: [] },
+      },
     },
   ]);
 });
