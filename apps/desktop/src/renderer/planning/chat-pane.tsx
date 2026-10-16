@@ -9,10 +9,10 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import type { ChatTarget } from "@luke/ui/chat-mention";
 import { useState } from "react";
 import { AskCard } from "./chat-ask";
 import { ChatComposer } from "./chat-composer";
-import type { ChatTarget } from "./chat-mention";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,

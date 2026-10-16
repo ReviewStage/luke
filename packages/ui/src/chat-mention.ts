@@ -1,5 +1,5 @@
 import { CHAT_BOUNDS, CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
-import { insideCode } from "@luke/ui/skill-mention";
+import { insideCode } from "./skill-mention.js";
 
 /**
  * chat-mention.ts -- a member or a channel named in a chat message as `@handle` or `#name`: where one is being typed, which match it, and what choosing one writes.

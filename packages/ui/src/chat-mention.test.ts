@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
 import { test } from "vitest";
-import { type ChatTarget, chatMentionAt, chooseTarget, matchingTargets } from "./chat-mention";
+import { type ChatTarget, chatMentionAt, chooseTarget, matchingTargets } from "./chat-mention.js";
 
 const TARGETS: readonly ChatTarget[] = [
   { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "maria", detail: undefined },

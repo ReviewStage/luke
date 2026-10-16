@@ -11,7 +11,7 @@ import {
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
-import type { ChatTarget } from "./chat-mention";
+import type { ChatTarget } from "@luke/ui/chat-mention";
 
 /**
  * chat-model.ts -- what the window's Chat draws of a workspace's chat: the rail of places, each channel's unread count, a channel's messages with their threads, and For you.

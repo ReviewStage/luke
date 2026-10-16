@@ -1,15 +1,15 @@
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
-import { ArrowUpIcon } from "lucide-react";
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import { BusyLabel } from "../spinner";
-import { Tooltip } from "../tooltip";
 import {
   type ChatMention,
   type ChatTarget,
   chatMentionAt,
   chooseTarget,
   matchingTargets,
-} from "./chat-mention";
+} from "@luke/ui/chat-mention";
+import { ArrowUpIcon } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { BusyLabel } from "../spinner";
+import { Tooltip } from "../tooltip";
 
 /**
  * chat-composer.tsx -- the box a chat message is written in: at a place's foot, or under a thread opened for a reply, with the list an `@` or a `#` opens.
