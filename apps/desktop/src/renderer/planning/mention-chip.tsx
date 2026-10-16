@@ -1,5 +1,4 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
@@ -41,6 +40,7 @@ import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
 import { PullRequestMark } from "./pull-request-mark";
+import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
 import { type LinkStanding, useLinkStanding } from "./use-link-standing";
@@ -59,7 +59,9 @@ import { useOpenLink } from "./use-open-link";
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
  * place can open none. An MCP server or one of its tools opens nothing
- * either, wearing its server's mark; a page of an integration's, a Linear
+ * either, wearing its server's mark and hanging its server's row as the
+ * MCP popover draws it, with what the mention does for the agent the words
+ * go to (`server-card.tsx`); a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
  * browser, its card saying its address. A Linear issue's chip, a pull
  * request's, and a GitHub issue's say the state it stands in after their
@@ -147,9 +149,6 @@ export function retargetedMention(
 
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
-
-/** What a server's card says of it. */
-const SERVER_WORDS = "An MCP server";
 
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
@@ -251,9 +250,6 @@ function MentionGlyph({
 /** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
 function noteOf(mention: Mention, state: MentionState, planId: string): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
-  if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
-  if (mention.kind === MENTION_KIND.TOOL)
-    return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
   if (mention.kind === MENTION_KIND.LINK) return mention.url;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
   if (mention.kind === MENTION_KIND.AGENT) {
@@ -273,7 +269,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
 function MentionCard({
   mention,
   name,
@@ -289,6 +285,15 @@ function MentionCard({
 }): ReactNode {
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
+  }
+  if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
+    return (
+      <ServerCard
+        provider={mention.provider}
+        connection={mention.connection}
+        tool={mention.kind === MENTION_KIND.TOOL ? mention.tool : undefined}
+      />
+    );
   }
   // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =

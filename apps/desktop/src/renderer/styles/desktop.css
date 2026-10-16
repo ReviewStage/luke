@@ -3872,7 +3872,7 @@ body:has(.app-stage[data-capture="true"])
   text-align: left;
 }
 
-.integration-tool-head:hover,
+button.integration-tool-head:hover,
 .integration-tool[data-current="true"] > .integration-tool-head {
   background: var(--raised-strong);
 }
@@ -7081,6 +7081,12 @@ button.automation-run:hover {
   margin: 0;
   border: 0;
   background: var(--hairline);
+}
+
+/* A server's card lists its tools as the MCP popover's page does
+   (`planning/server-card.tsx`), each row's words on the card's own column. */
+.card .integration-tool-list {
+  margin-inline: calc(-1 * var(--row-inset));
 }
 
 /* A card's name that opens its subject, where the control hanging the card

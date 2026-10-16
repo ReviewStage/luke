@@ -153,6 +153,74 @@ function ServerSwitch({
   );
 }
 
+/**
+ * What a server's row says between its mark and its end, here and on the
+ * card a mention of the server hangs (`server-card.tsx`): its name, how many
+ * tools it offers, and where its sign-in or its server stands.
+ */
+export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
+  return (
+    <>
+      <span className="plan-compose-menu-name">{row.name}</span>
+      {row.tools !== undefined ? (
+        <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
+      ) : null}
+      {row.kind === SERVER_ROW.SIGNING_IN ? (
+        <span
+          className="spinner agent-servers-waiting"
+          data-size={SPINNER_SIZE.INLINE}
+          role="status"
+          title={row.note}
+        >
+          <SpinnerRing />
+          <span className="visually-hidden">{row.note}</span>
+        </span>
+      ) : null}
+      {row.problem !== undefined ? (
+        <span className="agent-servers-problem" title={row.problem}>
+          {row.problem}
+        </span>
+      ) : null}
+      {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
+        <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
+          {row.note}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Every offered server's row as the popover draws it, from where each
+ * connection stands and the servers the agent switched off, each connected
+ * server's tools read for as long as the caller is drawn: every one's, or
+ * only the server named where the caller draws that one alone.
+ */
+export function useServerRows(
+  statuses: IntegrationStatuses,
+  disabled: readonly string[],
+  only?: string,
+): readonly ServerRow[] {
+  const reads = useIntegrationTools(
+    namedServers({
+      statusOf: statuses.statusOf,
+      accountsOf: statuses.accountsOf,
+      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
+    })
+      .map((server) => server.connection)
+      .filter((connection) => only === undefined || connection === only),
+  );
+  return serverRows({
+    statusOf: statuses.statusOf,
+    healthOf: (server) =>
+      connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]),
+    signInOf: statuses.signInOf,
+    accountsOf: statuses.accountsOf,
+    readFailed: statuses.readFailed,
+    disabled,
+  });
+}
+
 /** The search field at the top of either page, which holds the focus while the popover is open. */
 function SearchRow({
   field,
@@ -202,22 +270,7 @@ function ServersPopover({
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const rowsId = useId();
-  const reads = useIntegrationTools(
-    namedServers({
-      statusOf: statuses.statusOf,
-      accountsOf: statuses.accountsOf,
-      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
-    }).map((server) => server.connection),
-  );
-  const rows = serverRows({
-    statusOf: statuses.statusOf,
-    healthOf: (server) =>
-      connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]),
-    signInOf: statuses.signInOf,
-    accountsOf: statuses.accountsOf,
-    readFailed: statuses.readFailed,
-    disabled: servers.disabled,
-  });
+  const rows = useServerRows(statuses, servers.disabled);
   const [connecting, setConnecting] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
@@ -498,31 +551,7 @@ function ServersPopover({
         onClick={() => opensTools(row) && open(row)}
       >
         <ProviderMark provider={row.provider} />
-        <span className="plan-compose-menu-name">{row.name}</span>
-        {row.tools !== undefined ? (
-          <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
-        ) : null}
-        {row.kind === SERVER_ROW.SIGNING_IN ? (
-          <span
-            className="spinner agent-servers-waiting"
-            data-size={SPINNER_SIZE.INLINE}
-            role="status"
-            title={row.note}
-          >
-            <SpinnerRing />
-            <span className="visually-hidden">{row.note}</span>
-          </span>
-        ) : null}
-        {row.problem !== undefined ? (
-          <span className="agent-servers-problem" title={row.problem}>
-            {row.problem}
-          </span>
-        ) : null}
-        {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-          <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
-            {row.note}
-          </span>
-        ) : null}
+        <ServerRowWords row={row} />
         <span className="agent-servers-end">{end(row)}</span>
       </div>
     );

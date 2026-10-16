@@ -1508,6 +1508,8 @@ export interface SentLine {
   readonly attachments: readonly CodingAgentAttachment[];
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
+  /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
+  readonly steers: boolean;
 }
 
 /** The developer's own rows of a transcript, which a sent line is read back as one of. */
