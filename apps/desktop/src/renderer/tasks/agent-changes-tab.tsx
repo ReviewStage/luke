@@ -27,7 +27,6 @@ import {
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
-  DIFF_ROW,
   fileNotice,
   filePatch,
   linesChanged,
@@ -35,8 +34,8 @@ import {
   STATUS_LETTER,
   STATUS_WORDS,
 } from "./changes-model";
-import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import { DIFF_HUNK, DiffLine, DiffRowLine } from "./diff-rows";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
@@ -82,11 +81,6 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
-
-/** What the row holding a hunk's header is, beside the kinds of row the hunk holds. */
-const DIFF_HUNK = "hunk";
-
-type DiffLineKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW] | typeof DIFF_HUNK;
 
 /** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: CodingAgentChangesAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
@@ -201,27 +195,6 @@ function ChangesMenu({
   );
 }
 
-/** One row of the diff in a File tab's line: the old side's number, the new side's, and its text, tinted by what it is. */
-function DiffLine({
-  kind,
-  oldLine,
-  newLine,
-  children,
-}: {
-  kind: DiffLineKind;
-  oldLine: number | undefined;
-  newLine: number | undefined;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="code-line" data-diff={kind}>
-      <CodeLineNumber line={oldLine} />
-      <CodeLineNumber line={newLine} />
-      <code className="code-line-text">{children}</code>
-    </div>
-  );
-}
-
 /** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
 function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element {
   const look = useLinesLook();
@@ -252,13 +225,7 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
               </DiffLine>
               {hunk.rows.map((row, at) => (
                 // oxlint-disable-next-line react/no-array-index-key -- a hunk's rows never move within it.
-                <DiffLine key={at} kind={row.kind} oldLine={row.oldLine} newLine={row.newLine}>
-                  {row.kind === DIFF_ROW.NOTE
-                    ? row.text.trim()
-                    : row.text === ""
-                      ? BLANK_LINE_TEXT
-                      : row.text}
-                </DiffLine>
+                <DiffRowLine key={at} row={row} />
               ))}
             </Fragment>
           ))}

@@ -9,10 +9,12 @@ import {
   CONVERSATION_ENTRY,
   type CodingAgentOverview,
   type CodingAgentSummary,
+  DIFF_SIDE,
   MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
   REVIEW_STATE,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -348,6 +350,136 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
   assert.equal(earlier.textContent, "3 earlier comments on GitHub");
   await act(async () => earlier.click());
   assert.deepEqual(opened, [PAGE]);
+});
+
+/** A review thread on lines, open and current unless said otherwise. */
+function thread(overrides: Partial<ReviewThread> = {}): ReviewThread {
+  return {
+    path: "src/invite.ts",
+    line: 13,
+    startLine: 12,
+    originalLine: 13,
+    originalStartLine: 12,
+    side: DIFF_SIDE.RIGHT,
+    startSide: DIFF_SIDE.RIGHT,
+    diffHunk: [
+      "@@ -8,6 +8,7 @@ export function send()",
+      " const one = 1;",
+      " const two = 2;",
+      " const three = 3;",
+      " const four = 4;",
+      "-  twice();",
+      "+  once();",
+      "+  done();",
+    ].join("\n"),
+    resolved: false,
+    outdated: false,
+    comments: [
+      {
+        by: CHARLES_ON_GITHUB,
+        html: '<p dir="auto">Why <strong>once</strong>?</p>',
+        body: "",
+        at: 2_000,
+        url: `${PAGE}#discussion_r1`,
+      },
+    ],
+    more: 0,
+    ...overrides,
+  };
+}
+
+test("a review that only left line comments draws each thread under it: its file and lines over the lines it is on in Files changed's rows, then its comments; a resolved or outdated one folds closed under its label until opened", async () => {
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.COMMENTED,
+    html: null,
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    threads: [
+      thread({ more: 2 }),
+      thread({
+        path: "src/old.ts",
+        line: null,
+        startLine: null,
+        originalLine: 9,
+        originalStartLine: null,
+        resolved: true,
+        outdated: true,
+        comments: [
+          {
+            by: CHARLES_ON_GITHUB,
+            html: '<p dir="auto">Moved away.</p>',
+            body: "",
+            at: 2_400,
+            url: `${PAGE}#discussion_r7`,
+          },
+        ],
+      }),
+    ],
+  } as const;
+  const tab = await draw(
+    controlAnswering(() =>
+      Promise.resolve({ pullRequest: { ...OVERVIEW, conversation: [review] } }),
+    ),
+  );
+
+  const [open, folded] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
+  assert.ok(open !== undefined && folded !== undefined, "both threads stand under the review");
+  assert.equal(
+    open.querySelector(".pull-request-thread-head")?.textContent,
+    "src/invite.tslines 12–13",
+  );
+  const rows = [...open.querySelectorAll<HTMLElement>(".pull-request-thread-lines .code-line")];
+  assert.deepEqual(
+    rows.map((row) => [row.dataset.diff, row.querySelector(".code-line-text")?.textContent]),
+    [
+      ["context", "const three = 3;"],
+      ["context", "const four = 4;"],
+      ["removed", "  twice();"],
+      ["added", "  once();"],
+      ["added", "  done();"],
+    ],
+    "the end of the hunk, from three rows above the range to its line",
+  );
+  assert.deepEqual(
+    rows.map((row) => [...row.querySelectorAll(".code-line-number")].map((n) => n.textContent)),
+    [
+      ["10", "10"],
+      ["11", "11"],
+      ["12", ""],
+      ["", "12"],
+      ["", "13"],
+    ],
+  );
+  assert.equal(
+    open.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,
+    "once",
+  );
+  const more =
+    open.querySelector<HTMLButtonElement>(".pull-request-thread-more") ??
+    assert.fail("the replies left on GitHub are counted");
+  assert.equal(more.textContent, "2 more replies on GitHub");
+  await act(async () => more.click());
+  assert.deepEqual(opened, [`${PAGE}#discussion_r1`]);
+
+  const head =
+    folded.querySelector<HTMLElement>(".pull-request-thread-head") ?? assert.fail("a head");
+  assert.deepEqual(words(folded, ".pull-request-thread-label"), ["Resolved", "Outdated"]);
+  assert.match(
+    head.textContent ?? "",
+    /src\/old\.tsline 9/u,
+    "an outdated thread names the line it was made on",
+  );
+  assert.equal(folded.querySelector(".pull-request-thread-comment"), null, "folded closed");
+  act(() => head.click());
+  await settle();
+  assert.match(
+    folded.querySelector(".pull-request-thread-comment")?.textContent ?? "",
+    /Moved away\./u,
+    "a press opens it",
+  );
 });
 
 test("the switch shows the files, read only once shown, and back on the overview draws it as it was, reading neither again", async () => {

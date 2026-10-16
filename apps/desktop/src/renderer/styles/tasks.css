@@ -2016,6 +2016,89 @@ button.pull-request-check:hover {
   white-space: nowrap;
 }
 
+/* A review's threads on lines, under its words: each a box of its own,
+   headed by its file and lines, over the lines it is on drawn as Files
+   changed draws a diff's rows, then its comments, each under its head. */
+.pull-request-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
+.pull-request-thread-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  color: var(--text-primary);
+}
+
+/* A long path is cut at its start rather than its end, so its file's name
+   stands; the path itself is isolated, so it still reads left to right. */
+.pull-request-thread-path {
+  min-width: 0;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-thread-head > .pull-request-quiet {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.pull-request-thread-label {
+  flex: 0 0 auto;
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* The preview stands in the card rather than filling a tab, on a File tab's ground. */
+.pull-request-thread-lines {
+  flex: none;
+  overflow-y: visible;
+  border-top: 1px solid var(--hairline);
+  background: var(--code-ground);
+}
+
+.pull-request-thread-comments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread-comment {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-thread-more {
+  margin: 0 var(--space-8) var(--space-8);
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--space-8);

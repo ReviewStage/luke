@@ -2,7 +2,10 @@ import {
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
   type CodingAgentChangedFile,
+  DIFF_SIDE,
+  type DiffSide,
   PATCH_OMITTED,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { parsePatch } from "diff";
 import {
@@ -32,6 +35,13 @@ import {
  * marked as an editor's source control marks it (`changeMarks`). A file's
  * patch is copied or saved as a whole unified diff (`filePatch`), headed
  * as git writes one, so `git apply` takes it as it is.
+ *
+ * A review thread on the pull request's overview previews the lines it is
+ * on in the same rows (`threadPreview`): GitHub freezes the hunk a thread
+ * was made on, from the hunk's start to the thread's line, so the preview
+ * is the end of that hunk, from a few rows above the first line the thread
+ * is on down to its last, counted where the thread was made rather than
+ * where it stands now, since a later push moves the one and not the other.
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
@@ -45,7 +55,7 @@ export const DIFF_ROW = {
 type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
 
 /** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-interface DiffRow {
+export interface DiffRow {
   readonly kind: DiffRowKind;
   readonly oldLine: number | undefined;
   readonly newLine: number | undefined;
@@ -108,6 +118,12 @@ export const STATUS_WORDS = {
 /** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
 const NO_SIDE = "/dev/null";
 
+/** How many rows a review thread's preview shows above the first line it is on. */
+const THREAD_CONTEXT_ROWS = 3;
+
+/** A hunk's header: where it starts on each side, what it counts, and the scope git writes after. */
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/u;
+
 /** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
 function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
   let oldLine = oldStart;
@@ -141,6 +157,57 @@ export function patchHunks(patch: string): readonly DiffHunk[] | undefined {
     header: headers[index] ?? "",
     rows: rowsOf(hunk.lines, hunk.oldStart, hunk.newStart),
   }));
+}
+
+/**
+ * A hunk GitHub froze for a review thread, its header counting the lines it
+ * holds; none where it does not start with a header. Note that the header
+ * is counted again, because GitHub keeps the whole hunk's counts while
+ * cutting its lines at the thread's line, and jsdiff refuses a hunk whose
+ * lines fall short of its header.
+ */
+function frozenHunk(diffHunk: string): string | undefined {
+  const [header = "", ...written] = diffHunk.split("\n");
+  const match = HUNK_HEADER.exec(header);
+  if (match === null) return undefined;
+  const lines = written.at(-1) === "" ? written.slice(0, -1) : written;
+  const old = lines.filter((line) => !line.startsWith("+") && !line.startsWith("\\")).length;
+  const now = lines.filter((line) => !line.startsWith("-") && !line.startsWith("\\")).length;
+  const [, oldStart = "", newStart = "", scope = ""] = match;
+  return [`@@ -${oldStart},${old} +${newStart},${now} @@${scope}`, ...lines].join("\n");
+}
+
+/** A row's number on the side given, none where it does not stand on that side. */
+function lineOn(row: DiffRow, side: DiffSide): number | undefined {
+  return side === DIFF_SIDE.LEFT ? row.oldLine : row.newLine;
+}
+
+/**
+ * The rows a review thread previews: the end of the hunk GitHub froze for
+ * it, from a few rows above the first line of its range to its line, each
+ * found on the side it counts on; the hunk's last row where its line is
+ * not found, since GitHub ends the hunk there. None where the hunk is
+ * empty or does not read as a diff.
+ */
+export function threadPreview(
+  thread: Pick<
+    ReviewThread,
+    "diffHunk" | "originalLine" | "originalStartLine" | "side" | "startSide"
+  >,
+): readonly DiffRow[] | undefined {
+  const hunk = frozenHunk(thread.diffHunk);
+  if (hunk === undefined) return undefined;
+  const rows = patchHunks(hunk)?.at(-1)?.rows ?? [];
+  if (rows.length === 0) return undefined;
+  const { originalLine: line, originalStartLine: startLine, side } = thread;
+  const found = rows.findLastIndex((row) => line !== null && lineOn(row, side) === line);
+  const end = found === -1 ? rows.length - 1 : found;
+  const startSide = thread.startSide ?? side;
+  const first = rows.findIndex(
+    (row, at) => at <= end && startLine !== null && lineOn(row, startSide) === startLine,
+  );
+  const start = first === -1 ? end : first;
+  return rows.slice(Math.max(0, start - THREAD_CONTEXT_ROWS), end + 1);
 }
 
 /**

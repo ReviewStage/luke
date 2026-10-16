@@ -176,7 +176,10 @@ function accountsOfOverview(overview: GitHubOverview): readonly GitHubAccount[] 
   return [
     ...(overview.author === undefined ? [] : [overview.author]),
     ...overview.reviewers.map((reviewer) => reviewer.account),
-    ...overview.conversation.map((entry) => entry.account),
+    ...overview.conversation.flatMap((entry) => [
+      entry.account,
+      ...entry.threads.flatMap((thread) => thread.comments.map((comment) => comment.account)),
+    ]),
   ];
 }
 
@@ -231,10 +234,21 @@ export const namedOverview = /* @__PURE__ */ Effect.fn("web/namedOverview")(func
     ...(overview.author === undefined ? undefined : { author: person(overview.author) }),
     ...(agent.author === null ? undefined : { writtenAs: agent.author }),
     reviewers: overview.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
-    conversation: overview.conversation.map(({ account: held, state, ...entry }) => ({
+    conversation: overview.conversation.map(({ account: held, state, threads, ...entry }) => ({
       ...entry,
       by: person(held),
       ...(state === undefined ? undefined : { state }),
+      ...(threads.length === 0
+        ? undefined
+        : {
+            threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
+              ...thread,
+              comments: comments.map(({ account: author, ...comment }) => ({
+                ...comment,
+                by: person(author),
+              })),
+            })),
+          }),
     })),
   };
 });
