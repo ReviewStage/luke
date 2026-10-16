@@ -1761,8 +1761,11 @@ task the conversation belongs to (`readPlanOfConversation`), the two public
 research reads beside it, `queue_question`
 (`src/plans/queue-question.ts`), which runs nothing: its journaled call is
 how a question reaches the voice while the turn still runs, and the four
-tools about the task's coding agents (`src/agents/coding-agent-tools.ts`):
-a list with each agent's status and what it published, one agent's recent
+tools about coding agents (`src/agents/coding-agent-tools.ts`),
+`list_agents`, `read_agent`, `message_agent`, and `start_agent`: a list
+of the task's workspace's agents, on any task and by any member, with each
+agent's status, task, and what it published, narrowed to this task or
+another where asked (`src/agents/workspace-agents.ts`), one agent's recent
 progress as a bounded tail, a message to one, which takes the message
 box's own steer path (`src/agents/coder-host/steer.ts`), and a start of
 a new one on the call's task, which takes the Start button's own path

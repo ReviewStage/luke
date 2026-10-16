@@ -747,10 +747,12 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     userId: Schema.String,
     organizationId: Schema.String,
     repository: Schema.NullOr(Schema.String),
+    planId: Schema.NullOr(Schema.String),
+    includeArchived: Schema.Boolean,
     limit: Schema.Number,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, organizationId, repository, limit }) =>
+  execute: ({ userId, organizationId, repository, planId, includeArchived, limit }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
@@ -759,7 +761,8 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
           and(
             agentReachableBy(userId),
             eq(AGENT_WORKSPACE, organizationId),
-            isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+            planId === null ? undefined : eq(codingAgent.planId, planId),
             // Note that a repository is matched as GitHub matches one, its case aside.
             repository === null
               ? undefined
@@ -1040,19 +1043,27 @@ export function listCodingAgents(
 
 /**
  * The workspace's agents, on a plan or with none, by any member, newest
- * started first, an archived one left out, only those on the repository
- * named where one is, and at most `limit`; a workspace the account is not
- * in has none.
+ * started first, an archived one left out unless `includeArchived` asks,
+ * only those on the repository named where one is and on the plan named
+ * where one is, and at most `limit`; a workspace the account is not in has
+ * none.
  */
 export function listWorkspaceCodingAgents(
   userId: string,
   organizationId: string,
-  options: { readonly repository?: string; readonly limit: number },
+  options: {
+    readonly repository?: string;
+    readonly planId?: string;
+    readonly includeArchived?: boolean;
+    readonly limit: number;
+  },
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfWorkspace({
     userId,
     organizationId,
     repository: options.repository ?? null,
+    planId: options.planId ?? null,
+    includeArchived: options.includeArchived ?? false,
     limit: options.limit,
   });
 }
@@ -1068,6 +1079,41 @@ export function listPlanlessCodingAgents(
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PlanlessCodingAgent[]> {
   return findPlanlessAgents({ userId, includeArchived: options.includeArchived ?? false });
+}
+
+/** The plan an agent stands on, as a list of agents names it: its name, and whether it is archived. */
+export interface AgentPlanName {
+  readonly name: string;
+  readonly archived: boolean;
+}
+
+const findPlanNames = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
+  execute: ({ userId, planIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: plan.id,
+          name: plan.name,
+          archived: sql<boolean>`${plan.archivedAt} is not null`,
+        })
+        .from(plan)
+        .where(and(inArray(plan.id, [...planIds]), planReachableBy(userId))),
+    ),
+});
+
+/** The plans named, by id, each with its name and whether it is archived; a plan of a workspace the account is not in names nothing. None asked, none read. */
+export function planNamesOf(
+  userId: string,
+  planIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, AgentPlanName>> {
+  const ids = [...new Set(planIds)];
+  if (ids.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findPlanNames({ userId, planIds: ids }),
+    (rows) => new Map(rows.map((row) => [row.id, { name: row.name, archived: row.archived }])),
+  );
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */

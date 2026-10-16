@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
+  archiveCodingAgent,
   createCodingAgent,
   lineSendersOf,
   readCodingAgent,
@@ -12,7 +13,7 @@ import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -53,9 +54,11 @@ import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
   MESSAGE_AGENT_TOOL,
+  READ_AGENT_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
+import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
   claimRuntimeSession,
@@ -302,7 +305,11 @@ test("a message to the plan's agent steers its session as the deployment acting 
   assert.deepEqual(sent, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     delivery: STEER_OUTCOME.SENT,
-    agent: { id: agent.id, status: CODING_AGENT_STATUS.RUNNING },
+    agent: {
+      id: agent.id,
+      title: "anthropic/claude-opus-5.5",
+      status: CODING_AGENT_STATUS.RUNNING,
+    },
   });
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
@@ -370,6 +377,88 @@ test("a member speaking in the plan conversation a teammate opened messages the 
     await database.run(sentLineStands(opener, agent.conversationId, sentLineId("call-1"))),
     true,
   );
+});
+
+test("Luke's agent tools reach every agent of the task's workspace: a list names each agent's task, narrowed to this task or another by its id, archived ones marked; another task's agent, a teammate's, is read and messaged; an archived agent takes no message, and another workspace's agent is none of these", async () => {
+  const opener = await database.createUser();
+  const teammate = await database.createUser();
+  const plan = await planConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(plan.workspaceId, teammate));
+  const billing = await planConversation(opener, RELAY_FULL_NAME);
+  assert.equal(billing.workspaceId, plan.workspaceId);
+  const own = await agentOn(opener, plan.planId);
+  const teammates = await agentOn(teammate, billing.planId);
+  const archived = await agentOn(opener, billing.planId);
+  await database.run(archiveCodingAgent(opener, archived.id, true));
+  const stranger = await planConversation(undefined, RELAY_FULL_NAME);
+  const strangers = await agentOn(stranger.userId, stranger.planId);
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services);
+  const listedIds = async (input: WireRecord) => {
+    const listed = await call(LIST_AGENTS_TOOL.name, input);
+    assert.ok(Array.isArray(listed.agents), JSON.stringify(listed));
+    return listed.agents.map((each) => (isRecord(each) ? each.id : undefined)).sort();
+  };
+
+  assert.deepEqual(await listedIds({}), [own.id, teammates.id, archived.id].sort());
+  assert.deepEqual(await listedIds({ thisTask: true }), [own.id]);
+  assert.deepEqual(await call(LIST_AGENTS_TOOL.name, { taskId: billing.planId, thisTask: true }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: AGENT_LIST_FILTER_REFUSAL.BOTH,
+  });
+  assert.deepEqual(await listedIds({ taskId: billing.planId }), [teammates.id, archived.id].sort());
+  const listed = await call(LIST_AGENTS_TOOL.name, { taskId: billing.planId });
+  const archivedReading = Array.isArray(listed.agents)
+    ? listed.agents.find((each) => isRecord(each) && each.id === archived.id)
+    : undefined;
+  assert.ok(isRecord(archivedReading));
+  assert.deepEqual(archivedReading.task, {
+    id: billing.planId,
+    name: "Teammate invitations",
+    archived: false,
+  });
+  assert.equal(archivedReading.onYourTask, false);
+  assert.equal(archivedReading.archived, true);
+
+  const read = await call(READ_AGENT_TOOL.name, { agentId: teammates.id });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
+  assert.ok(isRecord(read.agent));
+  assert.equal(read.agent.id, teammates.id);
+
+  const sent = await call(MESSAGE_AGENT_TOOL.name, {
+    agentId: teammates.id,
+    text: INSTRUCTION,
+  });
+  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
+  assert.equal(eve.sent[0]?.path, `/eve/coder/v1/session/${teammates.sessionId}`);
+  assert.deepEqual(await database.run(lineSenderUnder(teammates, "call-1")), {
+    kind: MESSAGE_SENDER.LUKE,
+  });
+
+  // Luke passes on the developer's words as they are, to a member's own bound and no less.
+  const longest = "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+  const forwarded = await call(
+    MESSAGE_AGENT_TOOL.name,
+    { agentId: teammates.id, text: longest },
+    "call-longest",
+  );
+  assert.equal(forwarded.delivery, STEER_OUTCOME.SENT, JSON.stringify(forwarded));
+  assert.equal(JSON.parse(eve.sent[1]?.body ?? "").message, longest);
+
+  assert.deepEqual(
+    await call(MESSAGE_AGENT_TOOL.name, { agentId: archived.id, text: INSTRUCTION }, "call-2"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED },
+  );
+  assert.deepEqual(await call(READ_AGENT_TOOL.name, { agentId: strangers.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+  });
+  assert.equal(eve.sent.length, 2);
 });
 
 /** The agent a start answered, as the model reads it; the test fails where the answer carries none. */
@@ -442,8 +531,8 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   const listed = await call(LIST_AGENTS_TOOL.name, {});
   assert.ok(Array.isArray(listed.agents));
   assert.deepEqual(
-    listed.agents.map((each) => (isRecord(each) ? each.id : undefined)),
-    [agent.id, second.id],
+    listed.agents.map((each) => (isRecord(each) ? each.id : undefined)).sort(),
+    [agent.id, second.id].sort(),
   );
 
   const refused = await call(START_AGENT_TOOL.name, { model: SOL, effort: "max" }, "call-3");
