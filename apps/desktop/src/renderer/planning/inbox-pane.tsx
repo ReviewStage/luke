@@ -956,7 +956,11 @@ function AutomationCrumb({
   return (
     <Tooltip
       label={holder.name}
-      card={known === undefined ? undefined : <AutomationCard {...known} />}
+      card={
+        known === undefined ? undefined : (
+          <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+        )
+      }
     >
       <button type="button" className="tab-button" disabled={onOpen === undefined} onClick={onOpen}>
         <CrumbWords look={{ icon, label: holder.name }} />

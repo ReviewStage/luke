@@ -42,7 +42,7 @@ import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { runAppCommand, useAppKeymap } from "../app-commands";
-import type { InboxChoice } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -238,13 +238,15 @@ afterEach(() => {
 interface Asked {
   readonly shownPlans: string[];
   readonly shownAgents: [string, string][];
+  /** The automations whose pages it was asked to open. */
+  readonly shownAutomations: string[];
   /** How many times it was asked to close. */
   closed: number;
 }
 
 /** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
 function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
-  const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
+  const asked: Asked = { shownPlans: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
@@ -276,6 +278,15 @@ function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
         },
         onShowPlan: (planId) => asked.shownPlans.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+        automationsView: {
+          open: false,
+          place: { kind: AUTOMATIONS_PAGE.LIST },
+          onOpen: (place) => {
+            if (place?.kind === AUTOMATIONS_PAGE.EDIT)
+              asked.shownAutomations.push(place.automationId);
+          },
+          onClose: () => undefined,
+        },
       }),
     });
   }
@@ -544,6 +555,15 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
+function openings(card: string): string[] {
+  const standing = document.querySelector(`.tooltip-card ${card}`);
+  assert.ok(standing, "a card is hung");
+  return [...standing.querySelectorAll("button")]
+    .map((button) => button.textContent ?? "")
+    .filter((words) => words.startsWith("Open"));
+}
+
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
@@ -571,7 +591,7 @@ function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card and opens its tab, leaving the Inbox", async () => {
+test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   const [byline] = threadRefs(page);
@@ -580,6 +600,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   assert.ok(wearsAgentTile(byline), "the byline wears the agent's tile");
   reach(byline);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(openings("[data-tab-card]"), [], "the byline is the way to the tab");
   act(() => byline.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 
@@ -593,6 +614,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
     [BILLING.id, AGENT.id],
@@ -1411,7 +1433,7 @@ function hoveredCard(control: Element, card: string): string | null {
   return wordsOf(document.querySelector(`.tooltip-card ${card}`));
 }
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   listedWorkspace = {
     id: "workspace-acme",
@@ -1424,7 +1446,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
   ]);
-  const { page } = mount([
+  const { page, asked } = mount([
     { ...waitingPlanless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingPlanless(BUMP), automationId: null, automationName: null },
   ]);
@@ -1435,10 +1457,15 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
     "the automation's group wears its clock tile",
   );
-  assert.match(
-    hoveredCard(sweep, '[data-actor-card="automation"]') ?? "",
-    /Nightly flake sweep.*Open automation/u,
+  assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+  assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
+  const name = document.querySelector<HTMLButtonElement>(
+    '.tooltip-card [data-actor-card="automation"] .card-name button',
   );
+  assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
+  act(() => name?.click());
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
+  assert.equal(sweep.getAttribute("aria-expanded"), "true", "the header itself still only folds");
 
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
@@ -1457,6 +1484,13 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(crumb, "the automation's crumb is drawn");
   assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+  assert.equal(
+    document.querySelector('.tooltip-card [data-actor-card="automation"] button')?.textContent,
+    undefined,
+    "the crumb's card offers nothing to press, since the crumb opens the automation",
+  );
+  act(() => crumb.click());
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id, SWEEP.id]);
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();

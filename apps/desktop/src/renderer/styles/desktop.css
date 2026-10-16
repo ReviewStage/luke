@@ -6335,28 +6335,23 @@ button.automation-run:hover {
   background: var(--hairline);
 }
 
-/* A card's way to the page of what it is about, under its rule, set as a
-   menu's row: its fill washes off the card's edge on hover. */
-.card-door {
-  display: flex;
-  width: calc(100% + 2 * var(--row-inset));
-  height: var(--menu-row-height);
-  align-items: center;
-  margin-inline: calc(-1 * var(--row-inset));
-  padding: 0 var(--row-inset);
+/* A card's name that opens its subject, where the control hanging the card
+   opens nothing of its own: the name as drawn, washed on hover as a named
+   actor is. */
+.card-name-link {
+  padding: 0;
   border: 0;
-  border-radius: var(--menu-row-radius);
+  border-radius: 4px;
   background: none;
-  color: var(--text-primary);
+  color: inherit;
   font: inherit;
-  font-size: 13px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
-.card-door:is(:hover, :focus-visible) {
-  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
-  background: var(--raised-strong);
+.card-name-link:hover {
+  background: var(--raised);
+  box-shadow: 0 0 0 3px var(--raised);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
