@@ -15,12 +15,14 @@ import {
 } from "@luke/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import {
+  encodeMention,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -28,6 +30,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
   installEditorBundle,
@@ -876,4 +879,64 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     ["Not found", "A coding agent on another task", "A coding agent on no task"],
     "the task's own agent hangs its tab's card; another task's and one on none name where they work",
   );
+});
+
+test("a section's address pasted whole into the box on a plan's page is drawn as its chip, called by its heading, and sent as its mention", async () => {
+  const { container, sent } = await box(planPage([]));
+  const address = encodeMention(ROLLOUT, PLACE);
+
+  typeInComposer(container, "Follow ");
+  pasteInComposer(container, address);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Rollout"],
+  );
+  assert.deepEqual(sent, [`Follow [@Rollout](${address})`]);
+  assert.equal(carryingTarget(container), undefined);
+});
+
+test("a page's address pasted in the app's own scheme is called by the name the window holds, an agent's it holds none for by its kind, and a file of the plan's repository pastes as words", async () => {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      onAppState: () => () => undefined,
+      requestAppState: () =>
+        Promise.resolve(
+          stateWith(
+            {},
+            { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
+          ),
+        ),
+    },
+  });
+  const { container, sent } = await box(planPage([]));
+  const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE.id }, PLACE);
+  const agent = encodeMention(
+    { kind: MENTION_KIND.AGENT, taskId: PLAN_ID, agentId: STORE_AGENT.id },
+    PLACE,
+  );
+  const file = "https://github.com/acme/relay/blob/HEAD/apps/web/rollout-store.ts";
+
+  typeInComposer(container, "Build ");
+  pasteInComposer(container, page.replace("https:", "tryluke:"));
+  typeInComposer(container, "on ");
+  pasteInComposer(container, agent);
+  typeInComposer(container, "in ");
+  pasteInComposer(container, file);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    [PAGE.title, "Agent"],
+  );
+  assert.deepEqual(sent, [`Build [@${PAGE.title}](${page}) on [@Agent](${agent}) in ${file}`]);
 });

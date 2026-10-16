@@ -246,7 +246,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
-      // Note that image files pasted are laid in as pictures, and a page of an integration's pasted whole as its mention, as the box lays it in.
+      // Note that image files pasted are laid in as pictures, and an address of Luke's own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
         return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);
