@@ -5,6 +5,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -157,6 +158,76 @@ test("a message that did not go comes back into the box, the caret at its end, a
   composerEditor(box.container).focus();
   typeInComposer(box.container, ", please");
   assert.equal(box.shown(), "Fix the bug, please", "typing goes on at the words' end");
+});
+
+/** The agent as the service answers a message it took. */
+const TAKEN: CodingAgentAgentAnswer = {
+  agent: {
+    id: "agent-1",
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 1_800_000_000_000,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: null,
+  },
+};
+
+/** The box mounted, its one send answered only as the test lets it. */
+async function answeredLater() {
+  let answer: (answered: CodingAgentAgentAnswer) => void = ignore;
+  const box = await mounted(
+    () =>
+      new Promise<CodingAgentAgentAnswer>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  return { ...box, answer: (answered: CodingAgentAgentAnswer) => answer(answered) };
+}
+
+test("a message sent hands the caret back to the box as it opens again, after the field gave it up while held", async () => {
+  const box = await answeredLater();
+  typeInComposer(box.container, "Fix the bug");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  // A field that takes no words can hold no caret, so the browser takes it off the held box.
+  act(() => composerEditor(box.container).blur());
+  assert.equal(document.activeElement === composerEditor(box.container), false);
+
+  box.answer(TAKEN);
+  await settle();
+  assert.equal(composerEditor(box.container).getAttribute("aria-disabled"), null);
+  assert.equal(document.activeElement === composerEditor(box.container), true);
+});
+
+test("a message sent with Send hands the caret to the box as it opens again", async () => {
+  const box = await answeredLater();
+  typeInComposer(box.container, "Fix the bug");
+  const send = box.button("Send");
+  assert.ok(send);
+  send.focus();
+  act(() => send.click());
+  await settle();
+  act(() => send.blur());
+
+  box.answer(TAKEN);
+  await settle();
+  assert.equal(document.activeElement === composerEditor(box.container), true);
+});
+
+test("a box that opens again after a send leaves the caret where the developer went meanwhile", async () => {
+  const box = await answeredLater();
+  typeInComposer(box.container, "Fix the bug");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  const elsewhere = document.createElement("input");
+  document.body.append(elsewhere);
+  elsewhere.focus();
+
+  box.answer(TAKEN);
+  await settle();
+  assert.equal(document.activeElement === elsewhere, true);
 });
 
 test("an Enter an input method is composing sends nothing, and Shift+Enter is a new line", async () => {

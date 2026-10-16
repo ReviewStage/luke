@@ -92,7 +92,10 @@ import { useKnownNames } from "./use-known-names";
  * the MCP popover reconnects it; an editor bundle that could not be loaded
  * says so there too. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the plan. A draft agent's tab
+ * opening a tab never takes the caret out of the plan, and a message sent
+ * from the box, by Enter or by Send, hands the caret back to the box as it
+ * opens again, unless the developer went somewhere else meanwhile, so the
+ * next message is written at once. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
  * first message of its still empty conversation, and its model chip once
  * the choice it starts on is known.
@@ -302,6 +305,7 @@ export function AgentComposer({
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const foot = useRef<HTMLDivElement>(null);
@@ -381,6 +385,20 @@ export function AgentComposer({
             if (latest.current.note === note) latest.current.retry();
           });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
+
+  // Note that a held box gives up the caret, because a field that takes no
+  // words, and a Send disabled under the press, can hold none; a send made
+  // from the box hands it back as the box opens again, unless the caret went
+  // somewhere outside the box meanwhile.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (held || !refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body || card.current?.contains(active) === true) {
+      editor.current?.focus();
+    }
+  }, [held]);
 
   // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
   useEffect(() => {
@@ -522,6 +540,7 @@ export function AgentComposer({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
+      ref={card}
       className="agent-composer"
       data-status={status}
       data-dropping={dropping ? "" : undefined}
@@ -545,6 +564,7 @@ export function AgentComposer({
       <PromptInput
         onSubmit={() => {
           setRefusal(undefined);
+          refocus.current = card.current?.contains(document.activeElement) === true;
           composer.send();
         }}
       >
