@@ -43,8 +43,19 @@ interface Press {
   moved: boolean;
 }
 
-/** The view, and whether it glides to it from the last. */
+/** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
+const WHEEL_DELTA = {
+  PIXEL: 0,
+  LINE: 1,
+  PAGE: 2,
+} as const;
+
+/** The CSS pixels a wheel's line stands for. */
+const WHEEL_LINE_PX = 16;
+
+/** The view of the picture `subject` names, and whether it glides to it from the last. */
 interface Shown {
+  readonly subject: string;
   readonly view: ImageView;
   readonly glide: boolean;
 }
@@ -63,8 +74,6 @@ export interface ImageZoom {
   };
   /** Zooms one step in (`1`) or out (`-1`) about the frame's centre. */
   readonly step: (direction: 1 | -1) => void;
-  /** Puts the picture back fitted at once, for another file shown in its place. */
-  readonly reset: () => void;
   /** Zooms on a bare `=`, `+`, `-`, or `0`, and answers whether the key was one. */
   readonly keyDown: (event: React.KeyboardEvent) => boolean;
 }
@@ -81,28 +90,53 @@ function measured(
   };
 }
 
+/** A wheel's delta in CSS pixels, whatever its `deltaMode` counts: a page is the frame's height. */
+function wheelPixels(event: WheelEvent, delta: number, frame: HTMLElement): number {
+  if (event.deltaMode === WHEEL_DELTA.LINE) return delta * WHEEL_LINE_PX;
+  if (event.deltaMode === WHEEL_DELTA.PAGE) return delta * frame.clientHeight;
+  return delta;
+}
+
+/** Whether two views draw the picture alike. */
+function sameView(first: ImageView, second: ImageView): boolean {
+  return first.scale === second.scale && first.x === second.x && first.y === second.y;
+}
+
 /** Where a pointer at `clientX`, `clientY` stands from the frame's centre. */
 function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoint {
   const box = frame.getBoundingClientRect();
   return { x: clientX - box.left - box.width / 2, y: clientY - box.top - box.height / 2 };
 }
 
-/** The zoom of the viewer's picture, fitted until a gesture says otherwise. */
-export function useImageZoom(): ImageZoom {
-  const [shown, setShown] = useState<Shown>({ view: FITTED_VIEW, glide: false });
+/**
+ * The zoom of the picture `subject` names, fitted until a gesture says
+ * otherwise. Note that the zoom belongs to the picture rather than to its
+ * place among the files, so another picture shown, however it came to be,
+ * opens fitted, and the same picture moved along the files as an earlier one
+ * lands keeps its zoom.
+ */
+export function useImageZoom(subject: string): ImageZoom {
+  const [stored, setShown] = useState<Shown>({ subject, view: FITTED_VIEW, glide: false });
+  const shown: Shown =
+    stored.subject === subject ? stored : { subject, view: FITTED_VIEW, glide: false };
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
   const press = useRef<Press | undefined>(undefined);
 
-  // Note that every change measures as it lands rather than on a resize,
-  // because the window may have changed size since the last one.
+  // Note that every change measures the frame as it lands, because the
+  // window may have changed size since the last one.
   const change = useCallback(
     (glide: boolean, next: (view: ImageView, sizes: ImageFrame) => ImageView) => {
       const sizes = measured(frame.current, image.current);
       if (sizes === undefined) return;
-      setShown((last) => ({ view: next(last.view, sizes), glide }));
+      setShown((last) => {
+        const from = last.subject === subject ? last.view : FITTED_VIEW;
+        const view = next(from, sizes);
+        // A change that moves nothing, a resize's or a scroll's on a fitted picture, draws nothing.
+        return last.subject === subject && sameView(view, from) ? last : { subject, view, glide };
+      });
     },
-    [],
+    [subject],
   );
 
   // Note that the scroll is heard on the element itself rather than through
@@ -114,15 +148,26 @@ export function useImageZoom(): ImageZoom {
       if (element === null) return undefined;
       const wheel = (event: WheelEvent) => {
         const at = pointIn(element, event.clientX, event.clientY);
+        const dx = wheelPixels(event, event.deltaX, element);
+        const dy = wheelPixels(event, event.deltaY, element);
         if (event.ctrlKey) {
           event.preventDefault();
-          change(false, (view, sizes) => zoomedByWheel(view, sizes, event.deltaY, at));
+          change(false, (view, sizes) => zoomedByWheel(view, sizes, dy, at));
           return;
         }
-        change(false, (view, sizes) => pannedBy(view, sizes, -event.deltaX, -event.deltaY));
+        change(false, (view, sizes) => pannedBy(view, sizes, -dx, -dy));
       };
+      // A frame or a fitted picture resized holds the picture's edges to the frame's again.
+      const resized = new ResizeObserver(() =>
+        change(false, (view, sizes) => pannedBy(view, sizes, 0, 0)),
+      );
+      resized.observe(element);
+      if (image.current !== null) resized.observe(image.current);
       element.addEventListener("wheel", wheel, { passive: false });
-      return () => element.removeEventListener("wheel", wheel);
+      return () => {
+        resized.disconnect();
+        element.removeEventListener("wheel", wheel);
+      };
     },
     [change],
   );
@@ -187,7 +232,6 @@ export function useImageZoom(): ImageZoom {
       },
     },
     step,
-    reset: () => setShown({ view: FITTED_VIEW, glide: false }),
     keyDown,
   };
 }

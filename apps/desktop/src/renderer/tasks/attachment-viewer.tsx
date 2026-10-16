@@ -190,8 +190,8 @@ export function AttachmentViewer({
   note?: React.ReactNode;
 }): React.JSX.Element | null {
   const titleId = useId();
-  const zoom = useImageZoom();
   const file = files[at];
+  const zoom = useImageZoom(file?.url ?? "");
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -199,10 +199,7 @@ export function AttachmentViewer({
   // Note that the walk goes round from either end rather than stopping,
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
-  const walk = (step: number) => {
-    zoom.reset();
-    onAt((at + step + files.length) % files.length);
-  };
+  const walk = (step: number) => onAt((at + step + files.length) % files.length);
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
