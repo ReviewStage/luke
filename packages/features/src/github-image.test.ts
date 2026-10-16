@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { GITHUB_IMAGE_SOURCE, githubImageOf, isUploadOf } from "./github-image.js";
+import {
+  GITHUB_IMAGE_SOURCE,
+  GITHUB_IMAGE_TYPE,
+  githubImageOf,
+  isUploadOf,
+} from "./github-image.js";
 
 /**
  * github-image.test.ts -- an upload in GitHub's rendering is asked for by its
@@ -29,6 +34,29 @@ test("a public image on GitHub's image proxy or older upload host is asked for a
   assert.deepEqual(githubImageOf(old), { source: GITHUB_IMAGE_SOURCE.PUBLIC, url: old });
 });
 
+test("a file of a repository is asked for by its repository, ref, and path, however it is spelled, as its extension's type", () => {
+  const file = {
+    source: GITHUB_IMAGE_SOURCE.FILE,
+    repository: "acme/relay",
+    ref: "pr-assets",
+    path: ["pr-42", "before and after.PNG"],
+    contentType: GITHUB_IMAGE_TYPE.PNG,
+  };
+  for (const address of [
+    "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42/before%20and%20after.PNG",
+    "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42/before%20and%20after.PNG?token=ignored",
+    "https://github.com/acme/relay/raw/pr-assets/pr-42/before%20and%20after.PNG",
+  ]) {
+    assert.deepEqual(githubImageOf(address), file, address);
+  }
+  assert.deepEqual(githubImageOf("https://raw.githubusercontent.com/acme/relay/main/logo.svg"), {
+    ...file,
+    ref: "main",
+    path: ["logo.svg"],
+    contentType: GITHUB_IMAGE_TYPE.SVG,
+  });
+});
+
 test("anything else, plain HTTP, credentials, or an upload with no asset id, is no image the window draws", () => {
   for (const address of [
     "https://evil.example.com/a.png",
@@ -38,6 +66,12 @@ test("anything else, plain HTTP, credentials, or an upload with no asset id, is 
     "https://github.com/user-attachments/assets/not-an-id",
     `https://github.com/user-attachments/assets/${ID}/more`,
     "https://private-user-images.githubusercontent.com/90001/a.png",
+    "https://raw.githubusercontent.com/acme/relay/main/notes.html",
+    "https://raw.githubusercontent.com/acme/relay/main/Makefile",
+    "https://raw.githubusercontent.com/acme/relay/a.png",
+    "https://raw.githubusercontent.com/acme/relay/main/a%2Fb.png",
+    "https://raw.githubusercontent.com/acme/relay/main/%E0%A4%A.png",
+    "https://github.com/acme/relay/raw/main",
     "javascript:alert(1)",
     "not a url",
   ]) {
