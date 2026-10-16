@@ -1360,15 +1360,19 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   max-height: min(560px, 70vh);
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-12);
   padding: var(--space-12) var(--space-16) var(--space-16);
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
   box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-size: 12.5px;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .diff-settings-popover:focus-visible {
@@ -1388,10 +1392,15 @@ button.file-ref:hover .file-ref-path {
   font-weight: 600;
 }
 
-.diff-settings-rows {
+.diff-settings-group {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.diff-settings-group + .diff-settings-group {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--hairline);
 }
 
 /* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root

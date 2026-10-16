@@ -47,7 +47,7 @@ const INDICATOR_OPTIONS = [
 
 /** Each inline diff's words. */
 const INLINE_DIFF_OPTIONS = [
-  { value: INLINE_DIFF.WORD_ALT, label: "Word-Alt" },
+  { value: INLINE_DIFF.WORD_ALT, label: "Word-alt" },
   { value: INLINE_DIFF.WORD, label: "Word" },
   { value: INLINE_DIFF.CHAR, label: "Character" },
   { value: INLINE_DIFF.NONE, label: "None" },
@@ -89,7 +89,7 @@ function optionOf<Value extends string>(
   return options.find((option) => option.value === raw)?.value;
 }
 
-/** A setting's row of segments: its name, the settings' mark while changed, and the segments under a line of their own. */
+/** A setting's row of segments: its name, the settings' mark while changed, and the segments, wrapped under the name where the row is too narrow for both, as Settings wraps one. */
 function SegmentedRow<Value extends string>({
   label,
   detail,
@@ -106,7 +106,7 @@ function SegmentedRow<Value extends string>({
   onChange: (value: Value) => void;
 }): React.JSX.Element {
   return (
-    <div className="settings-row diff-settings-segmented">
+    <div className="settings-row settings-row-wrapping">
       <span className="settings-copy">
         <strong>
           {label}
@@ -156,105 +156,114 @@ function ThemeRow<Id extends string>({
   );
 }
 
-/** The popover's rows, every diff setting, each changed for every diff as it is set. */
+/** The popover's rows, every diff setting in groups set apart by a rule, as the context popover sets its sections apart: the layout and the marks, the switches, the themes, the type, and the comments. Each is changed for every diff as it is set. */
 function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
-    <div className="diff-settings-rows">
-      <SegmentedRow
-        label="Layout"
-        detail={roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT}
-        value={settings.diffLayout}
-        options={LAYOUT_OPTIONS}
-        changed={changed("diffLayout")}
-        onChange={(diffLayout) => change({ diffLayout })}
-      />
-      <SegmentedRow
-        label="Indicators"
-        value={settings.diffIndicators}
-        options={INDICATOR_OPTIONS}
-        changed={changed("diffIndicators")}
-        onChange={(diffIndicators) => change({ diffIndicators })}
-      />
-      <SelectRow
-        label="Inline diffs"
-        value={settings.inlineDiff}
-        options={INLINE_DIFF_OPTIONS}
-        parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
-        changed={changed("inlineDiff")}
-        onChange={(inlineDiff) => change({ inlineDiff })}
-      />
-      <SwitchRow
-        label="Backgrounds"
-        checked={settings.diffBackgrounds}
-        changed={changed("diffBackgrounds")}
-        onChange={(diffBackgrounds) => change({ diffBackgrounds })}
-      />
-      <SwitchRow
-        label="Wrapping"
-        checked={settings.wordWrap}
-        changed={changed("wordWrap")}
-        onChange={(wordWrap) => change({ wordWrap })}
-      />
-      <SwitchRow
-        label="Line numbers"
-        checked={settings.lineNumbers}
-        changed={changed("lineNumbers")}
-        onChange={(lineNumbers) => change({ lineNumbers })}
-      />
-      <ThemeRow
-        label="Dark theme"
-        themes={DIFF_THEMES.DARK}
-        value={settings.darkTheme}
-        changed={changed("darkTheme")}
-        onChange={(darkTheme) => change({ darkTheme })}
-      />
-      <ThemeRow
-        label="Light theme"
-        themes={DIFF_THEMES.LIGHT}
-        value={settings.lightTheme}
-        changed={changed("lightTheme")}
-        onChange={(lightTheme) => change({ lightTheme })}
-      />
-      <SelectRow
-        label="Font"
-        value={settings.diffFont}
-        options={FONT_OPTIONS}
-        parse={(raw) => optionOf(FONT_OPTIONS, raw)}
-        changed={changed("diffFont")}
-        onChange={(diffFont) => change({ diffFont })}
-      />
-      <SelectRow
-        label="Font size"
-        value={settings.diffFontSize}
-        options={FONT_SIZE_OPTIONS}
-        parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
-        changed={changed("diffFontSize")}
-        onChange={(diffFontSize) => change({ diffFontSize })}
-      />
-      <SelectRow
-        label="Line height"
-        value={settings.diffLineHeight}
-        options={LINE_HEIGHT_OPTIONS}
-        parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
-        changed={changed("diffLineHeight")}
-        onChange={(diffLineHeight) => change({ diffLineHeight })}
-      />
-      <SwitchRow
-        label="Ligatures"
-        checked={settings.diffLigatures}
-        changed={changed("diffLigatures")}
-        onChange={(diffLigatures) => change({ diffLigatures })}
-      />
-      <SwitchRow
-        label="Minimize inline comments"
-        detail="Review comments on their lines stand folded to a mark."
-        checked={settings.minimizeComments}
-        changed={changed("minimizeComments")}
-        onChange={(minimizeComments) => change({ minimizeComments })}
-      />
-    </div>
+    <>
+      <div className="diff-settings-group">
+        <SegmentedRow
+          label="Layout"
+          detail={roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT}
+          value={settings.diffLayout}
+          options={LAYOUT_OPTIONS}
+          changed={changed("diffLayout")}
+          onChange={(diffLayout) => change({ diffLayout })}
+        />
+        <SegmentedRow
+          label="Indicators"
+          value={settings.diffIndicators}
+          options={INDICATOR_OPTIONS}
+          changed={changed("diffIndicators")}
+          onChange={(diffIndicators) => change({ diffIndicators })}
+        />
+        <SelectRow
+          label="Inline diffs"
+          value={settings.inlineDiff}
+          options={INLINE_DIFF_OPTIONS}
+          parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
+          changed={changed("inlineDiff")}
+          onChange={(inlineDiff) => change({ inlineDiff })}
+        />
+      </div>
+      <div className="diff-settings-group">
+        <SwitchRow
+          label="Backgrounds"
+          checked={settings.diffBackgrounds}
+          changed={changed("diffBackgrounds")}
+          onChange={(diffBackgrounds) => change({ diffBackgrounds })}
+        />
+        <SwitchRow
+          label="Wrapping"
+          checked={settings.wordWrap}
+          changed={changed("wordWrap")}
+          onChange={(wordWrap) => change({ wordWrap })}
+        />
+        <SwitchRow
+          label="Line numbers"
+          checked={settings.lineNumbers}
+          changed={changed("lineNumbers")}
+          onChange={(lineNumbers) => change({ lineNumbers })}
+        />
+      </div>
+      <div className="diff-settings-group">
+        <ThemeRow
+          label="Dark theme"
+          themes={DIFF_THEMES.DARK}
+          value={settings.darkTheme}
+          changed={changed("darkTheme")}
+          onChange={(darkTheme) => change({ darkTheme })}
+        />
+        <ThemeRow
+          label="Light theme"
+          themes={DIFF_THEMES.LIGHT}
+          value={settings.lightTheme}
+          changed={changed("lightTheme")}
+          onChange={(lightTheme) => change({ lightTheme })}
+        />
+      </div>
+      <div className="diff-settings-group">
+        <SelectRow
+          label="Font"
+          value={settings.diffFont}
+          options={FONT_OPTIONS}
+          parse={(raw) => optionOf(FONT_OPTIONS, raw)}
+          changed={changed("diffFont")}
+          onChange={(diffFont) => change({ diffFont })}
+        />
+        <SelectRow
+          label="Font size"
+          value={settings.diffFontSize}
+          options={FONT_SIZE_OPTIONS}
+          parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
+          changed={changed("diffFontSize")}
+          onChange={(diffFontSize) => change({ diffFontSize })}
+        />
+        <SelectRow
+          label="Line height"
+          value={settings.diffLineHeight}
+          options={LINE_HEIGHT_OPTIONS}
+          parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
+          changed={changed("diffLineHeight")}
+          onChange={(diffLineHeight) => change({ diffLineHeight })}
+        />
+        <SwitchRow
+          label="Ligatures"
+          checked={settings.diffLigatures}
+          changed={changed("diffLigatures")}
+          onChange={(diffLigatures) => change({ diffLigatures })}
+        />
+      </div>
+      <div className="diff-settings-group">
+        <SwitchRow
+          label="Minimize inline comments"
+          checked={settings.minimizeComments}
+          changed={changed("minimizeComments")}
+          onChange={(minimizeComments) => change({ minimizeComments })}
+        />
+      </div>
+    </>
   );
 }
 
