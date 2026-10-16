@@ -18,6 +18,7 @@ import {
 } from "../renderer/tasks/use-side-panel";
 import {
   AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../renderer/tasks/use-tasks-tab";
@@ -286,6 +287,12 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
+    issuesView: {
+      open: false,
+      place: { kind: ISSUES_PAGE.LIST },
       onOpen: ignore,
       onClose: ignore,
     },

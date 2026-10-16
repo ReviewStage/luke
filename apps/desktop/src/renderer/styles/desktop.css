@@ -437,21 +437,23 @@ body,
 .sidebar-home:disabled,
 .sidebar-inbox:disabled,
 .sidebar-factory:disabled,
-.sidebar-automations:disabled {
+.sidebar-automations:disabled,
+.sidebar-issues:disabled {
   opacity: 0.45;
 }
 
 /* The Home row is the place shown while the home page stands, the Inbox
    row while the window's Inbox does, Factory's while Factory does, and the
-   Automations row while the Automations page does, each
-   filled as the open plan's row is.
+   Automations row while the Automations page does, and the Issues row
+   while the Issues page does, each filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
 .sidebar-inbox[aria-current="page"],
 .sidebar-factory[aria-current="page"],
-.sidebar-automations[aria-current="page"] {
+.sidebar-automations[aria-current="page"],
+.sidebar-issues[aria-current="page"] {
   background: var(--raised-strong);
 }
 

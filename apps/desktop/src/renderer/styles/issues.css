@@ -1,0 +1,121 @@
+/* The Issues page (`issues-page.tsx`): the listed workspace's issues under a
+   heading for each status, in the plan's place beside the sidebar. Its rows
+   are the sidebar's own, as Home's and Factory's are; only what an issue's
+   row adds is drawn here. Tokens only. */
+
+.issues-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.issues-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--content-inset) var(--space-32);
+}
+
+.issues-scroll:has(.empty-state) {
+  display: flex;
+  flex-direction: column;
+}
+
+.issues-scroll > .read-failure-centred {
+  flex: 1;
+}
+
+/* The toolbar's field files an issue on Return; it stands at a control's height. */
+.issues-new-title {
+  width: min(320px, 40vw);
+  height: var(--control-height);
+  padding-block: 0;
+}
+
+.issues-skeleton-row {
+  padding: var(--space-8) var(--row-inset);
+}
+
+.issue-group + .issue-group {
+  margin-top: var(--space-12);
+}
+
+/* A status's heading: its glyph, its name, and how many issues stand in it. */
+.issue-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-8) var(--row-inset);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.issue-group-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-rows {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A row offers no Pin or Archive to give way to, so its time stays put.
+   Note that it outranks the sidebar's own row, which hides its time to
+   make that room. */
+.issue-rows .issue-row:hover .sidebar-task:not(.sidebar-agent) .sidebar-task-time,
+.issue-rows .issue-row:has(:focus-visible) .sidebar-task:not(.sidebar-agent) .sidebar-task-time {
+  visibility: visible;
+}
+
+.issue-row-identifier {
+  flex: none;
+  min-width: 7ch;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each status's glyph wears the state colour the rest of the window gives that standing. */
+.issue-status-glyph {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.issue-status-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.issue-status-glyph[data-status="todo"] {
+  color: var(--text-secondary);
+}
+
+.issue-status-glyph[data-status="in-progress"] {
+  color: var(--state-working);
+}
+
+.issue-status-glyph[data-status="done"] {
+  color: var(--state-complete);
+}
+
+.issue-priority-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.issue-priority-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.issue-priority-mark[data-priority="urgent"] {
+  color: var(--state-attention);
+}
