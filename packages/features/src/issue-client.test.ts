@@ -155,3 +155,43 @@ it.effect(
       assert.ok(cancelled, "the stalled body is let go");
     }),
 );
+
+it.effect(
+  "an answer that arrives after a renewal slower than the deadline is read, not thrown away",
+  () =>
+    Effect.gen(function* () {
+      let token = "token-1";
+      let asked = 0;
+      const renewing = recordingHttpClient(() => {
+        asked += 1;
+        return asked === 1
+          ? new Response(JSON.stringify({ error: HOSTED_API_ERROR.INVALID_TOKEN }), { status: 401 })
+          : new Response(JSON.stringify({ issues: [ISSUE] }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+      });
+      const slowRenewal = new HostedIssueClient({
+        serviceBaseUrl: "https://tryluke.dev",
+        requestTimeoutMs: 10_000,
+        readAccessToken: () => Effect.sync(() => token),
+        refreshAccount: () =>
+          Effect.andThen(
+            Effect.sleep("15 seconds"),
+            Effect.sync(() => {
+              token = "token-2";
+            }),
+          ),
+        readAccountKey: () => Effect.succeed("ada@example.com"),
+      });
+
+      const listing = yield* Effect.forkChild(
+        Effect.provide(slowRenewal.list({ workspaceId: WORKSPACE_ID }), renewing.layer),
+      );
+      yield* TestClock.adjust("15 seconds");
+      const listed = yield* Fiber.join(listing);
+
+      assert.deepEqual(listed, { issues: [ISSUE] });
+      assert.equal(asked, 2);
+    }),
+);

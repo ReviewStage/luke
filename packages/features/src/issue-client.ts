@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Result, type Schema } from "effect";
+import { Duration, Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -82,14 +82,17 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
 }
 
 /**
- * A response's body as JSON, read within what is left of the call's
- * deadline; nothing where it is not JSON at all, and nothing, its stream
- * cancelled so its connection is let go, where it has not ended by then.
+ * A response's body as JSON, read within the deadline; nothing where it is
+ * not JSON at all, and nothing, its stream cancelled so its connection is
+ * let go, where it has not ended by then.
  * Note that the account call's own deadline ends with the headers, so a
  * body that stalls after them is bounded here, or the call would never
  * answer.
  */
-function jsonWithin(response: Response, left: Duration.Duration): Effect.Effect<WireBoundaryInput> {
+function jsonWithin(
+  response: Response,
+  deadline: Duration.Duration,
+): Effect.Effect<WireBoundaryInput> {
   const reader = response.body?.getReader();
   if (reader === undefined) return Effect.succeed(undefined);
   const parsed = Effect.flatMap(textOf(reader), (text) =>
@@ -100,7 +103,7 @@ function jsonWithin(response: Response, left: Duration.Duration): Effect.Effect<
   return parsed.pipe(
     Effect.catch(() => Effect.succeed(undefined)),
     Effect.timeoutOrElse({
-      duration: left,
+      duration: deadline,
       orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
     }),
   );
@@ -113,14 +116,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   return failure === undefined ? UNANSWERED : { failure };
 }
 
-/** An answer read whole within what is left of the deadline: the body the schema admits, a key a newer service added dropped, or why there is none. */
+/** An answer read whole within the deadline: the body the schema admits, a key a newer service added dropped, or why there is none. */
 function readAnswer<Answer, Encoded>(
   answer: CallAnswer,
   schema: Schema.Codec<Answer, Encoded>,
-  left: Duration.Duration,
+  deadline: Duration.Duration,
 ): Effect.Effect<Answer | Failed> {
   if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonWithin(answer.response, left), (body): Answer | Failed => {
+  return Effect.map(jsonWithin(answer.response, deadline), (body): Answer | Failed => {
     const payload = unparsedWire(body);
     if (!answer.response.ok) return refusedAs(payload, REFUSALS);
     return Result.getOrUndefined(readServiceAnswer(schema)(payload)) ?? UNANSWERED;
@@ -146,18 +149,20 @@ export class HostedIssueClient {
     });
   }
 
-  /** One call sent and its answer read, the body within what the call's deadline has left once the headers arrive. */
+  /**
+   * One call sent and its answer read, the body within a deadline of its
+   * own once the headers arrive. Note that the body is not handed what the
+   * call's deadline has left, because a renewal of the credential can spend
+   * all of it before an answer that did arrive is read; one deadline more
+   * keeps the call bounded without throwing such an answer away.
+   */
   #asked<Answer, Encoded>(
     request: CallRequest,
     schema: Schema.Codec<Answer, Encoded>,
   ): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
-    const deadline = this.#call.requestTimeoutMs;
-    return Effect.flatMap(Clock.currentTimeMillis, (started) =>
-      Effect.flatMap(this.#call.send(request), (answer) =>
-        Effect.flatMap(Clock.currentTimeMillis, (now) =>
-          readAnswer(answer, schema, Duration.millis(Math.max(0, deadline - (now - started)))),
-        ),
-      ),
+    const deadline = Duration.millis(this.#call.requestTimeoutMs);
+    return Effect.flatMap(this.#call.send(request), (answer) =>
+      readAnswer(answer, schema, deadline),
     );
   }
 
