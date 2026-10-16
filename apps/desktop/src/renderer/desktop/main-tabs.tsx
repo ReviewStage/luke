@@ -16,6 +16,7 @@ import { SpinnerRegion } from "../spinner";
 import { agentCardReading } from "../tasks/agent-ref";
 import { AgentTab } from "../tasks/agent-tab";
 import { AgentTabCard } from "../tasks/agent-tab-card";
+import type { ChatNoticeDoors } from "../tasks/chat-notice";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -130,10 +131,11 @@ export function agentTranscriptRead(
   agentId: string,
   title: string,
   brief: CodingAgentBrief | undefined,
+  chatOn: boolean,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief }),
+      messages === undefined ? undefined : agentTranscript({ title, messages, brief, chatOn }),
     );
 }
 
@@ -260,7 +262,13 @@ function agentTabs(input: {
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
-    const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
+    const read = agentTranscriptRead(
+      agents.readTranscript,
+      agent.id,
+      label,
+      agent.brief,
+      agents.chatOn,
+    );
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     return {
       tab,
@@ -609,6 +617,7 @@ export function MainTabContent({
   onOpenPullRequest,
   onOpenTarget,
   cards,
+  chat,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -629,6 +638,8 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: TaskCards;
+  /** The chat a chat notice's card reads and opens; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -657,6 +668,7 @@ export function MainTabContent({
       }
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
+      chat={chat}
       onHeld={views.onAgentHeld}
       run={agents.origin}
     />

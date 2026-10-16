@@ -5768,6 +5768,69 @@ button.automation-run:hover {
   color: var(--text-primary);
 }
 
+/* A chat notice in an agent's transcript: a card across the column washed
+   in Luke's blue, headed by its sender and the message's place, Open in
+   Chat at the head's end. */
+.chat-notice {
+  margin: var(--space-8) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
+}
+
+.chat-notice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-notice-from {
+  color: var(--voice-luke);
+  font-weight: 600;
+}
+
+/* A person's handle reads in the developer's green, as their words do on a call. */
+.chat-notice[data-author="human"] .chat-notice-from {
+  color: var(--voice-developer);
+}
+
+.chat-notice-words {
+  font-size: 14px;
+}
+
+.chat-notice-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chat-notice-open:hover {
+  color: var(--text-primary);
+}
+
+.chat-notice-open svg {
+  width: 12px;
+  height: 12px;
+}
+
 .chat-empty {
   margin: var(--space-24) 0;
   color: var(--text-tertiary);

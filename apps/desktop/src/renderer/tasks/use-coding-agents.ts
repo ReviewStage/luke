@@ -30,6 +30,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
+import { useChatOn } from "./chat-gate";
 import {
   type AgentRun,
   ARCHIVE_NOT_READY,
@@ -115,6 +116,8 @@ export interface HeldPeople {
 export interface CodingAgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
+  /** Whether the window offers Chat (`chat-gate.ts`): what a chat notice in an agent's transcript is drawn and copied as, a card from its sender or the plain line it is. */
+  chatOn: boolean;
   /** The open plan's agents in the order started, an archived one left out, or nothing before the first read lands. */
   agents: readonly CodingAgentSummary[] | undefined;
   /** The open plan's archived agents in the order started, or nothing before the first read lands. */
@@ -354,6 +357,7 @@ export function useCodingAgents(input: {
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
+  const chatOn = useChatOn();
   const { taskId, agentId, repository, archived } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
@@ -889,6 +893,7 @@ export function useCodingAgents(input: {
   );
 
   return {
+    chatOn,
     agents,
     archived: archivedAgents,
     workspaceId,
