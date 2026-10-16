@@ -295,8 +295,11 @@ export const INBOX_HOLDER = {
   AUTOMATION: "automation",
 } as const;
 
-/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, and the automation that started it. */
-type InboxAgentLine = Pick<AppInboxTasklessItem, "agentTitle" | "agentModel" | "automationId">;
+/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, the automation that started it, and the workspace it belongs to, where the service names it. */
+type InboxAgentLine = Pick<
+  AppInboxTasklessItem,
+  "agentTitle" | "agentModel" | "automationId" | "workspaceId"
+>;
 
 /**
  * The plan holding an item, or the automation holding an item of an agent
@@ -335,6 +338,17 @@ export function holderKey(holder: InboxHolder): string {
 /** A plan as the holder of its items. */
 export function planHolder(plan: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.PLAN, plan };
+}
+
+/**
+ * The workspace an item belongs to: its plan's, or, for an agent with no
+ * plan, the agent's own, where the service named it; none where it did not,
+ * since the Inbox may list an item whose workspace it does not know.
+ */
+export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | undefined {
+  return holder.kind === INBOX_HOLDER.PLAN
+    ? holder.plan.workspaceId
+    : holder.agents.get(agentId)?.workspaceId;
 }
 
 /** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
@@ -387,6 +401,7 @@ export function planlessGroups(
       agentTitle: entry.agentTitle,
       agentModel: entry.agentModel,
       automationId: entry.automationId,
+      ...(entry.workspaceId === undefined ? undefined : { workspaceId: entry.workspaceId }),
     });
     const holder: InboxHolder = groups.get(key)?.holder ?? {
       kind: INBOX_HOLDER.AUTOMATION,

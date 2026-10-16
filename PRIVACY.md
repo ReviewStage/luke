@@ -583,7 +583,11 @@ plan, is shown to the planning model on every turn of its call, and is
 deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title, and
 state, which it reads through this connection as you look and keeps
-nowhere; the app shows them on the link, and they go no further.
+nowhere; the app shows them on the link, and they go no further. The
+connection read through is that of the workspace the words belong to: a
+plan's, or an Inbox item's own, its plan's or its agent's, never the
+workspace the Inbox happens to list; an item whose workspace is not known
+reads nothing.
 Disconnecting stops every read through it at once,
 removes the connection's record, and asks Vercel Connect to revoke the grant;
 what plans already copied of an issue stays with them.
@@ -955,7 +959,9 @@ only when you press Send.
   open, a pull request's changed files for the Changes tab, a repository's
   skills, and the number, title, link, and state of a pull request or an
   issue a plan, a reply, or an Inbox item links to, which the app shows on
-  the link; an issue is read on a token cut to reading issues alone.
+  the link; an issue is read on a token cut to reading issues alone, and an
+  Inbox item's link is read through its own workspace's installation, its
+  plan's or its agent's, and through none where that is not known.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
   Linear's MCP server, which keeps it under Linear's own policy.

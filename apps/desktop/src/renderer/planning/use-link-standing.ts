@@ -18,10 +18,11 @@ import { useAppState } from "../use-app-state";
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
- * plan's, else the one their mentions are written under. Words that name
- * neither, as the window's own Inbox draws an item's, read nothing, since a
- * page read through another workspace's connection would be drawn in the
- * wrong one. A Linear issue is
+ * plan's, else the one their mentions are written under, which the window's
+ * Inbox names as an item's own, its plan's or its agent's (`WordsWorkspace`).
+ * Words that name neither, as an Inbox item whose workspace the service did
+ * not name, read nothing, since a page read through another workspace's
+ * connection would be drawn in the wrong one. A Linear issue is
  * read by its identifier through the workspace's Linear grant, and a pull
  * request or a GitHub issue by its repository and number through the
  * workspace's GitHub App, each on the service, once per chip, and only where that workspace has the
