@@ -5341,4 +5341,47 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a write naming the member it acts as is refused and writes nothing, since the window always acts as the caller's own person",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const asked = yield* chat.agentAsks("Ship it?");
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const before = (yield* chat.read).messages.length;
+
+        for (const spoofed of [
+          { text: "As the agent.", clientKey: randomUUID(), authorMemberId: chat.agent.id },
+          { text: "As the agent.", clientKey: randomUUID(), as: chat.agent.id },
+          {
+            answer: {
+              seq: asked.message.seq,
+              revision: 1,
+              reply: { reply: CHAT_REPLY.APPROVED },
+              answererMemberId: chat.agent.id,
+            },
+            clientKey: randomUUID(),
+          },
+          {
+            answer: { seq: asked.message.seq, revision: 1, reply: { reply: CHAT_REPLY.APPROVED } },
+            clientKey: randomUUID(),
+            answererMemberId: chat.agent.id,
+          },
+          { readTo: asked.message.seq, memberId: chat.agent.id },
+        ]) {
+          assert.deepEqual(yield* chat.write(spoofed), invalid, JSON.stringify(spoofed));
+        }
+        assert.equal((yield* chat.read).messages.length, before);
+        assert.equal(eve.sent.length, 0);
+
+        // The same post with no member named is the caller's own.
+        const own = yield* chat.wrote({ text: "Mine.", clientKey: randomUUID() });
+        assert.ok("posted" in own);
+        const self = (yield* chat.read).self;
+        assert.equal(own.posted.authorId, self);
+        assert.notEqual(own.posted.authorId, chat.agent.id);
+      }),
+  );
 });
