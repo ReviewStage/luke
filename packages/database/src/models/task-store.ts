@@ -119,13 +119,15 @@ export interface StoredTask {
  * the repository it is about where one is chosen, and the Linear issue it
  * starts from, as the service read it, where one was picked. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
- * renamed.
+ * renamed. A plan started with `planning` false skips its planning phase and
+ * starts empty rather than as the template.
  */
 export interface NewTask {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
   readonly linearIssue?: TaskLinearIssue;
+  readonly planning?: boolean;
 }
 
 /**
@@ -677,8 +679,9 @@ export function readStartedText(userId: string, createdAt: number): TaskStoreEff
 /**
  * Starts a plan under the account, in the workspace it was handed, as one
  * document, a copy of the account's own template or the default where it
- * keeps none, with the repository it was handed; it stands first in the
- * list. A plan handed no name, or a blank one, starts as
+ * keeps none, or empty where it skips its planning phase, with the
+ * repository it was handed; it stands first in the list. A plan handed no
+ * name, or a blank one, starts as
  * `UNTITLED_PLAN_NAME`. Note that the template is copied, not referred to,
  * because an edit of the template must leave every plan started from it as
  * it stands.
@@ -686,7 +689,7 @@ export function readStartedText(userId: string, createdAt: number): TaskStoreEff
 export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const template = yield* readPlanTemplate(userId);
+    const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
     const row = yield* insertTask({
       userId,

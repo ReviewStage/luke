@@ -463,6 +463,26 @@ it.effect(
     }),
 );
 
+it.effect("a started task opens its call, and one started without planning opens none", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    f.start.answer = { planId: PLAN_ID };
+
+    const planned = yield* f.router.performAct(
+      { kind: ACT_KIND.TASKS_START, payload: { name: "Invitations" } },
+      PANEL,
+    );
+    const unplanned = yield* f.router.performAct(
+      { kind: ACT_KIND.TASKS_START, payload: { name: "Typo", planning: false } },
+      PANEL,
+    );
+
+    assert.deepEqual(planned, { status: ACT_OUTCOME_STATUS.DONE, value: { planId: PLAN_ID } });
+    assert.deepEqual(unplanned, planned);
+    assert.deepEqual(f.talked, [PLAN_ID]);
+  }),
+);
+
 it.effect("the voice window does not reach the plans", () =>
   Effect.gen(function* () {
     const f = fixture();

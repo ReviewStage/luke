@@ -122,8 +122,10 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * the account's first workspace where none is, and the Linear issue it
  * starts from where one was picked, which the service reads through the
  * workspace's own Linear connection (`linear-wire.ts`); the document starts
- * as the untouched template. A name left out, or nothing but whitespace,
- * starts the plan as `UNTITLED_PLAN_NAME` until it is renamed.
+ * as the untouched template, or empty where `planning` is false: a task
+ * started without its planning phase, whose window opens no call on it
+ * either. A name left out, or nothing but whitespace, starts the plan as
+ * `UNTITLED_PLAN_NAME` until it is renamed.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -132,6 +134,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
+  planning: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;

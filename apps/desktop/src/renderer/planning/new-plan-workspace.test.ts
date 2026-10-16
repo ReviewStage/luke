@@ -286,7 +286,7 @@ test("New task's workspace and repository chips are the app's bordered picker, e
   ]);
 });
 
-test("Tab from the workspace picker's open list moves on to the task's name, and Shift-Tab back to the chip", async () => {
+test("Tab from the workspace picker's open list moves on to the Plan switch beside the title, and Shift-Tab back to the chip", async () => {
   await openNewPlan(ACME.id);
   const chip =
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
@@ -305,5 +305,5 @@ test("Tab from the workspace picker's open list moves on to the task's name, and
   const forward = await tabFromList(false);
   const backward = await tabFromList(true);
 
-  assert.deepEqual([forward, backward], ["Task name", "Workspace: Acme"]);
+  assert.deepEqual([forward, backward], ["Plan with Luke", "Workspace: Acme"]);
 });
