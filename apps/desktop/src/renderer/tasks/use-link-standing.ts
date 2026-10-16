@@ -1,4 +1,8 @@
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/coding-agent-wire";
+import {
+  type GitHubPerson,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@luke/features/coding-agent-wire";
 import {
   type GitHubPullRequestSummary,
   type IssueState,
@@ -60,13 +64,25 @@ export interface LinkStanding {
   readonly state: string | undefined;
   readonly pullRequest: StandingPullRequest | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
-  /** Who it is with, as its card says it: who opened a pull request or a GitHub issue, or who a Linear issue is assigned to; none where its provider named no one. */
+  /** Who a Linear issue is with, as its card says it: who it is assigned to; none where Linear named no one, and none for a pull request or a GitHub issue, whose card names `opener`. */
   readonly byline: string | undefined;
+  /** Who opened a pull request or a GitHub issue, as its card draws them by their face; none where GitHub named no one. */
+  readonly opener: GitHubPerson | undefined;
 }
 
-/** What a card says of who opened a pull request or a GitHub issue, by their GitHub login. */
-function openedBy(login: string | undefined): string | undefined {
-  return login === undefined ? undefined : `Opened by ${login}`;
+/** The suffix GitHub gives an App's bot's login, which names a bot where an older service answered no more than the login. */
+const BOT_LOGIN_SUFFIX = "[bot]";
+
+/** Who opened a pull request or a GitHub issue, as GitHub named them on it: their login, their avatar where the service answered one, and whether they are an App's bot. */
+function openerOf(summary: {
+  readonly author?: string;
+  readonly authorAvatarUrl?: string;
+  readonly authorBot?: boolean;
+}): GitHubPerson | undefined {
+  const { author, authorAvatarUrl, authorBot } = summary;
+  if (author === undefined) return undefined;
+  const person = { login: author, bot: authorBot ?? author.endsWith(BOT_LOGIN_SUFFIX) };
+  return authorAvatarUrl === undefined ? person : { ...person, avatarUrl: authorAvatarUrl };
 }
 
 /** What a card says of who a Linear issue is assigned to. */
@@ -80,8 +96,6 @@ export interface StandingPullRequest {
   readonly state: PullRequestState;
   readonly lines: { readonly additions: number; readonly deletions: number } | undefined;
   readonly files: number | undefined;
-  /** The GitHub login of who opened it. */
-  readonly author: string | undefined;
   /** When it was last opened, merged, or closed, as its state says: merged when merged, closed when closed, and opened otherwise. */
   readonly when: { readonly moment: PullRequestMoment; readonly at: number } | undefined;
   readonly branches: { readonly base: string; readonly head: string } | undefined;
@@ -123,7 +137,6 @@ function standingPullRequestOf(pullRequest: GitHubPullRequestSummary): StandingP
         ? undefined
         : { additions: pullRequest.additions, deletions: pullRequest.deletions },
     files: pullRequest.changedFiles,
-    author: pullRequest.author,
     when: whenOf(pullRequest),
     branches:
       pullRequest.baseRef === undefined || pullRequest.headRef === undefined
@@ -235,6 +248,7 @@ function readStanding(
             pullRequest: undefined,
             issue: undefined,
             byline: assignedTo(issue.assignee),
+            opener: undefined,
           },
     );
   }
@@ -249,7 +263,8 @@ function readStanding(
             state: ISSUE_WORDS[issue.state],
             pullRequest: undefined,
             issue: { number: issue.number, state: issue.state },
-            byline: openedBy(issue.author),
+            byline: undefined,
+            opener: openerOf(issue),
           },
     );
   }
@@ -266,7 +281,8 @@ function readStanding(
           state: PULL_REQUEST_WORDS[pullRequest.state],
           pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
-          byline: openedBy(pullRequest.author),
+          byline: undefined,
+          opener: openerOf(pullRequest),
         },
   );
 }

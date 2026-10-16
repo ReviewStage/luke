@@ -51,7 +51,7 @@ import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
 import { MentionedAgentCard } from "./mentioned-agent-card";
-import { PullRequestCardNotes } from "./pull-request-card-notes";
+import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
 import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
@@ -377,7 +377,11 @@ function MentionCard({
           <CardNote>
             {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
           </CardNote>
-          <OptionalNote words={standing.byline} />
+          {standing.opener === undefined ? (
+            <OptionalNote words={standing.byline} />
+          ) : (
+            <OpenedNote opener={standing.opener} />
+          )}
         </>
       ) : (
         <PullRequestCardNotes
@@ -385,6 +389,7 @@ function MentionCard({
             standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`
           }
           pullRequest={standing.pullRequest}
+          opener={standing.opener}
         />
       )}
       {note === undefined ? null : <CardNote>{note}</CardNote>}
