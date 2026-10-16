@@ -47,9 +47,9 @@ SKIPPED_DESCRIPTION="Skipped - Not affected"
 PREVIEW_ENVIRONMENT=Preview
 SSO_HOST=vercel.com
 SSO_PATH=/sso-api
-# The deployed tree is whatever the web project's ignoreCommand diffs, read
-# from the command itself so the two cannot drift apart.
-VERCEL_CONFIG="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../vercel.json"
+# The deployed tree is whatever the deployment's ignoreCommand diffs, read
+# from its script so the two cannot drift apart.
+VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"
 
 # Twenty minutes by default, on the probe's own observation that a record
 # appears within about 25 s of the push and settles 85–115 s later.
@@ -184,11 +184,14 @@ read_preview() {
     exit "$EXIT_NOT_READY"
 }
 
-if ! ignore_command=$(jq -r '.services.web.ignoreCommand' "$VERCEL_CONFIG"); then
-    printf 'UNREADABLE: could not read the ignoreCommand in %s\n' "$VERCEL_CONFIG" >&2
+if ! deployed=$("$VERCEL_IGNORE" --paths); then
+    printf 'UNREADABLE: could not read the deployed tree from %s\n' "$VERCEL_IGNORE" >&2
     exit "$EXIT_UNREADABLE"
 fi
-read -ra deployed_paths <<<"${ignore_command#* -- }"
+deployed_paths=()
+while IFS= read -r path; do
+    deployed_paths+=("$path")
+done <<<"$deployed"
 
 head=$sha
 is_head=true
