@@ -71,20 +71,20 @@ export const TASKS_DROP_ZONE = "tasks";
 /** What a press must land in to drag a section rather than one of its tasks. */
 const SECTION_HANDLE = ".sidebar-repository-header";
 
-/** Each glyph a section may wear, by its name on the wire. */
-const GLYPHS: Readonly<Record<TaskSectionGlyph, LucideIcon>> = {
-  [TASK_SECTION_GLYPH.FOLDER]: FolderIcon,
-  [TASK_SECTION_GLYPH.STAR]: StarIcon,
-  [TASK_SECTION_GLYPH.BOOKMARK]: BookmarkIcon,
-  [TASK_SECTION_GLYPH.FLAG]: FlagIcon,
-  [TASK_SECTION_GLYPH.ROCKET]: RocketIcon,
-  [TASK_SECTION_GLYPH.ZAP]: ZapIcon,
-  [TASK_SECTION_GLYPH.BUG]: BugIcon,
-  [TASK_SECTION_GLYPH.FLASK]: FlaskConicalIcon,
-  [TASK_SECTION_GLYPH.BRIEFCASE]: BriefcaseIcon,
-  [TASK_SECTION_GLYPH.LAYERS]: LayersIcon,
-  [TASK_SECTION_GLYPH.HEART]: HeartIcon,
-  [TASK_SECTION_GLYPH.CIRCLE]: CircleIcon,
+/** Each glyph a section may wear, by its name on the wire, and what the dialog calls it. */
+const GLYPHS: Readonly<Record<TaskSectionGlyph, { icon: LucideIcon; label: string }>> = {
+  [TASK_SECTION_GLYPH.FOLDER]: { icon: FolderIcon, label: "Folder" },
+  [TASK_SECTION_GLYPH.STAR]: { icon: StarIcon, label: "Star" },
+  [TASK_SECTION_GLYPH.BOOKMARK]: { icon: BookmarkIcon, label: "Bookmark" },
+  [TASK_SECTION_GLYPH.FLAG]: { icon: FlagIcon, label: "Flag" },
+  [TASK_SECTION_GLYPH.ROCKET]: { icon: RocketIcon, label: "Rocket" },
+  [TASK_SECTION_GLYPH.ZAP]: { icon: ZapIcon, label: "Lightning" },
+  [TASK_SECTION_GLYPH.BUG]: { icon: BugIcon, label: "Bug" },
+  [TASK_SECTION_GLYPH.FLASK]: { icon: FlaskConicalIcon, label: "Flask" },
+  [TASK_SECTION_GLYPH.BRIEFCASE]: { icon: BriefcaseIcon, label: "Briefcase" },
+  [TASK_SECTION_GLYPH.LAYERS]: { icon: LayersIcon, label: "Layers" },
+  [TASK_SECTION_GLYPH.HEART]: { icon: HeartIcon, label: "Heart" },
+  [TASK_SECTION_GLYPH.CIRCLE]: { icon: CircleIcon, label: "Circle" },
 };
 
 /** The emoji the dialog offers at a press; any other is typed or picked with the system's own picker. */
@@ -106,7 +106,7 @@ export function SectionIcon({ icon }: { icon: TaskSectionIcon | undefined }): Re
       </span>
     );
   }
-  const Glyph = GLYPHS[icon.glyph];
+  const Glyph = GLYPHS[icon.glyph].icon;
   return <Glyph />;
 }
 
@@ -159,7 +159,7 @@ function SectionIconPicker({
         {choice("No icon", undefined, <HashIcon />)}
         {Object.values(TASK_SECTION_GLYPH).map((glyph) =>
           choice(
-            glyph,
+            GLYPHS[glyph].label,
             { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph },
             <SectionIcon icon={{ kind: TASK_SECTION_ICON_KIND.GLYPH, glyph }} />,
           ),
