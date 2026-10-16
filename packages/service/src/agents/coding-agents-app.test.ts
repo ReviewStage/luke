@@ -126,6 +126,7 @@ import {
   type InstallationFixture,
   openGithubUser,
   type RepositoryScript,
+  type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
@@ -159,6 +160,7 @@ const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
+const AGENT_OVERVIEW = "/api/agents/overview";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const TASK = "/api/plans/plan";
 /** The account's plans, served by the plans group, each naming its agents in brief. */
@@ -501,6 +503,64 @@ const openTask = (
     const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
+
+/** The pull request an agent published from its branch, as GitHub holds it. */
+const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
+
+/** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
+const publishedPullRequest: RepositoryScript = (sent) => {
+  const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+  const pull = `${repository}/pulls/${PUBLISHED.number}`;
+  const commit = `${repository}/commits/${PUBLISHED.headSha}`;
+  switch (new URL(sent.url).pathname) {
+    case `${repository}/pulls`:
+      return Response.json([{ number: PUBLISHED.number }]);
+    case pull:
+      return Response.json({
+        number: PUBLISHED.number,
+        title: "Expire teammate invitations",
+        html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+        state: "open",
+        draft: false,
+        merged: false,
+        merged_at: null,
+        additions: 4,
+        deletions: 1,
+        changed_files: 1,
+        body: "Invitations expire.",
+        body_html: "<p>Invitations expire.</p>",
+        base: { ref: "main" },
+        head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
+        created_at: "2026-10-15T09:00:00Z",
+        mergeable_state: "clean",
+        user: null,
+        requested_reviewers: [],
+      });
+    case `${commit}/check-runs`:
+      return Response.json({ check_runs: [] });
+    case `${commit}/status`:
+      return Response.json({ statuses: [] });
+    case `${repository}/issues/${PUBLISHED.number}/comments`:
+    case `${pull}/reviews`:
+      return Response.json([]);
+    default:
+      return undefined;
+  }
+};
+
+/** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
+function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
+  const app = `https://api.github.com/app/installations/${installationId}`;
+  const mints = sent.filter((one) => one.url === `${app}/access_tokens`);
+  const forRepository = (one: SentToGitHub) => "repositories" in JSON.parse(one.body);
+  return {
+    installationReads: sent.filter((one) => one.url === app).length,
+    listings: sent.filter((one) => new URL(one.url).pathname === "/installation/repositories")
+      .length,
+    listingMints: mints.filter((one) => !forRepository(one)).length,
+    repositoryMints: mints.filter(forRepository).length,
+  };
+}
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
@@ -1014,6 +1074,39 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "an agent's pull request overview read twice reaches the repository through its installation once and mints one token for it, and a read past the token's hour mints afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, installation, github, ask } = yield* openTask({
+          github: publishedPullRequest,
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
+        // Note that the Start reached the repository itself, so the reads begin past every kept answer.
+        yield* TestClock.adjust(Duration.hours(2));
+        const asked = github.sent.length;
+        const overview = () => ask(request(AGENT_OVERVIEW, owner, { id: agent.id }));
+
+        const cold = yield* overview();
+        const warm = yield* overview();
+
+        assert.equal(cold.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(cold.body));
+        assert.deepEqual(warm, cold);
+        assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
+          installationReads: 1,
+          listings: 1,
+          listingMints: 1,
+          repositoryMints: 1,
+        });
+
+        const later = github.sent.length;
+        yield* TestClock.adjust(Duration.hours(1));
+        assert.deepEqual(yield* overview(), cold);
+        assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
       }),
   );
 });
