@@ -218,7 +218,7 @@ test("a version holds a chip with a comma it wrote in after it, and leaves a men
 test("a chip held with its punctuation is cut by a length alone, never a share of the box it stands in, which takes its width from the chip", () => {
   const surfaces = [
     drawn(createElement(TranscriptWords, { text: WORDS })),
-    drawn(createElement(PlanBody, { plan: PLAN, live: false, sectionLinks: SECTION_LINKS })),
+    drawn(createElement(PlanBody, { task: PLAN, live: false, sectionLinks: SECTION_LINKS })),
     // A version that wrote every chip in, so each stands in its change's mark inside the box.
     drawn(createElement(Version, { previous: { body: "## Rollout\n\nRead.", assumptions: [] } })),
   ];
