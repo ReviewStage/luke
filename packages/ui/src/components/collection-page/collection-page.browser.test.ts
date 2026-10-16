@@ -151,3 +151,52 @@ test("a desktop page narrows its inset in a pane under 480px wide", async () => 
   const narrow = await mount(createElement(Plans, { state: COLLECTION_STATE.READY, width: 400 }));
   expect(wide - (box(title()).left - box(narrow.container).left)).toBe(40 - 24);
 });
+
+test("acts too many for a phone's header wrap under the title, every one inside the page", async () => {
+  const { container } = await mount(
+    frame(
+      320,
+      createElement(CollectionPage, {
+        title: "Plans",
+        actions: ["Import", "Export", "New plan"].map((name) =>
+          createElement(Button, { key: name, children: name }),
+        ),
+        state: COLLECTION_STATE.EMPTY,
+        loadingLabel: "Reading plans",
+        empty: createElement("p", null, "No plans yet"),
+      }),
+    ),
+  );
+  const pageBox = box(container.querySelector(".luke-collection-page"));
+  for (const name of ["Import", "Export", "New plan"]) {
+    const act = box(page.getByRole("button", { name }).element());
+    expect(act.left).toBeGreaterThanOrEqual(pageBox.left);
+    expect(act.right).toBeLessThanOrEqual(pageBox.right);
+  }
+});
+
+test("filters taller than half a short pane scroll themselves, and the content keeps the rest", async () => {
+  const { container } = await mount(
+    createElement(
+      "div",
+      { style: { display: "flex", width: "320px", height: "240px" } },
+      createElement(CollectionPage, {
+        title: "Plans",
+        filters: Array.from({ length: 12 }, (_, index) =>
+          createElement(Button, { key: index, children: `Filter ${index + 1}` }),
+        ),
+        state: COLLECTION_STATE.READY,
+        loadingLabel: "Reading plans",
+        children: createElement(List, {
+          label: "Plans",
+          children: createElement(ListRow, { title: "Launch checklist" }),
+        }),
+      }),
+    ),
+  );
+  const scroll = box(container.querySelector(".luke-collection-page-scroll"));
+  expect(scroll.height).toBeGreaterThanOrEqual(120);
+  await expect.element(page.getByText("Launch checklist")).toBeInViewport();
+  page.getByRole("button", { name: "Filter 12" }).element().scrollIntoView();
+  await expect.element(page.getByRole("button", { name: "Filter 12" })).toBeInViewport();
+});

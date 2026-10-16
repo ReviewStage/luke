@@ -48,17 +48,20 @@
   }
 
   /* The title's acts are centred on its first line, whatever a control's
-     height is beside the title's leading. */
+     height is beside the title's leading. Where they leave the title less
+     than a short word's room they wrap under it, and wrap among themselves
+     past the line's width, so no act stands outside the page. */
   .luke-collection-page-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--luke-control-gap);
     padding-top: var(--luke-collection-page-inset);
   }
 
   .luke-collection-page-heading {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 0;
+    min-width: min(100%, 120px);
     overflow-wrap: anywhere;
   }
 
@@ -76,8 +79,10 @@
 
   .luke-collection-page-actions {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
     align-items: center;
+    min-width: 0;
     gap: var(--luke-control-gap);
     margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
   }
@@ -92,12 +97,16 @@
 
   /* The header and filters stand still above the scroll, and reserve a
      scrollbar's gutter as the scroll does, so a scrollbar that takes room
-     narrows the column under them no more than them. Their
-     end gap is the content's room under the filters, which keeps a focus
-     ring on a filter inside what they clip. */
+     narrows the column under them no more than them. Their end gap is the
+     content's room under the filters, which keeps a focus ring on a filter
+     inside what they clip. In a pane too short for them they take half its
+     height at most and scroll themselves, so the content keeps the rest. */
   .luke-collection-page-top {
     flex: none;
-    overflow: hidden;
+    box-sizing: border-box;
+    max-height: 50%;
+    overflow-x: hidden;
+    overflow-y: auto;
     scrollbar-gutter: stable;
     padding-bottom: var(--luke-section-gap);
   }
