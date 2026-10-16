@@ -7,9 +7,10 @@ import { useMemberDirectory } from "./member-directory";
 /**
  * person-door.tsx -- where a press on a person goes: their page in the listed workspace, the page of someone who left, or a GitHub account's own page on GitHub.
  *
- * Every place that names a person draws them through `ActorRef` and their
- * card, and both ask here what a press opens, so a byline, an agent's
- * card, an Inbox pick, and Changes all open the same page the same way.
+ * Every place that names a person draws them through `ActorRef`, which asks
+ * here what a press on the name opens, so a byline, an agent's card, an
+ * Inbox pick, and Changes all open the same page the same way; a hover card
+ * is read, never a door, since the name it hangs from already is one.
  * A member, the reader among them, opens their page (`person-page.tsx`),
  * and so does someone who left, by the account id the service still
  * names them by. Someone GitHub names who is no member opens their GitHub

@@ -14,8 +14,8 @@ import { githubPageOf, OpenPersonProvider } from "./person-door";
 
 /**
  * A press on a person goes where the window can take it: a member's page,
- * the page of someone who left, or a GitHub account's own page on GitHub,
- * and each card names the same door under its rule. Outside the window,
+ * the page of someone who left, or a GitHub account's own page on GitHub;
+ * a card is read, never a door. Outside the window,
  * where nobody provides the opener, a person opens nothing. Synthetic people.
  */
 
@@ -100,24 +100,21 @@ function press(element: Element | null | undefined): void {
   act(() => element.click());
 }
 
-test("a member's name is a press that opens their page, and their card says Open profile", () => {
+test("a member's name is a press that opens their page, and their card is read, never a door", () => {
   const view = draw(createElement(ActorRef, { actor: DANA }));
   const named = view.querySelector(".actor-ref");
 
   assert.equal(named?.tagName, "BUTTON");
   press(named);
-  const door = cardOf(view).querySelector(".card-door");
-  assert.equal(door?.textContent, "Open profile");
-  press(door);
+  assert.equal(cardOf(view).querySelector("button"), null);
 
-  assert.deepEqual(opened, ["user-dana", "user-dana"]);
+  assert.deepEqual(opened, ["user-dana"]);
 });
 
 test("someone who left opens their page by the account id the service still names them by, with the name the place knows", () => {
   const view = draw(createElement(ActorRef, { actor: LEE }));
 
   press(view.querySelector(".actor-ref"));
-  assert.equal(cardOf(view).querySelector(".card-door")?.textContent, "Open profile");
   assert.deepEqual(opened, ["user-lee"]);
   assert.deepEqual(names, ["Lee Park"]);
 });
@@ -125,7 +122,6 @@ test("someone who left opens their page by the account id the service still name
 test("a GitHub account who is no member opens on GitHub, a person their profile and an App's bot its App's page", () => {
   const person = draw(createElement(ActorRef, { actor: OCTOCAT }));
   press(person.querySelector(".actor-ref"));
-  assert.equal(cardOf(person).querySelector(".card-door")?.textContent, "Open on GitHub");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -144,17 +140,15 @@ test("someone nobody names opens nothing, and outside the window nobody does", (
 
   const outside = draw(createElement(ActorRef, { actor: DANA }), false);
   assert.equal(outside.querySelector(".actor-ref")?.tagName, "SPAN");
-  assert.equal(cardOf(outside).querySelector(".card-door"), null);
 });
 
-test("a place's own door wins over the person's, on the name and on the card alike", () => {
+test("a place's own door wins over the person's", () => {
   let own = 0;
   const view = draw(createElement(ActorRef, { actor: DANA, onOpen: () => (own += 1) }));
 
   press(view.querySelector(".actor-ref"));
-  press(cardOf(view).querySelector(".card-door"));
 
-  assert.equal(own, 2);
+  assert.equal(own, 1);
   assert.deepEqual(opened, []);
 });
 

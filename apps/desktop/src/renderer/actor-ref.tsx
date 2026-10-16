@@ -52,7 +52,7 @@ import { Tooltip } from "./tooltip";
  * one target that hangs its card (`ActorRef`); a press opens what has a
  * page of its own: an agent's tab, an automation's page, a person's page,
  * the page of someone who left, or a GitHub account's on GitHub
- * (`person-door.tsx`), each card saying the same door under its rule. Every mark is
+ * (`person-door.tsx`); a card is read, never a door, since its name already is one. Every mark is
  * hidden from a screen reader, since its name always stands beside it or in
  * its card; a picture's address is masked by session replay as its text is.
  */
@@ -255,24 +255,15 @@ function ActorHead({
   );
 }
 
-/** What a person's card's way to their page says, and a GitHub account's to theirs. */
-const OPEN_PROFILE = "Open profile";
-const OPEN_ON_GITHUB = "Open on GitHub";
-
-/** A person's card: their face, name, email, and role, then what they last did here where the place knows, and under a rule the way to their page where the window has one. */
+/** A person's card: their face, name, email, and role, then what they last did here where the place knows. A press on their name, not the card, opens their page. */
 export function PersonCard({
   actor,
   latest,
-  onOpen,
 }: {
   actor: PersonActor;
   /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
-  /** Where the place naming them sends a press instead of their page, which the card's door goes to as well. */
-  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  const ownDoor = useActorDoor(actor);
-  const door = onOpen ?? ownDoor;
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -284,12 +275,6 @@ export function PersonCard({
         <>
           <CardRule />
           <CardNote>{latest}</CardNote>
-        </>
-      )}
-      {door === undefined ? null : (
-        <>
-          <CardRule />
-          <CardDoor label={OPEN_PROFILE} onOpen={door} />
         </>
       )}
     </HoverCard>
@@ -329,14 +314,10 @@ const SOMEONE_NOTES = {
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
 function SomeoneCard({
   actor,
-  onOpen,
 }: {
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
-  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
-  const ownDoor = useActorDoor(actor);
-  const door = onOpen ?? ownDoor;
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -344,12 +325,6 @@ function SomeoneCard({
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
       <CardNote>{SOMEONE_NOTES[actor.reason]}</CardNote>
-      {door === undefined ? null : (
-        <>
-          <CardRule />
-          <CardDoor label={OPEN_PROFILE} onOpen={door} />
-        </>
-      )}
     </HoverCard>
   );
 }
@@ -361,16 +336,8 @@ const GITHUB_WORDS = {
   OUTSIDE: "Not in this workspace",
 } as const;
 
-/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, that a person is no member here, and the way to their page on GitHub. */
-function GitHubCard({
-  actor,
-  onOpen,
-}: {
-  actor: GitHubActor;
-  onOpen?: (() => void) | undefined;
-}): React.JSX.Element {
-  const ownDoor = useActorDoor(actor);
-  const door = onOpen ?? ownDoor;
+/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. A press on their name opens their page on GitHub. */
+function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
@@ -381,12 +348,6 @@ function GitHubCard({
           corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
         />
       </div>
-      {door === undefined ? null : (
-        <>
-          <CardRule />
-          <CardDoor label={OPEN_ON_GITHUB} onOpen={door} />
-        </>
-      )}
     </HoverCard>
   );
 }
@@ -449,15 +410,15 @@ export function AutomationCard({
   );
 }
 
-/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's, its door the place's own where it hands one; none for the rest, whose name stands as a pill. */
-function actorCard(actor: Actor, onOpen?: () => void): ReactNode {
+/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
+function actorCard(actor: Actor): ReactNode {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
-      return <PersonCard actor={actor} onOpen={onOpen} />;
+      return <PersonCard actor={actor} />;
     case ACTOR_KIND.SOMEONE:
-      return <SomeoneCard actor={actor} onOpen={onOpen} />;
+      return <SomeoneCard actor={actor} />;
     case ACTOR_KIND.GITHUB:
-      return <GitHubCard actor={actor} onOpen={onOpen} />;
+      return <GitHubCard actor={actor} />;
     default:
       return undefined;
   }
@@ -496,7 +457,7 @@ export function ActorRef({
     </>
   );
   return (
-    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor, onOpen)}>
+    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor)}>
       {open === undefined ? (
         <span className="actor-ref" data-kind={actor.kind}>
           {inner}
