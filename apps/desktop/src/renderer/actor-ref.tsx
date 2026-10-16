@@ -613,7 +613,8 @@ function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): Reac
   return (
     <span className="actor-more-words">
       {faceName(actor, {})}
-      {githubBot(actor) ? " " : null}
+      {/* Note that a no-break space holds the badge to its name's line however the row wraps. */}
+      {githubBot(actor) ? "\u00a0" : null}
       <BotBadge actor={actor} />
       {face.says === undefined ? null : ` · ${face.says}`}
     </span>

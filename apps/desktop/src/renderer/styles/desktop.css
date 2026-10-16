@@ -1290,14 +1290,17 @@ ul.actor-stack {
 }
 
 /* A row's words wrap within the card, a long login anywhere, and a bot's
-   badge rides the line its name ends on. */
+   badge rides the line its name ends on. Note that the badge is an inline
+   box, not an inline-block, because a line may break before an
+   inline-block whatever no-break space precedes it. */
 .actor-more-words {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .actor-more-words .actor-bot {
-  display: inline-block;
+  display: inline;
+  white-space: nowrap;
 }
 
 .actor-stack-more {
