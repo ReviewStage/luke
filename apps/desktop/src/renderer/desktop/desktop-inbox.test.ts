@@ -1812,3 +1812,27 @@ test("a link to an item newer than its task's last read waits for the read of it
     "Page on-call too?",
   );
 });
+
+test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
+  startRead = (planId) =>
+    planId === quiet.id
+      ? Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        })
+      : undefined;
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});

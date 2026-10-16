@@ -264,7 +264,11 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
         ? live.read || planless.items.has(chosenAgentId) || holderEmpty
         : true;
   const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
-  const standIn = chosen === undefined && !chosenWaits && !missing ? firstChoice(list) : undefined;
+  // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.
+  const standIn =
+    chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
+      ? firstChoice(list)
+      : undefined;
   const { onChoose } = view;
   const choose = useCallback(
     ({ holder, item }: InboxListed) =>
