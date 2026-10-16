@@ -1,4 +1,5 @@
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
@@ -10,12 +11,15 @@ import {
   BlocksIcon,
   FactoryIcon,
   GitMergeIcon,
+  LinkIcon,
   MessageCircleQuestionIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
@@ -31,6 +35,7 @@ import { useWaitingItems, type WaitingItems } from "../planning/use-waiting-item
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { Tooltip } from "../tooltip";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import {
   agentMovedAt,
   FACTORY_BLOCK,
@@ -108,6 +113,16 @@ function openPullRequest(plans: PlansControl, plan: PlanSummary, pullRequest: Pl
   else plans.repositories.openGitHub(pullRequest.url);
 }
 
+/** What a row's Copy link copies: what a press on it opens, a place in Luke, or a pull request's page on GitHub. */
+type RowLink = { readonly place: LinkPlace } | { readonly url: string };
+
+/** What a pull request's row copies: its page on GitHub, which it opens, or its task where the service sent no page. */
+function pullRequestLink(plan: PlanSummary, pullRequest: PlanPullRequestLine): RowLink {
+  return pullRequest.url === undefined
+    ? { place: { kind: LINK_PLACE.TASK, planId: plan.id } }
+    : { url: pullRequest.url };
+}
+
 /** What a pull request still being built says: a draft, or its checks running. */
 function buildingWords(pullRequest: PlanPullRequestLine): string {
   return pullRequest.state === PULL_REQUEST_STATE.DRAFT
@@ -175,6 +190,20 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
   }, [root, board]);
 }
 
+/** Copy link for a row: its place's Luke link under the workspace handed down, or the page it opens outside Luke. */
+function useRowLinkItem(): (link: RowLink) => MenuAction | undefined {
+  const linkItem = useCopyLinkItem();
+  const copy = useCopyToast();
+  return (link) =>
+    "place" in link
+      ? linkItem(link.place)
+      : {
+          label: LINK_COPY.LABEL,
+          icon: <LinkIcon aria-hidden="true" />,
+          onSelect: () => copy(link.url, LINK_COPY.COPIED),
+        };
+}
+
 /**
  * A row that moves from one station's list to another keeps the keyboard:
  * React draws it anew in its new list and drops the one that held focus, so
@@ -210,7 +239,8 @@ function useFocusFollows(root: HTMLElement | null, board: FactoryBoard): void {
  * GitHub says so with ↗ after its words, one that failed wears the failed
  * mark before its time, and one waiting on the developer is in the unread
  * weight with a dot past its time. Its hover hangs `card`, or says its
- * words whole.
+ * words whole, and its right-click offers Copy link, copying what a press
+ * on it opens.
  */
 function FactoryRow({
   slide,
@@ -223,8 +253,11 @@ function FactoryRow({
   external = false,
   waiting = false,
   card,
+  link,
   onOpen,
 }: {
+  /** What Copy link copies: what a press on the row opens. */
+  link: RowLink;
   /** What the row is across stations, so a move slides it: its plan, agent, item, or pull request. */
   slide: string;
   glyph: React.ReactNode;
@@ -242,6 +275,8 @@ function FactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const now = useMinute();
+  const menu = useActionMenu(true);
+  const copyLink = useRowLinkItem()(link);
   return (
     <li className="sidebar-plan-item home-row inbox-row factory-row" data-factory-row={slide}>
       <Tooltip label={words} card={card}>
@@ -250,6 +285,7 @@ function FactoryRow({
           className="sidebar-plan"
           data-unread={String(waiting)}
           onClick={onOpen}
+          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
         >
           <span className="sidebar-plan-line">
             <span className="home-row-picture">{glyph}</span>
@@ -275,6 +311,14 @@ function FactoryRow({
           </span>
         </button>
       </Tooltip>
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label="Row actions"
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
     </li>
   );
 }
@@ -356,6 +400,7 @@ function Line({
       actor={who(plan)}
       at={taskTime(plan, TASK_ORDER.UPDATED)}
       card={card(plan)}
+      link={{ place: { kind: LINK_PLACE.TASK, planId: plan.id } }}
       onOpen={() => plans.onSelect(plan.id)}
     />
   );
@@ -374,6 +419,7 @@ function Line({
           at={stop.item.postedAt}
           waiting
           // Note that a question hangs no card, because its hover says the question whole, which its one line cuts short.
+          link={{ place: { kind: LINK_PLACE.INBOX_ITEM, planId: plan.id, itemId: stop.item.id } }}
           onOpen={() => ask(plan, stop.item.id)}
         />
       );
@@ -391,6 +437,7 @@ function Line({
         end={agentEndMark(agent, true)}
         waiting
         card={card(plan)}
+        link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
         onOpen={() => plans.onShowAgent(plan.id, agent.id)}
       />
     );
@@ -409,6 +456,7 @@ function Line({
           actor={who(plan, agent)}
           at={agentMovedAt(plan, agent)}
           card={card(plan)}
+          link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
           onOpen={() => plans.onShowAgent(plan.id, agent.id)}
         />
       );
@@ -425,6 +473,7 @@ function Line({
         at={factoryMovedAt(plan)}
         external={pullRequest.url !== undefined}
         card={card(plan)}
+        link={pullRequestLink(plan, pullRequest)}
         onOpen={() => openPullRequest(plans, plan, pullRequest)}
       />
     );
@@ -442,6 +491,7 @@ function Line({
       external={pullRequest.url !== undefined}
       waiting
       card={card(plan)}
+      link={pullRequestLink(plan, pullRequest)}
       onOpen={() => openPullRequest(plans, plan, pullRequest)}
     />
   );
@@ -456,6 +506,7 @@ function Line({
       at={at}
       external={pullRequest.url !== undefined}
       card={card(plan)}
+      link={pullRequestLink(plan, pullRequest)}
       onOpen={() => openPullRequest(plans, plan, pullRequest)}
     />
   );
@@ -559,9 +610,12 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
             ) : null}
             <Summary board={board} />
             {/* A teammate's task names its creator against the listed workspace's members. */}
-            <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-              <Line plans={plans} board={board} now={now} />
-            </MemberDirectory>
+            {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
+            <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+              <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+                <Line plans={plans} board={board} now={now} />
+              </MemberDirectory>
+            </LinkWorkspaceProvider>
           </>
         )}
       </div>

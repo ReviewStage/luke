@@ -704,3 +704,56 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
   assert.equal(name(), "Plan index failed");
   assert.ok(page.contains(document.activeElement));
 });
+
+test("a row's right-click offers Copy link, copying what a press on it opens: its task's link, its question's, its agent's, or its pull request's page", async () => {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
+  const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
+    callPlanId: DRAFT.id,
+    workspace: {
+      id: "workspace-personal",
+      slug: "acme",
+      name: "Acme",
+      role: "owner",
+      github: null,
+    },
+    inbox: [
+      {
+        planId: BILLING.id,
+        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
+      },
+    ],
+  });
+  const copyFrom = async (words: string) => {
+    act(() => {
+      row(page, words).dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    assert.deepEqual(
+      items.map((each) => each.textContent),
+      ["Copy link"],
+    );
+    await act(async () => items[0]?.click());
+  };
+  await copyFrom("Usage alerts");
+  await copyFrom(QUESTION);
+  await copyFrom("Plan index");
+  await copyFrom("#2505 ready to merge");
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${DRAFT.id}`,
+    `https://tryluke.dev/acme/plan/${BILLING.id}/inbox/i1`,
+    `https://tryluke.dev/acme/plan/${SEARCH.id}/agent/${AGENT_ID}`,
+    "https://github.com/acme/relay/pull/2505",
+  ]);
+});
