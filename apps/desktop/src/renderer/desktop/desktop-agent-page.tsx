@@ -33,11 +33,10 @@ import { ActionMenu, useActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
-  changesTabOf,
-  showPullRequest,
   planCards,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  showPullRequest,
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel";

@@ -4,9 +4,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
-  CHECK_SUMMARY,
   type CheckState,
-  type CheckSummary,
   CODING_AGENT_STATUS,
   type CodingAgentOverview,
   type CodingAgentPullRequest,
@@ -162,13 +160,6 @@ const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.PASSED,
   CHECK_STATE.SKIPPED,
 ];
-
-/** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
-function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
-  if (checks.some((check) => check.state === CHECK_STATE.FAILED)) return CHECK_SUMMARY.FAILING;
-  if (checks.some((check) => check.state === CHECK_STATE.PENDING)) return CHECK_SUMMARY.PENDING;
-  return checks.length === 0 ? CHECK_SUMMARY.NONE : CHECK_SUMMARY.PASSING;
-}
 
 /** How long a check ran, as "42s", "3m 5s", or "1h 2m"; none for one still running or never timed. */
 function durationOf(check: PullRequestCheck): string | undefined {

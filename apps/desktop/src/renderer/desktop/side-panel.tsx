@@ -219,7 +219,7 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Changes, and its Terminal, and no plan's Board,
+ * agent's workers, its Pull request, and its Terminal, and no plan's Board,
  * Code, Call, files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered.
  */
@@ -410,10 +410,11 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
  * that tab rather than opening another, as a browser's tab search does, so
  * no row says it is open; a file not open opens through the panel's one
- * door for a file on the newest snippet of it. Then, under Changes, each
- * agent's pull request (`changesOffers`), named as its Changes tab is, with
- * the pull request's number beside it, found by its title and number too,
- * which opens the agent's Changes tab. The plan's coding agents are opened
+ * door for a file on the newest snippet of it. Then, under Pull requests,
+ * each agent's pull request (`changesOffers`), named as its Pull request tab
+ * is (a kind still spelled `changes`, as the tab of its files alone was),
+ * with the pull request's number beside it, found by its title and number
+ * too, which opens the agent's Pull request tab. The plan's coding agents are opened
  * from the plan's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
@@ -508,7 +509,7 @@ export function planWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Changes tab's look, named for the agent as the plan's agents last read it. */
+/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agent = agents.agents?.find((each) => each.id === agentId);
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);

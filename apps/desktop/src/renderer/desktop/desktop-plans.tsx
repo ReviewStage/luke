@@ -65,11 +65,10 @@ import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import {
   COLUMN,
-  changesTabOf,
-  showPullRequest,
   planCards,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  showPullRequest,
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel";
@@ -497,7 +496,7 @@ function PlanDocument({
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
   // An agent's Changes chip opens its pull request's changes in the side panel, beside its
-  // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
+  // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
   const openChanges = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
   // Its pull request's chip opens the same tab on the pull request's overview.

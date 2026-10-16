@@ -219,12 +219,12 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the side panel's + offers a working subagent and an agent's Changes in the look their tabs wear", () => {
+test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear", () => {
   const panel = mount().querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
-  for (const name of [READER.title, `Changes: ${DONE.title}`]) {
+  for (const name of [READER.title, `Pull request: ${DONE.title}`]) {
     assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }

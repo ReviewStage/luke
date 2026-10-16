@@ -368,7 +368,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
+test("an archived agent's pull request, picked from the panel's +, opens in a Pull request tab standing beside its page", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   published = {
     repository: "acme/relay",
@@ -401,8 +401,8 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
   );
 
   assert.ok(
-    tabs.some((label) => label.includes("Changes")),
-    `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
 

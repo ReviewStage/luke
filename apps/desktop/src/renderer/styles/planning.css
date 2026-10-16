@@ -1573,7 +1573,6 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
-
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
    bar, wearing the pull request's standing as a pill in its own colour and
    its branches quiet beside it, over the page read top to bottom in one
@@ -1591,9 +1590,33 @@ button.file-ref:hover .file-ref-path {
   --boxed-inset: calc(var(--row-inset) - 1px);
 }
 
-.pull-request-bar {
+.pull-request-bar,
+.pull-request-tab .file-view-bar {
   gap: var(--control-gap);
   padding-inline: var(--column-inset);
+}
+
+/* The files' strip of who the pull request names stands on no box, so its
+   words start at the content inset. */
+.pull-request-tab .changes-people {
+  padding-inline: var(--content-inset) var(--column-inset);
+}
+
+/* The view the switch shows fills the room under the bar, the other kept
+   drawn but hidden, so switching back draws what it last read. */
+.pull-request-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pull-request-view[hidden] {
+  display: none;
+}
+
+.pull-request-bar .segmented {
+  flex: 0 0 auto;
 }
 
 .pull-request-state {
@@ -1609,7 +1632,9 @@ button.file-ref:hover .file-ref-path {
   font-weight: 600;
 }
 
+/* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
+  margin: var(--space-2) 0 0;
   min-width: 0;
   overflow: hidden;
   color: var(--text-tertiary);
@@ -1635,6 +1660,7 @@ button.file-ref:hover .file-ref-path {
 /* The words that stand on the page rather than in a box, at the content
    inset. */
 .pull-request-title,
+.pull-request-page .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,
 .pull-request-none,
