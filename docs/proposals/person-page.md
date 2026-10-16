@@ -64,8 +64,8 @@ page do (`STAND_IN.PERSON {userId}`), and Back returns from it. Its head is:
 
 - their face at 48px;
 - their name;
-- a line of their role and email, plus their GitHub login once members carry
-  one.
+- a line of their role and email. Dean decided the page shows no GitHub
+  login, since the service keeps only GitHub's numeric account id.
 
 Under the head is one column in Home's own voice. Each section lists only
 what the window already reads for the listed workspace:
@@ -83,7 +83,6 @@ tasks in sidebar**, which calls #2899's `onCreatedBy`. ⋯ holds:
 
 - Copy link to profile, after 341 adds the link;
 - Copy email;
-- Open on GitHub, once members carry a login;
 - Manage in workspace settings, for owners and admins.
 
 ### The cases
@@ -93,7 +92,7 @@ tasks in sidebar**, which calls #2899's `onCreatedBy`. ⋯ holds:
 | A teammate | Their page in the listed workspace |
 | You | Your page, with You, "Waiting on you", and Edit profile (Settings › Profile) |
 | A former member | Their page, read-only: Former member, whatever of theirs is still in the workspace, no email, no ⋯ |
-| A GitHub user who isn't a member | Their GitHub profile in the browser (↗); the card says Open on GitHub |
+| A GitHub user who isn't a member | Their GitHub profile in the browser (↗), by the login GitHub names them by |
 | A GitHub login linked to a member | That member's page (`githubActor` already resolves the `userId`) |
 | Your personal workspace | Your page lists that workspace alone, with no sidebar filter |
 
@@ -167,8 +166,9 @@ check that each event's item is one the viewer may open.
    - the task card's Created by line.
 3. `feat(desktop): ways to a person: ⌘K, Members, and the sidebar filter`.
 4. `feat(desktop,features): copy a link to a person`, after 341.
-5. `feat(service,features,desktop): members carry their GitHub login`, and
-   optionally the date a member left.
+5. `feat(service,features,desktop): a person's page lists the workspace's
+   automations they made`. The GitHub login this PR was to add is dropped
+   (decision 11).
 6. `feat(service,features,ui,desktop): a member who left keeps their picture,
    grayed`: the members read names who left with their picture, and
    `ActorMark` draws it in grayscale.
@@ -199,4 +199,5 @@ check that each event's item is one the viewer may open.
    no Mention.
 10. **Placement.** A stand-in page with Back, no sidebar row, and a ⌘K People
     group.
-11. **Members carry a GitHub login and leave date.** Later, in their own PR.
+11. **Members carry a GitHub login and leave date.** Dropped: Dean decided
+    the page shows no GitHub login, with no follow-up.
