@@ -169,17 +169,38 @@ type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }
 /** A mention the part hands something for. */
 type Handed = PlanMention | ServerMention | LinesMention | TaskMention;
 
-/** A fence of backticks longer than any run the words hold, so the words stay one block inside it. */
-function fenceFor(words: string): string {
-  const longest = Math.max(0, ...[...words.matchAll(/`+/gu)].map((run) => run[0].length));
-  return "`".repeat(Math.max(3, longest + 1));
+/** The longest run of the character the words hold. */
+function longestRun(words: string, character: string): number {
+  let longest = 0;
+  let run = 0;
+  for (const each of words) {
+    run = each === character ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  return longest;
 }
 
-/** What a mention of a page is handed as: its id, which its next version is written under, and its HTML as it stood, cut to its bound. */
+/**
+ * A fence longer than any run of its character the words hold, so the
+ * words stay one block inside it: of backticks or of tildes, whichever is
+ * the shorter, since a page may hold a long run of either but seldom both.
+ */
+function fenceFor(words: string): string {
+  const ticks = longestRun(words, "`");
+  const tildes = longestRun(words, "~");
+  return ticks <= tildes ? "`".repeat(Math.max(3, ticks + 1)) : "~".repeat(Math.max(3, tildes + 1));
+}
+
+/**
+ * What a mention of a page is handed as: its id, which its next version is
+ * written under, and its HTML as it stood, cut so the HTML and both its
+ * fences together stay inside its bound, however long the fence.
+ */
 function pageNoteOf(pageId: string, name: string, reads: MentionedReads): string {
   const page = reads.pages.get(pageId);
   if (page === undefined) return `The page "${name}": no longer on this task.`;
-  const html = cutOnLine(page.html, MENTIONED_BOUNDS.PAGE_CHARS);
+  const room = MENTIONED_BOUNDS.PAGE_CHARS - 2 * fenceFor(page.html).length;
+  const html = cutOnLine(page.html, Math.max(0, room));
   const fence = fenceFor(html);
   return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) shown on this task. To change it, show it again with \`${AGENT_TOOL.SHOW_PAGE}\` and \`page: "${page.id}"\`, which writes its next version in its place. Its HTML as it stands:\n\n${fence}html\n${html}\n${fence}`;
 }

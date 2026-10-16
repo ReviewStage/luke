@@ -405,12 +405,12 @@ const READS = {
   agents: new Map([[OTHER_AGENT_ID, OTHER_AGENT]]),
 };
 
-test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close", () => {
+test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close, of tildes", () => {
   const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, PLAN, READS);
 
   assert.equal(
     part,
-    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place. Its HTML as it stands:\n\n\`\`\`\`html\n${PAGE_HTML}\n\`\`\`\``,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place. Its HTML as it stands:\n\n~~~html\n${PAGE_HTML}\n~~~`,
   );
 });
 
@@ -470,4 +470,19 @@ test("a long page is cut on a line to its bound, saying how much was left out", 
 
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
   assert.match(part, /\n… \(\d+ more characters\)\n```$/u);
+});
+
+test("a page whose HTML holds a long run of backticks is still handed, its fence and HTML inside the page's bound", () => {
+  const ticks = "`".repeat(11_000);
+  const part =
+    mentionedContext(`See ${page("Ticks")}.`, PLAN, {
+      pages: new Map([
+        [PAGE_ID, { id: PAGE_ID, title: "Ticks", version: 1, at: 0, html: `<pre>${ticks}</pre>` }],
+      ]),
+      agents: new Map(),
+    }) ?? "";
+
+  assert.match(part, /the page "Ticks"/u);
+  assert.match(part, /\n~~~html\n<pre>`+<\/pre>\n~~~$/u);
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
 });

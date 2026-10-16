@@ -216,6 +216,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
   const words = brief.prompt ?? (ask.planId === null ? undefined : ask.note);
+  // What the words mention of the plan's pages and agents is read before the agent is made, so a
+  // read that fails leaves no agent its retry would find and never open a session for.
+  const reads =
+    words === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
@@ -237,10 +243,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (!created) return { agent, created };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh.
-  const reads =
-    words === undefined
-      ? undefined
-      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
   const sessions = yield* eve;
   const opened = yield* sessions
     .open({

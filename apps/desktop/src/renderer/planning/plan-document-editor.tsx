@@ -29,6 +29,7 @@ import {
   retargetedMention,
 } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
+import { usePlanMentions } from "./plan-mentions";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
@@ -591,6 +592,8 @@ export function PlanDocumentEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
+  // The plan's pages and agents are offered as the page's agents' boxes offer them.
+  const page = usePlanMentions();
   const picker = useMentionPicker({
     source: {
       planId: plan.id,
@@ -598,6 +601,8 @@ export function PlanDocumentEditor({
       workspace: mentions?.place.workspace ?? "",
       repository: plan.repository,
       text,
+      pages: page?.pages,
+      agents: page?.agents,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,

@@ -12,6 +12,7 @@ import {
 } from "@luke/database/models/automation-store";
 import {
   readCodingAgent,
+  readCodingAgentByKey,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
@@ -497,6 +498,33 @@ const openPlan = (
   });
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
+  it.effect(
+    "a Start whose prompt mentions a page the store cannot read is refused before any agent is made, so a retry under its key starts afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const shown = yield* writePage(owner, plan.id, { title: "Chart", html: "<h1>Chart</h1>" });
+        assert.ok(Option.isSome(shown));
+        const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: plan.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: plan.repository })}.`;
+        const idempotencyKey = randomUUID();
+        const sql = yield* SqlClient.SqlClient;
+        // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
+        const answered = yield* Effect.ensuring(
+          Effect.andThen(
+            sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
+            ask(startAs(owner, plan.id, { idempotencyKey, task: prompt })),
+          ),
+          Effect.orDie(
+            sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
+          ),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, idempotencyKey)));
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
   it.effect(
     "a member deleting a plan a teammate planned on retires the teammate's eve session before the plan goes",
     () =>
