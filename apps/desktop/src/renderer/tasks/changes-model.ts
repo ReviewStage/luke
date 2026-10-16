@@ -2,7 +2,10 @@ import {
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
   type CodingAgentChangedFile,
+  DIFF_SIDE,
+  type DiffSide,
   PATCH_OMITTED,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import {
   FILE_MARK,
@@ -26,7 +29,45 @@ import {
  * a folder at a time: the folders here are listed from the changed paths
  * alone (`changedFolders`), so either shows only what changed, each file
  * marked as an editor's source control marks it (`changeMarks`).
+ *
+ * A review thread on the pull request's overview previews the lines it is
+ * on as a diff's rows (`threadPreview`): GitHub freezes the hunk a thread
+ * was made on, from the hunk's start to the thread's line, so the preview
+ * is the end of that hunk, from a few rows above the first line the thread
+ * is on down to its last, counted where the thread was made rather than
+ * where it stands now, since a later push moves the one and not the other.
  */
+
+/** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
+export const DIFF_ROW = {
+  CONTEXT: "context",
+  ADDED: "added",
+  REMOVED: "removed",
+  NOTE: "note",
+} as const;
+
+type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
+
+/** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
+export interface DiffRow {
+  readonly kind: DiffRowKind;
+  readonly oldLine: number | undefined;
+  readonly newLine: number | undefined;
+  readonly text: string;
+}
+
+/** The kind of row each mark starts in a hunk; a line of context starts with a space. */
+const ROW_MARK = new Map<string, DiffRowKind>([
+  ["+", DIFF_ROW.ADDED],
+  ["-", DIFF_ROW.REMOVED],
+  ["\\", DIFF_ROW.NOTE],
+]);
+
+/** How many rows a review thread's preview shows above the first line it is on. */
+const THREAD_CONTEXT_ROWS = 3;
+
+/** A hunk's header: where it starts on each side, and what it counts. */
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/u;
 
 /** What the tab says where the changes cannot be drawn. */
 export const CHANGES_WORDS = {
@@ -137,4 +178,63 @@ export function filePatch(file: CodingAgentChangedFile): string | undefined {
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
+}
+
+/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
+function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
+  let oldLine = oldStart;
+  let newLine = newStart;
+  return lines.map((line) => {
+    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
+    const text = line.slice(1);
+    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
+    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
+    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
+    return { kind, oldLine: oldLine++, newLine: newLine++, text };
+  });
+}
+
+/**
+ * The rows of the hunk GitHub froze for a review thread, numbered from its
+ * header; none where it does not start with one. Note that the header's
+ * counts are not read, because GitHub keeps the whole hunk's while cutting
+ * its lines at the thread's line.
+ */
+function frozenRows(diffHunk: string): readonly DiffRow[] | undefined {
+  const [header = "", ...written] = diffHunk.split("\n");
+  const match = HUNK_HEADER.exec(header);
+  if (match === null) return undefined;
+  const lines = written.at(-1) === "" ? written.slice(0, -1) : written;
+  return rowsOf(lines, Number(match[1]), Number(match[2]));
+}
+
+/** A row's number on the side given, none where it does not stand on that side. */
+function lineOn(row: DiffRow, side: DiffSide): number | undefined {
+  return side === DIFF_SIDE.LEFT ? row.oldLine : row.newLine;
+}
+
+/**
+ * The rows a review thread previews: the end of the hunk GitHub froze for
+ * it, from a few rows above the first line of its range to its line, each
+ * found on the side it counts on; the hunk's last row where its line is
+ * not found, since GitHub ends the hunk there. None where the hunk is
+ * empty or does not read as a diff.
+ */
+export function threadPreview(
+  thread: Pick<
+    ReviewThread,
+    "diffHunk" | "originalLine" | "originalStartLine" | "side" | "startSide"
+  >,
+): readonly DiffRow[] | undefined {
+  const rows = frozenRows(thread.diffHunk) ?? [];
+  if (rows.length === 0) return undefined;
+  const { originalLine: line, originalStartLine: startLine, side } = thread;
+  const found = rows.findLastIndex((row) => line !== null && lineOn(row, side) === line);
+  const end = found === -1 ? rows.length - 1 : found;
+  const startSide = thread.startSide ?? side;
+  const first = rows.findIndex(
+    (row, at) => at <= end && startLine !== null && lineOn(row, startSide) === startLine,
+  );
+  const start = first === -1 ? end : first;
+  return rows.slice(Math.max(0, start - THREAD_CONTEXT_ROWS), end + 1);
 }
