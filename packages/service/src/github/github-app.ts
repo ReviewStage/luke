@@ -1382,9 +1382,10 @@ function githubAppService(
      */
     const standingReach = (key: ReachKey) =>
       Effect.gen(function* () {
-        const linked = yield* installationsOfWorkspace(key.organizationId);
         const kept = yield* Cache.get(reaches, key);
         if (Result.isFailure(kept)) return kept;
+        // Note that the links are read after the reach, because a reach afresh mends a stale status first.
+        const linked = yield* installationsOfWorkspace(key.organizationId);
         const throughId = kept.success.installation.id;
         const stands = linked.some(
           (one) =>

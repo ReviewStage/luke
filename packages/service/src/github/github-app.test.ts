@@ -717,6 +717,26 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
   );
 
   it.effect(
+    "a reach of an installation the store holds suspended but GitHub runs mends the store and is kept as it is, reading the installation once",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(212);
+        const fake = githubReaching([relay]);
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, relay);
+        yield* setInstallationStatus(relay.id, GITHUB_INSTALLATION_STATUS.SUSPENDED);
+        const app = yield* GitHubApp;
+
+        const minted = yield* app
+          .repositoryReadToken(workspace, "octo-org/relay")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.ok(Option.isSome(minted));
+        assert.equal(fake.sent.filter((one) => one.url.endsWith("/installations/212")).length, 1);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
     "a mint GitHub refused, a repository not yet reached, and a token GitHub expires within the margin are never kept: the next ask asks GitHub again",
     () =>
       Effect.gen(function* () {
