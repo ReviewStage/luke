@@ -7,6 +7,8 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
+import type { PageLine } from "@luke/features/page-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -26,7 +28,8 @@ import { DesktopTasks } from "./desktop-tasks";
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
  * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, and the plan's own tab hangs the plan's card.
+ * that strip's "+" menu wears, the plan's own tab hangs the plan's card, and
+ * a page's tab hangs a card previewing the page.
  */
 
 const TASK: Task = {
@@ -94,6 +97,14 @@ const DONE = agent(
 
 const DRAFT = "draft-1";
 
+/** A page an agent showed on the plan, at its third version. */
+const FUNNEL: PageLine = {
+  id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+  title: "Invite funnel",
+  version: 3,
+  at: 1_800_000_000_000,
+};
+
 /** A planning worker still at work, on a model whose harness Luke knows. */
 const READER = worker("w", "Read the invite emails.", {
   state: TASK_WORK_STATE.RUNNING,
@@ -113,7 +124,7 @@ afterEach(() => {
 /**
  * The plan open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with a working subagent's tab, the done
- * agent's Changes tab, and the working agent's Terminal tab.
+ * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
@@ -138,7 +149,9 @@ function mount(): HTMLElement {
       subagents: [{ subagent: READER.callId }],
       changes: [{ changes: DONE.id }],
       terminals: [{ terminal: WORKING.id }],
+      pages: [{ page: FUNNEL.id }],
     },
+    pages: [FUNNEL],
     work: {
       ...base.work,
       conversation: conversationOf([
@@ -265,4 +278,29 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
     [...card.querySelectorAll(".card-note")].at(-1)?.textContent,
     "Terminal in this agent’s sandbox",
   );
+});
+
+test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", () => {
+  const panel = mount().querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
+  );
+  assert.ok(tab, "the strip has the page's tab");
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-page-card]");
+  assert.ok(card, "the page's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, FUNNEL.title);
+  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 3");
+  const frame = card.querySelector("iframe");
+  assert.ok(frame, "the card previews the page");
+  assert.equal(
+    frame.getAttribute("src"),
+    pageFrameUrl({ taskId: TASK.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  );
+  assert.equal(frame.getAttribute("sandbox"), "allow-scripts");
+  assert.equal(frame.tabIndex, -1);
+  assert.equal(frame.getAttribute("aria-hidden"), "true");
+  assert.ok(frame.closest(".ph-no-capture"), "the preview is left out of the recording");
 });

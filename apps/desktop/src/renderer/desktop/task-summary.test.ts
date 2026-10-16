@@ -8,6 +8,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -33,7 +34,8 @@ import {
  * task-summary.test.ts -- the summary's pull request row hangs the Changes
  * card, whose agent opens through the door the plan hands it, the one that
  * gives the plan's column the keys, and whose card previews the running
- * agent's latest step while the plan's column shows that agent. A column too
+ * agent's latest step while the plan's column shows that agent. A page's
+ * row hangs the page's tab's card, previewing it. A column too
  * narrow to spare the rail draws none, and the toolbar's button hangs the
  * card in its place. A plan with nothing to list draws neither the summary
  * nor its button. Synthetic agents and pull requests throughout.
@@ -170,6 +172,49 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(named, "the Changes card names the agent");
   return named;
 }
+
+test("a page's row hangs the page's tab's card, previewing its newest version", () => {
+  const funnel = {
+    id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+    title: "Invite funnel",
+    version: 1,
+    at: 1,
+  };
+  const taskId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const tasks = tasksControl({ activeTaskId: taskId, pages: [funnel] });
+  const page = document.createElement("div");
+  document.body.append(page);
+  root = createRoot(page);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskSummary, {
+          tasks,
+          layout: PINNED,
+          cardId: "summary-card",
+          inbox: { open: [], settled: [] },
+          held: HELD,
+          repository: "acme/relay",
+          onOpenAgent: () => undefined,
+        }),
+      ),
+    ),
+  );
+  const row = [...page.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes(funnel.title),
+  );
+  assert.ok(row, "the page has a row");
+  hover(row);
+  const card = document.querySelector(".tooltip-card [data-page-card]");
+  assert.ok(card, "the page's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, funnel.title);
+  assert.equal(card.querySelector(".card-sub"), null, "a page's one version is not counted");
+  assert.equal(
+    card.querySelector("iframe")?.getAttribute("src"),
+    pageFrameUrl({ taskId, pageId: funnel.id, version: 1 }),
+  );
+});
 
 test("the agent a pull request row's card names opens through the plan's door, which hands its column the keys", () => {
   const { page, opened } = mount("plan");
