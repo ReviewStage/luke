@@ -174,6 +174,8 @@ export class AccountSessionManager {
   #cancelSignIn: (() => void) | undefined;
   #sessionRunning: Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>> | undefined;
   #cancelSession: (() => void) | undefined;
+  /** The sign-out a refused renewal started, which `refresh` waits on and no renewal does. */
+  #signingOut: Fiber.Fiber<AccountSnapshot> | undefined;
 
   private constructor(
     options: AccountSessionManagerOptions,
@@ -286,6 +288,9 @@ export class AccountSessionManager {
       }
       if (!accessTokenNeedsRefresh(identity.failure)) return;
       yield* this.renewOnce();
+      // Note that the launch's refresh holds nothing a teardown needs, so it
+      // alone waits for the sign-out a refused renewal started.
+      if (this.#signingOut) yield* Fiber.await(this.#signingOut);
     });
   }
 
@@ -295,6 +300,11 @@ export class AccountSessionManager {
    * comes first: Better Auth answers a token it no longer holds with 400
    * `invalid_request` rather than a 401, and a read taking that as a token
    * still good would leave a dead one standing on every call after it.
+   *
+   * A refusal that signs out starts the sign-out and does not wait on it,
+   * because a renewal's caller may hold a lock the sign-out's capability stop
+   * needs: the Plans read holds the tasks lock while it waits here, and
+   * `tasks.reset` waits on that lock, so waiting would deadlock both.
    */
   #renew(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -307,7 +317,7 @@ export class AccountSessionManager {
           accountFailureAction(renewed.failure) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
           this.#isCurrent(generation)
         ) {
-          yield* this.signOut();
+          this.#signingOut = yield* Effect.forkDetach(this.signOut());
         }
         return;
       }

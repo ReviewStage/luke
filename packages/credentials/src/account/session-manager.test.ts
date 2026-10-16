@@ -7,7 +7,7 @@ import {
   HTTP_STATUS,
   jsonResponse,
 } from "@luke/wire/testing";
-import { Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -27,6 +27,8 @@ function manager(options: {
   client?: AccountClient;
   /** Who the service says a token belongs to; the stored account's person unless given. */
   identity?: { id: string; email: string };
+  /** The capability stop a sign-out runs; recording "stop" unless given. */
+  stopCapabilities?: Effect.Effect<void>;
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
   /** Whose session the hand-off's exchange answers; the stored account's person unless given. */
@@ -109,9 +111,11 @@ function manager(options: {
       startCapabilities: Effect.sync(() => {
         events.push("start");
       }),
-      stopCapabilities: Effect.sync(() => {
-        events.push("stop");
-      }),
+      stopCapabilities:
+        options.stopCapabilities ??
+        Effect.sync(() => {
+          events.push("stop");
+        }),
     });
     // The subscriber every test is: a fiber forked into the test's own scope,
     // pumping every snapshot the instance settles on, exactly as
@@ -199,6 +203,40 @@ it.effect(
       yield* subject.instance.refresh();
 
       assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+      assert.equal(subject.stored(), undefined);
+    }),
+);
+
+it.effect(
+  "a renewal that signs out answers its caller before the sign-out's capability stop settles",
+  () =>
+    Effect.gen(function* () {
+      // The stop waits on the renewal's caller, as `tasks.reset` waits on the
+      // lock a Plans read holds while it renews.
+      const callerDone = yield* Deferred.make<void>();
+      const subject = yield* manager({
+        stored: STORED,
+        client: refreshingClient(() =>
+          Promise.resolve(
+            jsonResponse(
+              { error: "invalid_grant", error_description: "Refresh token was revoked" },
+              400,
+            ),
+          ),
+        ),
+        stopCapabilities: Deferred.await(callerDone),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const changes = yield* subject.instance.changes;
+
+      yield* subject.instance.renewOnce();
+      yield* Deferred.succeed(callerDone, undefined);
+
+      const settled = yield* Stream.runCollect(Stream.take(changes, 2));
+      assert.deepEqual(
+        settled.map((account) => account.status),
+        [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT],
+      );
       assert.equal(subject.stored(), undefined);
     }),
 );
