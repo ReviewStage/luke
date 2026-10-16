@@ -15,18 +15,30 @@ import { RotateCwIcon } from "lucide-react";
 
 const RETRY_WORD = "Retry";
 
-/** The retry beside a failure's words; `label` names what it reads again where "Retry" alone would not say. */
+/**
+ * The retry beside a failure's words; `label` names what it reads again where
+ * "Retry" alone would not say. Its words stand in `.retry-word`, so a bar
+ * short of room can draw the glyph alone, named still, with a `Tooltip`
+ * around it, whose props it takes, saying the words.
+ */
 export function RetryButton({
   onRetry,
   label = RETRY_WORD,
+  ...anchor
 }: {
   onRetry: () => void;
   label?: string;
-}): React.JSX.Element {
+} & Omit<React.ComponentProps<"button">, "type" | "className" | "onClick">): React.JSX.Element {
   return (
-    <button type="button" className="toolbar-button quiet-button" onClick={onRetry}>
+    <button
+      type="button"
+      className="toolbar-button quiet-button"
+      aria-label={label}
+      {...anchor}
+      onClick={onRetry}
+    >
       <RotateCwIcon aria-hidden="true" />
-      {label}
+      <span className="retry-word">{label}</span>
     </button>
   );
 }

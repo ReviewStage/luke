@@ -1,5 +1,5 @@
-import { CloseIcon } from "@luke/ui";
-import { useLayoutEffect, useRef, useState } from "react";
+import { ChevronDownIcon, CloseIcon } from "@luke/ui";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -49,12 +49,18 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * and said whole in its hint, or in the card a tab with more to say hangs
  * in its hint's place. A label measured cut short wears
  * `data-overflow`, which desktop.css fades out at its end, as Chrome's and
- * Arc's tabs do, rather than ending it in an ellipsis. Past holding them all,
- * the strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
+ * Arc's tabs do, rather than ending it in an ellipsis. Short of room, every
+ * tab gives way down to a floor that keeps its glyph and a few letters, as
+ * Chrome's do, the chosen tab last and never wider than the strip, so its
+ * glyph and its × always show. Past holding them all at that floor, the
+ * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
  * sideways, and the tab chosen, or the one the keyboard reaches, is brought
- * into the room it shows, and kept there as the strip is narrowed. An edge
- * the strip hides tabs beyond wears `data-overflow-start` or
- * `data-overflow-end`, which desktop.css fades.
+ * into the room it shows, and kept there as the strip is narrowed. A tab the
+ * strip cuts short wears `data-hidden`, which desktop.css draws not at all
+ * rather than as a sliver, and a chevron after the strip counts those tabs
+ * and lists them, as VS Code's and Chrome's tab lists do, choosing one
+ * bringing it into view (`TabOverflow`), so no tab is out of reach however
+ * narrow its column.
  *
  * Its words are text, which the session recording masks with the rest.
  */
@@ -75,14 +81,29 @@ const WHEEL_DELTA = {
 const WHEEL_LINE = 16;
 
 /**
- * How far, in CSS pixels, the strip hides its tabs past an edge before that
- * edge fades: more than the sub-pixel the tabs' fractional widths can leave
- * over a strip that, to the eye, holds them all.
+ * How far, in CSS pixels, a tab reaches past the strip's edge before it is
+ * hidden: more than the sub-pixel the tabs' fractional widths can leave over
+ * a strip that, to the eye, holds them all.
  */
 const OVERFLOW_SLACK = 1;
 
 /** What an unread tab says in its hint and to a reader beyond its label. */
 const UNREAD_TAB_NOTE = "New result";
+
+/** What the strip's overflow lists of one of its tabs: its glyph, its label, its news, and the press that chooses it. */
+interface ListedTab {
+  icon: React.JSX.Element;
+  label: string;
+  unread: boolean;
+  onSelect: () => void;
+}
+
+/**
+ * The strip's tabs as each last drew itself, by its button, so the overflow
+ * lists the tabs it measured hidden in their own words and glyphs. Each
+ * `Tab` writes itself in while drawn and takes itself out when it goes.
+ */
+const StripTabs = createContext<Map<Element, ListedTab> | undefined>(undefined);
 
 /** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
 function tabHint(input: {
@@ -132,33 +153,52 @@ function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
 }
 
 /**
+ * How much further the strip scrolls, past a tab it would cut at its start
+ * edge `edge`, to begin on the next tab whole. Note that a tab cut short is
+ * not drawn, so without this its room would stand empty at the strip's start
+ * rather than after its last tab shown.
+ */
+function startGap(strip: HTMLElement, edge: number): number {
+  for (const pill of strip.querySelectorAll(".tab")) {
+    const left = pill.getBoundingClientRect().left;
+    if (left >= edge - OVERFLOW_SLACK) return Math.max(0, left - edge);
+  }
+  return 0;
+}
+
+/**
  * Scrolls the strip, and nothing around it, the least that shows the whole
- * of `tab`'s pill clear of the faded edges. Note that the strip's own scroll
- * padding is that clearance, and its scroll behaviour whether it glides, so
- * the stylesheet holds both, and a pane sliding in is never scrolled with it.
- * A strip just drawn is put there at once, as a page opens already scrolled.
+ * of `tab`'s pill, and on to begin on a tab whole (`startGap`). Note that
+ * the strip's scroll behaviour, whether it glides, is the stylesheet's, and
+ * a pane sliding in is never scrolled with it. A strip just drawn is put
+ * there at once, as a page opens already scrolled.
  */
 function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   const pill = tab.closest(".tab") ?? tab;
   const shown = strip.getBoundingClientRect();
   const own = pill.getBoundingClientRect();
-  const style = getComputedStyle(strip);
-  const before = shown.left + (Number.parseFloat(style.scrollPaddingLeft) || 0) - own.left;
-  const after = own.right - shown.right + (Number.parseFloat(style.scrollPaddingRight) || 0);
+  const before = shown.left - own.left;
+  const after = own.right - shown.right;
   if (before > 0) scrollStrip(strip, -before, glide);
-  else if (after > 0) scrollStrip(strip, after, glide);
+  else if (after > 0) scrollStrip(strip, after + startGap(strip, shown.left + after), glide);
 }
 
 /**
- * Marks each edge the strip hides tabs beyond, for its fade. Note that it is
- * measured rather than left to a scroll timeline, because a timeline is
- * active over any overflow at all, the sub-pixel one included, and a fade
- * must stand on exactly the edges that hide a tab, at every width.
+ * The tabs the strip does not show whole, but the chosen one, which it
+ * always brings into view, and one being dragged, which is under the
+ * pointer wherever it is carried. Note that it is measured rather than left
+ * to a scroll timeline, because a timeline is active over any overflow at
+ * all, the sub-pixel one included, and only a tab cut short is hidden.
  */
-function markOverflow(strip: HTMLElement): void {
-  const hidden = strip.scrollWidth - strip.clientWidth;
-  strip.setAttribute("data-overflow-start", String(strip.scrollLeft > OVERFLOW_SLACK));
-  strip.setAttribute("data-overflow-end", String(hidden - strip.scrollLeft > OVERFLOW_SLACK));
+function hiddenTabs(strip: HTMLElement): HTMLElement[] {
+  const shown = strip.getBoundingClientRect();
+  const candidates = strip.querySelectorAll<HTMLElement>(`${TAB}:not([aria-selected="true"])`);
+  return [...candidates].filter((tab) => {
+    const pill = tab.closest(".tab") ?? tab;
+    if (pill.getAttribute("data-dragging") === "true") return false;
+    const box = pill.getBoundingClientRect();
+    return box.left < shown.left - OVERFLOW_SLACK || box.right > shown.right + OVERFLOW_SLACK;
+  });
 }
 
 /** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
@@ -194,6 +234,84 @@ function underTab(tab: HTMLElement): MenuPlacement {
 }
 
 /**
+ * Marks each tab the strip does not show whole, which desktop.css draws not
+ * at all rather than as a sliver at the strip's edge, and counts them.
+ */
+function measureStrip(strip: HTMLElement): number {
+  const hidden = hiddenTabs(strip);
+  for (const tab of strip.querySelectorAll<HTMLElement>(TAB)) {
+    const pill = tab.closest(".tab") ?? tab;
+    pill.setAttribute("data-hidden", String(hidden.includes(tab)));
+  }
+  return hidden.length;
+}
+
+/** What the overflow's chevron is called, by how many tabs it lists. */
+function overflowLabel(count: number): string {
+  return count === 1 ? "1 more tab" : `${count} more tabs`;
+}
+
+/**
+ * The chevron after a strip that hides tabs, counting them in its name and
+ * its hint, and the menu it drops: the tabs hidden, in the strip's order,
+ * each in its own glyph and label, an unread one saying its news. The list
+ * is read as the menu opens, so it names the tabs hidden then. Choosing one
+ * chooses its tab, which the strip brings into view, and hands it focus.
+ */
+function TabOverflow({
+  count,
+  strip,
+  listed,
+}: {
+  count: number;
+  strip: React.RefObject<HTMLDivElement | null>;
+  listed: ReadonlyMap<Element, ListedTab>;
+}): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const [items, setItems] = useState<MenuAction[]>([]);
+  const label = overflowLabel(count);
+  const trigger = menu.trigger();
+  const list = (node: HTMLElement): MenuAction[] =>
+    hiddenTabs(node).flatMap((button) => {
+      const tab = listed.get(button);
+      if (tab === undefined) return [];
+      const onSelect = () => {
+        tab.onSelect();
+        focusTab(node, button);
+      };
+      return [
+        {
+          label: tab.label,
+          icon: tab.icon,
+          detail: tab.unread ? UNREAD_TAB_NOTE : undefined,
+          onSelect,
+        },
+      ];
+    });
+  return (
+    <>
+      <Tooltip label={label}>
+        <button
+          type="button"
+          className="icon-button tab-overflow"
+          aria-label={label}
+          {...trigger}
+          onClick={(event) => {
+            if (menu.open === undefined && strip.current !== null) setItems(list(strip.current));
+            trigger.onClick(event);
+          }}
+        >
+          <ChevronDownIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+      )}
+    </>
+  );
+}
+
+/**
  * The strip of tabs. Note that focus follows a tab closed from the keyboard
  * to the tab that took its place a render later, because the tab it was on
  * is gone by then; with none left, it goes on to the button after the
@@ -216,6 +334,9 @@ export function TabStrip({
   // Whether one of the strip's tabs has focus, the one the move chords move.
   const [focused, setFocused] = useState(false);
   const [movedSaid, setMovedSaid] = useState("");
+  // How many tabs the strip does not show whole, which its overflow counts.
+  const [hidden, setHidden] = useState(0);
+  const [listed] = useState(() => new Map<Element, ListedTab>());
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
   // The chosen tab last brought into view, so a tab newly chosen, opened
@@ -226,7 +347,9 @@ export function TabStrip({
     if (at === undefined || strip.current === null) return;
     closedAt.current = undefined;
     const tabs = [...strip.current.querySelectorAll<HTMLElement>(TAB)];
-    const beside = strip.current.nextElementSibling;
+    // The overflow's chevron goes with the last hidden tab, so the button after it takes focus.
+    const following = strip.current.nextElementSibling;
+    const beside = following?.matches(".tab-overflow") ? following.nextElementSibling : following;
     const after = beside?.matches("button") ? beside : beside?.querySelector("button");
     const next = tabs[Math.min(at, tabs.length - 1)];
     if (next === undefined && after instanceof HTMLElement) after.focus();
@@ -242,23 +365,23 @@ export function TabStrip({
   });
   // A strip narrowed, its panel dragged or the window resized, keeps the
   // chosen tab in view as an editor keeps its active tab, at once rather
-  // than gliding behind the edge being dragged, and fades the edges it now
-  // hides tabs beyond.
+  // than gliding behind the edge being dragged, and hides the tabs it now
+  // cuts short.
   useLayoutEffect(() => {
     const node = strip.current;
     if (node === null) return;
     const observer = new ResizeObserver(() => {
       const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
       if (chosen !== null) reveal(node, chosen, false);
-      markOverflow(node);
+      setHidden(measureStrip(node));
     });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  // A tab opened, closed, or renamed moves the edges the strip hides tabs
-  // beyond, and need not resize the strip, which may already be at its least.
+  // A tab opened, closed, or renamed moves which tabs the strip cuts short,
+  // and need not resize the strip, which may already be at its least.
   useLayoutEffect(() => {
-    if (strip.current !== null) markOverflow(strip.current);
+    if (strip.current !== null) setHidden(measureStrip(strip.current));
   });
 
   // Note that a move's places count the tabs that move alone, as the drag
@@ -337,7 +460,7 @@ export function TabStrip({
         onKeyDown={keyDown}
         onPointerDown={onPointerDown}
         onWheel={wheel}
-        onScroll={(event) => markOverflow(event.currentTarget)}
+        onScroll={(event) => setHidden(measureStrip(event.currentTarget))}
         onFocus={(event) => {
           if (within(event.currentTarget, event.target)) setFocused(true);
         }}
@@ -345,9 +468,39 @@ export function TabStrip({
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
       >
-        {children}
+        <StripTabs.Provider value={listed}>{children}</StripTabs.Provider>
       </div>
+      {hidden === 0 ? null : <TabOverflow count={hidden} strip={strip} listed={listed} />}
     </>
+  );
+}
+
+/**
+ * Writes a tab into its strip's list (`StripTabs`) as it last drew itself,
+ * by its button, and takes it out when the button goes. Answers the ref the
+ * button takes, which hands the button on to `forward` as well.
+ */
+function useListedTab(
+  tab: ListedTab,
+  forward: React.Ref<HTMLButtonElement> | undefined,
+): (element: HTMLButtonElement | null) => void {
+  const listed = useContext(StripTabs);
+  const own = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    const button = own.current;
+    if (listed === undefined || button === null) return;
+    listed.set(button, tab);
+    return () => {
+      listed.delete(button);
+    };
+  });
+  return useCallback(
+    (element: HTMLButtonElement | null) => {
+      own.current = element;
+      if (typeof forward === "function") forward(element);
+      else if (forward !== null && forward !== undefined) forward.current = element;
+    },
+    [forward],
   );
 }
 
@@ -413,10 +566,11 @@ export function Tab({
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
   const hint = tabHint({ label, clipped, tooltip, unread });
+  const button = useListedTab({ icon, label, unread, onSelect }, tabRef);
   const glyph = <span className="tab-icon">{icon}</span>;
   const tab = (
     <button
-      ref={tabRef}
+      ref={button}
       type="button"
       role="tab"
       className="tab-button"

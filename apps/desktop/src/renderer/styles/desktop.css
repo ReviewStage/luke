@@ -2061,6 +2061,37 @@ ul.actor-stack {
   padding-left: var(--column-inset);
 }
 
+/* The plan's toolbar answers its own width, so its controls give way before
+   its tabs do: Start draws its glyph alone, named still, and where the
+   column is narrowest it leaves its model menu to the new agent's own
+   composer, which chooses a model as well, and the agents' Retry draws its
+   glyph alone. */
+.desktop-plan-main .desktop-toolbar {
+  container: plan-toolbar / inline-size;
+}
+
+@container plan-toolbar (max-width: 480px) {
+  .start-agent .start-agent-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    width: var(--control-height);
+    padding: 0;
+  }
+}
+
+@container plan-toolbar (max-width: 320px) {
+  .start-agent .start-agent-chevron,
+  .main-tabs .retry-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    border-radius: calc(var(--control-radius) - 1px);
+  }
+}
+
 .desktop-toolbar-actions {
   position: relative;
   display: flex;
@@ -5228,9 +5259,39 @@ button.automation-run:hover {
 /* Find in a tab --------------------------------------------------------- */
 
 /* The tab a find searches holds its bar at its top right, over what it
-   shows, as a browser's find bar stands over the page. */
+   shows, as a browser's find bar stands over the page. It answers its own
+   width, so a column too narrow for the bar's own width spans the bar
+   across it, inset alike at both sides, and the field takes what the
+   buttons leave it. */
 .find-scope {
   position: relative;
+  container: find-scope / inline-size;
+}
+
+@container find-scope (max-width: 400px) {
+  .find-scope > .find-bar {
+    left: var(--column-inset);
+  }
+
+  .find-scope > .find-bar > .find-bar-well {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+/* Narrower still, the tally gives the field its room and is said rather
+   than drawn, as `.visually-hidden` says words; the matches stay marked in
+   the tab. */
+@container find-scope (max-width: 300px) {
+  .find-scope > .find-bar .find-bar-tally {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    clip-path: inset(50%);
+  }
 }
 
 /* A page standing in the plan's place finds as one scope (`PageFind`): it
@@ -6384,15 +6445,13 @@ button.automation-run:hover {
    editor draws its tabs: each a glyph and a label in a pill a toolbar
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
-   it. Every tab stands whole at its own width, up to a most past which its
-   label fades out at its end; past holding them all, the strip scrolls along
-   with no bar drawn, as a browser's does, and the end it has hidden tabs
-   beyond dissolves over `--scroll-fade`. The strip measures which edges
-   those are (tab-strip.tsx) as it scrolls and resizes, rather than riding a
-   scroll timeline, because a timeline is active over any overflow at all and
-   left a fade on a strip that holds every tab. The tab the strip brings into
-   view stops clear of the fade, at its scroll padding, and glides there
-   unless motion is held still. */
+   it. Every tab stands at its own width, up to a most past which its label
+   fades out at its end, and narrows to a floor where the strip is short of
+   room. Past holding them all, the strip scrolls along with no bar drawn, as
+   a browser's does; a tab it does not show whole is not drawn at all rather
+   than as a sliver at its edge, and the chevron after the strip lists those
+   (tab-strip.tsx), which the strip measures as it scrolls and resizes. The
+   tab the strip brings into view glides there unless motion is held still. */
 .tab-strip {
   display: flex;
   min-width: 0;
@@ -6401,45 +6460,12 @@ button.automation-run:hover {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: var(--scroll-glide);
-  scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
   margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
   padding: var(--space-8) var(--focus-ring-reach);
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--tab-strip-fade-start),
-    #000 calc(100% - var(--tab-strip-fade-end)),
-    transparent
-  );
-  transition:
-    --tab-strip-fade-start var(--duration-hover) ease,
-    --tab-strip-fade-end var(--duration-hover) ease;
-}
-
-.tab-strip[data-overflow-start="true"] {
-  --tab-strip-fade-start: var(--scroll-fade);
-}
-
-.tab-strip[data-overflow-end="true"] {
-  --tab-strip-fade-end: var(--scroll-fade);
-}
-
-/* Registered so a fade comes and goes as a length eased, and stands at none
-   on an edge that hides nothing. */
-@property --tab-strip-fade-start {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --tab-strip-fade-end {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
 }
 
 .tab {
@@ -6464,8 +6490,45 @@ button.automation-run:hover {
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease,
     transform var(--duration-fast) var(--spring-fast);
   -webkit-app-region: no-drag;
+}
+
+/* A strip short of room narrows every tab, as Chrome's does, down to a
+   floor that keeps its glyph, its label's first letters clear of their fade,
+   and the room the chosen tab keeps for its ×, before it scrolls any; the
+   chosen tab is never wider than the strip, so it is never shown without
+   its start or its ×. What a tab narrowed cuts short its hint says whole
+   (tab-strip.tsx). */
+.tab-strip .tab {
+  --tab-floor: calc(
+    var(--tab-start) +
+    var(--control-glyph) +
+    var(--tab-gap) +
+    var(--label-fade) +
+    1.5ch +
+    var(--tab-end)
+  );
+  min-width: var(--tab-floor);
+  max-width: min(200px, 100%);
+  flex: 0 1 auto;
+}
+
+/* The chosen tab gives way last, and below its floor too where the strip is
+   narrower still, its label first, so its glyph and its × always show. */
+.tab-strip .tab[data-selected="true"] {
+  min-width: min(var(--tab-floor), 100%);
+  flex-shrink: 0;
+}
+
+/* A tab the strip does not show whole is not drawn as a sliver at its edge:
+   the chevron after the strip lists it, and it is drawn again once the strip
+   scrolls it into view. It stays focusable, so the keyboard reaches it and
+   brings it in. */
+.tab-strip .tab[data-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tab:hover {
@@ -6861,11 +6924,9 @@ button.automation-run:hover {
 }
 
 /* The plan's tab alone in its column takes the room the heading has rather
-   than a most of its own, and gives way to the toolbar's buttons by
-   truncating its label, down to a few of its characters, rather than by
-   scrolling. Beside an agent's it is a tab like any other. The Inbox pane's
-   crumbs give way alike, within a tab's most. */
-.desktop-toolbar-heading .tab[data-quiet="true"],
+   than a most of its own, giving way to the toolbar's buttons as any tab
+   gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
+   other. The Inbox pane's crumbs give way alike, within a tab's most. */
 .inbox-crumbs .tab {
   min-width: calc(
     var(--tab-start) +
@@ -6878,7 +6939,7 @@ button.automation-run:hover {
 }
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
-  max-width: none;
+  max-width: 100%;
 }
 
 /* While the plan is read, one block in its tab's place: a tab's height and

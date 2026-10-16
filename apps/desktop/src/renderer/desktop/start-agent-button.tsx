@@ -25,6 +25,8 @@ import { useDisclosure } from "../use-disclosure";
  * is unavailable and says why on hover instead. The menu closes on a pick,
  * on Escape, on a press of the main part, and on focus leaving the button;
  * Escape stops there, so it closes the menu and not the plan behind it.
+ * In a toolbar short of room the main part draws its glyph alone, named
+ * still, its hover saying the model as before (desktop.css's `plan-toolbar`).
  */
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
@@ -110,7 +112,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     >
       <BusyLabel busy={start.busy} label="Starting">
         <PlayIcon />
-        Start
+        <span className="start-agent-word">Start</span>
       </BusyLabel>
     </button>
   );
