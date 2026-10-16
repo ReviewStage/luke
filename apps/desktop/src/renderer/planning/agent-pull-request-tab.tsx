@@ -4,7 +4,9 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
+  CHECK_SUMMARY,
   type CheckState,
+  type CheckSummary,
   CODING_AGENT_STATUS,
   type CodingAgentOverview,
   type CodingAgentPullRequest,
@@ -212,6 +214,33 @@ function PullRequestMenu({
   );
 }
 
+/** What the bar draws of the pull request: its mark's three, and its page. */
+type BarPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
+
+/** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
+function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
+  if (checks.some((check) => check.state === CHECK_STATE.FAILED)) return CHECK_SUMMARY.FAILING;
+  if (checks.some((check) => check.state === CHECK_STATE.PENDING)) return CHECK_SUMMARY.PENDING;
+  return checks.length === 0 ? CHECK_SUMMARY.NONE : CHECK_SUMMARY.PASSING;
+}
+
+/**
+ * The pull request the bar draws: the overview's, once a read of it has
+ * landed, since it is the newest and the page under the bar says the same;
+ * else what the agent published, as last read for the plan, while the
+ * overview is unread or its read failed.
+ */
+function barPullRequestOf(
+  overview: CodingAgentOverviewAnswerView | undefined,
+  published: CodingAgentPullRequest | undefined,
+): BarPullRequest | undefined {
+  if (overview === undefined || "failure" in overview || overview.pullRequest === null) {
+    return published;
+  }
+  const { number, state, url, checks } = overview.pullRequest;
+  return { number, state, url, checks: checksSummaryOf(checks) };
+}
+
 /** The words the bar's switch says for each view. */
 const VIEW_OPTIONS = [
   { value: PULL_REQUEST_VIEW.OVERVIEW, label: "Overview" },
@@ -230,7 +259,7 @@ function PullRequestBar({
   onView,
   overview,
 }: {
-  published: CodingAgentPullRequest | undefined;
+  published: BarPullRequest | undefined;
   view: PullRequestView;
   onView: (view: PullRequestView) => void;
   /** The overview's doors, drawn while it is the view shown and the agent has a pull request. */
@@ -536,7 +565,7 @@ export function AgentPullRequestTab({
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
-        published={control.pullRequests.get(agentId)}
+        published={barPullRequestOf(read.answer, control.pullRequests.get(agentId))}
         view={view}
         onView={onView}
         overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}

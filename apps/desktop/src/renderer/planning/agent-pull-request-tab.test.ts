@@ -300,7 +300,7 @@ test("the switch shows the files, read only once shown, and back on the overview
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
 });
 
-test("a merged pull request says nothing of merging, and one with no description, checks, or comments says so", async () => {
+test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
   const merged: CodingAgentOverview = {
     ...OVERVIEW,
     state: PULL_REQUEST_STATE.MERGED,
@@ -310,7 +310,8 @@ test("a merged pull request says nothing of merging, and one with no description
     conversation: [],
   };
   const tab = await draw(
-    controlAnswering(() => Promise.resolve({ pullRequest: merged }), PULL_REQUEST_STATE.MERGED),
+    // Note that what the agent published was last read open, so the bar says what the overview read.
+    controlAnswering(() => Promise.resolve({ pullRequest: merged }), PULL_REQUEST_STATE.OPEN),
   );
   assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
@@ -319,6 +320,21 @@ test("a merged pull request says nothing of merging, and one with no description
     "No description provided.",
     "Nobody has commented yet.",
   ]);
+});
+
+test("where what the agent published is not read, the bar still says where the pull request stands and opens it on GitHub, as its overview read it", async () => {
+  const control = {
+    ...controlAnswering(() => Promise.resolve({ pullRequest: OVERVIEW })),
+    pullRequests: new Map(),
+  };
+  const tab = await draw(control);
+  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  const github =
+    tab.querySelector<HTMLButtonElement>('.pull-request-bar [aria-label="Open on GitHub"]') ??
+    assert.fail("the bar opens the pull request on GitHub");
+  act(() => github.click());
+  await settle();
+  assert.deepEqual(opened, [PAGE]);
 });
 
 test("an agent with no pull request yet says so, and a read that failed offers a retry that reads again", async () => {
