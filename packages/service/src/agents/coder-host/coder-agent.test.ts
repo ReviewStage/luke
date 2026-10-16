@@ -175,7 +175,7 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
-test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it", () => {
+test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -184,9 +184,13 @@ test("the session and the post tool send whatever is ready for the developer to 
       )[1];
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
+      assert.ok(inbox?.includes("needs to test something by hand"), brief);
     }
   }
   assert.ok(INBOX_TOOLS.POST.description.includes(READY));
+  assert.ok(
+    INBOX_TOOLS.POST.description.includes("testing by hand what you could not test yourself"),
+  );
 });
 
 test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {

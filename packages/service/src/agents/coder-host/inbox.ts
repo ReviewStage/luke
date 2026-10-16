@@ -39,7 +39,7 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
  * hand such as a setting on GitHub, and whatever is ready for the developer
- * to look at or review, such as a pull request, goes in the inbox rather
+ * to look at, review, or test by hand, such as a pull request, goes in the inbox rather
  * than in a message, where it is lost in the transcript: an item of its own
  * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
@@ -81,8 +81,8 @@ export const INBOX_TOOLS = {
       `or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
       "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
-      "answer in their words), task (a to-do: something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
-      "say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
+      "answer in their words), task (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, " +
+      "or testing by hand what you could not test yourself: say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
       "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
       "should know or look at; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
