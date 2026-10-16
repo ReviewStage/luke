@@ -20,7 +20,7 @@
  * reviews that said something, each the first page GitHub answers.
  */
 
-import { githubAvatarUrl } from "@luke/features/account-picture";
+import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -507,12 +507,12 @@ function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
       .trimEnd()
       .split(/\n[ \t]*\n/u)
       .at(-1) ?? "";
-  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => ({
-    id: Number(id),
-    login,
-    bot: login.endsWith(BOT_LOGIN_SUFFIX),
-    avatarUrl: undefined,
-  }));
+  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
+    const bot = login.endsWith(BOT_LOGIN_SUFFIX);
+    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author keeps its robot.
+    const avatarUrl = bot ? undefined : githubUserAvatarUrl({ id: Number(id) });
+    return { id: Number(id), login, bot, avatarUrl };
+  });
 }
 
 /** Each account once, the first time it stands, up to the bound. */

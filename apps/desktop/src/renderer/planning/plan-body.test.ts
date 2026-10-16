@@ -44,7 +44,7 @@ const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LEE = { userId: "user-lee", name: "Lee Park" };
 /** Who the workspace's work names but left, as the read of who left answers. */
-const LEE_PICTURE = "https://avatars.githubusercontent.com/u/7";
+const LEE_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 const FORMER = [{ ...LEE, pictureUrl: LEE_PICTURE }];
 /** The window's own stylesheet, which says what each mark stands on. */
 const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");

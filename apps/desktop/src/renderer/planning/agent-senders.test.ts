@@ -194,8 +194,13 @@ test("each member sees a teammate's face and name over the teammate's messages a
     ["luke", ACTOR_KIND.LUKE, "Luke"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
-    // GitHub names who caused what it told the agent of: a person by their login, a bot by its App's.
-    ["reviewer", ACTOR_KIND.GITHUB, "octocat"],
+    // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.
+    [
+      "reviewer",
+      ACTOR_KIND.GITHUB,
+      "octocat",
+      "https://avatars.githubusercontent.com/octocat?v=4&s=32",
+    ],
     ["review-bot", ACTOR_KIND.GITHUB, "devin-ai-integration"],
     // A member the workspace no longer lists has left it, and keeps their name.
     ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],

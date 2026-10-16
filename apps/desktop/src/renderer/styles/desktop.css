@@ -1289,6 +1289,20 @@ ul.actor-stack {
   gap: var(--space-8);
 }
 
+/* A row's words wrap within the card, a long login anywhere, and a bot's
+   badge rides the line its name ends on. Note that the badge is an inline
+   box, not an inline-block, because a line may break before an
+   inline-block whatever no-break space precedes it. */
+.actor-more-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actor-more-words .actor-bot {
+  display: inline;
+  white-space: nowrap;
+}
+
 .actor-stack-more {
   display: inline-grid;
   height: 18px;
@@ -1333,7 +1347,12 @@ ul.actor-stack {
   white-space: pre;
 }
 
-.actor-you {
+/* The reader's own badge, and an App's bot's after its name, as GitHub's
+   own pages mark one: quiet and neutral, never cut, so a long name gives
+   way before the badge does. */
+.actor-you,
+.actor-bot {
+  flex-shrink: 0;
   padding: 0 5px; /* off-scale */
   border-radius: 4px;
   background: var(--raised-strong);

@@ -66,7 +66,7 @@ const MEMBER: WorkspaceMember = {
   name: "Sam",
   email: "sam@example.com",
   role: WORKSPACE_ROLE.MEMBER,
-  pictureUrl: "https://avatars.githubusercontent.com/u/7",
+  pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
 };
 
 /** The account reading the page: Dana, the owner. */
@@ -705,7 +705,7 @@ test("each member's row leads with their face, their picture where the read list
   assert.equal(dana.querySelector(".actor-mark .actor-face")?.textContent, "D");
   assert.equal(
     sam.querySelector<HTMLImageElement>(".actor-mark img")?.src,
-    "https://avatars.githubusercontent.com/u/7",
+    "https://lh3.googleusercontent.com/a/photo-7",
   );
   assert.equal(dana.querySelector(".actor-you")?.textContent, "You");
   assert.equal(sam.querySelector(".actor-you"), null);
