@@ -61,7 +61,8 @@ export function PageCard({ taskId, page }: CardPage): React.JSX.Element {
         sub={page.version > 1 ? `Version ${page.version}` : undefined}
         corner={<RelativeTime at={page.at} now={now} hint={false} />}
       />
-      <PagePreview taskId={taskId} page={page} />
+      {/* A new version is a new preview, held hidden until it has loaded rather than over the last one's frame. */}
+      <PagePreview key={`${page.id}/${page.version}`} taskId={taskId} page={page} />
     </HoverCard>
   );
 }
