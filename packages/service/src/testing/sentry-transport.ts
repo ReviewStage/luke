@@ -76,8 +76,13 @@ function itemsOf(body: string): SentItem[] {
   return items;
 }
 
-/** The deployment's Sentry over a transport that keeps each envelope's items rather than posting them. */
-export function recordingSentry(): RecordingSentry {
+/**
+ * The deployment's Sentry over a transport that keeps each envelope's items
+ * rather than posting them. `delivered`, where given, is when each send
+ * completes, so a suite can hold a report in flight the way a slow network
+ * would; by default a send completes at once.
+ */
+export function recordingSentry(delivered?: () => Promise<void>): RecordingSentry {
   const sent: SentItem[] = [];
   const transport: Transport = (options) =>
     Sentry.createTransport(options, (request) => {
@@ -85,7 +90,7 @@ export function recordingSentry(): RecordingSentry {
         ? request.body
         : new TextDecoder().decode(request.body);
       sent.push(...itemsOf(body));
-      return Promise.resolve({});
+      return (delivered?.() ?? Promise.resolve()).then(() => ({}));
     });
   const started = sentryLayer({
     dsn: FIXTURE_SENTRY_DSN,

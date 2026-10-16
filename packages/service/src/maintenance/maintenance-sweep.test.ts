@@ -54,7 +54,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
-    monitor: { run: (sweep) => sweep, unrunnable: Effect.void },
+    monitor: { run: (sweep) => sweep },
     purgeCleared: (now) =>
       Effect.sync(() => {
         recorded.purged.push(now);

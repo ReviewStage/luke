@@ -81,13 +81,15 @@ const sweep = (
     return response.status;
   });
 
-it.effect("a sweep the deployment cannot run checks in as failed", () =>
-  Effect.gen(function* () {
-    const sentry = recordingSentry();
-    const status = yield* sweep(undefined, CRON_SECRET).pipe(Effect.provide(sentry.layer));
-    assert.equal(status, 503);
-    assert.deepEqual(checkIns(sentry.sent), [["maintenance-sweep", "error"]]);
-  }),
+it.effect(
+  "a call to a deployment without its cron secret checks nothing in, so a stranger cannot fail a run",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const status = yield* sweep(undefined, "anything").pipe(Effect.provide(sentry.layer));
+      assert.equal(status, 503);
+      assert.deepEqual(checkIns(sentry.sent), []);
+    }),
 );
 
 it.effect("a call that is not the cron's checks nothing in", () =>

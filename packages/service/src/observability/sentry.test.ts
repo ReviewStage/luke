@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Logger } from "effect";
+import { Effect, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
-import { sentryLogger } from "./sentry.js";
+import { sentryCronCheckIns, sentryLogger } from "./sentry.js";
 
 /**
  * The deployment's Sentry at its own boundary, its transport
@@ -67,5 +67,34 @@ it.effect("a log line becomes a Sentry log, and a span a Sentry span", () =>
     const spans = sentry.sent.filter((item) => item.type !== "log").map((item) => item.text);
     assert.ok(logs.some((text) => text.includes("a title could not be generated")));
     assert.ok(spans.some((text) => text.includes("web/title")));
+  }),
+);
+
+it.effect("a monitored run returns only once its closing check-in has left", () =>
+  Effect.gen(function* () {
+    // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.
+    let release = () => {};
+    const network = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sentry = recordingSentry(() => network);
+    const monitor = sentryCronCheckIns({
+      slug: "a-job",
+      crontab: "* * * * *",
+      maxRuntimeMinutes: 1,
+      checkInMarginMinutes: 1,
+      failuresBeforeIssue: 1,
+    });
+    yield* Effect.gen(function* () {
+      const run = yield* Effect.forkChild(monitor.run(Effect.void));
+      for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow;
+      assert.equal(run.pollUnsafe(), undefined);
+      release();
+      yield* Fiber.join(run);
+    }).pipe(Effect.provide(sentry.layer));
+    assert.deepEqual(
+      sentOfType(sentry.sent, "check_in").map((item) => item.payload.status),
+      ["in_progress", "ok"],
+    );
   }),
 );

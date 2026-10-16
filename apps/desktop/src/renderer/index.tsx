@@ -4,7 +4,11 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
+import {
+  eventWithoutAccessTokens,
+  transactionWithoutAccessTokens,
+  withoutAccessTokens,
+} from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
@@ -21,6 +25,7 @@ Sentry.init({
   tracesSampleRate: 1.0,
   beforeBreadcrumb: withoutAccessTokens,
   beforeSend: eventWithoutAccessTokens,
+  beforeSendTransaction: transactionWithoutAccessTokens,
 });
 
 // The panel's avatar is subscribed to before anything is drawn, because main

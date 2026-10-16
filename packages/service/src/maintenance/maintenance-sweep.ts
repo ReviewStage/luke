@@ -52,12 +52,12 @@ interface MaintenanceSweeps {
 
 /**
  * How a run is told to the sweep's cron monitor: around the eight sweeps once
- * the call is the cron's own, and alone where the deployment cannot run them.
- * A call that is not the cron's is not a run and tells it nothing.
+ * the call is the cron's own. A call that is not the cron's, or one a
+ * deployment without its secret cannot authenticate, is not a run and tells
+ * it nothing, so a stranger cannot report a run that failed.
  */
 interface SweepMonitor {
   readonly run: <A, E, R>(sweep: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
-  readonly unrunnable: Effect.Effect<void>;
 }
 
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
@@ -116,7 +116,6 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
     }
     const secret = options.cronSecret;
     if (secret === undefined) {
-      yield* options.monitor.unrunnable;
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
     if (!bearerMatchesSecret(request, secret)) {

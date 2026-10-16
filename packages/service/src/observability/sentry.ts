@@ -109,6 +109,12 @@ export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
   sentryTelemetry,
 );
 
+/** How long a run waits for its closing check-in to leave before it returns anyway. */
+const CHECK_IN_FLUSH_MS = 2_000;
+
+/** What Sentry has queued, sent; a flush that runs out of time drops nothing the run depends on. */
+const checkInDelivered = Effect.asVoid(Effect.promise(() => Sentry.flush(CHECK_IN_FLUSH_MS)));
+
 /** The monitor's config, sent with each check-in so Sentry creates or updates it (an upsert). */
 function monitorConfig(monitor: CronMonitor): MonitorConfig {
   return {
@@ -123,8 +129,11 @@ function monitorConfig(monitor: CronMonitor): MonitorConfig {
 /**
  * A job's runs as Sentry's Crons guide recommends checking them in: one
  * check-in as a run starts and one as it ends, `ok` or `error`, so Sentry
- * can tell a run that never started from one that ran too long. A run the
- * deployment could not start is one `error` check-in on its own.
+ * can tell a run that never started from one that ran too long. The closing
+ * check-in is flushed before the run returns, because a function frozen once
+ * it has answered would otherwise drop it and leave a good run marked missed.
+ * A run the deployment could not start checks nothing in: its caller is
+ * unauthenticated, and the missed check-in is what Sentry alerts on.
  */
 export function sentryCronCheckIns(monitor: CronMonitor) {
   const config = monitorConfig(monitor);
@@ -145,11 +154,8 @@ export function sentryCronCheckIns(monitor: CronMonitor) {
                 },
                 config,
               );
-            }),
+            }).pipe(Effect.andThen(checkInDelivered)),
           ),
       ),
-    unrunnable: Effect.sync(() => {
-      Sentry.captureCheckIn({ monitorSlug: monitor.slug, status: "error" }, config);
-    }),
   };
 }
