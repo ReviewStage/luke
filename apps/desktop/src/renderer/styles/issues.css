@@ -66,9 +66,11 @@
   list-style: none;
 }
 
-/* A row offers no Pin or Archive to give way to, so its time stays put. */
-.issue-row:hover .sidebar-task-time,
-.issue-row:has(:focus-visible) .sidebar-task-time {
+/* A row offers no Pin or Archive to give way to, so its time stays put.
+   Note that it outranks the sidebar's own row, which hides its time to
+   make that room. */
+.issue-rows .issue-row:hover .sidebar-task:not(.sidebar-agent) .sidebar-task-time,
+.issue-rows .issue-row:has(:focus-visible) .sidebar-task:not(.sidebar-agent) .sidebar-task-time {
   visibility: visible;
 }
 

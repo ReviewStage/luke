@@ -288,3 +288,25 @@ test("a title typed and not yet filed is dropped once another workspace is liste
     "",
   );
 });
+
+test("while a filing is out the title's field takes no typing, so the title it empties is the one it sent", async () => {
+  mount();
+  await settle();
+
+  const field = document.querySelector<HTMLInputElement>("input[aria-label='New issue title']");
+  assert.ok(field, "the field stands");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    set?.call(field, "Flaky checkout test");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  const lockedWhileOut = field.readOnly;
+  await settle();
+
+  assert.ok(lockedWhileOut, "the field takes no typing while the filing is out");
+  assert.equal(field.readOnly, false);
+  assert.equal(field.value, "");
+});

@@ -63,6 +63,7 @@ function NewIssueField({
       placeholder="New issue…"
       value={title}
       disabled={disabled}
+      readOnly={filing}
       onChange={(event) => setTitle(event.target.value)}
       onKeyDown={(event) => {
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
