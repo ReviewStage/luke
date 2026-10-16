@@ -2361,7 +2361,7 @@ ul.actor-stack {
 
 /* base.css draws the ring; it stands inside the target, close round the disc. */
 .corner-dismiss:focus-visible {
-  outline-offset: calc(-1 * var(--focus-ring-width));
+  outline-offset: var(--focus-ring-inset);
 }
 
 .corner-dismiss svg {
@@ -2662,7 +2662,7 @@ ul.actor-stack {
 .plan-menu-note {
   margin: 0;
   overflow: clip;
-  overflow-clip-margin: 3px;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 .account-menu-name,
@@ -4118,19 +4118,13 @@ body:has(.app-stage[data-capture="true"])
    an option laid edge to edge in them. */
 .inbox-indent {
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
+  overflow-clip-margin: var(--focus-ring-room);
   padding-left: 21px;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron. The path clips what runs
-   past it, though not the keyboard's ring on a crumb, and a crumb under the
+   by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs {
-  overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
-}
-
 .inbox-crumbs ol {
   gap: var(--list-gap);
 }

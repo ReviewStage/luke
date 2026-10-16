@@ -726,11 +726,11 @@ export function TranscriptTodosDock({
 }): ReactNode {
   return (
     <Fold
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
+      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]"
       data-todos-dock=""
       aria-label="To-dos"
     >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]">
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none">
         <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 text-muted-foreground">{summary}</span>
         {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}

@@ -39,6 +39,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
@@ -592,6 +593,30 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownPlans, [BILLING.id]);
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+test("the keyboard's ring on a crumb of the pane's path and on an option of the choice is drawn whole, past the boxes that clip what runs long", async () => {
+  const styles = await layWindowStyles();
+  const { page } = mount();
+  await settle();
+  const crumbs = [
+    ...page.querySelectorAll<HTMLButtonElement>('.inbox-view-items nav[aria-label="Path"] button'),
+  ];
+  const options = [...page.querySelectorAll<HTMLButtonElement>("button.inbox-option")];
+  assert.ok(
+    crumbs.length > 0 && options.length > 0,
+    "the pane draws its crumbs and the choice's options",
+  );
+  for (const control of [...crumbs, ...options]) {
+    focusByKeyboard(control);
+    assert.ok(ringOf(control), `${control.textContent} rings`);
+    assert.equal(
+      ringClippedBy(control)?.className,
+      undefined,
+      `nothing cuts ${control.textContent}'s ring off`,
+    );
+  }
+  styles.remove();
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */

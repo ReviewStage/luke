@@ -242,12 +242,12 @@ export function ToolHeader({
 
 export type ToolContentProps = FoldBodyProps;
 
-/** The body under an open row: a card holding the blocks, a hairline between them. */
+/** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
 export function ToolContent({ className, children, ...props }: ToolContentProps): ReactNode {
   return (
     <FoldBody
       className={cn(
-        "mt-1 mb-1 ml-7 overflow-hidden rounded-lg border border-border bg-muted [&>*+*]:border-t [&>*+*]:border-border",
+        "mt-1 mb-1 ml-7 overflow-hidden rounded-lg border border-border bg-muted [--focus-ring-offset:var(--focus-ring-inset)] [&>*+*]:border-t [&>*+*]:border-border",
         className,
       )}
       {...props}
