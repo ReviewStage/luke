@@ -146,7 +146,7 @@ export interface LiveSessionHolderOptions {
   createId: () => string;
   /** Whether a call is to open with Luke's avatar, read as each session comes to stand. */
   videoOnCall?: Effect.Effect<boolean>;
-  /** The avatar a call opens with, read with `videoOnCall`; the default where none is given. */
+  /** The avatar a start asks for, read afresh as the call opens with video and as it restarts; the default where none is given. */
   videoAvatar?: Effect.Effect<VideoAvatar>;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
@@ -272,8 +272,6 @@ export class LiveSessionHolder {
   #avatarRequest: string | undefined;
   /** How many times the standing call's avatar was asked for again after a close this side did not start. */
   #avatarRestarts = 0;
-  /** The avatar the latest start asked for, which a restart after a close asks for again. */
-  #avatarAsked: VideoAvatar = VIDEO_AVATAR.DEFAULT;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -477,7 +475,7 @@ export class LiveSessionHolder {
       }
       this.#options.onSessionCreated?.();
       if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) {
-        this.startAvatar(yield* this.#options.videoAvatar ?? Effect.succeed(VIDEO_AVATAR.DEFAULT));
+        this.startAvatar(yield* this.#chosenAvatar());
       }
       return createdOf(opened);
     });
@@ -683,16 +681,15 @@ export class LiveSessionHolder {
    * superseded, since its answer may have been lost with a connection, and
    * the service closes whatever the earlier ask put up. An avatar that ended
    * may be asked for again, and draws a grant of its own. The avatar asked
-   * for is the one named, or the one the latest start asked for.
+   * for is the one the developer chose, as the caller read it.
    */
-  startAvatar(avatar: VideoAvatar = this.#avatarAsked): boolean {
+  startAvatar(avatar: VideoAvatar): boolean {
     const session = this.#held;
     if (!session || session.ended) return false;
     const start = session.opened.startAvatar;
     if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
     const requestId = this.#options.createId();
     this.#avatarRequest = requestId;
-    this.#avatarAsked = avatar;
     start(requestId, avatar);
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
       this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
@@ -743,16 +740,30 @@ export class LiveSessionHolder {
    * did not close it: Keyframe closed the room, or the session failed. The
    * service is told so, which closes its row and lets a start be asked
    * again, and the avatar is asked for once more on each call before it is
-   * left ended, where the tile offers to restart it. Answers whether it was
-   * asked for again.
+   * left ended, where the tile offers to restart it. Answers whether it is
+   * to be asked for again. The avatar is read afresh first, so a choice made
+   * while the last one stood is the one the restart asks for; a start asked
+   * for meanwhile, or the call's end, leaves the restart unasked.
    */
   closed(reason: AvatarStopReason): boolean {
+    const session = this.#held;
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.GRANTED || !this.stopAvatar(reason)) {
       return false;
     }
     if (this.#avatarRestarts >= AVATAR_RESTARTS_PER_CALL) return false;
     this.#avatarRestarts += 1;
-    return this.startAvatar();
+    this.#start(
+      Effect.map(this.#chosenAvatar(), (avatar) => {
+        if (this.#held !== session || this.#avatarRequest !== undefined) return;
+        this.startAvatar(avatar);
+      }),
+    );
+    return true;
+  }
+
+  /** The avatar the developer chose, as it stands now. */
+  #chosenAvatar(): Effect.Effect<VideoAvatar> {
+    return this.#options.videoAvatar ?? Effect.succeed(VIDEO_AVATAR.DEFAULT);
   }
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */

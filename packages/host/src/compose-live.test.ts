@@ -533,27 +533,28 @@ it.effect("a call opens with the avatar asked for where video is on for calls", 
 );
 
 it.effect(
-  "every start asks for the avatar chosen in Settings: the call's first, the toggle's, and the one after a close this side did not start",
+  "every start asks for the avatar chosen in Settings as it stands then: the call's first, the restart after a close this side did not start, and the toggle's",
   () =>
     Effect.gen(function* () {
       const f = yield* subject({ videoOnCall: true, avatar: VIDEO_AVATAR.ORION });
       const socket = yield* f.openCall;
       grantFor(socket, "request-1");
       yield* settle();
+      // A choice made while the avatar stands is the one its restart asks for.
+      yield* Effect.orDie(f.store.set("videoAvatar", VIDEO_AVATAR.SELENE));
       assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
       yield* settle();
       yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false });
-      // A choice made during the call is the one the next start asks for.
-      yield* Effect.orDie(f.store.set("videoAvatar", VIDEO_AVATAR.SELENE));
+      yield* Effect.orDie(f.store.set("videoAvatar", VIDEO_AVATAR.LYRA));
       yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
 
       assert.deepEqual(
         avatarSends(socket)
           .filter((frame) => frame.type === VOICE_SERVICE_FRAME.AVATAR_START)
           .map((frame) => frame.avatar),
-        [VIDEO_AVATAR.ORION, VIDEO_AVATAR.ORION, VIDEO_AVATAR.SELENE],
+        [VIDEO_AVATAR.ORION, VIDEO_AVATAR.SELENE, VIDEO_AVATAR.LYRA],
       );
-      assert.deepEqual(avatarSends(socket).at(-1), start("request-3", VIDEO_AVATAR.SELENE));
+      assert.deepEqual(avatarSends(socket).at(-1), start("request-3", VIDEO_AVATAR.LYRA));
     }),
 );
 
