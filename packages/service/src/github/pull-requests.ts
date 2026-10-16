@@ -74,6 +74,24 @@ export interface GitHubPullRequest {
   readonly changedFiles: number;
   /** The login of who opened it, where GitHub named one. */
   readonly author?: string;
+  /** When it was opened, and when it was merged or closed where it was, as epoch milliseconds, where GitHub named them. */
+  readonly openedAt?: number;
+  readonly mergedAt?: number;
+  readonly closedAt?: number;
+  /** The branch it merges into, where GitHub named it. */
+  readonly baseRef?: string;
+  /** Its labels, each by its name and its colour as GitHub's six hex digits. */
+  readonly labels?: readonly GitHubLabel[];
+  /** How many comments it holds, on its conversation and its diff together, where GitHub counted them. */
+  readonly comments?: number;
+  /** How many commits it holds, where GitHub counted them. */
+  readonly commits?: number;
+}
+
+/** A label as GitHub names it: its name and its colour, six hex digits with no `#`. */
+interface GitHubLabel {
+  readonly name: string;
+  readonly color: string;
 }
 
 /** What a read fails with: GitHub unreachable or answering off its shape. */
@@ -121,6 +139,17 @@ const PullRequestSchema = Schema.Struct({
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
   /** Who opened it; null where their account is gone. */
   user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
+  // Note that what follows is read where GitHub sends it, which its one pull request's read always does, and left out where it does not.
+  created_at: Schema.optional(Schema.String),
+  merged_at: Schema.optional(Schema.NullOr(Schema.String)),
+  closed_at: Schema.optional(Schema.NullOr(Schema.String)),
+  base: Schema.optional(Schema.Struct({ ref: Schema.String })),
+  labels: Schema.optional(
+    Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String })),
+  ),
+  comments: Schema.optional(Schema.Number),
+  review_comments: Schema.optional(Schema.Number),
+  commits: Schema.optional(Schema.Number),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -258,6 +287,19 @@ function readOptional<A>(
   );
 }
 
+/** A moment GitHub spells as ISO 8601, as epoch milliseconds; none where it spells none or one that does not parse. */
+function momentOf(spelled: string | null | undefined): number | undefined {
+  if (spelled == null) return undefined;
+  const at = Date.parse(spelled);
+  return Number.isNaN(at) ? undefined : at;
+}
+
+/** How many comments a pull request holds, on its conversation and its diff together; none where GitHub counted neither. */
+function commentCountOf(record: typeof PullRequestSchema.Type): number | undefined {
+  if (record.comments === undefined && record.review_comments === undefined) return undefined;
+  return (record.comments ?? 0) + (record.review_comments ?? 0);
+}
+
 function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest {
   const state = record.merged
     ? PULL_REQUEST_STATE.MERGED
@@ -266,6 +308,10 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
       : record.draft
         ? PULL_REQUEST_STATE.DRAFT
         : PULL_REQUEST_STATE.OPEN;
+  const openedAt = momentOf(record.created_at);
+  const mergedAt = momentOf(record.merged_at);
+  const closedAt = momentOf(record.closed_at);
+  const comments = commentCountOf(record);
   return {
     number: record.number,
     title: record.title,
@@ -277,6 +323,13 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     deletions: record.deletions,
     changedFiles: record.changed_files,
     ...(record.user == null ? undefined : { author: record.user.login }),
+    ...(openedAt === undefined ? undefined : { openedAt }),
+    ...(mergedAt === undefined ? undefined : { mergedAt }),
+    ...(closedAt === undefined ? undefined : { closedAt }),
+    ...(record.base === undefined ? undefined : { baseRef: record.base.ref }),
+    ...(record.labels === undefined ? undefined : { labels: record.labels }),
+    ...(comments === undefined ? undefined : { comments }),
+    ...(record.commits === undefined ? undefined : { commits: record.commits }),
   };
 }
 
