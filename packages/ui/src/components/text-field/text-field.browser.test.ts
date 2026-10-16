@@ -86,3 +86,10 @@ test("inside a field, a text entry is named, described, and marked invalid by th
   await expect.element(field).toHaveAccessibleDescription("Everyone sees it. Give it a name.");
   expect(await accessibilityViolations(container)).toEqual([]);
 });
+
+test("a text entry is named by its field or by a label of its own, and never by neither", () => {
+  // @ts-expect-error A text entry with neither a field nor a label would stand unnamed.
+  createElement(TextField, { value: "", onChange: () => undefined });
+  // @ts-expect-error A text area with neither a field nor a label would stand unnamed.
+  createElement(TextArea, { value: "", onChange: () => undefined });
+});
