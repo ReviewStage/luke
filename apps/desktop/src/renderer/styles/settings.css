@@ -256,44 +256,6 @@
   cursor: pointer;
 }
 
-/* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
-   a switch reads as the primary button beside it does. Its state is keyed on
-   its own `data-checked`, so a switch drawn inside a row button that carries
-   `aria-checked` (a menu's switch row) takes this one rule too. Only the
-   thumb moves, only by transform, and on `--spring-fast` — the bounce every
-   small element in the app rides. */
-.switch {
-  display: inline-flex;
-  width: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 2px;
-  border-radius: 999px;
-  background: var(--switch-track);
-  transition: background-color var(--duration-hover) ease;
-}
-
-.switch[data-checked="true"] {
-  background: var(--switch-on);
-}
-
-.switch:disabled {
-  opacity: 0.4;
-}
-
-.switch-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--switch-thumb);
-  box-shadow: var(--switch-thumb-shadow);
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-.switch[data-checked="true"] .switch-thumb {
-  transform: translateX(14px);
-}
-
 /* A row's picker: the chip naming the value, and the app's own menu under
    it, drawn the way the composer's chips and menus are so Settings reads as
    the rest of the app. Every chip shares one width, like a column of macOS

@@ -1,16 +1,16 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { CompatSwitchButton, CompatSwitchMark } from "@luke/ui/compat";
 
 /**
- * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the accent while on.
+ * switch.tsx -- the window's switch, which is `@luke/ui`'s shared `Switch`, and the settings search's landing on it.
  *
- * It is drawn two ways and looks the same in both. Given `onChange`, it is
- * its own button, `role="switch"` with the label as its name, as a Settings
- * row's and an MCP server's are. Without it, it is the drawing alone, inside a
- * row button that is itself the switch for the keyboard and the reader (a
- * menu's switch row), so it hides from the reader and carries no state but
- * what it draws. Either way it draws its state from its own `data-checked`,
- * so `settings.css` keys the thumb and the track once whatever element
- * carries `aria-checked`.
+ * Given `onChange` it is the switch as its own button; without it, the
+ * drawing alone inside a row button that is the switch. What is the
+ * window's own is `anchor`: the settings search id a result lands on, which
+ * this adapter hands the button as its search attribute. The window's
+ * callers still pass a class of their own, so they reach the shared control
+ * through the compatibility door, and each moves onto the barrel's `Switch`
+ * or `SwitchMark` when its screen is migrated.
  */
 
 /** The switch as a button of its own. */
@@ -39,43 +39,16 @@ interface SwitchDrawingProps {
   className?: string | undefined;
 }
 
-/** A class list of the switch's own class and the caller's. */
-function switchClass(className: string | undefined): string {
-  return className === undefined ? "switch" : `switch ${className}`;
-}
-
 /** The switch: a button of its own given `onChange`, else the drawing inside a row that is the switch. */
 export function Switch(props: SwitchButtonProps | SwitchDrawingProps): React.JSX.Element {
-  const thumb = <span className="switch-thumb" />;
   if (props.onChange === undefined) {
-    return (
-      <span
-        className={switchClass(props.className)}
-        data-checked={props.checked}
-        aria-hidden="true"
-      >
-        {thumb}
-      </span>
-    );
+    return <CompatSwitchMark checked={props.checked} className={props.className} />;
   }
-  const { checked, onChange, onMouseDown, label, id, describedBy, disabled, anchor, className } =
-    props;
+  const { anchor, ...button } = props;
   return (
-    <button
-      type="button"
-      id={id}
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      aria-describedby={describedBy}
-      className={switchClass(className)}
-      data-checked={checked}
+    <CompatSwitchButton
+      {...button}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
-      disabled={disabled}
-      onMouseDown={onMouseDown}
-      onClick={(event) => onChange(!checked, event)}
-    >
-      {thumb}
-    </button>
+    />
   );
 }

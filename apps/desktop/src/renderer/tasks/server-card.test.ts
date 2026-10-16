@@ -261,7 +261,7 @@ async function cardOf(chip: Element | null | undefined) {
   await settle();
   const card = [...document.querySelectorAll(".tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
-  const drawnSwitch = card.querySelector<HTMLElement>(".switch");
+  const drawnSwitch = card.querySelector<HTMLElement>(".luke-switch");
   const look = {
     name: card.querySelector(".task-compose-menu-name")?.textContent,
     count: card.querySelector(".agent-servers-count")?.textContent,
