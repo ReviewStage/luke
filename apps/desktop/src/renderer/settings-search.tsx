@@ -279,6 +279,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       : undefined,
     input.workspace
       ? {
+          id: SETTINGS_SECTION.REPOSITORIES,
+          label: "Repositories",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [
+            "Repositories",
+            "run command on this Mac pull request local checkout script dev server",
+          ],
+        }
+      : undefined,
+    input.workspace
+      ? {
           id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
           label: "Integrations",
           page: SETTINGS_VIEW.WORKSPACE,
@@ -383,6 +394,9 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  */
 const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
 
+/** The event a section's seek is announced on, so a page drawn in place of its sections gives way first. */
+export const SETTINGS_SEEK_EVENT = "luke:settings-seek";
+
 /**
  * Takes the view to the row a pressed result named, waiting out the page swap
  * the press asked for — the same frame-by-frame seek the session search field
@@ -395,6 +409,8 @@ const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
  * row the page is not drawing is given up on quietly.
  */
 export function landOnSettingsRow(id: string): () => void {
+  // A page drawn in place of its sections, a repository's own, gives way to the section sought.
+  window.dispatchEvent(new CustomEvent(SETTINGS_SEEK_EVENT, { detail: id }));
   return focusSeek({
     find: () =>
       document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`),

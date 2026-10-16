@@ -41,6 +41,7 @@ import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
 import { dayAndTimeText } from "../planning/plan-time";
+import { SETTINGS_SEEK_EVENT } from "../settings-search";
 import { SpinnerRegion } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
@@ -1489,6 +1490,13 @@ function ShownWorkspace({
   const repositories = useRepositoriesRead(workspace.id);
   // The repository whose own page stands in the workspace's place, none while the workspace's shows.
   const [repository, setRepository] = useState<string | undefined>(undefined);
+  // A link or a search result seeking one of the workspace's sections draws them again first.
+  useEffect(() => {
+    if (repository === undefined) return;
+    const leave = () => setRepository(undefined);
+    window.addEventListener(SETTINGS_SEEK_EVENT, leave);
+    return () => window.removeEventListener(SETTINGS_SEEK_EVENT, leave);
+  }, [repository]);
   if (repository !== undefined) {
     return (
       <RepositoryPage

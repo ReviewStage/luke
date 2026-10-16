@@ -1,3 +1,4 @@
+import { SETTINGS_SEEK_EVENT } from "../settings-search";
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
@@ -1817,4 +1818,29 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
   await chooseAction(rowNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("a section sought while a repository's page is open draws the workspace's sections again, and the window's focus reads the repositories again", async () => {
+  const { page } = await mount(ACME);
+  await settle();
+  const repositoryRow = () => page.querySelector<HTMLButtonElement>(".repository-row");
+
+  act(() => (repositoryRow() ?? assert.fail("no repository row")).click());
+  await settle();
+  assert.equal(repositoryRow(), null);
+  act(() => {
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_SEEK_EVENT, { detail: SETTINGS_SECTION.MEMBERS }),
+    );
+  });
+  await settle();
+  assert.equal(page.querySelector(".repository-page-title"), null);
+  assert.equal(repositoryRow() !== null, true);
+
+  runCommands = [{ workspaceId: ACME.id, repository: "acme/relay", command: "make serve" }];
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  assert.equal(repositoryRow()?.querySelector("code")?.textContent, "make serve");
 });

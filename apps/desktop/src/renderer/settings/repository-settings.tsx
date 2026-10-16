@@ -14,7 +14,10 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * installation reaches, as the service reads them, and any with a run
  * command set that it no longer lists; each row says whether one is set and
  * opens the repository's own page in the Workspace page's place, with its
- * way back above it. There the repository's run command is written in a
+ * way back above it; a link or search result seeking a section of the
+ * Workspace page closes it (`SETTINGS_SEEK_EVENT`), and the list is read
+ * again whenever the window takes the keyboard back, as after choosing
+ * repositories on GitHub. There the repository's run command is written in a
  * field of its own and saved, or removed. The command is kept on this Mac
  * for the account signed in, never synced and never taken from a pull
  * request (`compose-pr-runs.ts` in the host); Run on this Mac, in a pull
@@ -77,6 +80,12 @@ export function useRepositoriesRead(workspaceId: string): RepositoriesRead {
       live = false;
     };
   }, [act, workspaceId, attempt]);
+  // The window taking the keyboard back reads them again, since GitHub's own page, in the browser, is where repositories are added.
+  useEffect(() => {
+    const again = () => setAttempt((was) => was + 1);
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, []);
   const commands = new Map(
     set
       .filter((each) => each.workspaceId === workspaceId)
