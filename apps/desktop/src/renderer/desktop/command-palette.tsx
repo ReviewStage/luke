@@ -53,6 +53,7 @@ import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { Command, defaultFilter } from "cmdk";
+import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APP_COMMAND,
@@ -69,6 +70,7 @@ import {
 } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
@@ -224,6 +226,9 @@ const LISTED_COMMANDS: readonly AppCommand[] = [
 ];
 
 /** One row as the palette draws it, the words its search reads, and what choosing it does. */
+/** Words a Copy link row is found by beside its name. */
+const COPY_LINK_TERMS = ["link", "share", "url"] as const;
+
 interface PaletteRow {
   icon?: React.ReactNode;
   label: string;
@@ -498,7 +503,10 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
 /** The commands offered now, the palette's own left out, each with its chord. */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   return LISTED_COMMANDS.filter(
-    (command) => command !== APP_COMMAND.COMMAND_PALETTE && appCommandOffered(command),
+    (command) =>
+      command !== APP_COMMAND.COMMAND_PALETTE &&
+      command !== APP_COMMAND.COPY_LINK &&
+      appCommandOffered(command),
   ).map((command) => ({
     label: appCommandLabel(command),
     command: isKeyedCommand(command) ? command : undefined,
@@ -510,6 +518,28 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 /** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
 function holdsPlanPanel(plans: PlansControl): boolean {
   return plans.agentView.agentId === undefined;
+}
+
+/**
+ * Copy link to each thing the window can copy a link to now, the most
+ * specific first (`links-at-hand.ts`), named by what it is and, where the
+ * window holds it, its name; the first wears ⌥⌘C, which copies it.
+ */
+function copyLinkRows(
+  links: readonly LinkAtHand[],
+  copy: (held: LinkAtHand) => void,
+): readonly PaletteRow[] {
+  return links.map((held, index) => {
+    const label = `${appCommandLabel(APP_COMMAND.COPY_LINK)} to ${held.thing}`;
+    return {
+      icon: <LinkIcon aria-hidden="true" />,
+      label,
+      detail: held.name,
+      command: index === 0 ? APP_COMMAND.COPY_LINK : undefined,
+      terms: [label, ...COPY_LINK_TERMS],
+      onChoose: () => copy(held),
+    };
+  });
 }
 
 /**
@@ -714,6 +744,7 @@ export function CommandPalette({
   tab,
   onTabChange,
   plans,
+  links,
   settings,
   readFiles,
 }: {
@@ -721,6 +752,8 @@ export function CommandPalette({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
+  /** The links the window can copy now, the most specific first, and their copy (`useCopyLink`). */
+  links: CopyLink;
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
@@ -743,6 +776,8 @@ export function CommandPalette({
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
   const invoker = useRef<HTMLElement | null>(null);
+  // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
+  const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
   const field = useRef<HTMLInputElement>(null);
@@ -753,6 +788,7 @@ export function CommandPalette({
       ? () => {
           invoker.current =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setFromPanel(inSidePanel(document.activeElement));
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
           // The files are read afresh by the first search of each opening,
@@ -901,6 +937,7 @@ export function CommandPalette({
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
+        ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
         ...readMarkRows(plans, reads, choose),

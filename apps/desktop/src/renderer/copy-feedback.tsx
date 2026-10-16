@@ -43,6 +43,12 @@ const COPY_HINT = {
   [COPY_STATE.FAILED]: "Could not copy",
 } as const;
 
+/** What every item that copies a Luke link is called, wherever it stands, and what its toast says once the clipboard took it. */
+export const LINK_COPY = {
+  LABEL: "Copy link",
+  COPIED: "Link copied",
+} as const;
+
 /** What a copy's toast says when the clipboard refused it. */
 const COPY_FAILED_NOTE = "Could not copy to the clipboard. Try again.";
 

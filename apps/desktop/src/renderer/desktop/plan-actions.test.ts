@@ -12,10 +12,12 @@ import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { newestToastSays } from "#testing/toast";
 import { MemberDirectory } from "../member-directory";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { ToastHost } from "../toast";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
 import { planCardOf } from "./plan-card";
@@ -458,14 +460,15 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link to task copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row", async () => {
+test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
+  mount(createElement(ToastHost));
   const opened = openTab();
   const plans: PlansControl = { ...opened.plans, workspaces: [{ ...PERSONAL, slug: "dean" }] };
   const link = `https://tryluke.dev/dean/plan/${PLAN.id}`;
   const copyFromMenu = async () => {
-    const item = menuItems().find((candidate) => candidate.textContent === "Copy link to task");
-    assert.ok(item, "the menu offers Copy link to task");
+    const item = menuItems().find((candidate) => candidate.textContent === "Copy link");
+    assert.ok(item, "the menu offers Copy link");
     await act(async () => item.click());
   };
 
@@ -476,10 +479,12 @@ test("Copy link to task copies the plan's address on tryluke.dev, alike from the
   openMenu(title);
   await copyFromMenu();
   unmountAll();
+  mount(createElement(ToastHost));
   rightClick(mountSidebarPlan(plans, PLAN, opened.asked), 40, 60);
   await copyFromMenu();
 
   assert.deepEqual(copied, [link, link, link]);
+  assert.equal(newestToastSays(), "Link copied");
 });
 
 test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {

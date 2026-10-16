@@ -12,6 +12,7 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
 import { FindScope } from "../find-in-tab";
+import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { agentTabLabel } from "../planning/coding-agent-model";
@@ -145,6 +146,7 @@ export function DesktopAgentPage({
   };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
+  usePageWorkspace(agentId, workspaceId);
   const listed = plans.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.

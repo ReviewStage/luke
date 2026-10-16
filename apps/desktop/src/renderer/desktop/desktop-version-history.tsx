@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
@@ -7,12 +8,13 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
-import { ArrowUpRightIcon, FileDiffIcon, RotateCcwIcon } from "lucide-react";
+import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../planning/code-pane";
@@ -177,6 +179,7 @@ function RevisionRow({
   onOpenSections,
   source,
   onRestore,
+  onCopyLink,
   summary,
 }: {
   line: PlanRevisionLine;
@@ -191,6 +194,8 @@ function RevisionRow({
   source: SourceDoor | undefined;
   /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived plan's. */
   onRestore: (() => void) | undefined;
+  /** Copies the version's link; none for a history with no link of its own. */
+  onCopyLink: (() => void) | undefined;
   /** What the revision did, in a few words. */
   summary: string;
 }): React.JSX.Element {
@@ -203,6 +208,11 @@ function RevisionRow({
         ? []
         : [{ label: SECTIONS_LABEL, icon: <FileDiffIcon />, onSelect: onOpenSections }]),
       ...(source === undefined ? [] : [sourceItem(source)]),
+      ...(onCopyLink === undefined
+        ? []
+        : [
+            { label: LINK_COPY.LABEL, icon: <LinkIcon aria-hidden="true" />, onSelect: onCopyLink },
+          ]),
     ],
     onRestore === undefined
       ? []
@@ -627,6 +637,9 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
   const members = useWorkspaceMembers(subject.workspace);
+  // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
+  const copy = useCopyToast();
+  const linked = subject.plan;
   const reader = readerOf(account, members);
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
@@ -730,6 +743,22 @@ export function DesktopVersionHistory({
                         opensSections(line) ? () => openSections(line.seq) : undefined
                       }
                       onRestore={restoreOf(line)}
+                      onCopyLink={
+                        linked === undefined
+                          ? undefined
+                          : () =>
+                              copy(
+                                linkOf(
+                                  {
+                                    kind: LINK_PLACE.VERSION,
+                                    planId: linked.planId,
+                                    revision: line.seq,
+                                  },
+                                  linked.place.workspace,
+                                ),
+                                LINK_COPY.COPIED,
+                              )
+                      }
                       summary={subject.summary(line)}
                     />
                   );

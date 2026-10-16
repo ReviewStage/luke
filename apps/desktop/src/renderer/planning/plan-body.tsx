@@ -1,8 +1,8 @@
 import {
+  encodeMention,
   MENTION_KIND,
   type MentionLines,
   type MentionPlace,
-  mentionMarkdown,
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
@@ -12,7 +12,7 @@ import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
-import { useCopyToast } from "../copy-feedback";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
@@ -82,8 +82,9 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * has finished typing it (`../plan-diagram.tsx`).
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
- * pointer or the keyboard is on it, copies the section's mention
- * (`[@Heading](…)`, `@luke/features/mention-link`), and a mention in the
+ * pointer or the keyboard is on it, copies the section's address
+ * (`@luke/features/mention-link`), which a transcript or the plan draws as
+ * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
  * which copies the plan's link and offers Rename, where the title can be
@@ -115,12 +116,8 @@ interface LinkedPlan {
   readonly place: MentionPlace;
 }
 
-/** What a section's ⋯ and its one item are called. */
-const SECTION_MENU = {
-  LABEL: "Section actions",
-  COPY_LINK: "Copy link to section",
-  COPIED: "Link to section copied",
-} as const;
+/** What a section's ⋯ is called. */
+const SECTION_MENU_LABEL = "Section actions";
 
 /** What the title's ⋯ is called. */
 const TITLE_MENU_LABEL = "Title actions";
@@ -517,34 +514,29 @@ function UnitMenu({
 function SectionMenu({
   linked,
   anchor,
-  heading,
   tabbable,
 }: {
   linked: LinkedPlan;
   anchor: string;
-  heading: string;
   tabbable: boolean;
 }): React.JSX.Element {
   const copy = useCopyToast();
+  // Note that the link is the section's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown.
   const copyLink = () =>
     copy(
-      mentionMarkdown(
-        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
-        heading,
-        linked.place,
-      ),
-      SECTION_MENU.COPIED,
+      encodeMention({ kind: MENTION_KIND.SECTION, planId: linked.planId, anchor }, linked.place),
+      LINK_COPY.COPIED,
     );
   const item: MenuAction = {
-    label: SECTION_MENU.COPY_LINK,
+    label: LINK_COPY.LABEL,
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: copyLink,
   };
-  return <UnitMenu label={SECTION_MENU.LABEL} items={[item]} tabbable={tabbable} />;
+  return <UnitMenu label={SECTION_MENU_LABEL} items={[item]} tabbable={tabbable} />;
 }
 
 /**
- * The title's ⋯, drawn as a section's is: Copy link to plan, as the plan's
+ * The title's ⋯, drawn as a section's is: Copy link, the plan's, as the plan's
  * own ⋯ menu offers it, then Mark as unread or read where the window keeps
  * the plan's looks, Rename where the title can be edited, and Version
  * history where the window opens it, and nothing more, since the plan's
@@ -613,7 +605,7 @@ function DocumentUnit({
   );
   const menu =
     linked === undefined || anchor === "" ? null : (
-      <SectionMenu linked={linked} anchor={anchor} heading={view.heading} tabbable={entry} />
+      <SectionMenu linked={linked} anchor={anchor} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
