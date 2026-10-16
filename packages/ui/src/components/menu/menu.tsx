@@ -470,6 +470,7 @@ export function Menu({
   heading,
   footer,
   groups,
+  openOnChecked = false,
   onClose,
 }: {
   label: string;
@@ -478,6 +479,8 @@ export function Menu({
   heading?: React.ReactNode;
   footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
+  /** Whether it opens on its checked item, as a pop-up opens on its value, rather than on its first. */
+  openOnChecked?: boolean;
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
@@ -512,12 +515,18 @@ export function Menu({
     });
   }, [placement]);
 
-  // Focus lands on the first item as the menu is placed, and again as it is
-  // opened while it was leaving.
+  // Focus lands on the first item, or the checked one where it opens on
+  // that, as the menu is placed, and again as it is opened while it was
+  // leaving.
   const placed = at !== undefined;
   useEffect(() => {
-    if (placed && !leaving) element.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
-  }, [placed, leaving]);
+    if (!placed || leaving || element.current === null) return;
+    const items = itemsOf(element.current);
+    const checked = openOnChecked
+      ? items.find((item) => item.getAttribute("aria-checked") === "true")
+      : undefined;
+    (checked ?? items[0])?.focus();
+  }, [placed, leaving, openOnChecked]);
 
   // Note that a press on the opener is left to the opener, because the
   // button's own press is what closes the menu it opened; and that a menu

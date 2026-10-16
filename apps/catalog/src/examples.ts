@@ -7,6 +7,7 @@ import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
+import { SELECT_EXAMPLE } from "./examples/select";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
@@ -43,4 +44,5 @@ export const EXAMPLES: readonly Example[] = [
   SKELETONS_EXAMPLE,
   ANCHORED_POPOVER_EXAMPLE,
   MENU_EXAMPLE,
+  SELECT_EXAMPLE,
 ];
