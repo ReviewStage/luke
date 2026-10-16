@@ -462,13 +462,13 @@ export interface HostedToolDeclaration {
   readonly endsTurn?: boolean;
 }
 
-/** What one brain tool call runs under: the task the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, the task's coding agents, and Luke in the workspace's chat. */
+/** What one brain tool call runs under: the task the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, the task's coding agents, and Luke in the workspace's chat, nothing where Chat is off for the task's owner. */
 export interface BrainCall {
   readonly task: PlanDocumentBinding;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
-  readonly chat: PlannerChatCall;
+  readonly chat: PlannerChatCall | undefined;
 }
 
 /** One tool a brain turn is offered: its declaration, and the call it carries under the task the conversation belongs to. */
@@ -597,15 +597,15 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   },
   {
     ...CHAT_TOOLS.POST,
-    run: (call, input) => runPlannerPost(call.chat, input),
+    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerPost(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.READ,
-    run: (call, input) => runPlannerRead(call.chat, input),
+    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerRead(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.RESOLVE,
-    run: (call, input) => runPlannerResolve(call.chat, input),
+    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerResolve(call.chat, input)),
   },
   {
     ...END_CALL_TOOL,
@@ -708,9 +708,18 @@ Read the task's repository with run_in_repository, a checkout of its default bra
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
 
-/** The declarations every turn is offered, whatever kind of turn opened it. */
-export function brainToolDeclarations(): readonly HostedToolDeclaration[] {
-  return BRAIN_TOOLS.map((tool) => ({
+/** The chat's tools, which a turn is offered only where Chat is on for the plan's owner. */
+const CHAT_TOOL_NAMES: ReadonlySet<string> = new Set(
+  Object.values(CHAT_TOOLS).map((tool) => tool.name),
+);
+
+/**
+ * The declarations a turn is offered, whatever kind of turn opened it: every
+ * planning tool, the chat's among them only where Chat is on for the plan's
+ * owner (`@luke/settings`' `EXPERIMENT.CHAT`).
+ */
+export function brainToolDeclarations(chatOn = true): readonly HostedToolDeclaration[] {
+  return BRAIN_TOOLS.filter((tool) => chatOn || !CHAT_TOOL_NAMES.has(tool.name)).map((tool) => ({
     name: tool.name,
     description: tool.description,
     inputSchema: emitJsonSchema(tool.inputSchema),
@@ -780,6 +789,12 @@ const BRAIN_REFUSAL = {
   NO_TOOL: "Not run: no tool of that name is offered here.",
   NO_TASK: "Not run: this task no longer exists.",
 } as const;
+
+/** A chat tool called where Chat is off: no tool of that name is offered, as the turn was told. */
+const chatOff = Effect.succeed({
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: BRAIN_REFUSAL.NO_TOOL,
+});
 
 /**
  * Carries one brain tool call under the task the conversation belongs to, or

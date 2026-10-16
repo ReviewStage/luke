@@ -1,10 +1,11 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { chatEnabledFor } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@luke/database/models/message-reads";
-import { readTaskOfConversation } from "@luke/database/models/task-store";
+import { readTaskOfConversation, type StoredTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { isTextUIPart } from "ai";
@@ -172,6 +173,8 @@ export interface BrainHost extends HostAdmission {
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools every turn is offered, as declarations; the eve project binds each to `runTool`. */
   toolDeclarations(): readonly HostedToolDeclaration[];
+  /** The tools this conversation's turns are offered: every one, the chat's only where Chat is on for the plan's owner. */
+  toolDeclarationsFor(admitted: AdmittedConversation): HostEffect<readonly HostedToolDeclaration[]>;
   /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it, whose sandbox a repository read runs in. */
   runTool(
     name: string,
@@ -297,6 +300,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       Option.getOrUndefined,
     );
 
+  /** Whether Chat is on for the plan: asked of the account that owns it, whoever is speaking; off where no plan stands. */
+  const chatOnFor = (task: StoredTask | undefined) =>
+    task === undefined ? Effect.succeed(false) : chatEnabledFor(task.ownerId);
+
+  /** The tools a conversation's turns are offered, the chat's only where Chat is on for its plan. */
+  const offeredFor = (admitted: AdmittedConversation) =>
+    Effect.map(Effect.flatMap(taskOf(admitted), chatOnFor), brainToolDeclarations);
+
   /**
    * Relays one event of a session's stream into the conversation and turn
    * kind the caller admitted it under: the brain session's own, or a
@@ -306,6 +317,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     event: MessageStreamEvent,
     standing: Pick<RelayStanding, "sessionId" | "target" | "turn" | "state"> & {
       readonly promptHash?: string;
+      readonly offered?: readonly HostedToolDeclaration[];
     },
   ) =>
     Effect.gen(function* () {
@@ -319,7 +331,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       // declarations the tools resolver hands eve, so the hash names what
       // the model is offered and not a list kept beside it.
       const toolSetHash =
-        event.type === "turn.started" ? toolSetHashOf(brainToolDeclarations()) : undefined;
+        event.type === "turn.started"
+          ? toolSetHashOf(standing.offered ?? brainToolDeclarations())
+          : undefined;
       const writer = yield* seams.writer();
       const eve = yield* eveSessionsComposer;
       const relay = new StreamRelay({
@@ -392,7 +406,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // Read as the turn opens and marked read once it settles (`relay`), so a turn that fails
         // hands the next the same lines.
         const chat =
-          task === undefined
+          task === undefined || !(yield* chatOnFor(task))
             ? { messages: [], more: false }
             : yield* chatSince(admitted.caller, task.task.id);
         const text = brainStandingContext(
@@ -412,6 +426,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     toolDeclarations: () => brainToolDeclarations(),
 
+    toolDeclarationsFor: offeredFor,
+
     runTool: (name, binding, input, context) =>
       Effect.gen(function* () {
         // Admitted again as the call runs, not only as the tools were resolved:
@@ -429,6 +445,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // reached and paid for as the member speaking, whoever opened the conversation.
         const { caller } = standing.success;
         const task = yield* taskOf(standing.success);
+        // Asked again as the call runs, so a chat tool offered before Chat went off runs nothing.
+        const chatOn = yield* chatOnFor(task);
         // A message to a coding agent reaches its session as the deployment acting for the
         // caller, as a Stop does above: the brain session holds no bearer of the caller's.
         const secret = seams.deploymentSecret();
@@ -474,18 +492,24 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   writer: seams.writer(),
                   clientKey: context.callId,
                 },
-                // Luke reaches the chat on the standing of the member speaking.
-                chat: {
-                  luke: {
-                    ...lukeOn(caller, task.task.id),
-                    repository: task.task.repository,
-                    telling: { eveFor, writer: seams.writer(), doors: HELD_DOORS },
-                  },
-                  clientKey: context.callId,
-                  turnId: binding.turn.turnId,
-                  tally: chatPosts,
-                  sandbox: () => context.getSandbox(),
-                },
+                // Luke reaches the chat on the standing of the member speaking, where Chat is on.
+                chat: !chatOn
+                  ? undefined
+                  : {
+                      luke: {
+                        ...lukeOn(caller, task.task.id),
+                        repository: task.task.repository,
+                        telling: {
+                          eveFor,
+                          writer: seams.writer(),
+                          doors: HELD_DOORS,
+                        },
+                      },
+                      clientKey: context.callId,
+                      turnId: binding.turn.turnId,
+                      tally: chatPosts,
+                      sandbox: () => context.getSandbox(),
+                    },
               },
           input,
         );
@@ -495,12 +519,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {
+        // The turn row's tool set is the one this conversation is offered, read as the resolver reads it.
+        const offered = event.type === "turn.started" ? yield* offeredFor(admitted) : undefined;
         yield* relayEvent(event, {
           sessionId: session.id,
           target: admitted.target,
           turn: turnKindOf(session.auth.current),
           state,
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+          ...(offered === undefined ? undefined : { offered }),
         });
         // Only the turn the chat was handed to, and only once it completed, marks it read.
         if (event.type !== "turn.completed" || event.data.turnId !== chat.eveTurnId) return;

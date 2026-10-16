@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
   createCodingAgent,
@@ -26,6 +27,7 @@ import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/mode
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
+import { EXPERIMENT } from "@luke/settings";
 import { Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -221,6 +223,11 @@ async function callerOn(
         .runTool(name, binding, input, toolContext(id, auth, name, callId))
         .pipe(Effect.provide(Layer.merge(services, modelCatalogOf(catalog)))),
     );
+}
+
+/** Chat turned on for the account, as its Experimental page would. */
+async function chatOn(userId: string): Promise<void> {
+  await database.run(writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } }));
 }
 
 /** A task's own conversation, opened as the Tasks tab opens it, on the repository where one is named. */
@@ -769,6 +776,7 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
 
 test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
   const userId = await database.createUser();
+  await chatOn(userId);
   const plan = await taskConversation(userId, RELAY_FULL_NAME);
   const agent = await agentOn(userId, plan.taskId);
   const eve = await fakeCoderEve(plan.workspaceId);
@@ -791,6 +799,7 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
 
   // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
   const other = await taskConversation(undefined, RELAY_FULL_NAME);
+  await chatOn(other.userId);
   await agentOn(other.userId, other.taskId);
   const unsecured = await callerOn(brainHost(seams), other, eve.services);
   const held = await unsecured(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
@@ -799,8 +808,25 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   assert.equal(eve.sent.length, 1);
 });
 
+test("with Chat off for the plan's owner Luke's chat tools run nothing, and once the owner turns it on they post", async () => {
+  const plan = await taskConversation();
+  const call = await callerOn(brainHost(seams), plan);
+
+  const refused = await call(CHAT_TOOL.POST, { text: "Nobody hears this." }, "call-off");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
+  assert.equal((await call(CHAT_TOOL.READ, {}, "read-off")).status, ACTION_RESULT_STATUS.REJECTED);
+
+  await chatOn(plan.userId);
+  const posted = await call(CHAT_TOOL.POST, { text: "Now the room hears this." }, "call-on");
+  assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+  const read = await call(CHAT_TOOL.READ, { channel: "#teammate-invitations" }, "read-on");
+  assert.ok(Array.isArray(read.messages));
+  assert.equal(read.messages.length, 1);
+});
+
 test("Luke posts at most the chat's bound in one turn, a call eve runs again is its one post however many came after, and a post the bound refused is no post", async () => {
   const plan = await taskConversation();
+  await chatOn(plan.userId);
   const call = await callerOn(brainHost(seams), plan);
 
   const first = await call(CHAT_TOOL.POST, { text: "Step 0 is done." }, "call-0");

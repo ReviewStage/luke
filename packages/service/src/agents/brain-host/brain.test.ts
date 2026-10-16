@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureMember,
   ensurePlanChannel,
@@ -14,8 +15,9 @@ import { openTaskConversation, readTask, savePlanText } from "@luke/database/mod
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -496,10 +498,51 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
+    "with Chat off for the plan's owner a turn is offered no chat tool and opens with no chat, and once the owner turns it on it is offered them and the chat said since",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const person = Option.getOrThrow(
+          yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
+        );
+        // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
+        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.PLANNER, planId });
+        yield* postMessage(userId, channel.organizationId, {
+          authorMemberId: person.id,
+          to: { channelId: channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.ANSWERED }],
+          mentions: [],
+          clientKey: randomUUID(),
+        });
+        const standing = yield* admitted(host, session);
+        const offered = (on: readonly { readonly name: string }[]) =>
+          on
+            .map((declared) => declared.name)
+            .filter((name) => Object.values<string>(CHAT_TOOL).includes(name));
+
+        assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), []);
+        const off = (yield* host.standingContext(standing)).text;
+        assert.equal(off.includes("[chat since the last planning call]"), false, off);
+
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), [
+          CHAT_TOOL.POST,
+          CHAT_TOOL.READ,
+          CHAT_TOOL.RESOLVE,
+        ]);
+        const on = (yield* host.standingContext(standing)).text;
+        assert.ok(on.includes("[chat since the last planning call]"), on);
+      }),
+  );
+
+  it.effect(
     "asked to post, Luke posts in the plan's channel as @luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
     () =>
       Effect.gen(function* () {
         const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         const session = yield* startSession(host, userId, conversationId);
 
         const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);

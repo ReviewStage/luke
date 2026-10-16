@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { ensurePlanChannel, history, roster } from "@luke/database/models/chat-store";
 import { toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
@@ -20,6 +21,7 @@ import {
   SCRIPTED_POSTED_REPLY,
   SCRIPTED_READ,
 } from "@luke/service/testing/eve-scripted-model";
+import { EXPERIMENT } from "@luke/settings";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -143,6 +145,12 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
+      // Chat starts off for the account, as an account that never turned it on has it.
+      const chatChosen = (on: boolean) =>
+        run(
+          writeAccountPreferences(LOCAL_DEV_PRINCIPAL, { experiments: { [EXPERIMENT.CHAT]: on } }),
+        );
+      await chatChosen(false);
 
       /** A typed ask opening a new session over the conversation, answered once the session is its record. */
       const openSession = async (conversationId: string, message: string) => {
@@ -194,7 +202,8 @@ export default defineEval({
       // durable state to the turn row: the prompt's fingerprint and the tool
       // set's, neither naming a row, since nothing of either is kept.
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
-      assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations()));
+      // With Chat off, the turn ran under the tools without the chat's, and its row names that set.
+      assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations(false)));
 
       const tasksRows = await readMessagesByTurn(run, taskConversationId, turnId);
       assert.deepEqual(
@@ -277,6 +286,7 @@ export default defineEval({
         ),
       );
 
+      await chatChosen(true);
       // Asked to post, the model posts in the plan's channel as the plan's
       // Luke, and says where it landed.
       const chatPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
