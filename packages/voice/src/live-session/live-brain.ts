@@ -191,8 +191,21 @@ export interface LiveBrainJoin {
   readonly runs: readonly string[];
   /** What Luke said since the developer last heard him, bounded and newest last; none where nothing was missed. */
   readonly missed: string | undefined;
-  /** Tells the runs from where the record says they stand, never what came before; run once each run stands. */
+  /** The questions Luke queued meanwhile and has not taken back, oldest first, for the voice to ask in turn. */
+  readonly questions: readonly LiveBrainQuestion[];
+  /**
+   * Counts what the join handed over as heard, so no later call hands it
+   * again, then tells the runs from there; run once the catch-up and every
+   * run stand, and never where the call went or moved on before they did, so
+   * a catch-up nobody received is handed to the next call instead.
+   */
   readonly follow: Effect.Effect<void>;
+}
+
+/** A question the planning model queued for the developer, and the answer it recommends. */
+export interface LiveBrainQuestion {
+  readonly question: string;
+  readonly recommendation: string;
 }
 
 export interface LiveBrain {

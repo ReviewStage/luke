@@ -14,6 +14,7 @@ export {
   type LiveBrainAsk,
   type LiveBrainCancel,
   type LiveBrainJoin,
+  type LiveBrainQuestion,
   type LiveBrainRecoveredRun,
   type LiveBrainRecovery,
   type LiveBrainRunEnd,

@@ -194,7 +194,13 @@ class TurnOpeningBrain implements LiveBrain {
 
   /** The backend is not set exploring here, nor any earlier work taken up: the words on record are the developer's asks alone. */
   join(): Effect.Effect<LiveBrainJoin> {
-    return Effect.succeed({ joined: false, runs: [], missed: undefined, follow: Effect.void });
+    return Effect.succeed({
+      joined: false,
+      runs: [],
+      missed: undefined,
+      questions: [],
+      follow: Effect.void,
+    });
   }
 
   cancelRun(): Effect.Effect<LiveBrainCancel> {
