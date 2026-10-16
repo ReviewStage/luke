@@ -1027,9 +1027,11 @@ it which agent started it; `archive_agent` and `unarchive_agent`, which
 archive an idle agent of the workspace, never itself or one still working,
 on the rule the Archive agent menu keeps for the agent's starter, recording
 the archiving agent and its reason on the archived agent's row
-(`archived_by`), and bring one back; and `list_tasks`, the workspace's open
-tasks. A list, a read, or a start of an agent, a list of tasks, and
-`show_page` answer each thing's mention ready to write, `[@name](link)` under
+(`archived_by`), and bring one back; `read_page`, a page shown on any task
+of the workspace by its id, its HTML cut on a line to a bound, which a
+mention of a page points the agent at; and `list_tasks`, the workspace's
+open tasks. A list, a read, or a start of an agent, a list of tasks,
+`show_page`, and `read_page` answer each thing's mention ready to write, `[@name](link)` under
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
 task's link, so its replies, Inbox items, and plan notes draw them as chips.

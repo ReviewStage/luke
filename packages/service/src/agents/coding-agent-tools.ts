@@ -1185,8 +1185,14 @@ export function runListTasks(
   );
 }
 
+/** A page's HTML as a read answers it, and how many characters of it were left out. */
+interface PageCut {
+  readonly html: string;
+  readonly leftOutChars: number;
+}
+
 /** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */
-function pageCut(html: string): { readonly html: string; readonly leftOutChars: number } {
+function pageCut(html: string): PageCut {
   if (html.length <= READ_PAGE_CHARS) return { html, leftOutChars: 0 };
   const lineEnd = html.lastIndexOf("\n", READ_PAGE_CHARS);
   const kept = html.slice(0, lineEnd > 0 ? lineEnd : READ_PAGE_CHARS);

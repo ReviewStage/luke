@@ -386,6 +386,10 @@ most 262,144 characters a version, and every version it has had, each kept as
 written and never changed. Deleting the task deletes its pages. A page made by
 Luke is part of the task conversation, so it is sent back to
 Luke's model as the conversation goes on (see "Who we send it to"). Luke
+and coding agents can also read a page of any task of the workspace by its
+id, as a mention of the page points them to it: its HTML, at most 40,000
+characters of it, is then sent to that agent's model as part of its
+conversation. Luke
 on your Mac reads a page's HTML from our service only to draw it, holds it in
 memory only, and never passes it to the rest of the panel. A page runs sealed
 off from Luke: it cannot read the panel, your account, or another page, and
