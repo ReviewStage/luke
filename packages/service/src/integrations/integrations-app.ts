@@ -767,10 +767,6 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
   if (adding) {
     if (!connector.multipleAccounts) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    const held = providerRows(rows, provider).filter((row) => holdsAccountPlace(seams, row));
-    if (held.length >= INTEGRATION_ACCOUNTS_MAX) {
-      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    }
     // Note that a sign-in left past its window is let go first, so its name is free again and no read takes it for an account.
     const left = providerRows(rows, provider).filter((row) => !holdsAccountPlace(seams, row));
     yield* Effect.forEach(
@@ -781,9 +777,13 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
           : hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
       { discard: true },
     );
-    // Note that the rows are read again, so a sign-in restarted while these were let go keeps its name.
+    // Note that the rows are read again, so a sign-in restarted, or an account added, while these were let go keeps its name and its place.
     const remaining =
       left.length === 0 ? rows : yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+    const held = providerRows(remaining, provider).filter((row) => holdsAccountPlace(seams, row));
+    if (held.length >= INTEGRATION_ACCOUNTS_MAX) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
     const name = mintIntegrationConnectionName(
       provider,
       remaining.map((row) => row.connectionName),

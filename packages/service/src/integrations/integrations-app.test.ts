@@ -737,6 +737,50 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
+    "an account added while another add lets go of a sign-in left behind holds the last place, and the other is refused",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("raced@five-notions.example");
+        // Note that the fifth place is taken where this add would let its old sign-in go, as another add landing between the two would.
+        const group = yield* standing(
+          NOTION_CONNECTOR,
+          undefined,
+          undefined,
+          { declines: true },
+          {
+            endSignIn: (owner, connectionName, state) =>
+              Effect.andThen(endIntegrationSignIn(owner, connectionName, state), () =>
+                Effect.asVoid(
+                  beginIntegrationSignIn(
+                    owner,
+                    { provider: NOTION, connectionName, connectSubject: `${connectionName}-raced` },
+                    `${connectionName}-raced-state`,
+                    Redacted.make("connect-verifier"),
+                  ),
+                ),
+              ),
+          },
+        );
+        const connect = (query: string) =>
+          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+            method: "POST",
+            userId,
+          });
+        yield* connect("");
+        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) {
+          yield* connect("&add=true");
+        }
+        yield* TestClock.adjust("16 minutes");
+        // Every account but the fifth signs in again, so only the fifth's sign-in is left behind.
+        for (let place = 1; place < INTEGRATION_ACCOUNTS_MAX; place += 1) {
+          yield* connect(place === 1 ? "" : `&connection=${NOTION}-${place}`);
+        }
+
+        assert.deepEqual((yield* connect("&add=true")).body, UNAVAILABLE_REFUSAL.body);
+      }),
+  );
+
+  it.effect(
     "a read that ends the sign-ins holding a provider's places offers the provider again in that same read",
     () =>
       Effect.gen(function* () {
