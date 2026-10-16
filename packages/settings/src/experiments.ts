@@ -8,6 +8,8 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
+  /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
+  CHAT: "chat",
   /** The read-only Talk → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
   /** Coding agents started on a schedule, listed and made on their own page. */
@@ -37,6 +39,14 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.CHAT,
+    name: "Chat",
+    detail:
+      "Talk with your workspace's people, coding agents, and Luke in channels and direct messages.",
+    owner: "Charles",
+    since: "2026-10-16",
+  },
   {
     key: EXPERIMENT.VIDEO_CALLS,
     name: "Video calls",
