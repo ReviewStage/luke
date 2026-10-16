@@ -72,7 +72,11 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * version history, where each earlier version is. Each section says the
  * same of the save that last changed it, quietly, while the pointer or the
  * keyboard is on it, leading with the writer's face, and its time opens the
- * version history on the revision that save made. The sections changed since
+ * version history on the revision that save made. The words before the
+ * first heading have no heading's line for it to stand at, so they carry no
+ * line in the text, where it would stand over their words or a picture; a
+ * picture of the plan, opened over the window, says who last changed its
+ * section in the viewer's header instead. The sections changed since
  * the developer last looked at the plan on this Mac wear a still tint,
  * counted under that line beside a face for each who changed them, until
  * they dismiss them or leave the plan (`use-plan-looks.ts`).
@@ -299,11 +303,13 @@ interface SectionMarks {
 /**
  * The section's quiet line: who last changed the section under `heading`,
  * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
- * shown while the pointer or the keyboard is on it; none where no save has.
- * Where the window offers the version history, the time opens it on the
- * revision that save made.
+ * shown while the pointer or the keyboard is on it; none where no save has,
+ * or for the words before the first heading, which have no heading's line
+ * for it to stand at. Where the window offers the version history, the time
+ * opens it on the revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
+  if (heading === "") return null;
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
@@ -319,6 +325,26 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
         label={`${named}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
       />
+    </span>
+  );
+}
+
+/**
+ * What the picture viewer says of a picture of the plan: who last changed
+ * the section under `heading` it stands in, and when, "Edited by [Charles]
+ * Charles Pan · 2h ago"; none where no save has. Note that the time is
+ * words rather than the history's door, which would open behind the viewer.
+ */
+function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
+  const edit = marks.edits.get(heading);
+  if (edit === undefined) return null;
+  const { place } = marks;
+  return (
+    <span className="actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
+      <EditedBy edit={edit} place={place} sentence />
+      {" · "}
+      <span>{agoText(edit.at, place.now)}</span>
     </span>
   );
 }
@@ -858,7 +884,11 @@ export function PlanBody({
       />
     );
   return (
-    <PlanPictures planId={plan.id} text={plan.document.body}>
+    <PlanPictures
+      planId={plan.id}
+      text={plan.document.body}
+      sectionNote={(heading) => pictureNoteOf(marks, heading)}
+    >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the click is the pointer's way into an empty plan; the keyboard's is the title's Return or ↓. */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard reaches the text through the title, which Tab enters. */}
       <div
