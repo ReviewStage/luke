@@ -511,16 +511,20 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       );
       // A development build writes its windows' errors where the run's own
       // lines go, from before the first window opens, and offers their
-      // developer tools; the menu bar draws none in a packaged build.
+      // developer tools; the menu bar draws none in a packaged build. Note
+      // that a capture run is offered none either, because its windows are
+      // opened without them (`hardenedWebPreferences`).
       if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
-      config.showMenuBar({
-        developerTools: {
-          onOpenVoiceWindow: () =>
-            voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
-          onOpenCallWindow: () =>
-            callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
-        },
-      });
+      if (runMode.takesFocus) {
+        config.showMenuBar({
+          developerTools: {
+            onOpenVoiceWindow: () =>
+              voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+            onOpenCallWindow: () =>
+              callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+          },
+        });
+      }
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();

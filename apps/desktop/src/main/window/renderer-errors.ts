@@ -18,11 +18,15 @@ function documentName(url: string): string {
   return URL.canParse(url) ? path.posix.basename(new URL(url).pathname) : url;
 }
 
-/** Hands every error the window's page logs to the reporter, from now until the window goes. */
-function reportErrorsOf(window: BrowserWindow, report: (line: string) => void): void {
+/** Hands every error the window's page logs to the reporter while `reporting` says to. */
+function reportErrorsOf(
+  window: BrowserWindow,
+  report: (line: string) => void,
+  reporting: () => boolean,
+): void {
   const contents = window.webContents;
   contents.on("console-message", (details) => {
-    if (details.level !== "error") return;
+    if (details.level !== "error" || !reporting()) return;
     const source = `${documentName(details.sourceId)}:${details.lineNumber}`;
     report(`renderer error in ${documentName(contents.getURL())}: ${details.message} (${source})`);
   });
@@ -30,12 +34,16 @@ function reportErrorsOf(window: BrowserWindow, report: (line: string) => void): 
 
 /**
  * Reports the errors of every window opened from now on, and answers what
- * stops it. The caller decides the build: a packaged one calls nothing.
+ * stops it, for the windows already open as for those to come. The caller
+ * decides the build: a packaged one calls nothing.
  */
 export function reportRendererErrors(report: (line: string) => void): () => void {
-  const opened = (_event: Electron.Event, window: BrowserWindow) => reportErrorsOf(window, report);
+  let reporting = true;
+  const opened = (_event: Electron.Event, window: BrowserWindow) =>
+    reportErrorsOf(window, report, () => reporting);
   app.on("browser-window-created", opened);
   return () => {
+    reporting = false;
     app.removeListener("browser-window-created", opened);
   };
 }

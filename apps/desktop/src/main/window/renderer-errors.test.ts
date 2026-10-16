@@ -5,8 +5,8 @@ import { reportRendererErrors } from "./renderer-errors";
 /**
  * A development build's renderer errors, as the terminal the run was started
  * from reads them: each error a window's page logs is one line naming the
- * document it came from, a warning is not, and a window opened after the
- * reporting stopped says nothing.
+ * document it came from, a warning is not, and once the reporting stops no
+ * window says anything, whether it was open before or opened after.
  *
  * Note that Electron's module is replaced whole, because it is the operating
  * system's door and answers nothing outside an Electron process.
@@ -58,12 +58,14 @@ test("each error a window logs is one line naming its document, and a warning is
   ]);
 });
 
-test("a window opened after the reporting stopped says nothing", () => {
+test("once the reporting stops, no window says anything, open before or opened after", () => {
   const lines: string[] = [];
   const stop = reportRendererErrors((line) => lines.push(line));
+  const panel = open("index.html");
   stop();
 
-  open("index.html").log("error", "Uncaught Error: the sidebar never loaded");
+  panel.log("error", "Uncaught Error: the sidebar never loaded");
+  open("call.html").log("error", "Uncaught Error: the avatar never drew");
 
   assert.deepEqual(lines, []);
 });
