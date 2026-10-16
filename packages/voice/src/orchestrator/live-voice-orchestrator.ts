@@ -144,7 +144,7 @@ function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
 }
 
 const MICROPHONE_REFUSED_NOTE =
-  "The talk key needs the microphone. Allow it in System Settings, under Privacy & Security, Microphone.";
+  "The talk key needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.";
 
 function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
   return (

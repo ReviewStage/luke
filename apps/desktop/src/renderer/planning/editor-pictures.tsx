@@ -62,13 +62,10 @@ const TOOL = {
   DELETE: "Delete",
 } as const;
 
-/** What a field under a picture describes, and what its hint says. */
+/** What a field under a picture describes. */
 const DESCRIBING = {
-  ALT: {
-    label: TOOL.ALT,
-    hint: "Describe what the picture shows, for anyone who cannot see it and for the agents that read the plan as words.",
-  },
-  CAPTION: { label: TOOL.CAPTION, hint: "Words shown under the picture." },
+  ALT: { label: TOOL.ALT },
+  CAPTION: { label: TOOL.CAPTION },
 } as const;
 
 type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
@@ -201,7 +198,6 @@ function DescribeField({
           }}
         />
       </label>
-      <span className="picture-describe-hint">{describing.hint}</span>
     </span>
   );
 }

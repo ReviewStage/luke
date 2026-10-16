@@ -280,7 +280,7 @@ test("the task on the call stands in Talk however old, and with nothing standing
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state h3")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
   assert.equal(page.querySelector(".factory-scroll button"), null);
 });

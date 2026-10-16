@@ -175,9 +175,7 @@ function PeopleCard({
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
       {only || creation === undefined ? null : <CreatedBy creation={creation} />}
-      <CardNote>
-        {only ? "Invite someone to this workspace and they can read and edit its tasks." : note}
-      </CardNote>
+      {only ? null : <CardNote>{note}</CardNote>}
       {only || members === undefined ? null : (
         <>
           <CardRule />

@@ -346,7 +346,7 @@ function ServersRow({
           <strong>MCP servers</strong>
           <small>
             {disabled.length === 0
-              ? "Its creator's connected servers, every one."
+              ? "All of its creator's connected servers."
               : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
           </small>
         </span>
@@ -729,8 +729,7 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   {
     value: PULL_REQUEST_MOMENT.PUSHED,
     label: "When pushed to",
-    detail:
-      "A push by Luke's own agents never starts a run, so a run that pushes cannot start itself.",
+    detail: "A push by Luke's own agents never starts a run.",
   },
 ];
 
@@ -840,13 +839,13 @@ function CodeReviewGroup({
     <SettingsGroup title="Code review">
       <SwitchRow
         label="Comment when no issues are found"
-        detail="A first review that finds nothing says so. A later one that finds nothing new posts nothing."
+        detail="Only on a pull request's first review."
         checked={settings.commentWhenClean}
         onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
       />
       <SelectRow
         label="Most findings"
-        detail="The most one review posts, the most severe first."
+        detail="Per review, most severe first."
         value={settings.mostFindings}
         options={MOST_FINDINGS}
         parse={mostFindingsOf}
@@ -1008,7 +1007,6 @@ function WebhookRows({
         <div className="settings-row">
           <span className="settings-copy">
             <strong>Secret</strong>
-            <small>A new secret stops the one before.</small>
           </span>
           <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
             New secret
@@ -1178,8 +1176,8 @@ function AgentRow({
     <>
       <strong>Agent</strong>
       <small>
-        Each run goes to that agent as a message, as if you'd typed it, even mid-turn, and it keeps
-        its own model and effort.
+        Each run is sent to that agent as a message, even mid-turn. It keeps its own model and
+        effort.
       </small>
     </>
   );
@@ -1314,7 +1312,7 @@ function RunsGroup({
           />
           <SwitchRow
             label="Archive successful runs"
-            detail="A run's agent is archived once it finishes without failing. Its transcript and pull request stay reachable."
+            detail="Its transcript and pull request are kept."
             checked={draft.archiveSuccessful}
             onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
           />
@@ -1402,7 +1400,7 @@ function EditorForm({
           <>
             <SelectRow
               label="Event"
-              detail="Heard through the workspace's GitHub App, in the repositories below."
+              detail="Heard through the workspace's GitHub App."
               value={draft.githubEvent}
               options={GITHUB_EVENTS}
               parse={githubEventOf}
@@ -1434,7 +1432,7 @@ function EditorForm({
         <textarea
           className="automation-prompt"
           aria-label="Prompt"
-          placeholder="What the agent is told each run: find the flakiest test in CI this week and fix it."
+          placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
           onKeyDown={releaseOnEscape}
           onChange={(event) => onDraft({ prompt: event.target.value })}
@@ -1691,10 +1689,6 @@ export function AutomationEditor({
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
-          body:
-            automation === undefined
-              ? "This automation isn't created yet, and what you wrote here is lost."
-              : "What you changed here is lost.",
           verb: "Leave",
           running: "Leaving",
         }}

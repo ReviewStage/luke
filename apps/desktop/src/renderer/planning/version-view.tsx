@@ -69,7 +69,7 @@ const CURRENT_HINT = "This version is already current";
 function restoreQuestion(at: number, noun: string): DialogQuestion {
   return {
     title: "Restore this version?",
-    body: `The ${noun} will go back to the version from ${dayAndTimeText(at)}. The ${noun} as it stands now stays in the history, so you can restore it again.`,
+    body: `The ${noun} will go back to the version from ${dayAndTimeText(at)}. The ${noun} as it stands now stays in the history.`,
     verb: "Restore",
     running: "Restoring",
     tone: DIALOG_TONE.PRIMARY,

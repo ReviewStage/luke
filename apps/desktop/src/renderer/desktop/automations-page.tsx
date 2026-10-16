@@ -306,10 +306,7 @@ function ListPage({
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : groups.length === 0 ? (
           <div className="automations-empty">
-            <EmptyState icon={<ZapIcon />} title="No automations yet">
-              An automation starts a coding agent on a schedule, for you alone or for everyone in{" "}
-              {workspace?.name ?? "the workspace"}.
-            </EmptyState>
+            <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
             <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
           </div>
         ) : (

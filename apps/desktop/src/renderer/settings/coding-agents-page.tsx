@@ -113,7 +113,7 @@ function modelRowNote(
   const name = PROVIDER_NAME[provider];
   return status === PROVIDER_KEY_STATUS.VERIFIED
     ? `Runs on your own ${name} key.`
-    : `Your ${name} key needs attention under API keys.`;
+    : `Your ${name} key needs attention.`;
 }
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */

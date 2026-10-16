@@ -6,8 +6,7 @@ import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /** What the test row says of when Luke notifies at all. */
-const NOTIFICATIONS_WHEN_NOTE =
-  "Luke notifies when its window is in the background; in the window you'll see a toast instead.";
+const NOTIFICATIONS_WHEN_NOTE = "Luke notifies only when its window is in the background.";
 
 /** What the section says of macOS's grant, by whether this is the packaged app. */
 const NOTIFICATIONS_LINE = {

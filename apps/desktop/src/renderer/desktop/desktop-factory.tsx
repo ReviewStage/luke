@@ -695,9 +695,7 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
             place={READ_FAILURE_PLACE.CENTRED}
           />
         ) : !plans.listRead && !plans.listFailed ? null : empty ? (
-          <EmptyState icon={<FactoryIcon />} title="No agents at work">
-            Agents you and your team start show here as they work.
-          </EmptyState>
+          <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
         ) : (
           <>
             {plans.listFailed ? (

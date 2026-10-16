@@ -49,20 +49,13 @@ export function keepInView(list: HTMLElement | null, row: Element | null): void 
 }
 
 /** The badge a tool wears on its row and at the head of its page's hints. */
-function Badge({
-  tool,
-  server,
-}: {
-  tool: IntegrationTool;
-  server: string;
-}): React.JSX.Element | null {
+function Badge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
     <span
       className="integration-tool-badge"
       data-destructive={badge === TOOL_BADGE.DESTRUCTIVE ? "true" : undefined}
-      title={`${server}'s server marks this tool ${badge.toLowerCase()}`}
     >
       {badge}
     </span>
@@ -141,7 +134,7 @@ export function IntegrationToolList({
                     <Highlighted text={tool.name} tokens={tokens} />
                   </span>
                 ) : null}
-                <Badge tool={tool} server={server} />
+                <Badge tool={tool} />
               </span>
               {tool.description !== "" ? (
                 <span className="integration-tool-description">
@@ -313,7 +306,7 @@ export function IntegrationToolDetail({
           </ul>
         ) : null}
         {tool.description === "" ? (
-          <p className="integration-tool-silent">{`${server}'s server says nothing of what this tool does.`}</p>
+          <p className="integration-tool-silent">No description.</p>
         ) : (
           <MarkdownMessage
             words={tool.description}

@@ -186,7 +186,7 @@ export function repositoryFailureNote(failure: RepositoryCallFailure): string {
 
 /** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
 const LINEAR_START_FAILED_NOTE =
-  "Linear could not be read for that issue. It may be disconnected from this workspace; an owner or admin can connect it again in Settings › Workspace.";
+  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
 
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
