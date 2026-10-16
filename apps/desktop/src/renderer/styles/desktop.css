@@ -4422,7 +4422,7 @@ body:has(.app-stage[data-capture="true"])
   min-height: 52px; /* off-scale */
   align-items: center;
   gap: var(--space-12);
-  padding: var(--space-8) var(--space-16);
+  padding-right: var(--space-16);
 }
 
 .automation-row-copy {
@@ -4487,17 +4487,19 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
-/* A row's name and schedule are its press, which opens its page; the owner,
-   the next run, and the switch beside them are not, so the switch stays a
+/* A row is its press, which opens its page, from its edge to its switch, as
+   a sidebar task's row is: the owner, the next run, and the failure's mark
+   stand in it, and the switch stands beside it, so the switch stays a
    switch. */
 .automation-row-open {
   display: flex;
   min-width: 0;
   flex: 1;
+  align-self: stretch;
   align-items: center;
   gap: var(--space-12);
-  margin: calc(-1 * var(--space-8)) 0;
-  padding: var(--space-8) 0;
+  padding: var(--space-8) 0 var(--space-8) var(--space-16);
+  border-radius: inherit;
   background: none;
   color: inherit;
   text-align: left;
@@ -4507,8 +4509,18 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-secondary);
 }
 
-.automation-row:has(.automation-row-open:hover) {
+/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
+.automation-row:hover {
   background: var(--raised);
+}
+
+.automation-row-open:focus-visible {
+  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
+}
+
+:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its

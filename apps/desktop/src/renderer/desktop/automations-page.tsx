@@ -80,7 +80,9 @@ function OwnerCell({
 /**
  * One automation's row: the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next, a
- * failure's mark, and its switch.
+ * failure's mark, and its switch. Everything but the switch is one press
+ * that opens its page, as a sidebar task's row is, so the row opens wherever
+ * it is pressed and the switch beside the press only switches.
  */
 function AutomationRow({
   automation,
@@ -107,19 +109,19 @@ function AutomationRow({
             {automationTriggerText(automation.trigger, automation.repositories ?? [])}
           </span>
         </span>
+        <OwnerCell
+          owner={automationOwner(automation)}
+          mine={automation.mine === true}
+          workspace={workspace}
+        />
+        <span
+          className="automation-row-when"
+          title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+        >
+          {automationNextText(automation, now)}
+        </span>
+        {stateEndMark(state, true)}
       </button>
-      <OwnerCell
-        owner={automationOwner(automation)}
-        mine={automation.mine === true}
-        workspace={workspace}
-      />
-      <span
-        className="automation-row-when"
-        title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-      >
-        {automationNextText(automation, now)}
-      </span>
-      {stateEndMark(state, true)}
       <Switch
         checked={automation.enabled}
         label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}

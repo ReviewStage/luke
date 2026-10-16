@@ -714,6 +714,39 @@ function crumbs(page: HTMLElement): string {
   return page.querySelector(".automation-crumbs")?.textContent ?? "";
 }
 
+test("an automation's whole row is its press: its owner and its next run open it too, and its switch only switches it", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const row = rowOf(page, "Nightly flaky-test sweep");
+  const owner = row.querySelector<HTMLElement>(".automation-owner");
+  assert.ok(owner, "the row names its owner");
+  act(() => owner.click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const when = rowOf(list, "Nightly flaky-test sweep").querySelector<HTMLElement>(
+    ".automation-row-when",
+  );
+  assert.ok(when, "the row says when it runs next");
+  act(() => when.click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button(`Turn off ${SWEEP.name}`).click());
+  await settle();
+  assert.deepEqual(places, [{ kind: AUTOMATIONS_PAGE.LIST }], "the switch opens nothing");
+  assert.ok(changes.length > 0, "and switches it");
+});
+
 test("a row opens its automation's page, under crumbs naming it, with what it was saved as", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
