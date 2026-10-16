@@ -56,14 +56,17 @@
   /* A toolbar chip and a field light under the pointer and while their
      menu is open, as a quiet button does. */
   .luke-chip:is([data-look="toolbar"], [data-look="field"]):where(
-    :hover:not(:disabled),
+    :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"]
   ) {
     background: var(--luke-color-fill-selected);
     color: var(--luke-color-text);
   }
 
-  .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(:disabled) {
+  .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
     background: var(--luke-color-fill-pressed);
   }
 
@@ -83,7 +86,10 @@
     color: var(--luke-color-text);
   }
 
-  .luke-chip[data-look="pill"]:where(:hover:not(:disabled), [aria-expanded="true"]) {
+  .luke-chip[data-look="pill"]:where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"]
+  ) {
     background: var(--luke-color-fill-strong);
     color: var(--luke-color-text);
   }
@@ -102,7 +108,18 @@
     text-align: left;
   }
 
+  /* Unavailable, a chip fades to 45%: a disabled one whole, one that keeps
+     the keyboard (`aria-disabled`, so a hint can say why) its fill and its
+     words alone, so the app's ring around it is drawn at full strength. */
   .luke-chip:disabled {
     opacity: 0.45;
+  }
+
+  .luke-chip[aria-disabled="true"] {
+    color: color-mix(in srgb, currentColor 45%, transparent);
+  }
+
+  .luke-chip[data-look="pill"][aria-disabled="true"] {
+    background: color-mix(in srgb, var(--luke-color-fill-hover) 45%, transparent);
   }
 }

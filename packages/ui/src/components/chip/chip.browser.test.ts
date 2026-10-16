@@ -49,6 +49,23 @@ test("a chip in a narrow row cuts its words short rather than leaving the row", 
   expect(name && name.scrollWidth > name.clientWidth).toBe(true);
 });
 
+test("a chip that keeps the keyboard while unavailable is drawn as unavailable, not as a chip to press", async () => {
+  const { container } = await mount(
+    createElement(
+      "div",
+      null,
+      createElement(Chip, { look: CHIP_LOOK.FIELD, children: "Opus" }),
+      createElement(Chip, { look: CHIP_LOOK.FIELD, "aria-disabled": true, children: "Opus" }),
+    ),
+  );
+  const [available, unavailable] = container.querySelectorAll("button");
+  expect(unavailable && getComputedStyle(unavailable).color).not.toBe(
+    available && getComputedStyle(available).color,
+  );
+  await userEvent.hover(page.getByRole("button", { name: "Opus" }).nth(1));
+  expect(unavailable && getComputedStyle(unavailable).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+});
+
 for (const surface of [
   surfaceAttributes(PROFILE.DESKTOP, THEME.DARK),
   surfaceAttributes(PROFILE.DESKTOP, THEME.LIGHT),
