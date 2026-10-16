@@ -147,9 +147,12 @@ disc, and its start pill, the new-plan composer's round start, and a tab's ×,
 which brightens without a fill.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
-switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
-`--focus-ring-offset` off its edge, and only once the keyboard has moved focus
-(`keyboard-modality.ts`), so a press never rings a control. A box that clips
+switch, option, and menu item, and anything else in the tab order, draws
+`--focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
+only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
+never rings a control. A control whose drawn shape is a part of it, a picture
+tile's picture over its caption, marks that part `data-focus-ring`, which
+rings in the control's place, so the ring takes the shape that is seen. A box that clips
 what it holds keeps the ring whole one of two ways: one that clips only to hold
 in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
 `overflow-clip-margin: var(--focus-ring-room)`, which names its box because

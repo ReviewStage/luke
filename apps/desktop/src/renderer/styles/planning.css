@@ -3752,11 +3752,6 @@ button.picture-frame {
   text-align: left;
 }
 
-.picture-set-tile:focus-visible .picture-set-frame {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .picture-set-frame {
   position: relative;
   display: grid;

@@ -373,12 +373,13 @@
     font: inherit;
   }
 
-  /* One ring for every control. `:focus-visible` alone guesses wrong in a
-     window Luke focuses for itself and rings a button after a plain press,
-     so until the keyboard has actually moved focus (`keyboard-modality.ts`)
-     nothing but a field rings. In the base layer, so a sheet's own rule for
-     a control still wins: a menu row marks its focus with a fill, and says
-     so where it is drawn. */
+  /* One ring for every control, and for anything else in the tab order, so
+     no element given a tabindex is left to the engine's own ring.
+     `:focus-visible` alone guesses wrong in a window Luke focuses for itself
+     and rings a button after a plain press, so until the keyboard has
+     actually moved focus (`keyboard-modality.ts`) nothing but a field rings.
+     In the base layer, so a sheet's own rule for a control still wins: a
+     menu row marks its focus with a fill, and says so where it is drawn. */
   :is(
     button,
     a[href],
@@ -389,8 +390,22 @@
     [role="switch"],
     [role="option"],
     [role="menuitem"],
-    [role="menuitemcheckbox"]
-  ):focus-visible {
+    [role="menuitemcheckbox"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible:not(:has(> [data-focus-ring])) {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* A control whose drawn shape is a part of it, a picture tile's picture
+     over its caption, rings that part alone, which says so with
+     `data-focus-ring`, so the ring takes the shape that is seen and the
+     control draws no second one around it. */
+  :focus-visible:has(> [data-focus-ring]) {
+    outline: none; /* no ring: the part it names rings */
+  }
+
+  :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
@@ -411,7 +426,8 @@
     [role="switch"],
     [role="option"],
     [role="menuitem"],
-    [role="menuitemcheckbox"]
+    [role="menuitemcheckbox"],
+    [tabindex]:not([tabindex="-1"])
   ) {
     scroll-margin: var(--focus-ring-reach);
   }

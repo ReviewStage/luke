@@ -295,7 +295,7 @@ function SetTile({
       title={many ? words : undefined}
       onClick={onOpen}
     >
-      <span className="picture-set-frame" style={{ aspectRatio: aspect }}>
+      <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
         {shown.picture === undefined ? (
           <TileFace state={undefined} words={words} />
         ) : (
