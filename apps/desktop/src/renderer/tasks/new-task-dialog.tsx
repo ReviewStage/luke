@@ -313,6 +313,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
             onChoose={(chosenId) => {
               setWorkspaceId(chosenId);
               setHighlight(0);
+              setDismissed(false);
             }}
           />
         </div>
