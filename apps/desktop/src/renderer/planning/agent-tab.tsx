@@ -678,7 +678,9 @@ function AutomationSender({
       ) : (
         <ActorRef
           actor={automationActor(known.automation)}
-          card={<AutomationCard {...known} />}
+          card={
+            <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+          }
           onOpen={known.onOpen}
         />
       )}

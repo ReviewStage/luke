@@ -207,19 +207,15 @@ export function agentSubject(
   return { name, tile, read: () => reading };
 }
 
-/** The agent's tab's card, as a place naming the agent hangs it, ending on the way to its tab where the place offers one. */
+/** The agent's tab's card, as a place naming the agent hangs it: what it says, with no way to the tab, since the name it hangs from is that way. */
 export function AgentCard({
   subject,
   models,
-  onOpen,
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
-  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  return (
-    <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} onOpen={onOpen} />
-  );
+  return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} />;
 }
 
 /**
@@ -245,10 +241,7 @@ export function AgentRef({
 }): React.JSX.Element {
   const classes = className === undefined ? "agent-ref" : `agent-ref ${className}`;
   return (
-    <Tooltip
-      label={subject.name}
-      card={<AgentCard subject={subject} models={models} onOpen={onOpen} />}
-    >
+    <Tooltip label={subject.name} card={<AgentCard subject={subject} models={models} />}>
       {onOpen === undefined ? (
         <span className={classes} data-agent-ref="">
           {children}
@@ -264,8 +257,8 @@ export function AgentRef({
 
 /**
  * An agent named in a line as every actor is: its tile and its name as one
- * button (`ActorRef`), hanging its tab's card, which ends on the way to its
- * tab, and opening its tab on a press.
+ * button (`ActorRef`), hanging its tab's card and opening its tab on a
+ * press.
  */
 export function AgentActorRef({
   subject,
@@ -280,7 +273,7 @@ export function AgentActorRef({
   return (
     <ActorRef
       actor={subject.tile}
-      card={<AgentCard subject={subject} models={models} onOpen={onOpen} />}
+      card={<AgentCard subject={subject} models={models} />}
       onOpen={onOpen}
     />
   );

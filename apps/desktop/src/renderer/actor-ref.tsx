@@ -214,15 +214,17 @@ export function YouBadge(): React.JSX.Element {
   return <span className="actor-you">You</span>;
 }
 
-/** An actor's card head: its mark at a card's size, its name, the line under it, and its corner. */
+/** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, the line under it, and its corner. */
 function ActorHead({
   actor,
   sub,
   corner,
+  onOpen,
 }: {
   actor: Actor;
   sub?: ReactNode;
   corner?: ReactNode;
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const you = actor.kind === ACTOR_KIND.PERSON && actor.you;
   // Note that the card names the reader by their name, beside its badge, since the card is about who they are.
@@ -237,8 +239,12 @@ function ActorHead({
               {name}
               <YouBadge />
             </span>
-          ) : (
+          ) : onOpen === undefined ? (
             name
+          ) : (
+            <button type="button" className="card-name-link" onClick={onOpen}>
+              {name}
+            </button>
           )
         }
         sub={sub}
@@ -345,9 +351,6 @@ function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   );
 }
 
-/** What an automation's card's way to its page says. */
-const OPEN_AUTOMATION = "Open automation";
-
 /** Where an automation's work stands, as its tile wears it: its newest run's standing. */
 const ACTOR_STATE_OF_RUN = {
   [AUTOMATION_RUN_STANDING.WORKING]: ACTOR_STATE.WORKING,
@@ -366,8 +369,11 @@ export function automationActor(automation: AutomationSummary): Actor {
 
 /**
  * An automation's card: its clock, its name over what fires it, whose it
- * is at the corner, when it runs next, how its last run went, and under a
- * rule the way to its page.
+ * is at the corner, when it runs next, and how its last run went. Note
+ * that it offers no way to the automation's page under a rule, because
+ * the name it hangs from opens that page on a press; hung from a control
+ * whose press does something else, the Inbox's group header, which folds,
+ * its own name is that way instead (`onOpen`).
  */
 export function AutomationCard({
   automation,
@@ -377,7 +383,8 @@ export function AutomationCard({
   automation: AutomationSummary;
   /** The workspace's name, which a workspace automation's corner says. */
   workspaceName: string | undefined;
-  onOpen: () => void;
+  /** Opens the automation's page from the card's name, where the control hanging the card opens nothing of its own. */
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const actor = automationActor(automation);
@@ -388,6 +395,7 @@ export function AutomationCard({
         actor={actor}
         sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
         corner={automationOwnerName(automationOwner(automation), workspaceName)}
+        onOpen={onOpen}
       />
       <CardNote>{automationNextText(automation, now)}</CardNote>
       {lastRun === null ? null : (
@@ -397,8 +405,6 @@ export function AutomationCard({
           {` · ${automationRunLine(lastRun)}`}
         </CardNote>
       )}
-      <CardRule />
-      <CardDoor label={OPEN_AUTOMATION} onOpen={onOpen} />
     </HoverCard>
   );
 }
@@ -457,21 +463,6 @@ export function ActorRef({
         </button>
       )}
     </Tooltip>
-  );
-}
-
-/** A card's way to the page of what it is about, under its rule: "Open agent". Choosing it takes the card down (`tooltip.tsx`). */
-export function CardDoor({
-  label,
-  onOpen,
-}: {
-  label: string;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <button type="button" className="card-door" data-card-choice="" onClick={onOpen}>
-      {label}
-    </button>
   );
 }
 

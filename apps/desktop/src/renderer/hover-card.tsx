@@ -17,6 +17,12 @@ import { useClipped } from "./use-clipped";
  * and so wrapped to three lines, or one line faded at its end, and a rule
  * before what a card lists under it. The sizes are the stylesheet's, on the
  * `card-` classes (desktop.css), which only these parts draw.
+ *
+ * A card says what its subject is and offers no way to it, no "Open agent"
+ * under a rule, because the control it hangs from opens the subject on a
+ * press. Where that control's press does something else, as a group
+ * header's folds, the card's own name is the way in; its rows may still
+ * open what they name, another thing than the card's subject.
  */
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */

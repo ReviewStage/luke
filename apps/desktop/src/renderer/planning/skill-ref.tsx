@@ -1,6 +1,5 @@
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
-import { CardDetail } from "../desktop/plan-card";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
@@ -15,9 +14,9 @@ import { FileTypeIcon } from "./file-type-icon";
  * name, drawn from every card's parts (`hover-card.tsx`) and a plan card's
  * rows (`plan-card.tsx`): the skill's mark and name at its head, what it is
  * for under it, and its file's line, named from the repository's root,
- * which opens it too.
- * A press on the name, or Enter once it has the focus, opens the same
- * file. A name inside a message is the chip the composer drew it as
+ * which says and does not open, since every place hanging the card opens
+ * that file itself. A press on the name, or Enter once it has the focus,
+ * opens it. A name inside a message is the chip the composer drew it as
  * (`SkillRef`); a transcript's row that loaded the skill is a call's row,
  * which hangs the same card (`agent-tab.tsx`), as a row that opens an
  * agent's tab hangs that tab's card.
@@ -29,14 +28,19 @@ export interface SkillSubject {
   readonly onOpen: () => void;
 }
 
-/** The skill's card: its mark and name, what it is for, and its file's line, which a press opens. */
+/** The skill's card: its mark and name, what it is for, and its file's line. */
 export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Element {
-  const { skill, onOpen } = subject;
+  const { skill } = subject;
   return (
     <HoverCard data-skill-card="">
       <CardHead glyph={<BookOpenIcon aria-hidden="true" />} name={skillWord(skill.name)} />
       {skill.description === "" ? null : <CardNote>{skill.description}</CardNote>}
-      <CardDetail glyph={<FileTypeIcon name={skill.path} />} label={skill.path} onPress={onOpen} />
+      <span className="plan-card-detail">
+        <span className="plan-card-glyph">
+          <FileTypeIcon name={skill.path} />
+        </span>
+        <span className="plan-card-label">{skill.path}</span>
+      </span>
     </HoverCard>
   );
 }

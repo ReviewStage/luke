@@ -293,7 +293,7 @@ test("the pointer going from a starter's card back onto the agent's own name kee
   }
 });
 
-test("an agent's card wears its tile beside its name, its pull request at the corner where the plan holds one, and Open agent under a rule, which opens its tab and takes the card down", async () => {
+test("an agent's card wears its tile beside its name and its pull request at the corner where the plan holds one, and offers no Open agent, since the name it hangs from opens the tab", async () => {
   const { card, opened } = await agentNamed(DEAN.userId, new Map([[AGENT.id, PULL_REQUEST]]));
   const tile = card.querySelector<HTMLElement>(".actor-card-head > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
@@ -302,12 +302,19 @@ test("an agent's card wears its tile beside its name, its pull request at the co
   assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
   assert.match(corner.textContent ?? "", /^#42 · Failed/u);
 
-  const door = card.querySelector<HTMLButtonElement>("[data-card-choice]");
-  assert.equal(door?.textContent, "Open agent");
-  assert.ok(door?.previousElementSibling?.matches(".card-rule"), "it stands under a rule");
-  act(() => door?.click());
+  const offers = [...card.querySelectorAll("button")].map((button) => button.textContent ?? "");
+  assert.deepEqual(
+    offers.filter((words) => words.startsWith("Open")),
+    [],
+    "the card offers no way to the tab",
+  );
+  assert.equal(
+    card.querySelector(".card-rule")?.outerHTML,
+    undefined,
+    "nor a rule to stand one under",
+  );
+  act(() => document.querySelector<HTMLElement>("[data-agent-ref]")?.click());
   assert.deepEqual(opened, [AGENT.id]);
-  assert.equal(cards().length, 0, "choosing it takes the card down");
 });
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
