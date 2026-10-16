@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "432586bb-c3a7-452b-aae4-d1b3109225c0",
-  "prevIds": ["3441dcf4-626b-4597-a013-0165962548fc", "6c33933a-c64a-4be6-a3b7-17870c42c3a2"],
+  "id": "9c778095-d5c3-431e-b850-3192b6e9a66f",
+  "prevIds": ["3441dcf4-626b-4597-a013-0165962548fc", "c6d2ba39-b9f9-4835-bc77-fc54947df5dc"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3289,6 +3289,19 @@
       "generated": null,
       "identity": null,
       "name": "mentioned_servers",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "author",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
