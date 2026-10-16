@@ -1,6 +1,10 @@
 # Proposal: the pinned summary beside an empty side panel
 
-Status: **open**, waiting on a pick from §4.
+Status: **decided by Dean on 2026-10-16: (a)**. Dean: "I think we had some
+work to close the panel when the last tab closes, so check for that first and
+then build the reopen logic on top." The close is #3123. The reopen logic, and
+the panel staying hidden on a plan with no tab open (D2, D3 as recommended),
+come in a PR stacked on it. D4 and D5 are still open.
 
 The design show is `docs/proposals/summary-beside-empty-panel/index.html`. It
 is one self-contained file that fetches nothing. Its frames are drawn by hand
