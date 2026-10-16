@@ -112,7 +112,13 @@ const findFormer = SqlSchema.findAll({
                 db
                   .select({ id: inboxItem.answeredBy })
                   .from(inboxItem)
-                  .where(and(inArray(inboxItem.planId, tasks), isNotNull(inboxItem.answeredBy))),
+                  // Note that an item is the workspace's by its own column, since an agent with no task holds items too.
+                  .where(
+                    and(
+                      eq(inboxItem.organizationId, organizationId),
+                      isNotNull(inboxItem.answeredBy),
+                    ),
+                  ),
               ),
             ),
             notInArray(
