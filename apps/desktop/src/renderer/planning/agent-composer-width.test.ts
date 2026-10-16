@@ -17,6 +17,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { layComposerAt, shown } from "#testing/composer-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";
@@ -132,6 +133,7 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
     container.querySelector<HTMLElement>("form > :last-child") ?? assert.fail("the foot stands");
   return {
     container,
+    foot,
     /** The names of the foot's presses as drawn, in order. */
     presses: () =>
       [...foot.querySelectorAll<HTMLButtonElement>("button")]
@@ -242,4 +244,25 @@ test("MCP servers chosen from the ⋯ opens the servers popover its hidden press
   });
   assert.equal(box.container.querySelector(".agent-servers [role='dialog']"), null);
   assert.equal(document.activeElement?.getAttribute("aria-label"), "More");
+});
+
+test("the ⋯'s menu closes once the card changes width, as a panel dragged narrower would, so it never offers a stale set of presses", async () => {
+  const box = await drawnAt(CARD.NARROW);
+  const width = vi.spyOn(box.foot, "getBoundingClientRect");
+  width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROW }));
+  // What the standing menu offers; a closed one, held drawn while its exit plays, is inert.
+  const offered = () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .filter((item) => item.closest("[inert]") === null)
+      .map((item) => item.textContent);
+  act(() => box.press("More").click());
+  assert.deepEqual(offered(), ["Show changes", "MCP servers", "62% of context used", "Dictate"]);
+
+  // Laid out again at the same width, as a scroll would, it stays.
+  act(() => relayout());
+  assert.equal(offered().length, 4);
+
+  width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROWEST }));
+  act(() => relayout());
+  assert.deepEqual(offered(), []);
 });

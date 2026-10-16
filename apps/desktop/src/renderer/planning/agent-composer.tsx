@@ -21,7 +21,7 @@ import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
 import { lapsedServer } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
-import { type RefObject, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -192,7 +192,9 @@ function hiddenPresses(foot: HTMLElement | null): readonly OverflowPress[] {
 /**
  * The foot's ⋯, which the stylesheet shows only once the card is too narrow
  * for every press: opened, it offers each press the stylesheet hid, read as
- * it opens, so it never offers one still standing beside it.
+ * it opens, so it never offers one still standing beside it. The card
+ * changing width closes it, since what it offers was read at the old
+ * width; the panel beside it may be dragged with no window resize.
  */
 function ComposerMore({
   foot,
@@ -204,6 +206,18 @@ function ComposerMore({
   const menu = useActionMenu(true);
   const [taken, setTaken] = useState<readonly OverflowPress[]>([]);
   const trigger = menu.trigger(riseAboveEnd);
+  const standing = menu.open !== undefined;
+  const { close } = menu;
+  useEffect(() => {
+    const card = foot.current;
+    if (!standing || card === null) return undefined;
+    const width = card.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => {
+      if (card.getBoundingClientRect().width !== width) close(false);
+    });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [standing, close, foot]);
   const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
   return (
     <>
