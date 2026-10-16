@@ -231,3 +231,13 @@ test("every agent is told that what happens on its pull request after its turn r
     }
   }
 });
+
+test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const onPlan of [true, false]) {
+      const instructions = coderInstructions("Acme/Relay", brief, true, onPlan);
+      assert.ok(instructions.includes("playwright screenshot"), brief);
+      assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
+    }
+  }
+});
