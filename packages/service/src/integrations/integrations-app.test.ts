@@ -136,7 +136,8 @@ const standing = (
 ) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
-    // Each account added is handed the next of these as its subject at Connect.
+    // Each account added is handed the next of these as its subject at Connect, unique to this group, since the suite's tests share one database.
+    const minted = randomUUID();
     let subjects = 0;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -163,7 +164,7 @@ const standing = (
         mintState: mintIntegrationState,
         mintSubject: () => {
           subjects += 1;
-          return `subject-${subjects}`;
+          return `subject-${minted}-${subjects}`;
         },
         // The test's own clock, which also stamps a sign-in begun.
         now: () => clock.currentTimeMillisUnsafe(),
@@ -691,6 +692,47 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           url: GRANTING_SIGN_IN_URL,
           connection: NOTION,
         });
+      }),
+  );
+
+  it.effect(
+    "a sign-in restarted while an added account lets go of the ones left behind keeps its name and its state",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("restarted@notion.example");
+        // Note that the first account's sign-in is restarted where the add would end it, as a reconnect landing between the two would.
+        const group = yield* standing(
+          NOTION_CONNECTOR,
+          undefined,
+          undefined,
+          { declines: true },
+          {
+            endSignIn: (owner, connectionName, state) =>
+              connectionName === NOTION
+                ? Effect.asVoid(
+                    beginIntegrationSignIn(
+                      owner,
+                      firstIntegrationAccount(owner, NOTION),
+                      "restarted-state",
+                      Redacted.make("connect-verifier"),
+                    ),
+                  )
+                : endIntegrationSignIn(owner, connectionName, state),
+          },
+        );
+        const add = (query: string) =>
+          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+            method: "POST",
+            userId,
+          });
+        yield* add("");
+        yield* TestClock.adjust("16 minutes");
+
+        assert.deepEqual((yield* add("&add=true")).body, {
+          url: GRANTING_SIGN_IN_URL,
+          connection: "notion-2",
+        });
+        assert.equal((yield* readIntegrationSignIn("restarted-state"))?.connectionName, NOTION);
       }),
   );
 

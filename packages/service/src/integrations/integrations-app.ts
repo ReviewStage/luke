@@ -781,9 +781,12 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
           : hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
       { discard: true },
     );
+    // Note that the rows are read again, so a sign-in restarted while these were let go keeps its name.
+    const remaining =
+      left.length === 0 ? rows : yield* hostedStoreOrUnavailable(seams.readConnections(userId));
     const name = mintIntegrationConnectionName(
       provider,
-      rows.filter((row) => !left.includes(row)).map((row) => row.connectionName),
+      remaining.map((row) => row.connectionName),
     );
     return {
       provider,
