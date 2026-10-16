@@ -22,6 +22,11 @@ export interface FieldControl {
   readonly "aria-invalid": true | undefined;
 }
 
+/** Whether a field's words say anything: nothing, `null`, `false`, and an empty string say nothing. */
+function said(words: ReactNode): boolean {
+  return words !== undefined && words !== null && words !== false && words !== "";
+}
+
 /** A control under `label`, described by `description`, and marked invalid by `error` while it says something. */
 export function FormField({
   label,
@@ -40,11 +45,9 @@ export function FormField({
   const labelId = `${id}label`;
   const descriptionId = `${id}description`;
   const errorId = `${id}error`;
-  const failed = error !== undefined && error !== null && error !== false;
-  const describedBy = [
-    description === undefined ? undefined : descriptionId,
-    failed ? errorId : undefined,
-  ]
+  const failed = said(error);
+  const described = said(description);
+  const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
   return (
@@ -58,11 +61,11 @@ export function FormField({
         "aria-describedby": describedBy === "" ? undefined : describedBy,
         "aria-invalid": failed ? true : undefined,
       })}
-      {description === undefined ? null : (
+      {described ? (
         <p className="luke-field-description" id={descriptionId}>
           {description}
         </p>
-      )}
+      ) : null}
       <p className="luke-field-error" id={errorId} aria-live="polite">
         {failed ? error : null}
       </p>

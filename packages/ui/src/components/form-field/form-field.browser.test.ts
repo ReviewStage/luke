@@ -67,3 +67,18 @@ test("a field with no description or error describes its control with nothing", 
   await expect.element(input).not.toHaveAttribute("aria-describedby");
   await expect.element(input).not.toHaveAttribute("aria-invalid");
 });
+
+test("an empty error and a missing description say nothing, so the control is neither invalid nor described", async () => {
+  await mount(
+    createElement(FormField, {
+      label: "Name",
+      description: null,
+      error: "",
+      children: (control) => createElement("input", { ...control, type: "text" }),
+    }),
+  );
+  const input = page.getByRole("textbox", { name: "Name" });
+  await expect.element(input).not.toHaveAttribute("aria-invalid");
+  await expect.element(input).not.toHaveAttribute("aria-describedby");
+  expect(document.querySelectorAll("p").length).toBe(1);
+});
