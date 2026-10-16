@@ -33,8 +33,12 @@ const LABELS = [
 /** Each tab's width, as laid out, in CSS pixels. */
 const TAB_WIDTH = 100;
 
-/** Each tab's width as the layout stands now, which a label settling into its own font narrows. */
-const laid = { tab: TAB_WIDTH };
+/**
+ * The layout as it stands now: each tab's width, which a label settling into
+ * its own font narrows; the row's, which a panel dragged wider grows; and the
+ * chevron's, which the strip gives up to it while it stands.
+ */
+const laid = { tab: TAB_WIDTH, row: 0, chevron: 0 };
 
 const ignore = () => undefined;
 
@@ -72,8 +76,12 @@ function Strip(): ReactNode {
  */
 function layOut(width: number): void {
   laid.tab = TAB_WIDTH;
+  laid.row = width;
+  laid.chevron = 0;
   const scrolled = new WeakMap<Element, number>();
-  const most = Math.max(0, LABELS.length * laid.tab - width);
+  // The strip's own width: its row's, less the chevron's while one stands after it.
+  const stripWidth = (strip: Element) =>
+    laid.row - (strip.nextElementSibling?.matches(".tab-overflow") ? laid.chevron : 0);
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
     return scrolled.get(this) ?? 0;
   });
@@ -81,10 +89,14 @@ function layOut(width: number): void {
     this: Element,
     left: number,
   ) {
+    const most = Math.max(0, LABELS.length * laid.tab - stripWidth(this));
     scrolled.set(this, Math.min(Math.max(left, 0), most));
   });
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    if (this.matches(".tab-strip")) return DOMRect.fromRect({ x: 0, width, height: 30 });
+    if (this.matches(".tab-strip")) {
+      return DOMRect.fromRect({ x: 0, width: stripWidth(this), height: 30 });
+    }
+    if (this.matches(".tab-overflow")) return DOMRect.fromRect({ width: laid.chevron, height: 30 });
     const strip = this.closest(".tab-strip");
     if (!this.matches(".tab") || strip === null) return DOMRect.fromRect();
     const at = [...strip.querySelectorAll(".tab")].indexOf(this);
@@ -94,7 +106,7 @@ function layOut(width: number): void {
     return this.matches(".tab-strip") ? LABELS.length * laid.tab : 0;
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".tab-strip") ? width : 0;
+    return this.matches(".tab-strip") ? stripWidth(this) : 0;
   });
 }
 
@@ -198,6 +210,30 @@ test("tabs that narrow once their labels settle into the window's font are all d
   } finally {
     Reflect.deleteProperty(document, "fonts");
   }
+});
+
+test("a row grown wide enough for every tab, though not for the chevron too, draws them all and gives the chevron's room back", async () => {
+  const strip = await drawnAt(200);
+  laid.tab = 50;
+  laid.chevron = 34;
+  act(() => relayout());
+  assert.equal(chevron(strip)?.getAttribute("aria-label"), "2 more tabs");
+  laid.row = 260;
+  act(() => relayout());
+  assert.equal(chevron(strip)?.getAttribute("aria-label"), undefined);
+  assert.deepEqual(
+    LABELS.filter((label) => drawn(strip, label)),
+    [...LABELS],
+  );
+});
+
+test("a chosen tab a swipe left part shown at the strip's end stays drawn, the strip running to that end", async () => {
+  const strip = await drawnAt(250);
+  act(() => tab(strip, "Withdraw an invite").click());
+  swipeTo(strip, 0);
+  const row = strip.querySelector<HTMLElement>(".tab-strip") ?? assert.fail("it stands");
+  assert.equal(drawn(strip, "Withdraw an invite"), true);
+  assert.equal(row.style.getPropertyValue("--tabs-shown"), "250px");
 });
 
 test("the chevron lists the tabs cut short in the strip's order, and choosing one chooses its tab and hands it focus", async () => {
