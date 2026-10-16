@@ -1778,3 +1778,37 @@ test("an item a link names that its task's Inbox read does not hold is not found
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
   assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
 });
+
+test("a link to an item newer than its task's last read waits for the read of it, saying no Not found, and then shows it", async () => {
+  const { page } = mount();
+  await settle();
+  const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
+  let land: () => void = () => undefined;
+  startRead = (planId) =>
+    planId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { items: [EXPIRY, posted], cursor: "2" },
+            });
+        })
+      : undefined;
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { planId: INVITES.id, items: 2, updatedAt: 7_000 },
+    ]),
+  );
+  act(() => chooseFromOutside({ planId: INVITES.id, itemId: posted.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Page on-call too?",
+  );
+});

@@ -240,12 +240,12 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   // one whose agents are not read yet may still hold the item, until its Inbox's own read answers.
   const holderEmpty = agents.listMissing || agents.heldIds?.length === 0;
   const agentsUnread = agents.heldIds === undefined && !agents.listFailed && !agents.listMissing;
+  // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
   const chosenWaits =
     (planId !== undefined &&
-      ((holdings.some((holding) => holding.planId === planId) &&
-        !read.items.has(planId) &&
-        !live.read) ||
-        (agentsUnread && !read.items.has(planId) && !live.read))) ||
+      !read.current.has(planId) &&
+      !live.read &&
+      (holdings.some((holding) => holding.planId === planId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
       !planless.items.has(chosenAgentId) &&
       !live.read &&
@@ -259,7 +259,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     planId !== undefined
-      ? read.items.has(planId) || live.read || holderEmpty
+      ? read.current.has(planId) || live.read || holderEmpty
       : chosenAgentId !== undefined
         ? live.read || planless.items.has(chosenAgentId) || holderEmpty
         : true;
