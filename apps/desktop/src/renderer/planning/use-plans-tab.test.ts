@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -333,6 +334,9 @@ const TWO_WORKSPACES: PlanningView = {
 const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
+
+/** A pin's payload, read back as the act's own schema admits it. */
+const readPin = Schema.decodeUnknownOption(Schema.Struct({ pinned: Schema.Boolean }));
 
 /** A create's payload, read back as the act's own schema admits it. */
 const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
@@ -1942,4 +1946,33 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
   act(() => home.control().onGoHome());
   assert.equal(home.control().inboxView.open, false);
   assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+});
+
+test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
+  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  /** Each pin the tab asked of main, in order, as `pinned`. */
+  const asked = () =>
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN)
+      .map((each) => Option.getOrUndefined(readPin(each.payload))?.pinned);
+
+  await act(async () => {
+    tab.control().onPinAgent("agent-1", true);
+    tab.control().onPinAgent("agent-1", false);
+  });
+  const first = asked();
+  // The first is answered as refused, which is no matter to the order the second is asked in.
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+
+  assert.deepEqual(first, [true]);
+  assert.deepEqual(asked(), [true, false]);
 });

@@ -651,6 +651,20 @@ it.layer(getTestDB())("an agent's pin", (it) => {
     }),
   );
 
+  it.effect(
+    "an agent on a plan is not pinned, since only an agent with no plan stands in the sidebar",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const workspace = yield* openWorkspace(dean);
+        const task = yield* createPlan(dean, { organizationId: workspace, name: "Billing" });
+        const { agentId } = yield* planlessAgent(dean, workspace, { planId: task.id });
+
+        assert.ok(Option.isNone(yield* pinCodingAgent(dean, agentId, true)));
+        assert.deepEqual(yield* pinnedOnes(agentId), []);
+      }),
+  );
+
   it.effect("an agent's pins go with the agent, and an account's with the account", () =>
     Effect.gen(function* () {
       const { dean, charles, agentId } = yield* openSharedAgent;

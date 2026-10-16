@@ -1400,32 +1400,41 @@ export function usePlansTab(input: {
       });
   };
 
+  // Each agent's pins in flight, the newest last, which the next waits on.
+  const agentPinFlights = useRef(new Map<string, Promise<boolean>>());
   // A fixture's agents are pinned nowhere, as its plans are marked nowhere. A
   // pin says nothing once it lands, since the row it moves is in sight; a
   // refusal puts the row back only while no later press replaced it, and
-  // says so in a toast, since the menu that asked has closed.
+  // says so in a toast, since the menu that asked has closed. Note that one
+  // agent's pins are asked one after another, because each writes as it
+  // lands, so a Pin and an Unpin pressed together landing out of order would
+  // leave standing the one not pressed last.
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
     const next = { pinned, at: Date.now() };
     setAgentPins((held) => new Map(held).set(agentId, next));
-    act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned })
-      .then(
+    const flights = agentPinFlights.current;
+    const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
+      act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned }).then(
         (answer) => "agent" in answer,
         () => false,
-      )
-      .then((changed) => {
-        if (changed) return;
-        setAgentPins((held) =>
-          held.get(agentId) === next
-            ? new Map([...held].filter(([pending]) => pending !== agentId))
-            : held,
-        );
-        toast({
-          words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
-          tone: TOAST_TONE.FAILED,
-          hold: TOAST_HOLD.FAILED,
-        });
+      ),
+    );
+    flights.set(agentId, asked);
+    asked.then((changed) => {
+      if (flights.get(agentId) === asked) flights.delete(agentId);
+      if (changed) return;
+      setAgentPins((held) =>
+        held.get(agentId) === next
+          ? new Map([...held].filter(([pending]) => pending !== agentId))
+          : held,
+      );
+      toast({
+        words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
+        tone: TOAST_TONE.FAILED,
+        hold: TOAST_HOLD.FAILED,
       });
+    });
   };
 
   // Several plans archived at once answer with one toast rather than one

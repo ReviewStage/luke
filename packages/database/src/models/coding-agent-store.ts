@@ -1277,7 +1277,9 @@ export function archiveCodingAgent(
  * The account's own pin of the agent set as asked: from now, or from the
  * instant already standing, so pinning twice moves nothing; or taken away.
  * Every other member's pin stands as it was. Nothing for an agent of a
- * workspace the account is not in, which is neither pinned nor unpinned.
+ * workspace the account is not in, which is neither pinned nor unpinned,
+ * nor for an agent on a plan, which stands under its plan rather than in
+ * the sidebar, so a pin of it would be read nowhere.
  */
 export function pinCodingAgent(
   userId: string,
@@ -1286,7 +1288,7 @@ export function pinCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
-    if (Option.isNone(found)) return found;
+    if (Option.isNone(found) || found.value.planId !== null) return Option.none();
     if (pinned) yield* insertAgentPin({ userId, agentId, now: yield* DateTime.nowAsDate });
     else yield* deleteAgentPin({ userId, agentId });
     return found;
