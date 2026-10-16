@@ -411,6 +411,16 @@ test("a correction that puts a picture in code, where it draws no picture, is no
   }
 });
 
+test("a correction inside an indented code block at the text's start is no picture to keep", () => {
+  const text = `    ![example](${PICTURE_ADDRESS})\n`;
+
+  const taken = applyNotesToText(text, [
+    { kind: NOTE_KIND.REPLACE, find: `![example](${PICTURE_ADDRESS})`, text: "example" },
+  ]);
+
+  assert.deepEqual(taken, { text: "    example\n" });
+});
+
 test("deleting the line a picture stands on is a retraction, and is taken, while a deletion within it is not", () => {
   const taken = applyNotesToText(PICTURED, [
     { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text: "" },
