@@ -60,7 +60,6 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { useExperiment } from "../use-app-state";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
@@ -343,7 +342,6 @@ function PlanDocument({
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
   const { act } = useAct();
-  const toast = useToast();
   const openLink = useOpenLink();
   const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const inbox = usePlanInbox({
@@ -527,29 +525,16 @@ function PlanDocument({
   // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
   const openChanges = (agentId: string) =>
     sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
-  // An agent's pushed branch opens in a terminal of this Mac in the side
-  // panel (`mac-terminal-tab.tsx`); an agent that pushed none is told apart.
-  const openOnMac = (agentId: string) => {
-    act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then(
-      (answer) => {
-        const published = "failure" in answer ? undefined : answer;
-        if (published?.branch == null) {
-          toast({
-            words: "This agent has pushed no branch yet",
-            detail: "Ask it to push its work, then open it on this Mac again.",
-            tone: TOAST_TONE.FAILED,
-            hold: TOAST_HOLD.FAILED,
-          });
-          return;
-        }
-        const { repository, branch } = published;
-        sidePanel.onChoose({ macTerminal: agentId, repository, branch });
-        showSide();
-      },
-      (refused: Error) =>
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
-    );
-  };
+  // Run opens the agent's terminal of this Mac in the side panel at once;
+  // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
+  const { repository } = plan;
+  const openOnMac =
+    repository === null
+      ? undefined
+      : (agentId: string) => {
+          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
+          showSide();
+        };
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.

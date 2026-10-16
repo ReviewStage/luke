@@ -86,11 +86,15 @@ export interface PageStripTab {
   readonly page: string;
 }
 
-/** A terminal of this Mac opened on an agent's pushed branch, named by the agent, with the repository and branch it opened. */
+/**
+ * A terminal of this Mac run on an agent's pushed branch, named by the
+ * agent, with its repository and when Run was last pressed for it, which
+ * has the tab read the agent's branch again.
+ */
 export interface MacTerminalStripTab {
   readonly macTerminal: string;
   readonly repository: string;
-  readonly branch: string;
+  readonly asked: number;
 }
 
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */

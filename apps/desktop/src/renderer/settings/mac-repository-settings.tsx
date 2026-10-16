@@ -6,12 +6,12 @@ import { useAct } from "../act";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
- * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Open on this Mac runs for each repository.
+ * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
  *
  * A row stands for each repository the workspace reaches on GitHub, and for
  * any with a command on this Mac that it no longer lists. The command is
  * saved with Save or Return, and emptied to have none. It is kept in this
- * Mac's settings file alone, never sent to the service. Open on this Mac, in
+ * Mac's settings file alone, never sent to the service. Run, in
  * an agent tab's ⋯, runs it in the branch's worktree before the shell
  * opens; a repository without one opens on the shell alone.
  */
@@ -144,9 +144,9 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
   return (
     <SettingsGroup title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
       <p className="settings-card-line settings-note">
-        Open on this Mac, in an agent tab&apos;s ⋯, checks the agent&apos;s pushed branch out on
-        this Mac with your own git login and opens a terminal on it inside Luke. A repository&apos;s
-        run command, if it has one, runs there first. Commands are kept on this Mac only.
+        Run, in an agent tab&apos;s ⋯, checks the agent&apos;s pushed branch out on this Mac with
+        your own git login and opens a terminal on it inside Luke. A repository&apos;s run command,
+        if it has one, runs there first. Commands are kept on this Mac only.
       </p>
       {read.failed ? (
         <ReadFailed line={NOT_READ} onRetry={read.reread} />

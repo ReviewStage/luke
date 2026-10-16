@@ -442,8 +442,8 @@ export function MainTabStrip({
   actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
   onOpenTerminal: (agentId: string) => void;
-  /** Opens an agent's pushed branch in a terminal of this Mac in the side panel, by the agent. */
-  onOpenOnMac: (agentId: string) => void;
+  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository. */
+  onOpenOnMac?: ((agentId: string) => void) | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const drafted = useDraftedTabs(plan.id);
@@ -526,7 +526,8 @@ export function MainTabStrip({
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
       onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
-      onOpenOnMac: agent === undefined ? undefined : () => onOpenOnMac(agent.id),
+      onOpenOnMac:
+        agent === undefined || onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };

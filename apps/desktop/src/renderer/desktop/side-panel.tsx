@@ -662,10 +662,10 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A terminal of this Mac's tab names the branch it opened beside its word.
+  // A terminal of this Mac's tab names the repository it runs beside its word.
   const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
     tab,
-    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.branch }),
+    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.repository }),
     close: () => panel.onClose(tab),
   }));
   return [

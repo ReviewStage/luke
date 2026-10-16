@@ -32,7 +32,7 @@ that wrote it is signed in. The files attached to such a message stay in
 memory only.
 None of it is sent anywhere.
 
-**Open on this Mac.** An agent tab's Open on this Mac opens a terminal inside
+**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
 Luke, in a tab of its side panel, on this Mac. Its shell clones the repository
 from GitHub into Luke's application data the first time, with your own git
 login, fetches the agent's pushed branch, checks it out in a worktree there,
@@ -1057,8 +1057,8 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac and each repository's run command for Open
-on this Mac are kept with that Mac's settings. Our service
+switch for commands on your Mac and each repository's run command for Run
+are kept with that Mac's settings. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
