@@ -168,20 +168,25 @@ html.call-window[data-pointer-stale="true"] .call-card button {
    more than two fifths of the tab's height, narrowing to keep its 16:9
    rather than cropping, so a wide, short tab still leaves the transcript
    most of the room. It never narrows past the width its still frame and
-   Restart video need, short of the tab's own. The tab is the size
-   container the height is read from. */
+   Restart video need without meeting the corner's Video off, short of the
+   tab's own. The tab is the size container the height is read from. The
+   strip video off collapses the tile to is drawn at this same width, so
+   the toggle stays where it was. */
 .plan-call {
   container: plan-call / size;
 }
 
+.call-video-tile,
+.call-video-strip {
+  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 40cqh * 16 / 9));
+  margin: var(--space-4) auto var(--space-8);
+}
+
 .call-video-tile {
-  --call-video-column: min(100% - 2 * var(--space-16), var(--reading-width));
   position: relative;
   flex: none;
   overflow: clip;
   box-sizing: border-box;
-  width: min(var(--call-video-column), max(240px, 40cqh * 16 / 9));
-  margin: var(--space-4) auto var(--space-8);
   aspect-ratio: 16 / 9;
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
@@ -244,8 +249,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The strip the tile collapses to once the developer turns video off: one
-   line on the tile's ground, border, and column, saying so beside the
-   button that turns it on again, so the call keeps its video's place
+   line on the tile's ground, border, width, and margins, saying so beside
+   the button that turns it on again, so the call keeps its video's place
    without a picture's height. */
 .call-video-strip {
   display: flex;
@@ -253,8 +258,6 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
-  width: min(100% - 2 * var(--space-16), var(--reading-width));
-  margin: var(--space-4) auto var(--space-8);
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
