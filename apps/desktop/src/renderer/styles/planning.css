@@ -1562,13 +1562,31 @@ button.file-ref:hover .file-ref-path {
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
    bar, wearing the pull request's standing as a pill in its own colour and
    its branches quiet beside it, over the page read top to bottom in one
-   scroller, its sections each under a quiet heading. */
+   scroller, its sections each under a quiet heading.
+
+   It keeps to the panel's top row's two edges, so the tab reads down from
+   the strip above it: whatever is boxed or edged (the pill, the merge box,
+   the checks, a comment) stands at the row's inset, where a tab's chip
+   does, and every word and glyph at the content inset, where a tab's glyph
+   does, a box holding its own at a row's inset within; the bar's last
+   control ends where the row's last control ends. A boxed thing's hairline
+   counts toward its inset (`--boxed-inset`), so what it holds lands on the
+   content inset to the pixel. */
+.pull-request-tab {
+  --boxed-inset: calc(var(--row-inset) - 1px);
+}
+
+.pull-request-bar {
+  gap: var(--control-gap);
+  padding-inline: var(--column-inset);
+}
+
 .pull-request-state {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-8);
+  padding: var(--space-2) var(--boxed-inset);
   border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
@@ -1589,14 +1607,24 @@ button.file-ref:hover .file-ref-path {
 .pull-request-page {
   min-height: 0;
   flex: 1;
-  padding: var(--space-12) var(--space-16) var(--space-24);
+  padding: var(--space-12) var(--column-inset) var(--space-24);
   overflow-y: auto;
 }
 
 /* In the side panel, the page keeps to the reading measure a transcript
    keeps to, so a panel filling the window reads in one column. */
 .side-panel-content .pull-request-page {
-  padding-inline: max(var(--space-16), var(--reading-room));
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The words that stand on the page rather than in a box, at the content
+   inset. */
+.pull-request-title,
+.changes-people.pull-request-people,
+.pull-request-heading,
+.pull-request-none,
+.pull-request-section > .pull-request-words {
+  padding-inline: var(--row-inset);
 }
 
 .pull-request-title {
@@ -1616,7 +1644,7 @@ button.file-ref:hover .file-ref-path {
 /* Who opened it and its reviewers, in the Changes tab's voice, standing on
    the page rather than across it. */
 .changes-people.pull-request-people {
-  padding: var(--space-6) 0 0;
+  padding-block: var(--space-6) 0;
   border-bottom: 0;
 }
 
@@ -1632,7 +1660,7 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
   gap: var(--space-8);
   margin: var(--space-12) 0 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--boxed-inset);
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
   color: var(--text-primary);
@@ -1703,7 +1731,7 @@ button.file-ref:hover .file-ref-path {
   min-width: 0;
   align-items: center;
   gap: var(--space-8);
-  padding: var(--space-6) var(--space-12);
+  padding: var(--space-6) var(--boxed-inset);
   border: 0;
   background: none;
   color: var(--text-primary);
@@ -1785,7 +1813,7 @@ button.pull-request-check:hover {
   min-width: 0;
   flex-direction: column;
   gap: var(--space-6);
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--boxed-inset);
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
   font-size: 12.5px;
