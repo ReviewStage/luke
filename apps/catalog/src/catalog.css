@@ -232,3 +232,21 @@ body {
 .catalog-frame-wide {
   width: 160px;
 }
+
+/* A form's column at a settings page's measure. */
+.catalog-column {
+  max-width: 360px;
+}
+
+/* A bare text input standing in for a control an example holds. */
+.catalog-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--luke-control-height);
+  padding: 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  color: var(--luke-color-text);
+  font: inherit;
+}
