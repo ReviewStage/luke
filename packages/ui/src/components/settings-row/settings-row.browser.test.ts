@@ -57,6 +57,7 @@ function RefusedRow(): React.JSX.Element {
         checked: false,
         label: "Show captions",
         describedBy: control["aria-describedby"],
+        "aria-invalid": control["aria-invalid"],
         onChange: () => setError("The setting could not be saved."),
       }),
   });
@@ -73,11 +74,13 @@ test("at 380px and wider the controls stand beside the words, at the row's end",
   }
 });
 
-test("narrower than 380px the controls drop below the words, to the row's end", async () => {
-  const { container } = await mount(rowAt(379, "Launch at login"));
-  const { row, copy, control } = boxes(container);
-  expect(control.top).toBeGreaterThanOrEqual(copy.bottom);
-  expect(row.right - control.right).toBe(copy.left - row.left);
+test("narrower than 380px, by a whole pixel or a fraction of one, the controls drop below the words, to the row's end", async () => {
+  for (const width of [379, 379.5]) {
+    const { container } = await mount(rowAt(width, "Launch at login"));
+    const { row, copy, control } = boxes(container);
+    expect(control.top).toBeGreaterThanOrEqual(copy.bottom);
+    expect(row.right - control.right).toBeCloseTo(copy.left - row.left);
+  }
 });
 
 test("a long label wraps beside its controls, which stay whole inside the row", async () => {
@@ -126,7 +129,9 @@ test("a failed write describes the control and is announced as it arrives", asyn
   const region = container.querySelector('[aria-live="polite"]');
   expect(region?.textContent).toBe("");
   const control = page.getByRole("switch", { name: "Show captions" });
+  await expect.element(control).not.toBeInvalid();
   await control.click();
+  await expect.element(control).toBeInvalid();
   await expect
     .element(control)
     .toHaveAccessibleDescription(

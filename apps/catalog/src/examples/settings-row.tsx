@@ -1,4 +1,4 @@
-import { BUTTON_VARIANT, Button, SettingsRow, Switch } from "@luke/ui";
+import { BUTTON_VARIANT, Button, SettingsRow, type SettingsRowControl, Switch } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -10,18 +10,25 @@ import { CatalogSection } from "../section";
  * below its words under.
  */
 
-function HeldSwitch({ label, describedBy }: { label: string; describedBy: string | undefined }) {
+/** A switch holding its own state, named `label` and described and failed by its row. */
+function HeldSwitch({ label, control }: { label: string; control: SettingsRowControl }) {
   const [on, setOn] = useState(true);
-  return <Switch checked={on} label={label} describedBy={describedBy} onChange={setOn} />;
+  return (
+    <Switch
+      checked={on}
+      label={label}
+      describedBy={control["aria-describedby"]}
+      aria-invalid={control["aria-invalid"]}
+      onChange={setOn}
+    />
+  );
 }
 
 function Rows(): React.JSX.Element {
   return (
     <>
       <SettingsRow label="Launch at login" description="Luke opens with the Mac, in the menu bar.">
-        {(control) => (
-          <HeldSwitch label="Launch at login" describedBy={control["aria-describedby"]} />
-        )}
+        {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>
       <SettingsRow label="Sign out">
         {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Sign out</Button>}
@@ -31,15 +38,17 @@ function Rows(): React.JSX.Element {
         description="Words the call hears stand under its video."
         error="The setting could not be saved. Try again."
       >
-        {(control) => (
-          <HeldSwitch label="Show captions" describedBy={control["aria-describedby"]} />
-        )}
+        {(control) => <HeldSwitch label="Show captions" control={control} />}
       </SettingsRow>
       <SettingsRow
         label="Archive a coding agent's run once its pull request merges into the default branch"
         description="Runs whose branch acme/a-repository-whose-name-runs-long-and-longer merged stop showing in Factory."
       >
-        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Choose repositories</Button>}
+        {(control) => (
+          <Button variant={BUTTON_VARIANT.OUTLINE} aria-describedby={control["aria-describedby"]}>
+            Choose repositories
+          </Button>
+        )}
       </SettingsRow>
     </>
   );

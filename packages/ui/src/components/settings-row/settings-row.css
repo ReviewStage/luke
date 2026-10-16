@@ -83,8 +83,9 @@
   }
 
   /* A container query cannot read a custom property, so the contract's
-     width is written here (`tokens/profiles.css`). */
-  @container luke-settings-row (max-width: 379px) {
+     width is written here (`tokens/profiles.css`); a range rather than a
+     379px maximum, so a fractional width under 380px stacks too. */
+  @container luke-settings-row (width < 380px) {
     .luke-settings-row-line {
       flex-direction: column;
       align-items: stretch;
