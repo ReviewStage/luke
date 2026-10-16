@@ -8,8 +8,10 @@
  * so a breadcrumb that names one anywhere it carries text is dropped whole
  * rather than redacted: a URL or a console line is free text, and a pattern
  * that missed one spelling would send the rest. An event is held to the same
- * rule, since a failed join's error can carry the same URL in its message.
- * Every renderer's page and its preload both report, so both drop them.
+ * rule, since a failed join's error can carry the same URL in its message,
+ * and so is a trace, since browser tracing records each request as a span
+ * whose description and data carry its URL. Every renderer's page and its
+ * preload both report, so both drop them.
  */
 
 import type { Breadcrumb, ErrorEvent } from "@sentry/electron/renderer";
@@ -40,4 +42,13 @@ export function eventWithoutAccessTokens(event: ErrorEvent): ErrorEvent | null {
   const exceptions = event.exception?.values ?? [];
   const texts = [event.message, event.request?.url, ...exceptions.map((caught) => caught.value)];
   return namesAccessToken(texts) ? null : event;
+}
+
+/**
+ * Sentry's `beforeSendTransaction`: the trace as it was, or nothing where any
+ * of it names the token. A span's URL sits in its description and in fields
+ * whose names differ by integration, so the whole event's text is read.
+ */
+export function transactionWithoutAccessTokens<Trace extends object>(event: Trace): Trace | null {
+  return namesAccessToken([JSON.stringify(event)]) ? null : event;
 }
