@@ -32,6 +32,20 @@ that wrote it is signed in. The files attached to such a message stay in
 memory only.
 None of it is sent anywhere.
 
+**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
+Luke, in a tab of its side panel, on this Mac. Its shell clones the repository
+from GitHub into Luke's application data the first time, with your own git
+login, fetches the agent's pushed branch, checks it out in a worktree there,
+runs the run command you set for that repository if you set one, and stays
+open for you to type in. It runs as your macOS user in your login shell, and
+reaches what you can. Each repository's run command is kept in this Mac's
+settings, under Settings › Workspace › Repositories, and never sent anywhere;
+what the terminal prints and what you type pass only between Luke's windows
+on this Mac, are held in memory up to the latest 256 KB of output while the
+tab stays open, and are never written to disk, logged, counted, or recorded.
+Closing the tab, or quitting Luke, hangs up the terminal and everything it
+started on it; the clone and the worktree stay until you delete them.
+
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
 to can each run any shell command on your Mac, at once and without asking you,
@@ -1066,7 +1080,8 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac is kept with that Mac's settings. Our service
+switch for commands on your Mac and each repository's run command for Run
+are kept with that Mac's settings. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and

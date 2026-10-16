@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
 import {
@@ -118,6 +119,8 @@ interface PromisedSettingsStore {
   ): Promise<boolean>;
   retireStoredApiKeys(): Promise<void>;
   cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
+  macRepositories(): Promise<readonly MacRepository[]>;
+  setMacRepository(entry: MacRepository): Promise<void>;
 }
 
 function awaitedStoreOf(
@@ -145,6 +148,8 @@ function awaitedStoreOf(
     retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
     cacheExperiments: (accountEmail, choices) =>
       awaited(store.cacheExperiments(accountEmail, choices)),
+    macRepositories: () => awaited(store.macRepositories()),
+    setMacRepository: (entry) => awaited(store.setMacRepository(entry)),
   };
 }
 
@@ -267,6 +272,30 @@ test("a stored account and a chosen preference survive each other's writes", asy
     assert.deepEqual(await reopened.readAccount(), replacement, `${field} disturbed the account`);
     assert.deepEqual(await reopened.get(field), SAMPLE_VALUE[field], `${field} did not survive`);
   }
+});
+
+test("a repository's run command on this Mac survives a reopen, by name in any case, and none forgets it", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  const app: MacRepository = { repository: "acme/app", command: "pnpm dev" };
+  const site: MacRepository = { repository: "acme/site", command: "make serve" };
+
+  assert.deepEqual(await store.macRepositories(), []);
+  await store.setMacRepository(app);
+  await store.setMacRepository(site);
+  await store.set("theme", THEME.DARK);
+  const renamed = { repository: "Acme/App", command: "pnpm start" };
+  await store.setMacRepository(renamed);
+
+  const reopened = await storeIn(directory).macRepositories();
+  assert.deepEqual(
+    [...reopened].sort((a, b) => a.repository.localeCompare(b.repository)),
+    [renamed, site],
+  );
+  assert.equal(await storeIn(directory).get("theme"), THEME.DARK);
+
+  await store.setMacRepository({ repository: "acme/site", command: null });
+  assert.deepEqual(await storeIn(directory).macRepositories(), [renamed]);
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {

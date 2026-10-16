@@ -95,6 +95,13 @@ import {
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
+import {
+  type MacRepositoriesAnswer,
+  macRepositoriesAnswerSchema,
+  macRepositorySchema,
+  macTerminalKeySchema,
+  macTerminalOpenParamsSchema,
+} from "@luke/features/mac-terminal-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -477,6 +484,17 @@ export const ACT_KIND = {
   TERMINAL_RESUME: "terminal.resume",
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
+  /**
+   * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
+   * each repository's run command read and set; and a terminal of this Mac
+   * opened on the agent's branch for the asking panel, and closed with its
+   * tab. What the terminal prints and what is typed travel on the port an
+   * open posts to that panel, never on an act.
+   */
+  MAC_REPOSITORIES: "macRepositories.read",
+  MAC_REPOSITORY_SET: "macRepositories.set",
+  MAC_TERMINAL_OPEN: "macTerminal.open",
+  MAC_TERMINAL_CLOSE: "macTerminal.close",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_TASK: "call.showPlan",
@@ -1340,6 +1358,26 @@ export const ACT = {
     payload: actSchema(terminalAttachParamsSchema),
     result: answersNothing,
     refusal: "Could not open that shell.",
+  },
+  [ACT_KIND.MAC_REPOSITORIES]: {
+    payload: noPayload,
+    result: wireResult<MacRepositoriesAnswer>(isReadable(macRepositoriesAnswerSchema)),
+    refusal: "Could not read the run commands set on this Mac.",
+  },
+  [ACT_KIND.MAC_REPOSITORY_SET]: {
+    payload: actSchema(macRepositorySchema),
+    result: answersNothing,
+    refusal: "Could not save the repository's run command on this Mac.",
+  },
+  [ACT_KIND.MAC_TERMINAL_OPEN]: {
+    payload: actSchema(macTerminalOpenParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open a terminal on this Mac.",
+  },
+  [ACT_KIND.MAC_TERMINAL_CLOSE]: {
+    payload: actSchema(macTerminalKeySchema),
+    result: answersNothing,
+    refusal: "Could not close the terminal.",
   },
   [ACT_KIND.TERMINAL_DETACH]: {
     payload: actSchema(terminalShellParamsSchema),

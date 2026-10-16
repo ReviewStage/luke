@@ -96,6 +96,11 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import {
+  type MacRepositoriesAnswer,
+  type MacRepository,
+  macRepositoriesAnswerSchema,
+} from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -269,6 +274,10 @@ interface HostSessionReplay {
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
+  /** Every repository with a run command on this Mac; none where the host could not answer. */
+  macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
+  /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
+  setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -762,6 +771,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
+      ),
+    macRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ),
+        terminalAnswer(macRepositoriesAnswerSchema),
+      ),
+    setMacRepository: (entry) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_REPOSITORY_SET, {
+          repository: entry.repository,
+          command: entry.command,
+        }),
+        terminalAnswer(macRepositoriesAnswerSchema),
       ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>

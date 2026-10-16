@@ -19,6 +19,7 @@ import {
   inTaskOrder,
   isChangesTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -74,6 +75,7 @@ import {
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
+import { MacTerminalTab } from "../tasks/mac-terminal-tab";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
@@ -669,7 +671,21 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
+  // A terminal of this Mac's tab names the repository it runs beside its word.
+  const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
+    tab,
+    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.repository }),
+    close: () => panel.onClose(tab),
+  }));
+  return [
+    ...fixed,
+    ...subagentTabs,
+    ...fileTabs,
+    ...changesTabs,
+    ...pageTabs,
+    ...terminalTabs,
+    ...macTerminalTabs,
+  ];
 }
 
 /**
@@ -1240,6 +1256,9 @@ function TabContent({
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isMacTerminalTab(tab)) {
+    return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
+  }
   if (isTerminalTab(tab)) {
     return (
       <TerminalTab
@@ -1722,7 +1741,9 @@ export function SidePanel({
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
-                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isMacTerminalTab(tab)
+                  ? TAB_WORDS.MAC_TERMINAL
+                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],

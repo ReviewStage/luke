@@ -2,7 +2,7 @@ import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { changesLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
+import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon, LaptopIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -35,6 +35,8 @@ export const TAB_KIND = {
   CHANGES: "changes",
   /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
+  /** A terminal of this Mac opened on an agent's pushed branch, which wears the laptop: it runs here, not in the agent's sandbox. */
+  MAC_TERMINAL: "mac-terminal",
   FILE: "file",
   PAGE: "page",
 } as const;
@@ -74,6 +76,7 @@ export type TabSubject =
       /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
     }
+  | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string };
 
@@ -166,6 +169,8 @@ export function tabLook(subject: TabSubject): KindLook {
       // Note that the agent's name is not the label, because the tab says
       // what it is first; each place drawing it names the agent beside it.
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
+    case TAB_KIND.MAC_TERMINAL:
+      return { icon: <LaptopIcon />, label: TAB_WORDS.MAC_TERMINAL };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);
