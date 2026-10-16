@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import {
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -154,7 +162,9 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
       ),
     );
   draw(plans);
-  return { page: container, opened };
+  /** The same page drawn again with some of its control changed, as a newer read hands it. */
+  const redraw = (patch: Partial<PlansControl>) => draw({ ...plans, ...patch });
+  return { page: container, opened, redraw };
 }
 
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
@@ -444,4 +454,206 @@ test("a question's hover says it whole, which its one line cuts short", () => {
     row(page, QUESTION).dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, QUESTION);
+});
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+test("a question a teammate's agent asks, which main does not count as the reader's, waits in Build as Home lists it", async () => {
+  const asked: InboxItem = {
+    id: "b0000000-0000-4000-8000-000000000001",
+    agentId: AGENT_ID,
+    key: "1",
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: QUESTION,
+    blocks: [],
+    response: {
+      type: INBOX_RESPONSE.CHOICE,
+      options: [{ label: "Operating" }, { label: "Payroll" }],
+    },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: NOW - HOUR,
+    updatedAt: NOW - HOUR,
+  };
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+        }
+        const value: CodingAgentInboxAnswerView = {
+          items: request.payload.planId === BILLING.id ? [asked] : [],
+          cursor: "1",
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      },
+    },
+  });
+  const { page } = mount([SEARCH, BILLING], {
+    // Main's own count holds nothing: the agent is a teammate's.
+    inbox: [],
+    listed: {
+      plans: [SEARCH, BILLING],
+      archived: [],
+      inbox: [],
+      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+    },
+  });
+  await settle();
+  assert.deepEqual(rows(page, "build"), [
+    `${QUESTION} · Mercury payouts (waits)`,
+    "Plan index · Search across plans",
+  ]);
+});
+
+/** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
+function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
+  const counted = { reads: 0 };
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+        }
+        counted.reads += 1;
+        const items = answer(request.payload.planId);
+        if (items === undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
+        }
+        const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      },
+    },
+  });
+  return counted;
+}
+
+test("a question answered since main last counted it leaves Build once the Inbox's read says so", async () => {
+  answerInbox(() => []);
+  const { page } = mount([SEARCH, BILLING], {
+    inbox: [
+      {
+        planId: BILLING.id,
+        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
+      },
+    ],
+    listed: {
+      plans: [SEARCH, BILLING],
+      archived: [],
+      inbox: [],
+      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+    },
+  });
+  await settle();
+  assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
+});
+
+test("questions that could not be read say so with Retry, and the reader's own still stand meanwhile", async () => {
+  const counted = answerInbox(() => undefined);
+  const { page } = mount([SEARCH, BILLING], {
+    inbox: [
+      {
+        planId: BILLING.id,
+        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
+      },
+    ],
+    listed: {
+      plans: [SEARCH, BILLING],
+      archived: [],
+      inbox: [],
+      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+    },
+  });
+  await settle();
+  assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);
+  const alert = page.querySelector('[role="alert"]');
+  assert.match(alert?.textContent ?? "", /Some questions could not be read\./u);
+  const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry);
+  const before = counted.reads;
+  act(() => retry.click());
+  await settle();
+  assert.ok(counted.reads > before);
+});
+
+test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
+  const counted = answerInbox((planId) => (planId === BILLING.id ? [] : undefined));
+  const other = plan(7, "Invites", HOUR);
+  const { page } = mount([SEARCH, BILLING, other], {
+    inbox: [
+      {
+        planId: BILLING.id,
+        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
+      },
+    ],
+    listed: {
+      plans: [SEARCH, BILLING, other],
+      archived: [],
+      inbox: [],
+      inboxPlans: [
+        { planId: BILLING.id, items: 1, updatedAt: NOW - HOUR },
+        { planId: other.id, items: 1, updatedAt: NOW - HOUR },
+      ],
+    },
+  });
+  await settle();
+  assert.ok(counted.reads >= 2);
+  assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
+  assert.match(
+    page.querySelector('[role="alert"]')?.textContent ?? "",
+    /Some questions could not be read\./u,
+  );
+});
+
+test("a question read that fails says so even while a refresh of the task list has failed over rows read before", async () => {
+  answerInbox(() => undefined);
+  const { page } = mount([SEARCH, BILLING], {
+    listFailed: true,
+    listRead: false,
+    listed: {
+      plans: [SEARCH, BILLING],
+      archived: [],
+      inbox: [],
+      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+    },
+  });
+  await settle();
+  const alerts = [...page.querySelectorAll('[role="alert"]')].map((each) => each.textContent ?? "");
+  assert.ok(alerts.some((each) => /Some questions could not be read\./u.test(each)));
+  assert.ok(alerts.some((each) => /Your tasks could not be read\./u.test(each)));
+});
+
+test("a question main counts after a plan's last read stands while that plan's reread is out or failed", async () => {
+  let fail = false;
+  answerInbox(() => (fail ? undefined : []));
+  const listed = (updatedAt: number) => ({
+    plans: [SEARCH, BILLING],
+    archived: [],
+    inbox: [],
+    inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt }],
+  });
+  const asked = {
+    planId: BILLING.id,
+    items: [{ id: "i9", agentId: AGENT_ID, title: QUESTION, postedAt: NOW }],
+  };
+  const { page, redraw } = mount([SEARCH, BILLING], { listed: listed(NOW - HOUR) });
+  await settle();
+  assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
+  // Main counts a new question on the plan; its reread fails.
+  fail = true;
+  redraw({ listed: listed(NOW), inbox: [asked] });
+  await settle();
+  assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);
 });

@@ -1,32 +1,18 @@
-import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { InboxItemRow } from "../planning/inbox-list";
-import {
-  holderName,
-  INBOX_GROUPING,
-  INBOX_HOLDER,
-  type InboxListed,
-  inboxList,
-  listedItems,
-  NEEDS_YOU,
-  planHolder,
-  planlessGroups,
-} from "../planning/inbox-model";
+import { holderName, INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
-import { useInboxItems } from "../planning/use-inbox-items";
-import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { useWaitingItems } from "../planning/use-waiting-items";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
@@ -69,51 +55,6 @@ function greeting(name: string | undefined): string {
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
 function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
   return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
-}
-
-/**
- * Every open Inbox item of the listed workspace's plans, and of its agents
- * with no plan, the latest changed first, read as the window's Inbox reads
- * them: each plan main says holds an item and the listed workspace's list
- * holds, read whole, a teammate's agent's items among them, as every
- * member's Inbox lists them, and each agent with no plan main says
- * something waits on.
- */
-export function useWaitingItems(plans: PlansControl) {
-  const { act } = useAct();
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
-  const { inboxPlans, plans: listed } = plans.listed;
-  // Note that every plan holding an item is read, not only those main counts as waiting on the
-  // account, because those are its own agents' alone, and the Inbox lists every member's.
-  const holdings = useMemo(
-    () => inboxPlans.filter((holding) => listed.some((plan) => plan.id === holding.planId)),
-    [inboxPlans, listed],
-  );
-  const read = useInboxItems({ holdings, readInbox });
-  const planless = usePlanlessInboxItems(plans.inboxPlanless);
-  const entries = [
-    ...holdings.flatMap((holding) => {
-      const plan = listed.find((each) => each.id === holding.planId);
-      return plan === undefined
-        ? []
-        : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
-    }),
-    ...planlessGroups(plans.inboxPlanless, planless.items, plans.workspace?.id),
-  ];
-  const items = listedItems(
-    inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
-  );
-  // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
-  const reading =
-    read.pending || plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
-  const onRetry = () => {
-    read.onRetry();
-    planless.onRetry();
-  };
-  return { items, reading, failed: read.failed || planless.failed, onRetry };
 }
 
 /**
