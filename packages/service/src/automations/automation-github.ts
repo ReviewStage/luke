@@ -37,9 +37,12 @@ import { Clock, Effect, Option, Result, Schema } from "effect";
  * agent inside GitHub's ten seconds is not a promise this can keep.
  *
  * Each event is read with who sent it, people, Luke's agents (the App's
- * own bot), or another bot, and, for a pull request, the moment it is
+ * own bot, or a person opening, reopening, or marking ready a pull request
+ * from a `luke/` branch, which is a coding agent writing as its developer),
+ * or another bot, and, for a pull request, the moment it is
  * (opened, marked ready, or pushed to), whether it is a draft, and whether
- * it comes from a fork; the trigger's own settings say which of those fire
+ * it comes from a fork; an issue an agent opened as its developer has no
+ * branch to tell it by, and reads as people's; the trigger's own settings say which of those fire
  * it (`triggerMatches`), people's events alone and no draft or fork where
  * it names none. Two things fire nothing whatever a trigger says, so an
  * automation cannot fire itself in a loop: a push by Luke's agents, to a
@@ -83,6 +86,17 @@ const BRANCH_REF = "refs/heads/";
 /** The branch prefix a coding agent works on, whose own checks it already watches. */
 const AGENT_BRANCH_PREFIX = "luke/";
 
+/**
+ * The pull request actions a coding agent takes on its own pull request, as
+ * the developer it writes as: opening it, reopening it, and marking it
+ * ready. A push is never among them, since every push goes out as the App.
+ */
+const AGENT_OPENING_ACTIONS: ReadonlySet<string> = new Set([
+  GITHUB_ACTION.OPENED,
+  "reopened",
+  "ready_for_review",
+]);
+
 /** The most automations one delivery queues runs for, of those listening for its event. */
 const MAXIMUM_AUTOMATIONS = 100;
 
@@ -101,9 +115,12 @@ const PullRequestSchema = Schema.Struct({
     html_url: Schema.String,
     labels: Schema.Array(LabelSchema),
     base: Schema.Struct({ ref: Schema.String }),
-    // The repository the head branch is in: a fork's, or none where the fork was deleted.
+    // The head branch, and the repository it is in: a fork's, or none where the fork was deleted.
     head: Schema.optionalKey(
-      Schema.Struct({ repo: Schema.NullOr(Schema.Struct({ full_name: Schema.String })) }),
+      Schema.Struct({
+        ref: Schema.optionalKey(Schema.String),
+        repo: Schema.NullOr(Schema.Struct({ full_name: Schema.String })),
+      }),
     ),
     draft: Schema.optionalKey(Schema.Boolean),
   }),
@@ -174,6 +191,27 @@ function senderOf(
   return sender.type === BOT_SENDER ? GITHUB_SENDER.OTHER_BOTS : GITHUB_SENDER.PEOPLE;
 }
 
+/**
+ * Who sent a pull request's delivery. A person who opened, reopened, or
+ * marked ready a pull request from a `luke/` branch of the repository's own
+ * is Luke's agents, because a coding agent that writes as its developer
+ * opens its pull request on their token, so GitHub names the developer;
+ * the branch is where every coding agent works. Note that a person doing
+ * the same by hand reads as Luke's agents too, which mislabels the event
+ * and grants nothing, and that a push is read by its sender alone, which
+ * is the App's for every push an agent makes.
+ */
+function pullRequestSender(
+  read: typeof PullRequestSchema.Type,
+  agentLogin: string | undefined,
+  fork: boolean,
+): GitHubSender {
+  const sender = senderOf(read.sender, agentLogin);
+  const agentBranch = read.pull_request.head?.ref?.startsWith(AGENT_BRANCH_PREFIX) === true;
+  const agentOpened = !fork && agentBranch && AGENT_OPENING_ACTIONS.has(read.action);
+  return sender === GITHUB_SENDER.PEOPLE && agentOpened ? GITHUB_SENDER.LUKE_AGENTS : sender;
+}
+
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
 function readDelivery<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
@@ -214,14 +252,15 @@ function pullRequestEvents(
   );
   const moment = UPDATE_MOMENT.get(read.action);
   const head = pull.head === undefined ? repository.full_name : pull.head.repo?.full_name;
+  const fork = head?.toLowerCase() !== repository.full_name.toLowerCase();
   const shared = {
     repository: repository.full_name,
     labels: label === undefined ? pull.labels.map((one) => one.name) : [label.name],
     branch: pull.base.ref,
-    sender: senderOf(read.sender, agentLogin),
+    sender: pullRequestSender(read, agentLogin, fork),
     pushed: moment === PULL_REQUEST_MOMENT.PUSHED,
     draft: pull.draft === true,
-    fork: head?.toLowerCase() !== repository.full_name.toLowerCase(),
+    fork,
   };
   const kinds = [
     ...(kind === undefined ? [] : [{ event: kind, moment: undefined }]),

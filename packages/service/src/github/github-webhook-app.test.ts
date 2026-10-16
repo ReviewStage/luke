@@ -25,6 +25,7 @@ import {
   type AutomationTrigger,
   GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  type GitHubSender,
   type GitHubTriggerEvent,
   PULL_REQUEST_MOMENT,
 } from "@luke/features/automation-wire";
@@ -654,6 +655,84 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           [3, 5], // another bot: only the trigger that hears other bots
           [3, 6], // a draft: only the trigger that asks for drafts
           [3, 7], // a fork's: only the trigger that asks for forks
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a person opening, reopening, or marking ready a pull request from a luke/ branch of the repository is Luke's agents, as a coding agent writing as its developer does, while a person's push to it, a fork's luke/ branch, and any other branch are people's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const repositoryName = `Acme/agents-${randomUUID()}`;
+        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const hearing = (senders: readonly GitHubSender[]) =>
+          Effect.map(
+            createAutomation(owner, {
+              planId: null,
+              organizationId: plan.workspaceId,
+              repositories: [repositoryName],
+              name: "Code review",
+              trigger: {
+                kind: AUTOMATION_TRIGGER.GITHUB,
+                event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+                senders,
+                forks: true,
+              },
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Review this pull request." },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: null,
+              webhookSecretHash: null,
+            }),
+            Option.getOrThrow,
+          );
+        const people = yield* hearing([GITHUB_SENDER.PEOPLE]);
+        const agents = yield* hearing([GITHUB_SENDER.LUKE_AGENTS]);
+        const github = githubReaching([]);
+        const developer = { type: "User", login: "ada" };
+        const pull = (
+          action: string,
+          sender: { readonly type: string; readonly login: string },
+          ref: string,
+          from: string = repositoryName,
+        ) => ({
+          action,
+          repository: { full_name: repositoryName },
+          sender,
+          pull_request: {
+            number: 5,
+            title: "Teammate invitations",
+            html_url: `https://github.com/${repositoryName}/pull/5`,
+            labels: [],
+            base: { ref: "main" },
+            head: { ref, repo: { full_name: from } },
+            draft: false,
+          },
+        });
+        const runsOf = (automation: { readonly id: string }) =>
+          Effect.map(listAutomationRuns(owner, automation.id), (runs) => runs.length);
+        const counts = [];
+        for (const payload of [
+          pull("opened", developer, "luke/invitations"),
+          pull("ready_for_review", developer, "luke/invitations"),
+          pull("reopened", developer, "luke/invitations"),
+          pull("synchronize", { type: "Bot", login: "luke[bot]" }, "luke/invitations"),
+          pull("synchronize", developer, "luke/invitations"),
+          pull("opened", developer, "luke/invitations", "Stranger/agents-fork"),
+          pull("opened", developer, "invitations"),
+        ]) {
+          yield* answer(github, SECRET, delivery("pull_request", payload));
+          counts.push([yield* runsOf(people), yield* runsOf(agents)]);
+        }
+
+        assert.deepEqual(counts, [
+          [0, 1], // an agent opens its pull request as its developer
+          [0, 2], // and marks it ready
+          [0, 3], // and reopens it
+          [0, 3], // its push is the App's, which fires nothing
+          [1, 3], // the developer's own push to the agent's branch is a person's
+          [2, 3], // a fork's luke/ branch is no agent's
+          [3, 3], // any other branch is a person's
         ]);
       }),
   );
