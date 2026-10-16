@@ -179,6 +179,8 @@ export function SettingsPanel({
           entries={EXPERIMENTS}
           experiments={settings?.experiments ?? NO_EXPERIMENTS}
           signedIn={signedIn}
+          view={panelView}
+          writes={writes}
         />
       ) : null}
 

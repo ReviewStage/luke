@@ -2529,7 +2529,10 @@ echoed. `src/voice/avatar.ts` answers them in turn on one fiber of the
 session's scope, so a stop right behind its start closes what that start
 opened. A start mints a session through `src/voice/keyframe.ts`, one
 `POST /v1/sessions` on Keyframe's API under `KEYFRAME_API_KEY` naming the
-persona `LUKE_KEYFRAME_PERSONA_ID` (a stock persona), and hands its grant to
+persona the start asked for: a start names the avatar the Mac chose by its key
+(`@luke/features/video-avatar`), never a persona id, and `keyframe.ts` maps
+each key to Keyframe's stock persona for it, while a start naming none or the
+default mints `LUKE_KEYFRAME_PERSONA_ID` (a stock persona). It hands its grant to
 the device socket and nowhere else: a grant joins once, so each start mints
 its own and none is kept, and the log keeps only the room's host. The key is
 the bearer of that one request. A failure is a fixed kind and Keyframe's

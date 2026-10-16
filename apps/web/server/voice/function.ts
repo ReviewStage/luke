@@ -68,7 +68,7 @@ function deploymentAvatar(): VoiceServiceOptions["avatar"] {
   const personaId = process.env[VOICE_FUNCTION_ENVIRONMENT.KEYFRAME_PERSONA_ID]?.trim();
   if (apiKey === undefined || !personaId) return undefined;
   return {
-    keyframe: Layer.provide(Keyframe.layer({ apiKey, personaId }), FetchHttpClient.layer),
+    keyframe: Layer.provide(Keyframe.layer({ apiKey }), FetchHttpClient.layer),
     personaId,
   };
 }

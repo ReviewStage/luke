@@ -37,6 +37,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
   isLiveVoice,
@@ -175,10 +176,12 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * Asks the service for Luke's avatar on this session, in its own
    * vocabulary, under the request id the caller minted for this ask: the
    * service mints the avatar's session on its own key and answers with
-   * `avatar.started` or `avatar.unavailable` echoing that id. Optional on
-   * the same terms as `reportActivity`.
+   * `avatar.started` or `avatar.unavailable` echoing that id. The avatar is
+   * the one the developer chose, which the frame names only where it is not
+   * the default, so a service from before the choice reads the start as it
+   * always did. Optional on the same terms as `reportActivity`.
    */
-  startAvatar?(requestId: string): void;
+  startAvatar?(requestId: string, avatar: VideoAvatar): void;
   /** Tells the service the avatar the request put up is down, and why; the session goes on as voice. Optional on the same terms as `reportActivity`. */
   stopAvatar?(requestId: string, reason: AvatarStopReason): void;
   /**
@@ -991,8 +994,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         },
         // The avatar's asks ride the same socket, held through a gap like any
         // send, since the session they are about outlives the gap.
-        startAvatar: (requestId) => {
-          const frame: AvatarStartFrame = { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId };
+        startAvatar: (requestId, avatar) => {
+          const frame: AvatarStartFrame = {
+            type: VOICE_SERVICE_FRAME.AVATAR_START,
+            requestId,
+            ...(avatar === VIDEO_AVATAR.DEFAULT ? undefined : { avatar }),
+          };
           socket.send(JSON.stringify(frame));
         },
         stopAvatar: (requestId, reason) => {

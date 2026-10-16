@@ -1,8 +1,8 @@
 /**
  * keyframe.ts -- Keyframe Labs, as the voice service mints one avatar session on Luke's key.
  *
- * A session is one POST under the API key naming the deployment's persona,
- * answered with the LiveKit server the avatar publishes into, the token that
+ * A session is one POST under the API key naming the persona the call asked
+ * for, answered with the LiveKit server the avatar publishes into, the token that
  * joins it, and the identity the avatar takes there. The key travels as the
  * bearer of that one call and leaves this module nowhere else; the grant it
  * answers is the call window's alone to hold, so nothing here logs either.
@@ -12,6 +12,7 @@
  * can vouch for holding no credential.
  */
 
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import { readEither } from "@luke/wire/effect";
 import { Context, Data, Effect, Layer, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -30,6 +31,23 @@ const KEYFRAME_DEFAULTS = {
 } as const;
 
 const KEYFRAME_SESSIONS_PATH = "/v1/sessions";
+
+/**
+ * Keyframe's id for each stock avatar a Mac may choose, as Keyframe's avatar
+ * library lists them for `persona-1.5-live`
+ * (https://docs.keyframelabs.com/guides/resources/avatar-library). The
+ * default is the deployment's own persona, so it is not here.
+ */
+export const KEYFRAME_STOCK_PERSONA_ID = {
+  [VIDEO_AVATAR.ATLAS]: "81b834ee-8aaa-4796-861e-5b206f6e1bff",
+  [VIDEO_AVATAR.CASPIAN]: "b5a52072-3beb-4578-80c1-4bfa580f68c4",
+  [VIDEO_AVATAR.CASSIDY]: "de49f8e0-572c-40b0-8e46-893d6ec72eda",
+  [VIDEO_AVATAR.CELIA]: "fbf30421-c647-49f8-8440-b748c01201fe",
+  [VIDEO_AVATAR.COSMO]: "ab85a2a0-0555-428d-87b2-ff3019a58b93",
+  [VIDEO_AVATAR.LYRA]: "b6dad089-2dd4-4012-9f6c-53b8aec8d4f5",
+  [VIDEO_AVATAR.ORION]: "9b3988bd-8b4e-43ca-aef2-90da70dba2c0",
+  [VIDEO_AVATAR.SELENE]: "37fc1a9e-144e-4447-8df1-f4cb4dd76914",
+} as const satisfies Record<Exclude<VideoAvatar, typeof VIDEO_AVATAR.DEFAULT>, string>;
 
 /** The status Keyframe answers when no avatar worker is free, beside the 429 of a plan's concurrency. */
 const SERVICE_UNAVAILABLE = 503;
@@ -69,13 +87,12 @@ export interface AvatarGrant {
 }
 
 export interface KeyframeService {
-  /** Mints one session of the configured persona. */
-  readonly createSession: () => Effect.Effect<AvatarGrant, KeyframeError>;
+  /** Mints one session of the persona named, by Keyframe's id for it. */
+  readonly createSession: (personaId: string) => Effect.Effect<AvatarGrant, KeyframeError>;
 }
 
 export interface KeyframeOptions {
   readonly apiKey: Redacted.Redacted;
-  readonly personaId: string;
   /** The API's base; a test points it elsewhere. */
   readonly baseUrl?: string | undefined;
   readonly requestTimeoutMs?: number | undefined;
@@ -110,12 +127,12 @@ function keyframeService(options: KeyframeOptions, client: HttpClient.HttpClient
   // Note that the deadline is taken again around the whole session, because
   // the call's own ends when the headers arrive and a body that stalls after
   // them would otherwise hold the call's voice-only fallback indefinitely.
-  const createSession: KeyframeService["createSession"] = () =>
+  const createSession: KeyframeService["createSession"] = (personaId) =>
     Effect.gen(function* () {
       const sent = yield* call.send({
         method: HTTP_METHOD.POST,
         path: KEYFRAME_SESSIONS_PATH,
-        body: JSON.stringify({ persona_id: options.personaId }),
+        body: JSON.stringify({ persona_id: personaId }),
       });
       if (!callAnswered(sent)) {
         return yield* new KeyframeError({ failure: KEYFRAME_FAILURE.UPSTREAM });
@@ -153,7 +170,7 @@ function keyframeService(options: KeyframeOptions, client: HttpClient.HttpClient
 }
 
 export class Keyframe extends Context.Service<Keyframe, KeyframeService>()("Keyframe") {
-  /** The client on Luke's key and the deployment's persona, over the ambient `HttpClient`. */
+  /** The client on Luke's key, over the ambient `HttpClient`. */
   static layer(options: KeyframeOptions): Layer.Layer<Keyframe, never, HttpClient.HttpClient> {
     return Layer.effect(
       Keyframe,

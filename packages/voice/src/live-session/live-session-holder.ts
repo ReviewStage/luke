@@ -14,6 +14,7 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -145,6 +146,8 @@ export interface LiveSessionHolderOptions {
   createId: () => string;
   /** Whether a call is to open with Luke's avatar, read as each session comes to stand. */
   videoOnCall?: Effect.Effect<boolean>;
+  /** The avatar a call opens with, read with `videoOnCall`; the default where none is given. */
+  videoAvatar?: Effect.Effect<VideoAvatar>;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
@@ -269,6 +272,8 @@ export class LiveSessionHolder {
   #avatarRequest: string | undefined;
   /** How many times the standing call's avatar was asked for again after a close this side did not start. */
   #avatarRestarts = 0;
+  /** The avatar the latest start asked for, which a restart after a close asks for again. */
+  #avatarAsked: VideoAvatar = VIDEO_AVATAR.DEFAULT;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -471,7 +476,9 @@ export class LiveSessionHolder {
         this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
       }
       this.#options.onSessionCreated?.();
-      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) this.startAvatar();
+      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) {
+        this.startAvatar(yield* this.#options.videoAvatar ?? Effect.succeed(VIDEO_AVATAR.DEFAULT));
+      }
       return createdOf(opened);
     });
   }
@@ -675,16 +682,18 @@ export class LiveSessionHolder {
    * session the plan's concurrency pays for. A start still unanswered is
    * superseded, since its answer may have been lost with a connection, and
    * the service closes whatever the earlier ask put up. An avatar that ended
-   * may be asked for again, and draws a grant of its own.
+   * may be asked for again, and draws a grant of its own. The avatar asked
+   * for is the one named, or the one the latest start asked for.
    */
-  startAvatar(): boolean {
+  startAvatar(avatar: VideoAvatar = this.#avatarAsked): boolean {
     const session = this.#held;
     if (!session || session.ended) return false;
     const start = session.opened.startAvatar;
     if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
     const requestId = this.#options.createId();
     this.#avatarRequest = requestId;
-    start(requestId);
+    this.#avatarAsked = avatar;
+    start(requestId, avatar);
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
       this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
     }

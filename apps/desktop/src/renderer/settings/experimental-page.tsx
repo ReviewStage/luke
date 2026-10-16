@@ -1,12 +1,25 @@
 import { ACT_KIND } from "@luke/host/acts";
-import { type ExperimentChoices, type ExperimentEntry, experimentOn } from "@luke/settings";
+import {
+  EXPERIMENT,
+  type Experiment,
+  type ExperimentChoices,
+  type ExperimentEntry,
+  experimentOn,
+  SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
+  SETTING_SECTION,
+  type SettingSection,
+  type SettingsRowsInput,
+} from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
 import { FlaskConicalIcon } from "lucide-react";
+import { Fragment } from "react";
 import { useAct } from "../act";
 import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";
+import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";
 import { SwitchRow } from "./switch-row";
+import type { SettingsWrites } from "./writes";
 
 /**
  * experimental-page.tsx -- Settings › Experimental: a switch for each feature the account can try before it is finished, or the empty state between them.
@@ -19,7 +32,9 @@ import { SwitchRow } from "./switch-row";
  * row's Send feedback opens the window's feedback dialog about that
  * experiment. With none standing, the page keeps its place and draws the
  * empty state the empty Inbox draws, so a link or a search result that lands
- * here never lands on nothing.
+ * here never lands on nothing. An experiment with stored settings of its
+ * own, such as the avatar Video calls shows, draws them beneath its switch,
+ * from the schema section named for it, while the schema says they stand.
  */
 
 /** What the empty page says, under its title. */
@@ -30,6 +45,11 @@ const NO_EXPERIMENTS_TITLE = "No experiments right now";
 
 /** Why a signed-out page holds no switches: experiments are an account's. */
 const SIGN_IN_NOTE = "Sign in to try experiments.";
+
+/** The schema section an experiment's own settings stand in, for one that has any. */
+function sectionOf(experiment: Experiment): SettingSection | undefined {
+  return experiment === EXPERIMENT.VIDEO_CALLS ? SETTING_SECTION.VIDEO_CALLS : undefined;
+}
 
 /** One experiment's row: its switch, what turning it on brings, and the way to say how it went. */
 function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): React.JSX.Element {
@@ -62,12 +82,17 @@ export function ExperimentalPage({
   entries,
   experiments,
   signedIn,
+  view,
+  writes,
 }: {
   /** The experiments standing, newest first: `EXPERIMENTS`, as the registry lists them. */
   entries: readonly ExperimentEntry[];
   /** The account's choices, as the settings carry them. */
   experiments: ExperimentChoices;
   signedIn: boolean;
+  /** What the schema rows are judged from; absent until the settings arrive, when only the switches stand. */
+  view?: SettingsRowsInput | undefined;
+  writes: SettingsWrites;
 }): React.JSX.Element {
   if (!signedIn) return <p className="settings-note">{SIGN_IN_NOTE}</p>;
   if (entries.length === 0) {
@@ -79,9 +104,22 @@ export function ExperimentalPage({
   }
   return (
     <SettingsGroup>
-      {entries.map((entry) => (
-        <ExperimentRow key={entry.key} entry={entry} on={experimentOn(experiments, entry.key)} />
-      ))}
+      {entries.map((entry) => {
+        const section = sectionOf(entry.key);
+        return (
+          <Fragment key={entry.key}>
+            <ExperimentRow entry={entry} on={experimentOn(experiments, entry.key)} />
+            {section !== undefined && view !== undefined ? (
+              <SchemaSettingRows
+                page={SCHEMA_SETTINGS_PAGE.EXPERIMENTAL}
+                section={section}
+                view={view}
+                writes={writes}
+              />
+            ) : null}
+          </Fragment>
+        );
+      })}
     </SettingsGroup>
   );
 }

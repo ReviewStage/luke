@@ -1,6 +1,13 @@
+import {
+  isVideoAvatar,
+  VIDEO_AVATAR,
+  VIDEO_AVATAR_LIST,
+  VIDEO_AVATAR_NAME,
+} from "@luke/features/video-avatar";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
+import { EXPERIMENT, experimentOn } from "./experiments.js";
 import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
@@ -45,6 +52,10 @@ function themeOptionLabel(theme: Theme): string {
 
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
+
+/** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
+const videoCallsDrawn = (view: SettingsVisibility): boolean =>
+  view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
 
 export const APP_SETTING_SCHEMA = {
   theme: choiceSetting({
@@ -130,6 +141,28 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
     visible: voiceControlDrawn,
+  }),
+  /*
+   * Who Luke appears as on video: the deployment's own persona, or one of
+   * Keyframe's stock avatars. Kept on this Mac, beside the Video calls switch
+   * it belongs to, and read as each avatar starts, so a change shows the next
+   * time video does rather than ending the call in progress.
+   */
+  videoAvatar: choiceSetting({
+    field: "videoAvatar",
+    id: APP_SETTING_ID.VIDEO_AVATAR,
+    label: "Avatar",
+    detail: "Who Luke appears as on video. A new choice shows the next time video starts.",
+    values: VIDEO_AVATAR_LIST,
+    token: (avatar) => avatar,
+    optionLabel: (avatar) => VIDEO_AVATAR_NAME[avatar],
+    guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
+    default: VIDEO_AVATAR.DEFAULT,
+    page: SETTINGS_PAGE.EXPERIMENTAL,
+    section: SETTING_SECTION.VIDEO_CALLS,
+    order: 40,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: videoCallsDrawn,
   }),
   voiceCaptions: toggleSetting({
     field: "voiceCaptions",

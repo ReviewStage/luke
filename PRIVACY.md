@@ -853,7 +853,9 @@ only when you press Send.
   choice is your account's, so it follows you to every Mac you sign in on.
   Each call that shows Luke on video opens one avatar session at Keyframe: our
   service asks Keyframe for it
-  on our key, naming the stock persona Luke appears as and nothing about you,
+  on our key, naming the stock persona Luke appears as (the default, or the
+  avatar you chose under Video calls, which is kept on that Mac) and nothing
+  about you,
   and hands the session's one-time pass to your Mac, where only Luke's main
   window holds it. That window then sends Keyframe Luke's synthesized voice as
   he speaks, which carries what he says about your plan, and plays back the
