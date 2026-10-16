@@ -1006,20 +1006,23 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(FAILING.name), "someone");
 });
 
-test("a new agent's MCP servers are the owner's connected ones until switched off, and a switch saves with the task", async () => {
+test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  assert.match(page.textContent ?? "", /2 of 2 on\./u);
+  const chip = button("MCP servers");
+  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.equal(chip.querySelectorAll(".provider-mark").length, 2, "Linear's and Sentry's marks");
 
-  act(() => button("MCP servers").click());
+  act(() => chip.click());
   await settle();
   const sentry = document.querySelector<HTMLButtonElement>(
     "[role=switch][aria-label='Sentry for this agent']",
   );
   assert.ok(sentry, "the agent box's own switches stand");
   act(() => sentry.click());
-  assert.match(page.textContent ?? "", /1 of 2 on\./u);
+  assert.match(page.textContent ?? "", /Sentry off\./u);
+  assert.equal(chip.querySelectorAll(".provider-mark").length, 1, "Linear's mark alone");
   act(() => button("Save").click());
   await settle();
 
