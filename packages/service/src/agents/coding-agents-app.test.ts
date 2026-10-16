@@ -1801,7 +1801,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(
           part.text,
           new RegExp(
-            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*Read it with \`read_page\``,
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*with \`read_page\`, \`pageId: "${shown.value.id}"\`, and \`version: 1\``,
             "u",
           ),
         );

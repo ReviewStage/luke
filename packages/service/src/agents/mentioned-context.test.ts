@@ -413,7 +413,7 @@ test("a page of the plan the words mention is handed by its title, id, and versi
 
   assert.equal(
     part,
-    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. Read it with \`read_page\` and \`pageId: "${PAGE_ID}"\`. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place.`,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. Read it as the developer saw it with \`read_page\`, \`pageId: "${PAGE_ID}"\`, and \`version: 3\`, or leave the version out for its newest. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place.`,
   );
 });
 
