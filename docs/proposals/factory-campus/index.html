@@ -1,0 +1,1661 @@
+<!doctype html>
+<!-- Factory as a campus of buildings: a design exploration, not a feature. One self-contained page that fetches nothing; every task, agent, and pull request on it is illustrative. Open it in a browser. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luke · Factory as a campus (design exploration)</title>
+<style>
+/* Tokens, copied from the renderer's base.css, desktop.css, and the generated
+   motion tokens so the mockup wears the app's own ground, ink, and timing. */
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --spring: linear(0, 0.0285, 0.0993, 0.1943, 0.3005, 0.4083, 0.5115, 0.6061, 0.69, 0.7623, 0.8229, 0.8727, 0.9125, 0.9437, 0.9674, 0.9848, 0.9972, 1.0056, 1.0109, 1.0138, 1.015, 1.015, 1.0142, 1.0129, 1.0114, 1.0098, 1);
+  --duration-fast: 280ms;
+  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
+  --duration-shape: 460ms;
+  --duration-exit: 90ms;
+  --duration-quick: 140ms;
+  --duration-hover: 70ms;
+  --duration-pane: 240ms;
+  --motion-pane: cubic-bezier(0.2, 0, 0, 1);
+  --row-stagger: 32ms;
+  --loop-motion: running;
+
+  --space-2: 2px; --space-4: 4px; --space-6: 6px; --space-8: 8px; --space-12: 12px;
+  --space-16: 16px; --space-20: 20px; --space-24: 24px; --space-32: 32px; --space-40: 40px;
+  --column-inset: var(--space-12);
+  --row-inset: var(--space-8);
+  --content-inset: calc(var(--column-inset) + var(--row-inset));
+  --glyph-gap: var(--space-8);
+  --control-gap: var(--space-8);
+  --list-gap: var(--space-2);
+  --section-gap: var(--space-16);
+  --control-height: 30px;
+  --control-radius: 8px;
+  --control-glyph: 15px;
+  --menu-inset: var(--space-4);
+  --menu-row-height: 32px;
+  --menu-row-radius: 6px;
+  --menu-radius: calc(var(--menu-row-radius) + var(--menu-inset));
+  --sidebar-width: 264px;
+  --desktop-bar-height: 51px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+}
+
+/* Dark, the default; data-theme on <html> takes a choice from the page's own switch. */
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --state-working: #5cd5ff;
+  --state-attention: #ffa049;
+  --state-complete: #6fdca4;
+  --state-merged: #c3a0ff;
+  --voice-developer: #7fe0ac;
+  --message-sent: #0071e3;
+  --danger: #ff7e7e;
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-body: rgba(255, 255, 255, 0.86);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --selected: rgba(255, 255, 255, 0.2);
+  --pressed: rgba(255, 255, 255, 0.26);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --on-accent: #fff;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-deep: rgba(0, 0, 0, 0.6);
+  --section-fill: rgba(255, 255, 255, 0.022);
+  --desktop-ground: #0c0c0e;
+  --desktop-sidebar: #111114;
+  --desktop-well: #0f0f12;
+  --sidebar-ink: rgba(255, 255, 255, 0.7);
+  --surface-popover: #111114;
+  --attention-mark-ground: #c4620c;
+  --workspace-hue-1: #4f63b8;
+  --actor-tile: #2a2a30;
+  --focus-ring: var(--message-sent);
+  --page-ground: #050506;
+  --page-ink: rgba(255, 255, 255, 0.6);
+  --stage-sky: radial-gradient(120% 90% at 50% 30%, #15161c 0%, #0c0c0e 70%);
+  --label-ground: rgba(17, 17, 20, 0.92);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --state-working: #0a72a8;
+  --state-attention: #a65400;
+  --state-complete: #18794e;
+  --state-merged: #8250df;
+  --voice-developer: #17784a;
+  --danger: #e0383e;
+  --text-primary: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --text-tertiary: rgba(0, 0, 0, 0.56);
+  --text-body: rgba(0, 0, 0, 0.8);
+  --raised: rgba(0, 0, 0, 0.035);
+  --raised-strong: rgba(0, 0, 0, 0.06);
+  --selected: rgba(0, 0, 0, 0.07);
+  --pressed: rgba(0, 0, 0, 0.11);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.1);
+  --shadow: rgba(0, 0, 0, 0.12);
+  --shadow-deep: rgba(0, 0, 0, 0.2);
+  --section-fill: #fff;
+  --desktop-ground: #fcfcfc;
+  --desktop-sidebar: #f3f3f4;
+  --desktop-well: #f8f8f9;
+  --sidebar-ink: rgba(0, 0, 0, 0.68);
+  --surface-popover: #fff;
+  --attention-mark-ground: #a65400;
+  --workspace-hue-1: #4a5fc0;
+  --actor-tile: #e8e8ec;
+  --page-ground: #e4e4e8;
+  --page-ink: rgba(0, 0, 0, 0.6);
+  --stage-sky: radial-gradient(120% 90% at 50% 30%, #ffffff 0%, #f4f4f6 70%);
+  --label-ground: rgba(255, 255, 255, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --loop-motion: paused;
+    --duration-fast: 0ms; --duration-shape: 0ms; --duration-exit: 0ms;
+    --duration-quick: 0ms; --duration-hover: 0ms; --duration-pane: 0ms; --row-stagger: 0ms;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--page-ground);
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
+svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+:focus { outline: none; }
+:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+
+/* The page around the mockup: what this is, and the appearance switch. */
+.show-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-24);
+  color: var(--page-ink);
+  font-size: 12px;
+}
+.show-head strong { color: var(--text-primary); font-weight: 600; font-size: 13px; }
+.show-chip {
+  padding: var(--space-2) var(--space-8);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.show-chip[data-tone="illustrative"] { color: var(--state-attention); border-color: currentColor; }
+.show-head .spacer { flex: 1; }
+.segmented {
+  display: inline-flex;
+  margin: 0;
+  border: 0;
+  padding: var(--space-2);
+  border-radius: var(--control-radius);
+  background: var(--raised-strong);
+}
+.segmented button {
+  height: 24px;
+  padding: 0 var(--space-12);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.segmented button[aria-pressed="true"] { background: var(--desktop-ground); color: var(--text-primary); box-shadow: 0 1px 2px var(--shadow); }
+
+/* The window. */
+.window-wrap { flex: 1; min-height: 0; display: flex; padding: 0 var(--space-24) var(--space-24); }
+.window {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  overflow: clip;
+  background: var(--desktop-ground);
+  box-shadow: 0 24px 64px var(--shadow-deep);
+}
+.traffic { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; z-index: 5; }
+.traffic i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.traffic i:nth-child(2) { background: #febc2e; }
+.traffic i:nth-child(3) { background: #28c840; }
+
+/* Sidebar, drawn as desktop-sidebar.tsx draws it. */
+.sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 var(--column-inset) var(--column-inset);
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+.sidebar-top { height: var(--desktop-bar-height); display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.sidebar-top .icon-button { color: var(--text-tertiary); }
+.switcher {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  height: 36px; padding: 0 var(--row-inset); margin-bottom: var(--space-8);
+  border-radius: 9px; font-size: 14px; font-weight: 650; letter-spacing: -0.01em;
+}
+.switcher:hover { background: var(--raised); }
+.workspace-tile {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px;
+  background: var(--workspace-hue-1); color: #fff; font-size: 10px; font-weight: 650;
+}
+.switcher .chev { margin-left: auto; color: var(--text-tertiary); }
+.side-row {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  height: var(--control-height); margin: 0 0 var(--list-gap); padding: 0 var(--row-inset);
+  border-radius: 9px; color: var(--sidebar-ink); font-size: 13px; text-align: left; width: 100%;
+  transition: background-color var(--duration-hover) ease, color var(--duration-hover) ease;
+}
+.side-row:hover { color: var(--text-primary); }
+.side-row[aria-current="page"] { background: var(--raised-strong); color: var(--text-primary); }
+.side-row .end { margin-left: auto; color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.kbd { display: inline-flex; gap: 1px; color: var(--text-tertiary); font-size: 11.5px; }
+.sidebar-rule { height: 1px; margin: var(--space-8) var(--row-inset); border: 0; background: var(--hairline); }
+.section-head {
+  display: flex; align-items: center; height: 28px; padding: 0 var(--row-inset);
+  color: var(--text-tertiary); font-size: 11.5px; font-weight: 600;
+}
+.task-row {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  width: 100%; min-height: var(--control-height); padding: var(--space-6) var(--row-inset);
+  border-radius: 9px; color: var(--sidebar-ink); text-align: left; font-size: 13px;
+}
+.task-row:hover { color: var(--text-primary); background: var(--raised); }
+.task-row[aria-current="true"] { background: var(--raised-strong); color: var(--text-primary); }
+.task-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--tone, var(--text-tertiary)); }
+.dot[data-pulse] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 25%, transparent); }
+.sidebar-scroll { flex: 1; min-height: 0; overflow: auto; margin: 0 calc(-1 * var(--space-4)); padding: 0 var(--space-4); }
+.sidebar-foot { padding-top: var(--space-8); border-top: 1px solid var(--hairline); }
+
+/* The work column: a toolbar over the campus, and the inspector pane beside it. */
+.main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+.toolbar {
+  display: flex; align-items: center; gap: var(--control-gap);
+  min-height: var(--desktop-bar-height); padding: var(--space-8) var(--content-inset);
+  border-bottom: 1px solid var(--hairline);
+}
+.toolbar-title { display: flex; align-items: center; gap: var(--glyph-gap); font-size: 13px; font-weight: 600; }
+.toolbar-title .sub { color: var(--text-tertiary); font-weight: 500; }
+.toolbar .spacer { flex: 1; }
+.toolbar-button, .icon-button, .primary-button {
+  --button-fill: transparent;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--glyph-gap);
+  height: var(--control-height); padding: 0 var(--space-12);
+  border-radius: var(--control-radius); background: var(--button-fill);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  transition: background-color var(--duration-hover) ease, color var(--duration-hover) ease, filter var(--duration-hover) ease;
+}
+.icon-button { width: var(--control-height); padding: 0; color: var(--text-secondary); }
+.toolbar-button:hover, .icon-button:hover, .toolbar-button[aria-pressed="true"], .icon-button[aria-pressed="true"] { background: var(--selected); color: var(--text-primary); }
+.toolbar-button:active, .icon-button:active { background: var(--pressed); }
+.primary-button { --button-fill: var(--message-sent); color: var(--on-accent); }
+.primary-button:hover { filter: brightness(1.1); }
+.toolbar-button[data-tone="attention"] { color: var(--state-attention); }
+.attention-mark {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--attention-mark-ground); color: #fff; font-size: 11px; font-weight: 800; line-height: 1;
+}
+
+.work { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; }
+.stage {
+  position: relative; min-width: 0; min-height: 0; overflow: clip;
+  background: var(--stage-sky);
+  touch-action: none;
+}
+.stage svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage[data-dragging] { cursor: grabbing; }
+#camera { transform-origin: 0 0; transition: transform var(--duration-shape) var(--spring); }
+.stage[data-dragging] #camera, #camera[data-instant] { transition: none; }
+
+/* Buildings. */
+.bldg { cursor: pointer; transition: opacity var(--duration-fast) ease; }
+.bldg .lift { transition: transform var(--duration-hover) ease; }
+.bldg:hover .lift, .bldg:focus-visible .lift { transform: translateY(-3px); }
+.bldg:focus-visible { outline: none; } /* no ring: the plot's outline draws the keyboard's ring (.plot[data-focus]) */
+.scene[data-focused] .bldg:not([data-open]) { opacity: 0.42; }
+.bldg .shell, .bldg .upper, .bldg .cut, .bldg .fx { transition: opacity var(--duration-fast) ease, transform var(--duration-shape) var(--spring); }
+.bldg .cut { opacity: 0; pointer-events: none; }
+.bldg[data-open] .shell { opacity: 0; }
+.bldg[data-open] .upper { opacity: 0; transform: translateY(-48px); }
+.bldg[data-open] .fx-roof { opacity: 0; }
+.bldg[data-open] .cut { opacity: 1; }
+.plot { transition: opacity var(--duration-hover) ease; }
+.plot-edge { fill: none; stroke: var(--text-primary); stroke-width: 1.4; opacity: 0; transition: opacity var(--duration-hover) ease; vector-effect: non-scaling-stroke; }
+.plot[data-hover] .plot-edge { opacity: 0.35; }
+.plot[data-open] .plot-edge { opacity: 0.5; }
+.plot[data-focus] .plot-edge { opacity: 1; stroke: var(--focus-ring); stroke-width: 2; }
+.new-plot { cursor: pointer; }
+.new-plot .plot-dash { fill: none; stroke: var(--text-tertiary); stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.new-plot:hover .plot-dash, .new-plot:focus-visible .plot-dash { stroke: var(--text-primary); }
+.new-plot:focus-visible { outline: none; } /* no ring: the dashed edge brightens and thickens */
+.new-plot:focus-visible .plot-dash { stroke: var(--focus-ring); stroke-width: 2; }
+
+.win-lit { filter: url(#glow); }
+:root[data-theme="light"] .win-lit { filter: none; }
+
+/* Loops: each answers --loop-motion, so reduced motion holds them still. */
+.loop { animation-play-state: var(--loop-motion); transform-box: fill-box; transform-origin: center; }
+.smoke { animation: smoke 4.8s linear infinite; }
+@keyframes smoke {
+  0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+  12% { opacity: 0.75; }
+  100% { transform: translate(-22px, -64px) scale(2.1); opacity: 0; }
+}
+.beacon-ring { animation: beacon 1.6s ease-out infinite; transform-origin: center; }
+@keyframes beacon {
+  0% { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+.beacon-core { animation: blink 1.6s ease-in-out infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.wave { animation: wave 2.4s ease-out infinite; }
+@keyframes wave {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.flag { animation: flag 2.2s ease-in-out infinite; transform-origin: left center; }
+@keyframes flag { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-6deg) scaleX(0.92); } }
+.flag-raise { animation: raise var(--duration-shape) var(--spring) backwards; }
+@keyframes raise { from { transform: translateY(18px); opacity: 0; } }
+.bubble { animation: bob 2.8s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.screen { animation: screen 3.2s steps(4) infinite; }
+@keyframes screen { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+/* Labels float over the campus at a constant size. */
+.tag { pointer-events: none; transition: opacity var(--duration-quick) ease; }
+.tag rect.ground { fill: var(--label-ground); stroke: var(--hairline-strong); }
+.tag text { font-size: 11.5px; font-weight: 600; fill: var(--text-primary); }
+.tag text.meta { font-size: 10.5px; font-weight: 500; fill: var(--text-secondary); }
+.tag[data-dim] { opacity: 0.35; }
+.agent-tag text { font-size: 7px; font-weight: 600; fill: var(--text-primary); }
+.agent-tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
+
+/* What floats over the stage: the map's controls, the key, and a passing notice. */
+.map-controls {
+  position: absolute; right: var(--space-16); bottom: var(--space-16);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); border: 1px solid var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+}
+.map-controls hr { width: 100%; height: 1px; margin: var(--space-2) 0; border: 0; background: var(--hairline); }
+.key {
+  position: absolute; left: var(--space-16); bottom: var(--space-16); width: 236px;
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border: 1px solid var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+  transition: opacity var(--duration-quick) ease, transform var(--duration-shape) var(--spring);
+}
+.key[data-hidden] { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.key-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-4) var(--space-4) var(--space-8); color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; }
+.key-head .icon-button { width: 24px; height: 24px; }
+.key-row { display: flex; align-items: center; gap: var(--glyph-gap); height: 28px; padding: 0 var(--space-8); color: var(--text-secondary); font-size: 12px; }
+.key-row svg { width: 22px; height: 18px; flex: 0 0 auto; overflow: visible; }
+.toast {
+  position: absolute; left: 50%; bottom: var(--space-24);
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  padding: var(--space-8) var(--space-12); border: 1px solid var(--hairline-strong); border-radius: 10px;
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow); font-size: 12.5px; font-weight: 600;
+  transform: translateX(-50%); transition: opacity var(--duration-quick) ease, transform var(--duration-shape) var(--spring);
+}
+.toast[data-hidden] { opacity: 0; transform: translate(-50%, 8px); pointer-events: none; }
+
+/* The inspector: a pane beside the campus, the side panel's well and edge. */
+.inspector {
+  width: 0; overflow: clip; border-left: 0 solid var(--hairline); background: var(--desktop-well);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.inspector[data-open] { width: 360px; border-left-width: 1px; }
+.inspector-body { width: 360px; flex: 1; min-height: 0; overflow: auto; padding: 0 0 var(--space-24); }
+.inspector-body > * { animation: arrive var(--duration-shape) var(--spring) backwards; animation-delay: calc(var(--i, 0) * var(--row-stagger)); }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
+.insp-head { display: flex; align-items: flex-start; gap: var(--space-12); padding: var(--space-16) var(--space-12) var(--space-12) var(--content-inset); }
+.insp-head .titles { flex: 1; min-width: 0; }
+.insp-title { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; }
+.insp-path { margin-top: var(--space-2); color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11.5px; }
+.insp-state {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  margin: 0 var(--column-inset) var(--space-12); padding: var(--space-8) var(--row-inset);
+  border-radius: 9px; background: color-mix(in srgb, var(--tone) 12%, transparent); color: var(--tone);
+  font-size: 12.5px; font-weight: 650;
+}
+.insp-state .when { margin-left: auto; color: var(--text-tertiary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.insp-section { padding: var(--space-8) var(--content-inset) var(--space-4); color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; }
+.card {
+  margin: 0 var(--column-inset) var(--space-12); padding: var(--space-12);
+  border: 1px solid var(--hairline-strong); border-radius: 12px; background: var(--section-fill);
+}
+.card p { margin: 0 0 var(--space-12); color: var(--text-body); font-size: 13px; line-height: 1.45; }
+.card .who { display: flex; align-items: center; gap: var(--space-6); margin-bottom: var(--space-8); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.choices { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.choice {
+  height: 28px; padding: 0 var(--space-12); border: 1px solid var(--hairline-strong); border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; transition: background-color var(--duration-hover) ease;
+}
+.choice:hover { background: var(--selected); }
+.row {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  min-height: 34px; margin: 0 var(--column-inset); padding: var(--space-4) var(--row-inset);
+  border-radius: 9px; font-size: 13px;
+}
+.row:hover { background: var(--raised); }
+.row .meta { margin-left: auto; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row .sub { color: var(--text-secondary); font-size: 12px; }
+.row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actor {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto;
+  background: var(--actor-tile);
+}
+.actor svg { width: 14px; height: 14px; }
+.actor[data-person] { border-radius: 50%; background: var(--workspace-hue-1); color: #fff; font-size: 10px; font-weight: 650; }
+.log { margin: 0 var(--column-inset) var(--space-12); padding: var(--space-8) 0; }
+.log-line { display: flex; gap: var(--space-8); padding: var(--space-4) var(--row-inset); color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
+.log-line time { flex: 0 0 38px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.log-line code { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-body); }
+.log-line[data-new] { animation: arrive var(--duration-shape) var(--spring) backwards; }
+.insp-actions { display: flex; gap: var(--control-gap); padding: var(--space-4) var(--content-inset) var(--space-12); }
+.check-row { display: flex; align-items: center; gap: var(--space-6); color: var(--state-complete); font-size: 12px; font-weight: 600; }
+.diffstat { font-family: var(--font-mono); font-size: 11.5px; }
+.diffstat .add { color: var(--state-complete); }
+.diffstat .del { color: var(--danger); }
+.plan-line { margin: 0 0 var(--space-8); color: var(--text-body); font-size: 13px; line-height: 1.45; }
+.plan-line b { display: block; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+.caret { display: inline-block; width: 2px; height: 1em; vertical-align: -2px; background: var(--state-working); animation: blink 1s steps(2) infinite; animation-play-state: var(--loop-motion); }
+.meter { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.meter i { width: 2px; height: 4px; border-radius: 1px; background: var(--voice-developer); animation: meter 0.9s ease-in-out infinite; animation-play-state: var(--loop-motion); }
+.meter i:nth-child(2) { animation-delay: 0.15s; } .meter i:nth-child(3) { animation-delay: 0.3s; } .meter i:nth-child(4) { animation-delay: 0.45s; }
+@keyframes meter { 0%, 100% { height: 4px; } 50% { height: 13px; } }
+.toolbar-button[hidden] { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="show-head">
+  <strong>Factory · campus of buildings</strong>
+  <span class="show-chip">Design exploration</span>
+  <span class="show-chip" data-tone="illustrative">Illustrative data · nothing is live</span>
+  <span>Every task is a building. Click one to look inside; answer or merge to watch the campus change.</span>
+  <span class="spacer"></span>
+  <span>Appearance</span>
+  <fieldset class="segmented">
+    <legend class="sr-only">Appearance</legend>
+    <button type="button" data-theme-choice="dark">Night</button>
+    <button type="button" data-theme-choice="light">Day</button>
+  </fieldset>
+</header>
+
+<div class="window-wrap">
+<div class="window" id="window">
+  <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <aside class="sidebar" aria-label="Sidebar">
+    <div class="sidebar-top">
+      <button type="button" class="icon-button" aria-label="Back" data-g="chevron-left"></button>
+      <button type="button" class="icon-button" aria-label="Forward" data-g="chevron-right"></button>
+    </div>
+    <button type="button" class="switcher"><span class="workspace-tile">R</span>ReviewStage<span class="chev" data-g="chevrons"></span></button>
+    <button type="button" class="side-row" data-g-lead="square-pen">New task<span class="end kbd">⌘N</span></button>
+    <button type="button" class="side-row" data-g-lead="search">Search<span class="end kbd">⌘K</span></button>
+    <button type="button" class="side-row" data-g-lead="house">Home</button>
+    <button type="button" class="side-row" data-g-lead="inbox">Inbox<span class="end" id="inbox-count">2</span></button>
+    <button type="button" class="side-row" data-g-lead="factory" aria-current="page">Factory</button>
+    <button type="button" class="side-row" data-g-lead="zap">Automations</button>
+    <hr class="sidebar-rule">
+    <div class="sidebar-scroll">
+      <div class="section-head">Tasks</div>
+      <nav id="task-list" aria-label="Tasks"></nav>
+    </div>
+    <div class="sidebar-foot">
+      <button type="button" class="side-row" data-g-lead="settings">Settings</button>
+    </div>
+  </aside>
+
+  <section class="main" aria-label="Factory">
+    <div class="toolbar">
+      <div class="toolbar-title"><span data-g="factory"></span>Factory <span class="sub" id="census"></span></div>
+      <span class="show-chip" data-tone="illustrative" title="Every task, agent, and pull request here is made up">Illustrative</span>
+      <span class="spacer"></span>
+      <button type="button" class="toolbar-button" id="needs-you" data-tone="attention"></button>
+    </div>
+    <div class="work">
+      <div class="stage" id="stage">
+        <svg class="scene" id="scene">
+          <title>Campus</title>
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+            <radialGradient id="pool"><stop offset="0" stop-color="#ffd9a0" stop-opacity="0.32"/><stop offset="1" stop-color="#ffd9a0" stop-opacity="0"/></radialGradient>
+          </defs>
+          <g id="camera">
+            <g id="layer-ground"></g>
+            <g id="layer-plots"></g>
+            <g id="layer-shadows"></g>
+            <g id="layer-vehicles"></g>
+            <g id="layer-objects"></g>
+            <g id="layer-tags"></g>
+          </g>
+        </svg>
+        <section class="key" id="key" aria-label="Key">
+          <div class="key-head">How to read it<button type="button" class="icon-button" id="key-close" aria-label="Hide key" data-g="x"></button></div>
+          <div id="key-rows"></div>
+        </section>
+        <div class="map-controls" role="toolbar" aria-label="Campus view">
+          <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in" data-g="plus"></button>
+          <button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out" data-g="minus"></button>
+          <hr>
+          <button type="button" class="icon-button" id="rotate" aria-label="Turn the campus" data-g="rotate-cw"></button>
+          <button type="button" class="icon-button" id="fit" aria-label="Show the whole campus" data-g="scan"></button>
+          <button type="button" class="icon-button" id="key-toggle" aria-label="Key" aria-pressed="true" data-g="circle-help"></button>
+        </div>
+        <div class="toast" id="toast" role="status" aria-live="polite" data-hidden></div>
+      </div>
+      <aside class="inspector" id="inspector" aria-label="Building">
+        <div class="inspector-body" id="inspector-body"></div>
+      </aside>
+    </div>
+  </section>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------------
+   Glyphs: lucide's paths, as the renderer draws them, in a 24 box.
+   ------------------------------------------------------------------------ */
+const GLYPH = {
+  "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+  "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+  chevrons: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+  "square-pen": '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  factory: '<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  settings: '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  minus: '<path d="M5 12h14"/>',
+  "rotate-cw": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  question: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/>',
+  merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  blocks: '<rect width="7" height="7" x="14" y="3" rx="1"/><path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3"/>',
+  open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+};
+const glyph = (name) => `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">${GLYPH[name] || ""}</svg>`;
+/* An agent's harness mark: Claude's burst, drawn simply, in its own clay. */
+const claudeMark = () => {
+  let rays = "";
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4;
+    rays += `<line x1="12" y1="12" x2="${(12 + Math.cos(a) * 9).toFixed(2)}" y2="${(12 + Math.sin(a) * 9).toFixed(2)}"/>`;
+  }
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" stroke="#d97757" stroke-width="3.2" stroke-linecap="round">${rays}</svg>`;
+};
+for (const el of document.querySelectorAll("[data-g]")) el.insertAdjacentHTML("afterbegin", glyph(el.dataset.g));
+for (const el of document.querySelectorAll("[data-g-lead]")) el.insertAdjacentHTML("afterbegin", glyph(el.dataset.gLead));
+
+/* ------------------------------------------------------------------------
+   The illustrative work. Nothing here is read from anywhere.
+   ------------------------------------------------------------------------ */
+const STATE = {
+  call: { label: "On a call", tone: "--voice-developer" },
+  question: { label: "Needs an answer", tone: "--state-attention" },
+  working: { label: "Working", tone: "--state-working" },
+  ready: { label: "Ready to merge", tone: "--state-complete" },
+  merged: { label: "Merged", tone: "--state-merged" },
+};
+const WORK = [
+  { id: "factory-view", name: "Add another Factory view", state: "call", who: "You and Luke", branch: "plan", when: "14 min" },
+  { id: "invite", name: "Invite your teammates", state: "question", agent: "Opus", effort: "high", branch: "luke/invite-teammates", when: "4 min" },
+  { id: "search", name: "Improve search ranking", state: "working", agent: "Sonnet", effort: "medium", branch: "luke/search-ranking", when: "22 min" },
+  { id: "shortcuts", name: "Keyboard shortcuts", state: "working", agent: "Opus", effort: "high", branch: "luke/keyboard-shortcuts", when: "9 min" },
+  { id: "reconnect", name: "Fix reconnect handling", state: "ready", agent: "Opus", effort: "high", branch: "luke/reconnect-handling", pr: 3081, when: "checks passed" },
+  { id: "switching", name: "Faster workspace switching", state: "merged", agent: "Sonnet", branch: "luke/workspace-switching", pr: 3071, when: "2h ago" },
+  { id: "empty", name: "Polish empty states", state: "merged", agent: "Opus", branch: "luke/empty-states", pr: 3068, when: "yesterday" },
+];
+const byId = Object.fromEntries(WORK.map((w) => [w.id, w]));
+const LOGS = {
+  invite: [["4m", "Asked: <b>should an invite link expire?</b>"], ["6m", "Wrote <code>invite-dialog.tsx</code>"], ["9m", "Read <code>memberships.ts</code>"], ["12m", "Started on the plan"]],
+  search: [["now", "Running <code>vitest run search</code>"], ["1m", "Edited <code>rank.ts</code>"], ["3m", "Edited <code>query-terms.ts</code>"], ["7m", "Read <code>search-index.ts</code>"]],
+  shortcuts: [["now", "Editing <code>app-shortcuts.ts</code>"], ["2m", "Added <code>shortcut-sheet.tsx</code>"], ["5m", "Read <code>menu-bar.ts</code>"]],
+  reconnect: [["8m", "All 14 checks passed"], ["15m", "Opened <b>#3081</b>"], ["21m", "Backoff now resets on a clean close"]],
+  switching: [["2h", "Merged <b>#3071</b>"], ["3h", "Checks passed"]],
+  empty: [["1d", "Merged <b>#3068</b>"], ["1d", "Checks passed"]],
+};
+const TICKER = {
+  search: ["Edited <code>rank.ts</code>", "Running <code>vitest run search</code>", "Edited <code>score-weights.ts</code>", "Read <code>fixtures/queries.json</code>", "12 of 12 search tests passed"],
+  shortcuts: ["Editing <code>app-shortcuts.ts</code>", "Edited <code>settings-shortcuts.tsx</code>", "Running <code>pnpm check:affected</code>", "Read <code>keyboard-modality.ts</code>"],
+};
+
+/* ------------------------------------------------------------------------
+   The campus: world coordinates in tiles, N by N, roads at 9 to 11.
+   x runs down to the right on screen, y down to the left, z up.
+   ------------------------------------------------------------------------ */
+const N = 20;
+const DX = 22, DY = 11, DZ = 25;
+let rot = 0;
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+function R(x, y) {
+  switch (rot) {
+    case 1: return [N - y, x];
+    case 2: return [N - x, N - y];
+    case 3: return [y, N - x];
+    default: return [x, y];
+  }
+}
+const P = (x, y, z) => [(x - y) * DX, (x + y) * DY - z * DZ];
+const PR = (x, y, z) => { const [a, b] = R(x, y); return P(a, b, z); };
+const pts = (list) => list.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+const poly = (list, fill, extra = "") => `<polygon points="${pts(list)}" fill="${fill}" ${extra}/>`;
+
+/* Materials and light, per appearance: night is the dark window, day the light one. */
+let theme = "dark";
+const PALETTE = {
+  dark: {
+    slab: "#18191e", slabSide: "#101115", grass: "#141a17", road: "#1f2026", line: "rgba(255,255,255,0.16)",
+    pad: "#1d1e24", curb: "#26272e", wall: "#3a3c46", wall2: "#45403c", glass: "#1f2a36", roof: "#2c2e36",
+    metal: "#4b4e5a", dock: "#30323a", floor: "#2a2b33", inner: "#24252c", unlit: "#16171c",
+    tree: "#1f3a2d", tree2: "#2a4a39", trunk: "#3a2f28", shadow: "rgba(0,0,0,0.42)", smoke: "#8a8d99",
+    lamp: "#ffd9a0", deskTop: "#4a4c57", crate: "#5a4a36", truck: "#d9dbe3", cab: "#4f63b8",
+  },
+  light: {
+    slab: "#e7e8ec", slabSide: "#cfd0d6", grass: "#dfe7df", road: "#d3d4da", line: "rgba(255,255,255,0.9)",
+    pad: "#f1f1f4", curb: "#dcdde2", wall: "#f7f7f9", wall2: "#efe7df", glass: "#bfd3e6", roof: "#e3e4ea",
+    metal: "#c4c7d0", dock: "#d7d8de", floor: "#ececf0", inner: "#dedfe5", unlit: "#c8d2df",
+    tree: "#8fb89a", tree2: "#a8cbb0", trunk: "#9b8572", shadow: "rgba(30,30,60,0.16)", smoke: "#c9ccd4",
+    lamp: "#ffd9a0", deskTop: "#d0d2da", crate: "#c9a77a", truck: "#ffffff", cab: "#4a5fc0",
+  },
+};
+const C = () => PALETTE[theme];
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+/* Light from behind the right shoulder: tops brightest, the right faces next, the left faces darkest. */
+const L = (() => { const v = [0.38, -0.32, 0.87]; const m = Math.hypot(...v); return v.map((c) => c / m); })();
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function shade(hex, normal) {
+  const d = Math.max(0, normal[0] * L[0] + normal[1] * L[1] + normal[2] * L[2]);
+  const f = (theme === "dark" ? 0.62 : 0.8) + (theme === "dark" ? 0.5 : 0.22) * d;
+  const [r, g, b] = hexToRgb(hex);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+const TOP = [0, 0, 1], FX = [1, 0, 0], FY = [0, 1, 0];
+
+/* A box in world tiles, with its top's corners at their own heights so a slope
+   or a gable is a box too. Turned with the campus, its corners keep their heights. */
+function turnBox(b) {
+  const hs = b.hs || [b.h, b.h, b.h, b.h];
+  const c = [[b.x, b.y, hs[0]], [b.x + b.w, b.y, hs[1]], [b.x + b.w, b.y + b.d, hs[2]], [b.x, b.y + b.d, hs[3]]]
+    .map(([x, y, h]) => { const [a, bb] = R(x, y); return [a, bb, h]; });
+  const xs = c.map((q) => q[0]), ys = c.map((q) => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const H = (x, y) => c.find((q) => near(q[0], x) && near(q[1], y))[2];
+  return { x0, x1, y0, y1, z: b.z || 0, h00: H(x0, y0), h10: H(x1, y0), h11: H(x1, y1), h01: H(x0, y1) };
+}
+function normalOf(a, b, c) {
+  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const m = Math.hypot(...n) || 1;
+  return n.map((q) => q / m);
+}
+function boxSVG(b, mat, opts = {}) {
+  const t = turnBox(b);
+  const { x0, x1, y0, y1, z } = t;
+  const w3 = [[x0, y0, z + t.h00], [x1, y0, z + t.h10], [x1, y1, z + t.h11], [x0, y1, z + t.h01]];
+  const n = normalOf(w3[0], w3[1], w3[3]);
+  const top = w3.map((q) => P(...q));
+  const fx = [P(x1, y0, z), P(x1, y1, z), P(x1, y1, z + t.h11), P(x1, y0, z + t.h10)];
+  const fy = [P(x0, y1, z), P(x1, y1, z), P(x1, y1, z + t.h11), P(x0, y1, z + t.h01)];
+  const base = C()[mat] || mat;
+  const edge = theme === "dark" ? 'stroke="rgba(255,255,255,0.05)" stroke-width="0.6"' : 'stroke="rgba(0,0,0,0.06)" stroke-width="0.6"';
+  let s = "";
+  if (!opts.noTop) s += poly(top, opts.topFill || shade(base, n[2] < 0 ? TOP : n), edge);
+  s += poly(fx, opts.sideFill || shade(base, FX), edge) + poly(fy, opts.sideFill || shade(base, FY), edge);
+  if (opts.win) s += windowsSVG(t, opts.win);
+  if (opts.stripe) s += stripeSVG(t, opts.stripe);
+  return s;
+}
+/* Windows on the two faces the viewer sees, lit by what the building is doing. */
+function windowsSVG(t, win) {
+  const { x0, x1, y0, y1, z } = t;
+  const hTop = Math.min(t.h00, t.h10, t.h11, t.h01);
+  const rows = win.rows || Math.max(1, Math.floor((hTop - 0.25) / 0.55));
+  const per = win.per || 2;
+  const lit = win.lit;
+  let s = "";
+  let k = win.seed || 1;
+  const rnd = () => { k = (k * 9301 + 49297) % 233280; return k / 233280; };
+  const face = (axis) => {
+    const len = axis === "x" ? y1 - y0 : x1 - x0;
+    const cols = Math.max(1, Math.round(len * per));
+    const cw = len / cols;
+    const rh = (hTop - 0.3) / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const u0 = c * cw + cw * 0.22, u1 = (c + 1) * cw - cw * 0.22;
+        const za = z + 0.18 + r * rh + rh * 0.2, zb = z + 0.18 + (r + 1) * rh - rh * 0.2;
+        const q = axis === "x"
+          ? [P(x1, y0 + u0, za), P(x1, y0 + u1, za), P(x1, y0 + u1, zb), P(x1, y0 + u0, zb)]
+          : [P(x0 + u0, y1, za), P(x0 + u1, y1, za), P(x0 + u1, y1, zb), P(x0 + u0, y1, zb)];
+        const on = lit && rnd() < (win.ratio ?? 0.8);
+        if (on) s += poly(q, lit, `class="win-lit" data-win opacity="${theme === "dark" ? 0.92 : 0.75}"`);
+        else s += poly(q, win.band ? shade(C().glass, axis === "x" ? FX : FY) : C().unlit, "data-win");
+      }
+    }
+  };
+  face("x"); face("y");
+  return s;
+}
+function stripeSVG(t, color) {
+  const { x0, x1, y0, y1, z } = t;
+  const hTop = Math.min(t.h00, t.h10, t.h11, t.h01);
+  const za = z + hTop - 0.12, zb = z + hTop - 0.02;
+  return poly([P(x1, y0, za), P(x1, y1, za), P(x1, y1, zb), P(x1, y0, zb)], color) +
+    poly([P(x0, y1, za), P(x1, y1, za), P(x1, y1, zb), P(x0, y1, zb)], color);
+}
+/* A quad lying on the ground (or at height z), turned with the campus. */
+function flat(x, y, w, d, fill, z = 0, extra = "") {
+  return poly([PR(x, y, z), PR(x + w, y, z), PR(x + w, y + d, z), PR(x, y + d, z)], fill, extra);
+}
+/* A cylinder: a silo, a chimney, a tank, a mast. */
+function cylSVG(x, y, r, z, h, mat, opts = {}) {
+  const [cx, cy] = R(x, y);
+  const [bx, by] = P(cx, cy, z), [tx, ty] = P(cx, cy, z + h);
+  const rx = r * DX * Math.SQRT2, ry = r * DY * Math.SQRT2;
+  const base = C()[mat] || mat;
+  const id = `cg-${mat.replace(/[^a-z0-9]/gi, "")}-${theme}`;
+  ensureGradient(id, base);
+  let s = `<path d="M${bx - rx},${by} L${tx - rx},${ty} L${tx + rx},${ty} L${bx + rx},${by} A${rx},${ry} 0 0 1 ${bx - rx},${by} Z" fill="url(#${id})"/>`;
+  if (opts.bands) for (const f of opts.bands) {
+    const zz = z + h * f; const [, yy] = P(cx, cy, zz);
+    s += `<path d="M${bx - rx},${yy} A${rx},${ry} 0 0 0 ${bx + rx},${yy}" fill="none" stroke="${theme === "dark" ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.1)"}" stroke-width="1"/>`;
+  }
+  s += `<ellipse cx="${tx}" cy="${ty}" rx="${rx}" ry="${ry}" fill="${opts.topFill || shade(base, TOP)}"/>`;
+  return s;
+}
+const gradients = new Set();
+function ensureGradient(id, base) {
+  if (gradients.has(id)) return;
+  gradients.add(id);
+  const defs = document.querySelector("#scene defs");
+  defs.insertAdjacentHTML("beforeend", `<linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="${shade(base, FY)}"/><stop offset="0.55" stop-color="${shade(base, [0.6, 0.6, 0.2])}"/><stop offset="1" stop-color="${shade(base, FX)}"/></linearGradient>`);
+}
+/* A shadow: the footprint dragged away from the light, on the ground. */
+function hull(points) {
+  const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+function shadowSVG(b) {
+  const t = turnBox(b);
+  const h = (b.z || 0) + Math.max(t.h00, t.h10, t.h11, t.h01);
+  const sx = (-L[0] / L[2]) * h * 1.25, sy = (-L[1] / L[2]) * h * 1.25;
+  const g = [[t.x0, t.y0], [t.x1, t.y0], [t.x1, t.y1], [t.x0, t.y1]];
+  const all = g.concat(g.map(([x, y]) => [x + sx, y + sy]));
+  return poly(hull(all).map(([x, y]) => P(x, y, 0.02)), C().shadow);
+}
+function shadowCyl(x, y, r, h) {
+  const [cx, cy] = R(x, y);
+  const sx = (-L[0] / L[2]) * h * 1.25, sy = (-L[1] / L[2]) * h * 1.25;
+  const ring = [];
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; ring.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  const all = ring.concat(ring.map(([a, b]) => [a + sx, b + sy]));
+  return poly(hull(all).map(([a, b]) => P(a, b, 0.02)), C().shadow);
+}
+
+/* ------------------------------------------------------------------------
+   The buildings. Each is a plot, the parts on it, what it does on its roof,
+   and what stands inside when its roof comes off.
+   ------------------------------------------------------------------------ */
+const toneOf = (w) => css(STATE[w.state].tone);
+function lit(w) {
+  if (w.state === "merged") return { color: css("--state-merged"), ratio: 0.18 };
+  if (w.state === "call") return { color: css("--voice-developer"), ratio: 0.9 };
+  return { color: toneOf(w), ratio: w.state === "ready" ? 0.55 : 0.82 };
+}
+const BUILDINGS = {
+  /* A glass studio where a task is being talked through. */
+  "factory-view": {
+    plot: [12, 12, 4.4, 4.4],
+    hollow: { x: 12.6, y: 12.6, w: 3.2, d: 3.2, z: 0, h: 1.1, mat: "glass" },
+    parts: (w) => [
+      { box: { x: 12.6, y: 12.6, w: 3.2, d: 3.2, z: 0, h: 1.1 }, mat: "glass", win: { rows: 1, per: 1.6, lit: lit(w).color, ratio: 0.95, band: true, seed: 3 }, role: "shell" },
+      { box: { x: 12.45, y: 12.45, w: 3.5, d: 3.5, z: 1.1, h: 0.16 }, mat: "roof", role: "upper" },
+      { cyl: [14.2, 14.2, 0.07, 1.26, 1.3, "metal"], role: "upper" },
+    ],
+    fx: (w) => (w.state === "call" ? [{ kind: "waves", at: [14.2, 14.2, 2.6] }] : []),
+    inside: (w) => [
+      { kind: "table", at: [14.2, 14.2] },
+      { kind: "person", at: [13.5, 14.5], who: "you", label: "You" },
+      { kind: "luke", at: [14.9, 13.9], label: "Luke" },
+      { kind: "board", at: [12.75, 13.4] },
+    ],
+  },
+  /* A gabled workshop; the beacon on its ridge asks for you. */
+  invite: {
+    plot: [1, 15.8, 5.6, 3.8],
+    hollow: { x: 1.5, y: 16.3, w: 4.6, d: 2.8, z: 0, h: 1.35, mat: "wall2" },
+    parts: (w) => [
+      { box: { x: 1.5, y: 16.3, w: 4.6, d: 2.8, z: 0, h: 1.35 }, mat: "wall2", win: { rows: 1, per: 1.4, lit: lit(w).color, ratio: lit(w).ratio, seed: 11 }, role: "shell" },
+      { box: { x: 1.4, y: 16.2, w: 4.8, d: 1.5, z: 1.35, hs: [0, 0, 0.9, 0.9] }, mat: "roof", role: "upper" },
+      { box: { x: 1.4, y: 17.7, w: 4.8, d: 1.5, z: 1.35, hs: [0.9, 0.9, 0, 0] }, mat: "roof", role: "upper" },
+      { box: { x: 4.6, y: 16.6, w: 0.4, d: 0.4, z: 1.6, h: 0.9 }, mat: "wall", role: "upper" },
+    ],
+    fx: (w) => (w.state === "question" ? [{ kind: "beacon", at: [2.4, 17.7, 2.25] }] : w.state === "working" ? [{ kind: "smoke", at: [4.8, 16.8, 2.5] }] : []),
+    inside: (w) => [
+      { kind: "desk", at: [2.6, 17.1], agent: "Opus", ask: w.state === "question" },
+      { kind: "desk", at: [4.3, 17.1] },
+      { kind: "shelf", at: [1.8, 18.6] },
+      { kind: "crate", at: [5.4, 18.5] },
+    ],
+  },
+  /* A sawtooth works with silos and a stack: the biggest job on the campus. */
+  search: {
+    plot: [0.6, 10.9, 8, 4.4],
+    hollow: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2, mat: "wall" },
+    parts: (w) => {
+      const color = lit(w).color;
+      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, lit: color, ratio: lit(w).ratio, seed: 5 }, stripe: color, role: "shell" }];
+      for (let i = 0; i < 4; i++) {
+        list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0.75, 0, 0, 0.75] }, mat: "roof", role: "upper" });
+      }
+      return list;
+    },
+    extras: (w) => [
+      { cyl: [7.1, 12.1, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], shadow: true },
+      { cyl: [7.1, 13.6, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], shadow: true },
+      { cyl: [5.6, 12.1, 0.22, 1.2, 1.9, "wall2"], bands: [0.85] },
+    ],
+    fx: (w) => (w.state === "working" ? [{ kind: "smoke", at: [5.6, 12.1, 3.15] }] : []),
+    inside: (w) => [
+      { kind: "line", at: [1.6, 12.5], len: 4.2 },
+      { kind: "desk", at: [2.4, 13.7], agent: "Sonnet", work: true },
+      { kind: "desk", at: [3.8, 13.7], work: true },
+      { kind: "rack", at: [5.4, 13.7] },
+    ],
+  },
+  /* Going up under a crane: floors still being added. */
+  shortcuts: {
+    plot: [16.8, 11.4, 3, 5],
+    hollow: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, z: 0, h: 2.2, mat: "wall" },
+    parts: (w) => [
+      { box: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, z: 0, h: 2.2 }, mat: "wall", win: { rows: 3, per: 1.8, lit: lit(w).color, ratio: lit(w).ratio, seed: 21 }, role: "shell" },
+      { box: { x: 17.2, y: 11.9, w: 2.3, d: 1.8, z: 2.2, h: 0.7 }, mat: "inner", role: "upper", frame: true },
+    ],
+    crane: { at: [19.55, 11.75], h: 3.8, jib: 2.8 },
+    fx: (w) => [],
+    inside: (w) => [
+      { kind: "desk", at: [18.2, 12.8], agent: "Opus", work: true },
+      { kind: "desk", at: [18.2, 14.2], work: true },
+      { kind: "scaffold", at: [17.4, 15.1] },
+    ],
+  },
+  /* A warehouse with a loading dock; a packed truck waits at it until you merge. */
+  reconnect: {
+    plot: [11.6, 1, 7.6, 6.6],
+    hollow: { x: 12.2, y: 1.6, w: 6.2, d: 3.4, z: 0, h: 1.5, mat: "wall" },
+    parts: (w) => [
+      { box: { x: 12.2, y: 1.6, w: 6.2, d: 3.4, z: 0, h: 1.5 }, mat: "wall", win: { rows: 2, per: 1.5, lit: lit(w).color, ratio: w.state === "merged" ? 0.2 : 0.55, seed: 7 }, role: "shell" },
+      { box: { x: 12.1, y: 1.5, w: 6.4, d: 3.6, z: 1.5, h: 0.14 }, mat: "roof", role: "upper" },
+      { box: { x: 12.6, y: 5, w: 5.4, d: 0.7, z: 0, h: 0.35 }, mat: "dock", role: "keep" },
+    ],
+    fx: (w) => (w.state === "merged" ? [{ kind: "flag", at: [17.8, 2.2, 1.64] }] : [{ kind: "docklight", at: [15.2, 5.02, 1.2] }]),
+    truck: (w) => (w.state === "ready" ? { at: [14.6, 5.75], dir: "y" } : null),
+    inside: (w) => [
+      { kind: "crate", at: [13, 2.4], check: true }, { kind: "crate", at: [13.8, 2.4], check: true }, { kind: "crate", at: [13, 3.2], check: true },
+      { kind: "crate", at: [15.8, 2.4], check: true }, { kind: "crate", at: [16.6, 2.4], check: true },
+      { kind: "desk", at: [16.8, 4], agent: "Opus" },
+    ],
+  },
+  /* Finished: a tower that shipped, with its flag up. */
+  switching: {
+    plot: [1, 1, 4.2, 4.2],
+    hollow: { x: 1.6, y: 1.6, w: 3, d: 3, z: 0, h: 3.3, mat: "wall" },
+    parts: (w) => [
+      { box: { x: 1.6, y: 1.6, w: 3, d: 3, z: 0, h: 3.3 }, mat: "wall", win: { rows: 5, per: 2, lit: lit(w).color, ratio: lit(w).ratio, seed: 13 }, role: "shell" },
+      { box: { x: 2.1, y: 2.1, w: 2, d: 2, z: 3.3, h: 0.5 }, mat: "roof", role: "upper" },
+    ],
+    fx: (w) => [{ kind: "flag", at: [3.1, 3.1, 3.8] }],
+    inside: (w) => [{ kind: "desk", at: [2.4, 2.6] }, { kind: "desk", at: [3.6, 2.6] }, { kind: "plaque", at: [3.1, 3.9], tone: "--state-merged" }],
+  },
+  /* Finished: a low pavilion that shipped yesterday. */
+  empty: {
+    plot: [5.8, 1, 3, 5.2],
+    hollow: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, z: 0, h: 1.9, mat: "wall2" },
+    parts: (w) => [
+      { box: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, z: 0, h: 1.9 }, mat: "wall2", win: { rows: 2, per: 1.6, lit: lit(w).color, ratio: lit(w).ratio, seed: 17 }, role: "shell" },
+      { box: { x: 6.2, y: 1.5, w: 2.2, d: 2, z: 1.9, h: 0.7 }, mat: "wall2", win: { rows: 1, per: 1.6, lit: lit(w).color, ratio: 0.2, seed: 2 }, role: "upper" },
+    ],
+    fx: (w) => [{ kind: "flag", at: [7.3, 2.5, 2.6] }],
+    inside: (w) => [{ kind: "desk", at: [7.3, 3.2] }, { kind: "plaque", at: [7.3, 4.8], tone: "--state-merged" }],
+  },
+};
+const NEW_PLOT = [12, 17.4, 4.4, 2.2];
+const TREES = [[1.2, 6.8], [2.4, 7.6], [3.6, 6.7], [4.9, 7.8], [6.3, 7], [7.6, 7.9], [8.2, 6.6], [19.3, 8.4], [11.8, 8.3], [1.2, 9.9], [17.2, 18.4], [18.6, 17.6], [19.3, 19.2], [7.5, 16.6], [8.3, 18.4], [7.2, 19.3], [19.3, 9.9], [0.6, 15.4]];
+const LAMPS = [[8.7, 8.7], [11.3, 8.7], [8.7, 11.3], [11.3, 11.3], [8.7, 3], [11.3, 16], [3, 8.7], [16, 11.3]];
+
+/* ------------------------------------------------------------------------
+   Drawing the campus.
+   ------------------------------------------------------------------------ */
+const $ = (id) => document.getElementById(id);
+let openId = null;
+let hoverId = null;
+let focusId = null;
+
+function renderGround() {
+  const c = C();
+  let s = "";
+  /* The slab the campus stands on. */
+  s += boxSVG({ x: 0, y: 0, w: N, d: N, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass, sideFill: undefined });
+  /* Roads: the avenue, the street, and the driveways off them. */
+  s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 0, 2, N, c.road, 0.01);
+  s += flat(14.4, 7.6, 1.6, 1.4, c.road, 0.01); /* the dock's apron */
+  for (let i = 0.4; i < N; i += 1.2) {
+    if (i > 8.6 && i < 11.4) continue;
+    s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02) + flat(9.96, i, 0.08, 0.6, c.line, 0.02);
+  }
+  /* A plaza where the roads cross. */
+  s += flat(9, 9, 2, 2, theme === "dark" ? "#24252c" : "#e2e3e8", 0.015);
+  s += `<ellipse cx="${PR(10, 10, 0)[0]}" cy="${PR(10, 10, 0)[1]}" rx="${0.55 * DX * Math.SQRT2}" ry="${0.55 * DY * Math.SQRT2}" fill="${theme === "dark" ? "#2d2f38" : "#d6d8df"}"/>`;
+  $("layer-ground").innerHTML = s;
+}
+
+function renderPlots() {
+  const c = C();
+  let s = "";
+  for (const w of WORK) {
+    const b = BUILDINGS[w.id];
+    const [x, y, pw, pd] = b.plot;
+    const edge = [PR(x, y, 0.1), PR(x + pw, y, 0.1), PR(x + pw, y + pd, 0.1), PR(x, y + pd, 0.1)];
+    s += `<g class="plot" data-plot="${w.id}">${boxSVG({ x, y, w: pw, d: pd, z: 0, h: 0.1 }, "pad", { topFill: c.pad })}<polygon class="plot-edge" points="${pts(edge)}"/></g>`;
+  }
+  const [x, y, pw, pd] = NEW_PLOT;
+  const edge = [PR(x, y, 0.03), PR(x + pw, y, 0.03), PR(x + pw, y + pd, 0.03), PR(x, y + pd, 0.03)];
+  const [mx, my] = PR(x + pw / 2, y + pd / 2, 0.03);
+  s += `<g class="new-plot" id="new-plot" tabindex="0" role="button" aria-label="New task: break ground on a new building"><polygon points="${pts(edge)}" fill="transparent"/><polygon class="plot-dash" points="${pts(edge)}"/>` +
+    `<text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="${css("--text-tertiary")}">+ New task</text></g>`;
+  $("layer-plots").innerHTML = s;
+}
+
+function renderShadows() {
+  let s = "";
+  for (const w of WORK) {
+    const b = BUILDINGS[w.id];
+    for (const p of b.parts(w)) if (p.box && (p.box.z || 0) === 0) s += shadowSVG(p.box);
+    if (b.extras) for (const e of b.extras(w)) if (e.shadow) s += shadowCyl(e.cyl[0], e.cyl[1], e.cyl[2], e.cyl[4]);
+  }
+  for (const [x, y] of TREES) s += shadowCyl(x, y, 0.3, 1.1);
+  $("layer-shadows").innerHTML = `<g opacity="1">${s}</g>`;
+}
+
+/* Depth: a thing nearer the viewer (larger turned x + y) is drawn later. */
+const depthOf = (x, y) => { const [a, b] = R(x, y); return a + b; };
+
+function treeSVG(x, y) {
+  const c = C();
+  const [bx, by] = PR(x, y, 0);
+  const [tx, ty] = PR(x, y, 1.25);
+  const r = 0.34 * DX * Math.SQRT2;
+  return `<g><line x1="${bx}" y1="${by}" x2="${bx}" y2="${by - 10}" stroke="${c.trunk}" stroke-width="2.4" stroke-linecap="round"/>` +
+    `<path d="M${tx},${ty} L${bx - r},${by - 7} Q${bx},${by - 2} ${bx},${by - 2} Z" fill="${c.tree}"/>` +
+    `<path d="M${tx},${ty} L${bx + r},${by - 7} Q${bx},${by - 2} ${bx},${by - 2} Z" fill="${c.tree2}"/></g>`;
+}
+function lampSVG(x, y) {
+  const c = C();
+  const [bx, by] = PR(x, y, 0);
+  const [, ty] = PR(x, y, 1.1);
+  const pool = theme === "dark" ? `<ellipse cx="${bx}" cy="${by}" rx="${1.3 * DX}" ry="${1.3 * DY}" fill="url(#pool)"/>` : "";
+  return `<g>${pool}<line x1="${bx}" y1="${by}" x2="${bx}" y2="${ty}" stroke="${c.metal}" stroke-width="1.4"/>` +
+    `<circle cx="${bx}" cy="${ty}" r="2.4" fill="${theme === "dark" ? c.lamp : c.metal}" ${theme === "dark" ? 'filter="url(#glow)"' : ""}/></g>`;
+}
+
+/* What stands inside a building with its roof off. */
+function figure(x, y, color, z = 0) {
+  const [bx, by] = PR(x, y, z);
+  return `<ellipse cx="${bx}" cy="${by}" rx="5" ry="2.6" fill="rgba(0,0,0,0.25)"/>` +
+    `<path d="M${bx - 4.2},${by} L${bx - 3.4},${by - 11} Q${bx},${by - 14} ${bx + 3.4},${by - 11} L${bx + 4.2},${by} Q${bx},${by + 2} ${bx - 4.2},${by} Z" fill="${color}"/>` +
+    `<circle cx="${bx}" cy="${by - 17}" r="4.2" fill="${color}"/>`;
+}
+function agentTag(x, y, z, text) {
+  const [px, py] = PR(x, y, z);
+  const wd = textWidth(text, 7, 600) + 8;
+  return `<g class="agent-tag" transform="translate(${px.toFixed(1)},${py.toFixed(1)})"><rect x="${-wd / 2}" y="-6" width="${wd}" height="11" rx="3.5" stroke-width="0.6"/><text x="0" y="2.2" text-anchor="middle">${text}</text></g>`;
+}
+function insideSVG(w, item) {
+  const c = C();
+  const [x, y] = item.at;
+  const tone = toneOf(w);
+  switch (item.kind) {
+    case "desk": {
+      let s = boxSVG({ x: x - 0.35, y: y - 0.22, w: 0.7, d: 0.44, z: 0, h: 0.32 }, "deskTop");
+      const glow = item.ask ? css("--state-attention") : item.work ? css("--state-working") : (theme === "dark" ? "#2c2e36" : "#c5c8d0");
+      s += boxSVG({ x: x - 0.3, y: y - 0.2, w: 0.6, d: 0.06, z: 0.32, h: 0.34 }, "metal", { topFill: glow });
+      const [sx, sy] = PR(x, y - 0.14, 0.5);
+      s += `<rect class="${item.work ? "loop screen" : ""}" x="${sx - 9}" y="${sy - 4}" width="18" height="6" rx="1" fill="${glow}" opacity="${item.work || item.ask ? 0.85 : 0.4}" ${theme === "dark" && (item.work || item.ask) ? 'filter="url(#glow)"' : ""}/>`;
+      if (item.agent) {
+        s += figure(x, y + 0.45, "#d97757");
+        s += agentTag(x, y + 0.45, 1.25, item.agent);
+        if (item.ask) {
+          const [qx, qy] = PR(x, y + 0.45, 1.9);
+          s += `<g class="loop bubble"><circle cx="${qx + 16}" cy="${qy - 4}" r="9" fill="${css("--attention-mark-ground")}"/><text x="${qx + 16}" y="${qy}" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">?</text></g>`;
+        }
+      }
+      return s;
+    }
+    case "person": return figure(x, y, css("--workspace-hue-1")) + agentTag(x, y, 1.05, item.label);
+    case "luke": return figure(x, y, theme === "dark" ? "#e8eaf0" : "#2a2a30") + agentTag(x, y, 1.05, item.label);
+    case "table": return cylSVG(x, y, 0.55, 0, 0.3, "deskTop");
+    case "board": return boxSVG({ x: x - 0.05, y: y - 0.7, w: 0.1, d: 1.4, z: 0.1, h: 0.75 }, "wall", { sideFill: theme === "dark" ? "#e8eaf0" : "#ffffff" });
+    case "shelf": return boxSVG({ x: x - 0.4, y: y - 0.15, w: 1.2, d: 0.3, z: 0, h: 0.7 }, "crate");
+    case "crate": {
+      let s = boxSVG({ x: x - 0.3, y: y - 0.3, w: 0.6, d: 0.6, z: 0, h: 0.45 }, "crate");
+      if (item.check) { const [cx, cy] = PR(x, y, 0.46); s += `<path d="M${cx - 4},${cy} l3,3 l6,-6" fill="none" stroke="${css("--state-complete")}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`; }
+      return s;
+    }
+    case "line": {
+      let s = boxSVG({ x, y: y - 0.25, w: item.len, d: 0.5, z: 0, h: 0.28 }, "metal");
+      for (let i = 0; i < 5; i++) s += boxSVG({ x: x + 0.3 + i * 0.8, y: y - 0.15, w: 0.3, d: 0.3, z: 0.28, h: 0.22 }, "crate");
+      return s;
+    }
+    case "rack": return boxSVG({ x: x - 0.3, y: y - 0.3, w: 0.6, d: 0.6, z: 0, h: 0.9 }, "metal", { win: { rows: 3, per: 3, lit: tone, ratio: 0.6, seed: 9 } });
+    case "scaffold": return boxSVG({ x, y, w: 1.8, d: 0.25, z: 0, h: 0.5 }, "crate");
+    case "plaque": {
+      const [px, py] = PR(x, y, 0.4);
+      return `${boxSVG({ x: x - 0.25, y: y - 0.25, w: 0.5, d: 0.5, z: 0, h: 0.35 }, "metal")}<circle cx="${px}" cy="${py - 4}" r="5" fill="${css(item.tone)}"/>`;
+    }
+    default: return "";
+  }
+}
+function cutawaySVG(w, b) {
+  const c = C();
+  const t = turnBox(b.hollow);
+  const { x0, x1, y0, y1 } = t;
+  const h = b.hollow.h;
+  let s = "";
+  s += poly([P(x0, y0, 0.03), P(x1, y0, 0.03), P(x1, y1, 0.03), P(x0, y1, 0.03)], c.floor);
+  /* The far walls, seen from inside. */
+  s += poly([P(x0, y0, 0), P(x0, y1, 0), P(x0, y1, h), P(x0, y0, h)], shade(c[b.hollow.mat] || c.wall, FX));
+  s += poly([P(x0, y0, 0), P(x1, y0, 0), P(x1, y0, h), P(x0, y0, h)], shade(c[b.hollow.mat] || c.wall, FY));
+  /* The floor's grid, faint, so the room reads as a floor. */
+  for (let i = Math.ceil(x0); i < x1; i++) s += `<line x1="${P(i, y0, 0.04)[0]}" y1="${P(i, y0, 0.04)[1]}" x2="${P(i, y1, 0.04)[0]}" y2="${P(i, y1, 0.04)[1]}" stroke="${c.inner}" stroke-width="0.8"/>`;
+  for (let j = Math.ceil(y0); j < y1; j++) s += `<line x1="${P(x0, j, 0.04)[0]}" y1="${P(x0, j, 0.04)[1]}" x2="${P(x1, j, 0.04)[0]}" y2="${P(x1, j, 0.04)[1]}" stroke="${c.inner}" stroke-width="0.8"/>`;
+  const items = b.inside(w).slice().sort((p, q) => depthOf(...p.at) - depthOf(...q.at));
+  for (const it of items) s += insideSVG(w, it);
+  /* The near walls, cut low. */
+  const cut = 0.28;
+  s += poly([P(x1, y0, 0), P(x1, y1, 0), P(x1, y1, cut), P(x1, y0, cut)], shade(c[b.hollow.mat] || c.wall, FX));
+  s += poly([P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, cut), P(x0, y1, cut)], shade(c[b.hollow.mat] || c.wall, FY));
+  s += `<polyline points="${pts([P(x1, y0, cut), P(x1, y1, cut), P(x0, y1, cut)])}" fill="none" stroke="${theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.15)"}" stroke-width="1.2"/>`;
+  return s;
+}
+
+/* Signals on a roof: smoke, a beacon, waves of a call, a flag, the dock's light. */
+function fxSVG(w, f) {
+  const [x, y, z] = f.at;
+  const [px, py] = PR(x, y, z);
+  const c = C();
+  switch (f.kind) {
+    case "smoke": {
+      let s = "";
+      for (let i = 0; i < 5; i++) s += `<circle class="loop smoke" style="animation-delay:${-i * 0.96}s" cx="${px}" cy="${py}" r="5" fill="${c.smoke}" opacity="0"/>`;
+      return `<g class="fx fx-roof">${s}</g>`;
+    }
+    case "beacon": {
+      const col = css("--state-attention");
+      return `<g class="fx fx-roof"><line x1="${px}" y1="${py + 14}" x2="${px}" y2="${py}" stroke="${c.metal}" stroke-width="2"/>` +
+        `<ellipse class="loop beacon-ring" cx="${px}" cy="${py}" rx="9" ry="9" fill="none" stroke="${col}" stroke-width="2"/>` +
+        `<ellipse class="loop beacon-ring" style="animation-delay:-0.8s" cx="${px}" cy="${py}" rx="9" ry="9" fill="none" stroke="${col}" stroke-width="2"/>` +
+        `<circle class="loop beacon-core" cx="${px}" cy="${py}" r="5.5" fill="${col}" filter="url(#glow)"/></g>`;
+    }
+    case "waves": {
+      const col = css("--voice-developer");
+      let s = `<circle cx="${px}" cy="${py}" r="3.2" fill="${col}" filter="url(#glow)"/>`;
+      for (let i = 0; i < 3; i++) s += `<ellipse class="loop wave" style="animation-delay:${-i * 0.8}s" cx="${px}" cy="${py}" rx="26" ry="13" fill="none" stroke="${col}" stroke-width="1.6"/>`;
+      return `<g class="fx fx-roof">${s}</g>`;
+    }
+    case "flag": {
+      const col = css("--state-merged");
+      return `<g class="fx fx-roof ${f.raise ? "flag-raise" : ""}"><line x1="${px}" y1="${py}" x2="${px}" y2="${py - 34}" stroke="${c.metal}" stroke-width="1.6"/>` +
+        `<path class="loop flag" d="M${px},${py - 34} l18,4 l-18,6 Z" fill="${col}"/></g>`;
+    }
+    case "docklight": {
+      const col = css("--state-complete");
+      return `<g class="fx fx-roof"><circle class="loop beacon-core" cx="${px}" cy="${py}" r="3.4" fill="${col}" filter="url(#glow)"/></g>`;
+    }
+    default: return "";
+  }
+}
+function truckSVG(x, y, dir, z = 0) {
+  const c = C();
+  /* A box truck reversed up to the dock: the container, then the cab. */
+  if (dir === "y") {
+    return boxSVG({ x: x - 0.4, y, w: 0.8, d: 1.5, z: z + 0.15, h: 0.75 }, "truck") +
+      boxSVG({ x: x - 0.38, y: y + 1.5, w: 0.76, d: 0.55, z: z + 0.15, h: 0.55 }, "cab") +
+      boxSVG({ x: x - 0.4, y, w: 0.8, d: 2.05, z, h: 0.15 }, theme === "dark" ? "#15161a" : "#6b6e78");
+  }
+  return boxSVG({ x, y: y - 0.4, w: 1.5, d: 0.8, z: z + 0.15, h: 0.75 }, "truck") +
+    boxSVG({ x: x + 1.5, y: y - 0.38, w: 0.55, d: 0.76, z: z + 0.15, h: 0.55 }, "cab") +
+    boxSVG({ x, y: y - 0.4, w: 2.05, d: 0.8, z, h: 0.15 }, theme === "dark" ? "#15161a" : "#6b6e78");
+}
+let craneAngle = 0.6;
+function craneSVG(cr) {
+  const c = C();
+  const [mx, my] = cr.at;
+  let s = boxSVG({ x: mx - 0.09, y: my - 0.09, w: 0.18, d: 0.18, z: 0, h: cr.h }, "#c9a227");
+  const [tx, ty] = PR(mx, my, cr.h);
+  const tip = [mx + Math.cos(craneAngle) * cr.jib, my + Math.sin(craneAngle) * cr.jib];
+  const back = [mx - Math.cos(craneAngle) * 1.1, my - Math.sin(craneAngle) * 1.1];
+  const [ax, ay] = PR(tip[0], tip[1], cr.h + 0.1);
+  const [bx, by] = PR(back[0], back[1], cr.h + 0.1);
+  const trolley = [mx + Math.cos(craneAngle) * cr.jib * 0.7, my + Math.sin(craneAngle) * cr.jib * 0.7];
+  const [hx, hy] = PR(trolley[0], trolley[1], cr.h + 0.1);
+  const [lx, ly] = PR(trolley[0], trolley[1], cr.h - 1.6);
+  s += `<line x1="${bx}" y1="${by}" x2="${ax}" y2="${ay}" stroke="#e0b42e" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<line x1="${tx}" y1="${ty - 14}" x2="${ax}" y2="${ay}" stroke="#e0b42e" stroke-width="0.8"/><line x1="${tx}" y1="${ty - 14}" x2="${bx}" y2="${by}" stroke="#e0b42e" stroke-width="0.8"/>`;
+  s += `<line x1="${tx}" y1="${ty}" x2="${tx}" y2="${ty - 14}" stroke="#e0b42e" stroke-width="2"/>`;
+  s += `<rect x="${bx - 5}" y="${by - 2}" width="10" height="7" fill="${c.metal}"/>`;
+  s += `<line x1="${hx}" y1="${hy}" x2="${lx}" y2="${ly}" stroke="${c.metal}" stroke-width="0.8"/>`;
+  s += `<rect x="${lx - 6}" y="${ly}" width="12" height="7" fill="${c.crate}"/>`;
+  return s;
+}
+
+function buildingSVG(w) {
+  const b = BUILDINGS[w.id];
+  const items = [];
+  for (const p of b.parts(w)) {
+    let svg;
+    if (p.box) {
+      svg = boxSVG(p.box, p.mat, { win: p.win, stripe: p.stripe });
+      if (p.frame) svg = scaffoldFrame(p.box) + svg;
+    } else if (p.cyl) svg = cylSVG(...p.cyl);
+    const z = p.box ? p.box.z || 0 : p.cyl[3];
+    const [cx, cy] = p.box ? [p.box.x + p.box.w / 2, p.box.y + p.box.d / 2] : [p.cyl[0], p.cyl[1]];
+    items.push({ z, depth: depthOf(cx, cy), svg, role: p.role });
+  }
+  if (b.extras) for (const e of b.extras(w)) {
+    items.push({ z: e.cyl[3], depth: depthOf(e.cyl[0], e.cyl[1]), svg: cylSVG(...e.cyl, { bands: e.bands }), role: e.cyl[3] > 0 ? "upper" : "keep" });
+  }
+  if (b.crane) items.push({ z: 0, depth: depthOf(...b.crane.at), svg: "", role: "crane" });
+  items.sort((p, q) => p.z - q.z || p.depth - q.depth);
+  let body = "";
+  let cutDone = false;
+  for (const it of items) {
+    if (it.role === "shell" && !cutDone) { body += `<g class="cut">${cutawaySVG(w, b)}</g>`; cutDone = true; }
+    if (it.role === "crane") { body += `<g class="upper" id="crane-${w.id}">${craneSVG(b.crane)}</g>`; continue; }
+    const cls = it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep";
+    body += `<g class="${cls}">${it.svg}</g>`;
+  }
+  const t = b.truck?.(w);
+  const truck = t ? `<g class="keep" id="dock-truck">${truckSVG(t.at[0], t.at[1], t.dir)}</g>` : "";
+  const fx = b.fx(w).map((f) => fxSVG(w, f)).join("");
+  return `<g class="lift">${body}${fx}${truck}</g>`;
+}
+function scaffoldFrame(box) {
+  /* Scaffolding: poles and rails around a floor still going up. */
+  const c = C();
+  const col = theme === "dark" ? "#8a7a4a" : "#b89a52";
+  const { x, y, w, d } = box; const z = box.z; const h = box.h + 0.5;
+  let s = "";
+  const corners = [[x - 0.1, y - 0.1], [x + w + 0.1, y - 0.1], [x + w + 0.1, y + d + 0.1], [x - 0.1, y + d + 0.1]];
+  for (const [px, py] of corners) { const [a, b] = PR(px, py, z); const [, e] = PR(px, py, z + h); s += `<line x1="${a}" y1="${b}" x2="${a}" y2="${e}" stroke="${col}" stroke-width="1.2"/>`; }
+  for (const f of [0.45, 0.95]) {
+    const ring = corners.map(([px, py]) => PR(px, py, z + h * f));
+    s += `<polygon points="${pts(ring)}" fill="none" stroke="${col}" stroke-width="1"/>`;
+  }
+  return `<g opacity="0.9">${s}</g>`;
+}
+
+function renderObjects() {
+  const list = [];
+  for (const w of WORK) {
+    const b = BUILDINGS[w.id];
+    const [x, y, pw, pd] = b.plot;
+    list.push({
+      depth: depthOf(x + pw / 2, y + pd / 2),
+      svg: `<g class="bldg" data-id="${w.id}" tabindex="0" role="button" aria-label="${w.name}, ${STATE[w.state].label.toLowerCase()}" ${openId === w.id ? "data-open" : ""}>${buildingSVG(w)}</g>`,
+    });
+  }
+  for (const [x, y] of TREES) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
+  for (const [x, y] of LAMPS) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
+  list.sort((a, b) => a.depth - b.depth);
+  $("layer-objects").innerHTML = list.map((i) => i.svg).join("");
+}
+
+/* Name tags: a pill over each roof, the state's dot and the task's name. */
+function tagAnchor(w) {
+  const b = BUILDINGS[w.id];
+  const hb = b.hollow;
+  let top = hb.h;
+  for (const p of b.parts(w)) if (p.box) top = Math.max(top, (p.box.z || 0) + (p.box.h ?? Math.max(...p.box.hs)));
+  if (b.crane) top = Math.max(top, 2.8);
+  if (b.extras) for (const e of b.extras(w)) top = Math.max(top, e.cyl[3] + e.cyl[4]);
+  const fxTop = b.fx(w).some((f) => f.kind === "flag" || f.kind === "beacon" || f.kind === "waves") ? 1.6 : 0.4;
+  return PR(hb.x + hb.w / 2, hb.y + hb.d / 2, top + fxTop);
+}
+function renderTags() {
+  let s = "";
+  const k = 1 / cam.s;
+  for (const w of WORK) {
+    const [x, y] = tagAnchor(w);
+    const meta = w.state === "call" ? "On a call" : w.state === "question" ? `${w.agent} · needs an answer` : w.state === "working" ? `${w.agent} · working` : w.state === "ready" ? `#${w.pr} · ready to merge` : w.state === "shipping" ? `#${w.pr} · merging` : `#${w.pr} · merged ${w.when}`;
+    const width = Math.max(textWidth(w.name, 11.5, 600), textWidth(meta, 10.5, 500)) + 30;
+    const dim = openId && openId !== w.id ? "data-dim" : "";
+    s += `<g class="tag" data-tag="${w.id}" ${dim} transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${k.toFixed(4)})">` +
+      `<rect class="ground" x="${-width / 2}" y="-40" width="${width}" height="34" rx="8"/>` +
+      `<line x1="0" y1="-6" x2="0" y2="0" stroke="${css("--hairline-strong")}"/>` +
+      `<circle cx="${-width / 2 + 12}" cy="-28" r="3.5" fill="${toneOf(w)}"/>` +
+      `<text x="${-width / 2 + 21}" y="-24">${w.name}</text>` +
+      `<text class="meta" x="${-width / 2 + 21}" y="-11">${meta}</text></g>`;
+  }
+  $("layer-tags").innerHTML = s;
+}
+const canvas = document.createElement("canvas").getContext("2d");
+function textWidth(t, size, weight) { canvas.font = `${weight} ${size}px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif`; return canvas.measureText(t).width; }
+
+function renderAll() {
+  gradients.clear();
+  for (const g of document.querySelectorAll("#scene defs linearGradient")) g.remove();
+  renderGround(); renderPlots(); renderShadows(); renderObjects(); renderTags(); renderVehicles();
+  syncPlotMarks();
+  $("scene").toggleAttribute("data-focused", !!openId);
+}
+
+/* ------------------------------------------------------------------------
+   Carts on the roads, the crane's swing, and a window or two going on and off.
+   ------------------------------------------------------------------------ */
+const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+const carts = [
+  { axis: "x", lane: 9.5, pos: 2, speed: 0.9 },
+  { axis: "x", lane: 10.5, pos: 15, speed: -0.7 },
+  { axis: "y", lane: 10.5, pos: 4, speed: 0.6 },
+];
+let departing = null;
+function cartSVG(cart) {
+  const c = C();
+  const [x, y] = cart.axis === "x" ? [cart.pos, cart.lane] : [cart.lane, cart.pos];
+  const box = cart.axis === "x" ? { x: x - 0.4, y: y - 0.22, w: 0.8, d: 0.44, z: 0.04, h: 0.32 } : { x: x - 0.22, y: y - 0.4, w: 0.44, d: 0.8, z: 0.04, h: 0.32 };
+  /* Turning the campus turns which axis a cart runs on, so the box turns with it. */
+  return boxSVG(box, "metal") + boxSVG({ ...box, w: box.w * 0.6, d: box.d * 0.6, x: box.x + box.w * 0.2, y: box.y + box.d * 0.2, z: 0.36, h: 0.16 }, "crate");
+}
+function renderVehicles() {
+  let s = carts.map(cartSVG).join("");
+  if (departing) s += truckSVG(departing.x, departing.y, departing.dir);
+  $("layer-vehicles").innerHTML = s;
+}
+let last = performance.now();
+let twinkleAt = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (!reduced.matches) {
+    for (const cart of carts) {
+      cart.pos += cart.speed * dt;
+      if (cart.pos > N - 0.4) cart.pos = 0.4;
+      if (cart.pos < 0.4) cart.pos = N - 0.4;
+    }
+    if (departing) stepDeparture(dt);
+    renderVehicles();
+    craneAngle += dt * 0.18;
+    const cr = $("crane-shortcuts");
+    if (cr) cr.innerHTML = craneSVG(BUILDINGS.shortcuts.crane);
+    if (now > twinkleAt) { twinkle(); twinkleAt = now + 900; }
+  }
+  requestAnimationFrame(frame);
+}
+function twinkle() {
+  for (const w of WORK) {
+    if (w.state !== "working" && w.state !== "question") continue;
+    const wins = document.querySelectorAll(`.bldg[data-id="${w.id}"] .shell [data-win]`);
+    if (!wins.length) continue;
+    const el = wins[Math.floor(Math.random() * wins.length)];
+    const on = el.classList.contains("win-lit");
+    el.classList.toggle("win-lit", !on);
+    el.setAttribute("fill", on ? C().unlit : lit(w).color);
+    el.setAttribute("opacity", on ? 1 : theme === "dark" ? 0.92 : 0.75);
+  }
+}
+
+/* The merge's departure: the truck pulls off the dock, down to the avenue, and away. */
+function stepDeparture(dt) {
+  const d = departing;
+  d.t += dt;
+  if (d.phase === 0) { d.y += 2.2 * dt; if (d.y > 9.3) { d.phase = 1; d.dir = "x"; d.x = 14.2; d.y = 9.5; } }
+  else { d.x += 3.2 * dt; if (d.x > N + 1) { departing = null; finishMerge(d.id); } }
+}
+
+/* ------------------------------------------------------------------------
+   The camera: pan by dragging, zoom with the wheel or the buttons, and fly to
+   a building when it is opened.
+   ------------------------------------------------------------------------ */
+const cam = { x: 0, y: 0, s: 1 };
+function sceneBounds() {
+  const corners = [[0, 0], [N, 0], [N, N], [0, N]].map(([x, y]) => P(x, y, 0));
+  const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys) - 4.4 * DZ, y1: Math.max(...ys) + 0.6 * DZ };
+}
+function applyCamera(instant) {
+  const g = $("camera");
+  g.toggleAttribute("data-instant", !!instant);
+  g.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
+  const k = 1 / cam.s;
+  document.querySelectorAll(".tag").forEach((t) => {
+    const m = /translate\(([^)]+)\)/.exec(t.getAttribute("transform"));
+    t.setAttribute("transform", `translate(${m[1]}) scale(${k.toFixed(4)})`);
+  });
+  if (instant) requestAnimationFrame(() => g.removeAttribute("data-instant"));
+}
+function fitCampus(instant) {
+  const st = $("stage").getBoundingClientRect();
+  const b = sceneBounds();
+  const s = Math.min((st.width - 80) / (b.x1 - b.x0), (st.height - 80) / (b.y1 - b.y0));
+  cam.s = s;
+  cam.x = st.width / 2 - ((b.x0 + b.x1) / 2) * s;
+  cam.y = st.height / 2 - ((b.y0 + b.y1) / 2) * s + 6;
+  applyCamera(instant);
+}
+function focusOn(id, instant) {
+  const st = $("stage").getBoundingClientRect();
+  const b = BUILDINGS[id];
+  const hb = b.hollow;
+  const [px, py] = PR(hb.x + hb.w / 2, hb.y + hb.d / 2, hb.h * 0.45);
+  const base = Math.min((st.width - 80) / (sceneBounds().x1 - sceneBounds().x0), (st.height - 80) / (sceneBounds().y1 - sceneBounds().y0));
+  cam.s = Math.max(base * 1.9, 1.15);
+  cam.x = st.width / 2 - px * cam.s;
+  cam.y = st.height / 2 - py * cam.s + 30;
+  applyCamera(instant);
+}
+function zoomBy(f, cx, cy) {
+  const st = $("stage").getBoundingClientRect();
+  const ox = cx ?? st.width / 2, oy = cy ?? st.height / 2;
+  const ns = Math.max(0.35, Math.min(5, cam.s * f));
+  cam.x = ox - ((ox - cam.x) * ns) / cam.s;
+  cam.y = oy - ((oy - cam.y) * ns) / cam.s;
+  cam.s = ns;
+}
+
+/* ------------------------------------------------------------------------
+   Opening a building, the inspector, and the two acts it offers.
+   ------------------------------------------------------------------------ */
+function syncPlotMarks() {
+  document.querySelectorAll(".plot").forEach((p) => {
+    const id = p.dataset.plot;
+    p.toggleAttribute("data-hover", hoverId === id);
+    p.toggleAttribute("data-open", openId === id);
+    p.toggleAttribute("data-focus", focusId === id);
+  });
+  for (const g of document.querySelectorAll(".bldg")) g.toggleAttribute("data-open", g.dataset.id === openId);
+  for (const t of document.querySelectorAll(".tag")) t.toggleAttribute("data-dim", !!openId && t.dataset.tag !== openId);
+  for (const r of document.querySelectorAll(".task-row")) r.setAttribute("aria-current", r.dataset.id === openId ? "true" : "false");
+  $("scene").toggleAttribute("data-focused", !!openId);
+}
+let keyAutoHidden = false;
+function open(id) {
+  openId = id;
+  /* The key makes way the first time a building is opened; its button brings it back. */
+  if (!keyAutoHidden) { keyAutoHidden = true; setKey(false); }
+  syncPlotMarks();
+  const insp = $("inspector");
+  const was = insp.hasAttribute("data-open");
+  insp.setAttribute("data-open", "");
+  renderInspector();
+  /* The pane lands at once; the campus flies to the building in the room left. */
+  requestAnimationFrame(() => focusOn(id, false));
+  if (!was) renderTags();
+}
+function close() {
+  if (!openId) return;
+  const id = openId;
+  openId = null;
+  syncPlotMarks();
+  $("inspector").removeAttribute("data-open");
+  requestAnimationFrame(() => fitCampus(false));
+  const g = document.querySelector(`.bldg[data-id="${id}"]`);
+  if (g) g.focus({ preventScroll: true });
+}
+
+function actorTile(w) { return `<span class="actor">${claudeMark()}</span>`; }
+function renderInspector() {
+  const w = byId[openId];
+  if (!w) return;
+  const st = STATE[w.state];
+  let i = 0;
+  const n = () => `style="--i:${i++}"`;
+  let h = `<div class="insp-head" ${n()}><div class="titles"><div class="insp-title">${w.name}</div><div class="insp-path">ReviewStage/luke · ${w.branch}</div></div>` +
+    `<button type="button" class="icon-button" id="insp-close" aria-label="Close">${glyph("x")}</button></div>`;
+  const icon = { call: "mic", question: "question", working: "blocks", ready: "pr", shipping: "merge", merged: "merge" }[w.state];
+  h += `<div class="insp-state" style="--tone:var(${st.tone});--i:${i++}">${glyph(icon)}${st.label}${w.state === "call" ? '<span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ""}<span class="when">${w.when}</span></div>`;
+
+  if (w.state === "call") {
+    h += `<div class="insp-section" ${n()}>Plan so far</div><div class="card" ${n()}>` +
+      `<p class="plan-line"><b>Goal</b>A second Factory view that reads at a glance, like walking a campus.</p>` +
+      `<p class="plan-line"><b>Decided</b>Every task is a building; what it is doing shows on the building.</p>` +
+      `<p class="plan-line" style="margin:0"><b>Open</b>Campus or factory floor, or both behind one switch <span class="caret"></span></p></div>`;
+    h += `<div class="insp-section" ${n()}>Inside</div>` +
+      `<div class="row" ${n()}><span class="actor" data-person>D</span><span class="grow">You</span><span class="meta">talking</span></div>` +
+      `<div class="row" ${n()}><span class="actor" style="background:var(--raised-strong)">${lukeFace()}</span><span class="grow">Luke</span><span class="meta">writing the plan</span></div>`;
+    h += `<div class="insp-actions" ${n()}><button type="button" class="toolbar-button" style="--button-fill:var(--raised-strong)">${glyph("open")}Open plan</button></div>`;
+  }
+  if (w.state === "question") {
+    h += `<div class="card" ${n()}><div class="who">${actorTile(w)}${w.agent} asks</div>` +
+      `<p>Should an invite link expire? Members can resend one either way.</p>` +
+      `<div class="choices"><button type="button" class="choice" data-answer="After 7 days">After 7 days</button><button type="button" class="choice" data-answer="After 30 days">After 30 days</button><button type="button" class="choice" data-answer="Never">Never</button></div></div>`;
+  }
+  if (w.state === "ready") {
+    h += `<div class="card" ${n()}><div class="who">${glyph("pr")}<span>#${w.pr} · ${w.name}</span></div>` +
+      `<div class="check-row">${glyph("check")}14 of 14 checks passed</div>` +
+      `<div class="diffstat" style="margin-top:var(--space-8)"><span class="add">+84</span> <span class="del">−31</span> <span style="color:var(--text-tertiary)">in 5 files</span></div></div>` +
+      `<div class="insp-actions" ${n()}><button type="button" class="primary-button" id="merge">${glyph("merge")}Merge</button><button type="button" class="toolbar-button" style="--button-fill:var(--raised-strong)">${glyph("open")}Open pull request</button></div>`;
+  }
+  if (w.state === "merged") {
+    h += `<div class="card" ${n()}><div class="who">${glyph("merge")}<span>#${w.pr} · merged ${w.when}</span></div>` +
+      `<div class="diffstat"><span class="add">+${w.id === "empty" ? 156 : 302}</span> <span class="del">−${w.id === "empty" ? 47 : 118}</span> <span style="color:var(--text-tertiary)">in ${w.id === "empty" ? 9 : 12} files</span></div></div>`;
+  }
+  if (w.agent) {
+    h += `<div class="insp-section" ${n()}>Inside</div>` +
+      `<div class="row" ${n()}>${actorTile(w)}<span class="grow">${w.agent}${w.effort ? ` <span class="sub">· ${w.effort}</span>` : ""}</span><span class="meta" style="color:var(${st.tone})">${w.state === "merged" ? "done" : st.label.toLowerCase()}</span></div>`;
+    h += `<div class="insp-section" ${n()}>Activity</div><div class="log" id="log" ${n()}>` +
+      (LOGS[w.id] || []).map(([t, line]) => `<div class="log-line"><time>${t}</time><span>${line}</span></div>`).join("") + `</div>`;
+    if (w.state === "working" || w.state === "question") {
+      h += `<div class="insp-actions" ${n()}><button type="button" class="toolbar-button" style="--button-fill:var(--raised-strong)">${glyph("open")}Open task</button></div>`;
+    }
+  }
+  $("inspector-body").innerHTML = h;
+}
+function lukeFace() {
+  return `<svg viewBox="53.85 56.72 134.29 134.29" aria-hidden="true"><g transform="rotate(-8 120 124)"><path d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/><circle cx="78" cy="92" r="12" fill="currentColor"/><circle cx="162" cy="92" r="12" fill="currentColor"/></g></svg>`;
+}
+
+let toastTimer = 0;
+function toast(html) {
+  const t = $("toast");
+  t.innerHTML = html;
+  t.removeAttribute("data-hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.setAttribute("data-hidden", ""), 2600);
+}
+function answer(choice) {
+  const w = byId.invite;
+  w.state = "working";
+  w.when = "now";
+  LOGS.invite.unshift(["now", `You answered: <b>${choice}</b>`]);
+  TICKER.invite = ["Edited <code>invite-links.ts</code>", "Running <code>vitest run invites</code>", "Edited <code>invite-dialog.tsx</code>"];
+  toast(`${glyph("check")}Sent to Opus: “${choice}”`);
+  refreshAll();
+}
+function merge() {
+  const w = byId.reconnect;
+  if (w.state !== "ready") return;
+  w.state = "shipping";
+  STATE.shipping = { label: "Merging", tone: "--state-complete" };
+  departing = { id: "reconnect", x: 14.6, y: 5.75, dir: "y", phase: 0, t: 0 };
+  refreshAll();
+  if (reduced.matches) { departing = null; finishMerge("reconnect"); }
+}
+function finishMerge(id) {
+  const w = byId[id];
+  w.state = "merged";
+  w.pr = 3081;
+  w.when = "just now";
+  LOGS.reconnect.unshift(["now", "Merged <b>#3081</b>"]);
+  BUILDINGS.reconnect.fx = () => [{ kind: "flag", at: [17.8, 2.2, 1.64], raise: true }];
+  toast(`${glyph("merge")}Merged #3081`);
+  refreshAll();
+}
+function refreshAll() {
+  renderAll();
+  renderSidebar();
+  renderCensus();
+  if (openId) renderInspector();
+  applyCamera(true);
+}
+
+/* ------------------------------------------------------------------------
+   The sidebar's tasks and the toolbar's census, from the same work.
+   ------------------------------------------------------------------------ */
+function renderSidebar() {
+  $("task-list").innerHTML = WORK.map((w) => {
+    const st = STATE[w.state] || STATE.ready;
+    const pulse = w.state === "question" || w.state === "ready" ? "data-pulse" : "";
+    return `<button type="button" class="task-row" data-id="${w.id}" aria-current="${openId === w.id}"><span class="dot" ${pulse} style="--tone:var(${st.tone})"></span><span class="name">${w.name}</span></button>`;
+  }).join("");
+}
+function needs() { return WORK.filter((w) => w.state === "question" || w.state === "ready"); }
+function renderCensus() {
+  const working = WORK.filter((w) => w.state === "working").length;
+  const shipped = WORK.filter((w) => w.state === "merged").length;
+  $("census").textContent = `· ${WORK.length} buildings, ${working} at work, ${shipped} shipped`;
+  const n = needs().length;
+  const btn = $("needs-you");
+  btn.hidden = n === 0;
+  btn.innerHTML = `<span class="attention-mark">!</span>${n} need${n === 1 ? "s" : ""} you`;
+  $("inbox-count").textContent = n || "";
+}
+function renderKey() {
+  const k = (svg, text) => `<div class="key-row"><svg viewBox="-11 -9 22 18" aria-hidden="true">${svg}</svg>${text}</div>`;
+  $("key-rows").innerHTML =
+    k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${css("--state-working")}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${css("--state-working")}"/><rect x="-8" y="1" width="5" height="5" rx="1" fill="${css("--state-working")}"/><rect x="-1" y="1" width="5" height="5" rx="1" fill="${css("--text-tertiary")}" opacity="0.4"/><circle cx="7" cy="-4" r="2.5" fill="${css("--text-tertiary")}"/>`, "Lights and smoke: agents at work") +
+    k(`<circle cx="0" cy="0" r="4" fill="${css("--state-attention")}"/><circle cx="0" cy="0" r="8" fill="none" stroke="${css("--state-attention")}" stroke-width="1.5" opacity="0.6"/>`, "Beacon: someone needs an answer") +
+    k(`<ellipse cx="0" cy="0" rx="9" ry="4.5" fill="none" stroke="${css("--voice-developer")}" stroke-width="1.5"/><circle cx="0" cy="0" r="2" fill="${css("--voice-developer")}"/>`, "Rings: you are talking it through") +
+    k(`<rect x="-9" y="-5" width="11" height="9" rx="1" fill="${css("--text-secondary")}"/><rect x="3" y="-2" width="6" height="6" rx="1" fill="${css("--workspace-hue-1")}"/><circle cx="-4" cy="-8" r="1.8" fill="${css("--state-complete")}"/>`, "Truck at the dock: ready to merge") +
+    k(`<line x1="-4" y1="8" x2="-4" y2="-8" stroke="${css("--text-secondary")}" stroke-width="1.5"/><path d="M-4,-8 l11,3 l-11,4 Z" fill="${css("--state-merged")}"/>`, "Flag: merged") +
+    k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "Crane: going up floor by floor");
+}
+
+/* ------------------------------------------------------------------------
+   Wiring.
+   ------------------------------------------------------------------------ */
+function setTheme(t) {
+  theme = t;
+  document.documentElement.dataset.theme = t;
+  for (const b of document.querySelectorAll("[data-theme-choice]")) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === t));
+  renderAll(); renderKey(); applyCamera(true);
+}
+for (const b of document.querySelectorAll("[data-theme-choice]")) b.addEventListener("click", () => setTheme(b.dataset.themeChoice));
+
+const scene = $("scene");
+scene.addEventListener("click", (e) => {
+  if (dragMoved) return;
+  const g = e.target.closest(".bldg");
+  if (g) { open(g.dataset.id); return; }
+  if (e.target.closest("#new-plot")) { toast(`${glyph("plus")}New task: a fresh plot breaks ground once you start talking`); return; }
+  if (openId) close();
+});
+scene.addEventListener("pointerover", (e) => {
+  const g = e.target.closest(".bldg");
+  const id = g ? g.dataset.id : null;
+  if (id !== hoverId) { hoverId = id; syncPlotMarks(); }
+});
+scene.addEventListener("focusin", (e) => { const g = e.target.closest(".bldg"); focusId = g?.matches(":focus-visible") ? g.dataset.id : null; syncPlotMarks(); });
+scene.addEventListener("focusout", () => { focusId = null; syncPlotMarks(); });
+scene.addEventListener("keydown", (e) => {
+  const g = e.target.closest(".bldg");
+  if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); open(g.dataset.id); }
+  if (e.target.closest("#new-plot") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toast(`${glyph("plus")}New task: a fresh plot breaks ground once you start talking`); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") close();
+  if (e.target.closest("input, textarea")) return;
+  if (e.key === "r" && !e.metaKey) turn();
+});
+$("task-list").addEventListener("click", (e) => { const r = e.target.closest(".task-row"); if (r) open(r.dataset.id); });
+$("inspector").addEventListener("click", (e) => {
+  if (e.target.closest("#insp-close")) close();
+  const a = e.target.closest("[data-answer]");
+  if (a) answer(a.dataset.answer);
+  if (e.target.closest("#merge")) merge();
+});
+let needIndex = 0;
+$("needs-you").addEventListener("click", () => {
+  const list = needs();
+  if (!list.length) return;
+  const cur = list.findIndex((w) => w.id === openId);
+  needIndex = cur === -1 ? 0 : (cur + 1) % list.length;
+  open(list[needIndex].id);
+});
+$("zoom-in").addEventListener("click", () => { zoomBy(1.3); applyCamera(false); });
+$("zoom-out").addEventListener("click", () => { zoomBy(1 / 1.3); applyCamera(false); });
+$("fit").addEventListener("click", () => { if (openId) close(); else fitCampus(false); });
+function turn() {
+  rot = (rot + 1) % 4;
+  renderAll();
+  if (openId) focusOn(openId, true); else fitCampus(true);
+}
+$("rotate").addEventListener("click", turn);
+function setKey(shown) { $("key").toggleAttribute("data-hidden", !shown); $("key-toggle").setAttribute("aria-pressed", String(shown)); }
+$("key-close").addEventListener("click", () => setKey(false));
+$("key-toggle").addEventListener("click", () => setKey($("key").hasAttribute("data-hidden")));
+
+/* Dragging pans; the wheel zooms about the pointer. */
+const stage = $("stage");
+let drag = null, dragMoved = false;
+stage.addEventListener("pointerdown", (e) => {
+  if (e.target.closest(".map-controls, .key, .toast")) return;
+  drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+  dragMoved = false;
+});
+window.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+  dragMoved = true;
+  stage.setAttribute("data-dragging", "");
+  cam.x = drag.cx + dx; cam.y = drag.cy + dy;
+  applyCamera(true);
+});
+window.addEventListener("pointerup", () => {
+  drag = null;
+  stage.removeAttribute("data-dragging");
+  setTimeout(() => { dragMoved = false; }, 0);
+});
+stage.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  zoomBy(Math.exp(-e.deltaY * 0.0022), e.clientX - r.left, e.clientY - r.top);
+  applyCamera(true);
+}, { passive: false });
+new ResizeObserver(() => { if (openId) focusOn(openId, true); else fitCampus(true); }).observe(stage);
+
+/* A working building's activity keeps arriving while its inspector is open. */
+setInterval(() => {
+  if (!openId || reduced.matches) return;
+  const w = byId[openId];
+  const lines = TICKER[w.id];
+  if (!lines || w.state !== "working") return;
+  const log = $("log");
+  if (!log) return;
+  const line = lines[(Date.now() / 3000 | 0) % lines.length];
+  log.insertAdjacentHTML("afterbegin", `<div class="log-line" data-new><time>now</time><span>${line}</span></div>`);
+  log.querySelectorAll(".log-line time").forEach((t, idx) => { if (idx > 0 && t.textContent === "now") t.textContent = "1m"; });
+  while (log.children.length > 6) log.lastElementChild.remove();
+}, 3000);
+
+const params = new URLSearchParams(location.search);
+const initialTheme = params.get("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+renderSidebar();
+renderCensus();
+setTheme(initialTheme);
+fitCampus(true);
+if (params.get("open")) open(params.get("open"));
+if (params.get("rot")) { for (let i = 0; i < Number(params.get("rot")); i++) turn(); }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
