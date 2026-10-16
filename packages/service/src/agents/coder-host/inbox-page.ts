@@ -2,6 +2,7 @@ import { ownFailedAutomationRuns } from "@luke/database/models/automation-store"
 import type { AccountFailedRun, AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
+import { FAILED_RUN_WINDOW_MILLIS } from "@luke/features/live-wire";
 import { Clock, Duration, Effect } from "effect";
 import { cursorOf, heldUntilMoved as heldOpen } from "../../http/held-read.js";
 import {
@@ -54,8 +55,8 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  * item does.
  */
 
-/** How far back a run that failed to start is still carried to its automation's owner. */
-const FAILED_RUN_WINDOW = Duration.days(7);
+/** How far back a run that failed to start is still carried to its automation's owner, as the live read keeps it too. */
+const FAILED_RUN_WINDOW = Duration.millis(FAILED_RUN_WINDOW_MILLIS);
 
 /** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader, or a failed run. */
 type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {

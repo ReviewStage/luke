@@ -402,6 +402,10 @@
           "dest": "/api/default.js?route=issues"
         },
         {
+          "src": "/api/live/inbox",
+          "dest": "/api/default.js?route=live/inbox"
+        },
+        {
           "src": "/api/mac-commands",
           "dest": "/api/default.js?route=mac-commands"
         },

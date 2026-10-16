@@ -1,5 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import {
+  LIVE_COUNT,
+  type LiveStatement,
+  liveLatest,
+  liveSelection,
+  liveStatementOf,
+} from "@luke/database/core/live-statement";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@luke/database/core/query";
 import { automationReadableBy } from "@luke/database/models/automation-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
@@ -1024,6 +1036,104 @@ const findAutomationsWithItems = SqlSchema.findAll({
         .orderBy(desc(LATEST_ITEM), desc(automation.id)),
     ),
 });
+
+/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape. */
+export interface AccountInboxLiveStatements {
+  readonly items: LiveStatement;
+  readonly planless: LiveStatement;
+  readonly plans: LiveStatement;
+  readonly automations: LiveStatement;
+}
+
+/**
+ * What waits on the developer across the account, written for Neon Realtime:
+ * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
+ * `accountTasklessItems`, `accountInboxTasks`, and `accountInboxAutomations`,
+ * each column under the key `account-inbox-wire.ts` reads it by and each
+ * instant in epoch milliseconds, so a row decodes as the held read's entry
+ * does. The order is the reader's to keep, since Realtime keeps none.
+ * None where a statement names a value Realtime cannot carry.
+ */
+export function accountInboxLiveStatements(
+  userId: string,
+): Option.Option<AccountInboxLiveStatements> {
+  const items = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: inboxItem.id,
+          planId: inboxItem.taskId,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          startedBy: codingAgent.userId,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+        },
+        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+      ),
+    )
+    .from(inboxItem)
+    .innerJoin(task, eq(task.id, inboxItem.taskId))
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .where(accountWaiting(userId));
+  const planless = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: inboxItem.id,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          startedBy: codingAgent.userId,
+          automationId: automation.id,
+          automationName: automation.name,
+          repository: codingAgent.repository,
+          workspaceId: codingAgent.organizationId,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+        },
+        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+      ),
+    )
+    .from(inboxItem)
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .leftJoin(
+      automation,
+      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+    )
+    .where(tasklessWaiting(userId));
+  const plans = queryBuilder
+    .select({
+      ...liveSelection({ planId: inboxItem.taskId }),
+      items: LIVE_COUNT.as("items"),
+      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
+    })
+    .from(inboxItem)
+    .innerJoin(task, eq(task.id, inboxItem.taskId))
+    .where(and(taskReachableBy(userId), isNull(task.archivedAt)))
+    .groupBy(inboxItem.taskId);
+  const automations = queryBuilder
+    .select({
+      ...liveSelection({ automationId: automation.id }),
+      items: LIVE_COUNT.as("items"),
+      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
+    })
+    .from(inboxItem)
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .leftJoin(
+      automation,
+      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+    )
+    .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
+    .groupBy(automation.id);
+  return Option.all({
+    items: liveStatementOf(items),
+    planless: liveStatementOf(planless),
+    plans: liveStatementOf(plans),
+    automations: liveStatementOf(automations),
+  });
+}
 
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
 function scopeItems(

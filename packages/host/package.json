@@ -43,6 +43,7 @@
     "@luke/settings": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@neon/realtime": "0.1.1",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
     "@orpc/server": "catalog:",
