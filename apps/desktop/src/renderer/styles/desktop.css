@@ -4401,8 +4401,11 @@ button.integration-tool-head:hover,
 }
 
 /* Note that the agent's crumb gives way as the task's does, because the
-   breadcrumbs keep their last crumb whole, and the path's clip would cut it. */
+   breadcrumbs keep their last crumb whole, and the path's clip would cut it.
+   A crumb takes no tab's cap, since it shares no strip: it names its task or
+   its agent whole while the bar has room, and is cut only once it has not. */
 .inbox-crumbs li.inbox-crumb {
+  max-width: none;
   flex-shrink: 1;
 }
 

@@ -5,7 +5,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
@@ -20,7 +20,7 @@ import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
 
 /**
- * chip-punctuation.test.ts -- a chip and the punctuation written against it stand as one box no line breaks inside, wherever words are drawn: a transcript, the plan, a version, and Luke's note. A comma or full stop after a chip, a Luke link's, a GitHub file's or pull request's, or a Linear issue's alike, never starts a line alone, nor an opening bracket ends one alone before it; a plain link's words still wrap as words. Synthetic plan and repository.
+ * chip-punctuation.test.ts -- a chip and the punctuation written against it stand as one box no line breaks inside, wherever words are drawn: a transcript, the plan, a version, and Luke's note, a box no wider than the chip as it is cut and its punctuation. A comma or full stop after a chip, a Luke link's, a GitHub file's or pull request's, or a Linear issue's alike, never starts a line alone, nor an opening bracket ends one alone before it; a plain link's words still wrap as words. Synthetic plan and repository.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -108,7 +108,7 @@ function drawn(node: ReactNode): HTMLElement {
 }
 
 /** A plan's version, read and ready, as the version history draws it, against the version before it where one is given. */
-function Version({ previous = null }: { previous?: Task["document"] | null } = {}): ReactNode {
+function Version({ previous = null }: { previous?: Task["document"] | null }): ReactElement {
   const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );
@@ -213,4 +213,20 @@ test("a version holds a chip with a comma it wrote in after it, and leaves a men
   );
   assert.ok(changed, "the mention changed in part is drawn as words");
   assert.equal(changed.closest(".link-glued"), null);
+});
+
+test("a chip held with its punctuation is cut by a length alone, never a share of the box it stands in, which takes its width from the chip", () => {
+  const surfaces = [
+    drawn(createElement(TranscriptWords, { text: WORDS })),
+    drawn(createElement(PlanBody, { task: PLAN, live: false, sectionLinks: SECTION_LINKS })),
+    // A version that wrote every chip in, so each stands in its change's mark inside the box.
+    drawn(createElement(Version, { previous: { body: "## Rollout\n\nRead.", assumptions: [] } })),
+  ];
+
+  for (const surface of surfaces) {
+    const held = [...surface.querySelectorAll<HTMLElement>(".link-glued .mention-chip")];
+    assert.equal(held.length, HELD.length);
+    // A share has nothing to resolve against while the box is measured, so the box would keep the whole name's room as a gap after the chip it cuts.
+    for (const chip of held) assert.match(getComputedStyle(chip).maxWidth, /^\d+(\.\d+)?px$/);
+  }
 });
