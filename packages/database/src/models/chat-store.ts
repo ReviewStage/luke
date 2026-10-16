@@ -27,6 +27,7 @@ import {
   eq,
   exists,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -1529,6 +1530,8 @@ function holdSequence(organizationId: string): ChatStoreEffect<void> {
  * The message already standing under the post's key in its channel, read
  * under the sequence's lock, so two sends of one post racing land once:
  * the author's own is the post repeated, another member's refuses the key.
+ * A channel no longer of the workspace by then, moved with its plan, takes
+ * no post.
  */
 function standingUnder(
   organizationId: string,
@@ -1537,6 +1540,12 @@ function standingUnder(
 ): ChatStoreEffect<Result.Result<Option.Option<ChatMessageRow>, ChatRefusal>> {
   return Effect.gen(function* () {
     yield* holdSequence(organizationId);
+    // Note that the channel is read again under the lock, because a plan's move may have taken it to another workspace meanwhile.
+    if (
+      Option.isNone(yield* findChannelInWorkspace({ organizationId, channelId: placed.channelId }))
+    ) {
+      return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    }
     const standing = yield* findMessageByKey({ channelId: placed.channelId, clientKey });
     if (Option.isSome(standing) && standing.value.authorMemberId !== placed.author.id) {
       return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
@@ -2149,11 +2158,11 @@ const findWaitingStamps = SqlSchema.findAll({
 });
 
 /**
- * The asks of an author or a channel, as a list of what is asked reads
- * them: every one still open, then the latest settled ones up to the
- * limit, each run the latest changed first. Note that the open asks are read apart from the
- * limit, because one left unanswered while many others changed must still
- * stand where it is looked for. None where the account is not in the
+ * The asks of an author or a channel, as a list of what is asked reads them:
+ * every one still open, then the latest settled ones up to the limit, each
+ * run the latest changed first. Note that the open asks are read apart from
+ * the limit, because one left unanswered while many others changed must
+ * still stand where it is looked for. None where the account is not in the
  * workspace.
  */
 export function openAsksOf(
@@ -2428,4 +2437,315 @@ export function releaseNotice(
     if (!(yield* isWorkspaceMember(userId, organizationId))) return;
     yield* dropNotice({ readerId: memberId, organizationId, seq });
   });
+}
+
+const findChannelMessages = SqlSchema.findAll({
+  Request: Schema.Struct({ channelId: Schema.String }),
+  Result: ChatMessageRowSchema,
+  execute: ({ channelId }) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(eq(chatMessage.channelId, channelId))
+        .orderBy(asc(chatMessage.seq)),
+    ),
+});
+
+/** The members a plan's move takes along: its planner, and the agents of the plan, in the workspace it leaves. */
+const findPlanMembers = SqlSchema.findAll({
+  Request: Schema.Struct({ planId: Schema.String, organizationId: Schema.String }),
+  Result: ChatMemberRowSchema,
+  execute: ({ planId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(
+          and(
+            eq(chatMember.organizationId, organizationId),
+            or(
+              eq(chatMember.planId, planId),
+              inArray(
+                chatMember.agentId,
+                queryBuilder
+                  .select({ id: codingAgent.id })
+                  .from(codingAgent)
+                  .where(eq(codingAgent.taskId, planId)),
+              ),
+            ),
+          ),
+        ),
+    ),
+});
+
+const findMembersByIds = SqlSchema.findAll({
+  Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+  Result: ChatMemberRowSchema,
+  execute: ({ ids }) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(inArray(chatMember.id, [...ids])),
+    ),
+});
+
+/** A member the move leaves behind: no longer the agent's or the plan's, and stamped as having left the workspace it stays in. */
+const releaseMember = SqlSchema.void({
+  Request: Schema.Struct({ memberId: Schema.String, now: Schema.Date }),
+  execute: ({ memberId, now }) =>
+    Database.use((db) =>
+      db
+        .update(chatMember)
+        .set({ agentId: null, planId: null, leftAt: now })
+        .where(eq(chatMember.id, memberId)),
+    ),
+});
+
+/** A person minted into a workspace they are not in, for the messages they wrote that moved there: on its roster as having left. */
+const stampPersonLeft = SqlSchema.void({
+  Request: Schema.Struct({ memberId: Schema.String, now: Schema.Date }),
+  execute: ({ memberId, now }) =>
+    Database.use((db) =>
+      db.update(chatMember).set({ leftAt: now }).where(eq(chatMember.id, memberId)),
+    ),
+});
+
+const moveChannel = SqlSchema.void({
+  Request: Schema.Struct({
+    channelId: Schema.String,
+    organizationId: Schema.String,
+    name: Schema.String,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(chatChannel)
+        .set({ organizationId: row.organizationId, name: row.name })
+        .where(eq(chatChannel.id, row.channelId)),
+    ),
+});
+
+const moveMessage = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    organizationId: Schema.String,
+    seq: Schema.Number,
+    touchedSeq: Schema.Number,
+    authorMemberId: Schema.String,
+    mentions: Schema.Array(Schema.String),
+    answeredByMemberId: Schema.NullOr(Schema.String),
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(chatMessage)
+        .set({
+          organizationId: row.organizationId,
+          seq: row.seq,
+          touchedSeq: row.touchedSeq,
+          authorMemberId: row.authorMemberId,
+          mentions: [...row.mentions],
+          answeredByMemberId: row.answeredByMemberId,
+        })
+        .where(eq(chatMessage.id, row.id)),
+    ),
+});
+
+const moveAttachments = SqlSchema.void({
+  Request: Schema.Struct({ channelId: Schema.String, organizationId: Schema.String }),
+  execute: ({ channelId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .update(chatAttachment)
+        .set({ organizationId })
+        .where(
+          inArray(
+            chatAttachment.messageId,
+            queryBuilder
+              .select({ id: chatMessage.id })
+              .from(chatMessage)
+              .where(eq(chatMessage.channelId, channelId)),
+          ),
+        ),
+    ),
+});
+
+const advanceSequence = SqlSchema.void({
+  Request: Schema.Struct({ organizationId: Schema.String, by: Schema.Number }),
+  execute: ({ organizationId, by }) =>
+    Database.use((db) =>
+      db
+        .update(workspaceChat)
+        .set({ nextSeq: sql`${workspaceChat.nextSeq} + ${by}` })
+        .where(eq(workspaceChat.organizationId, organizationId)),
+    ),
+});
+
+/**
+ * The member a moved message's author or mention becomes in the workspace
+ * the plan moved to: the plan's planner and its agents minted there again,
+ * a person their member there, minted as having left where they are not
+ * in it; and anyone else, an agent of another plan or one since deleted,
+ * minted there as a former member of its kind that has left, so no moved
+ * message still names a member of the workspace the plan left, whose
+ * deletion would otherwise take the message with it.
+ */
+function memberAcross(
+  member: ChatMemberRow,
+  ofPlan: boolean,
+  planId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    if (member.kind === MEMBER_KIND.HUMAN && member.userId !== null) {
+      const subject = { kind: MEMBER_KIND.HUMAN, userId: member.userId } as const;
+      const key = { organizationId, kind: MEMBER_KIND.HUMAN, subjectId: member.userId };
+      const standing = yield* findMemberOfSubject(key);
+      if (Option.isSome(standing)) return standing;
+      const minted = yield* mint(organizationId, subject);
+      if (!(yield* isWorkspaceMember(member.userId, organizationId))) {
+        yield* stampPersonLeft({ memberId: minted.id, now });
+      }
+      return Option.some(minted);
+    }
+    const subject = !ofPlan
+      ? undefined
+      : member.kind === MEMBER_KIND.PLANNER
+        ? ({ kind: MEMBER_KIND.PLANNER, planId } as const)
+        : member.agentId === null
+          ? undefined
+          : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
+    if (subject === undefined) return Option.some(yield* mintFormer(organizationId, member, now));
+    yield* releaseMember({ memberId: member.id, now });
+    return Option.some(yield* mint(organizationId, subject));
+  });
+}
+
+/** A former agent or planner minted in the workspace as having left, naming no agent or plan, for the moved messages that name it. */
+function mintFormer(
+  organizationId: string,
+  member: ChatMemberRow,
+  now: Date,
+): ChatStoreEffect<ChatMemberRow> {
+  return Effect.gen(function* () {
+    yield* lockWorkspace(organizationId);
+    const { last } = yield* findLastOrdinal({ organizationId, kind: member.kind }).pipe(
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    const ordinal = (last ?? 0) + 1;
+    const minted = yield* insertMember({
+      organizationId,
+      kind: member.kind,
+      userId: null,
+      agentId: null,
+      planId: null,
+      handle: member.kind === MEMBER_KIND.PLANNER ? PLANNER_HANDLE : `agent-${ordinal}`,
+      ordinal,
+      now,
+    }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+    yield* stampPersonLeft({ memberId: minted.id, now });
+    return { ...minted, leftAt: now };
+  });
+}
+
+/** A member minted in the workspace for the subject, as `ensureMember` mints one, with no account's gate: the move is the plan's own, already gated. */
+function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffect<ChatMemberRow> {
+  return Effect.gen(function* () {
+    yield* lockWorkspace(organizationId);
+    const { last } = yield* findLastOrdinal({ organizationId, kind: subject.kind }).pipe(
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    const ordinal = (last ?? 0) + 1;
+    const handle = yield* mintHandle(organizationId, subject, ordinal);
+    const now = yield* DateTime.nowAsDate;
+    return yield* insertMember({
+      organizationId,
+      kind: subject.kind,
+      userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
+      agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
+      planId: subject.kind === MEMBER_KIND.PLANNER ? subject.planId : null,
+      handle,
+      ordinal,
+      now,
+    }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+  });
+}
+
+/**
+ * Moves a plan's chat to the workspace the plan moved to, as the plan's own
+ * move already gated: its channel, named apart where the new workspace holds
+ * its name, and every message, ask, and picture in it, at the end of the new
+ * workspace's sequence, their order kept, each message's last change after
+ * every place its messages took. The plan's planner and its agents are
+ * minted again there, and their members in the workspace the plan left let
+ * go of them and are stamped as having left; every author, mention, and
+ * answerer of a moved message is the member they are in the new workspace.
+ * DMs, threads, and posts elsewhere stay where they were. Nothing where the
+ * plan has no channel or it stands in that workspace already.
+ */
+export function movePlanChat(planId: string, organizationId: string): ChatStoreEffect<void> {
+  return transaction(
+    Effect.gen(function* () {
+      const channel = yield* findPlanChannel(planId);
+      if (Option.isNone(channel) || channel.value.organizationId === organizationId) return;
+      const from = channel.value.organizationId;
+      // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a planner takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
+      const pair = [from, organizationId].toSorted();
+      for (const held of pair) yield* lockWorkspace(held);
+      for (const held of pair) yield* holdSequence(held);
+      const messages = yield* findChannelMessages({ channelId: channel.value.id });
+      const named = new Set(
+        messages.flatMap((row) => [
+          row.authorMemberId,
+          ...row.mentions,
+          ...(row.answeredByMemberId === null ? [] : [row.answeredByMemberId]),
+        ]),
+      );
+      const ours = yield* findPlanMembers({ planId, organizationId: from });
+      const others = yield* findMembersByIds({
+        ids: [...named].filter((id) => !ours.some((row) => row.id === id)),
+      });
+      const across = new Map<string, string>();
+      for (const [member, ofPlan] of [
+        ...ours.map((row) => [row, true] as const),
+        ...others.map((row) => [row, false] as const),
+      ]) {
+        const moved = yield* memberAcross(member, ofPlan, planId, organizationId);
+        if (Option.isSome(moved)) across.set(member.id, moved.value.id);
+      }
+      const held = new Set(
+        (yield* findChannels({ organizationId })).flatMap((row) =>
+          row.name === null ? [] : [row.name],
+        ),
+      );
+      const name = firstFree(
+        channel.value.name ?? "plan",
+        (candidate) => held.has(candidate) || candidate === GENERAL_CHANNEL,
+      );
+      yield* moveChannel({ channelId: channel.value.id, organizationId, name });
+      const head = (yield* headOf(organizationId)) + 1;
+      const byTouch = messages.toSorted((a, b) => a.touchedSeq - b.touchedSeq);
+      for (const [at, row] of messages.entries()) {
+        const touched = byTouch.findIndex((each) => each.id === row.id);
+        yield* moveMessage({
+          id: row.id,
+          organizationId,
+          seq: head + at,
+          touchedSeq: head + messages.length + touched,
+          authorMemberId: across.get(row.authorMemberId) ?? row.authorMemberId,
+          mentions: row.mentions.flatMap((id) => {
+            const moved = across.get(id);
+            return moved === undefined ? [] : [moved];
+          }),
+          answeredByMemberId:
+            row.answeredByMemberId === null ? null : (across.get(row.answeredByMemberId) ?? null),
+        });
+      }
+      yield* moveAttachments({ channelId: channel.value.id, organizationId });
+      yield* advanceSequence({ organizationId, by: 2 * messages.length });
+    }),
+  );
 }
