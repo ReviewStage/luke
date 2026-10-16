@@ -1,7 +1,3 @@
-import type { ReactNode } from "react";
-import { RetryIcon } from "../../face/glyphs.js";
-import { BUTTON_VARIANT, Button } from "../button/button.js";
-
 /**
  * error-state.tsx -- something that did not land: its sentence in the fault's red, then Retry, where what it would have drawn stands.
  *
@@ -20,6 +16,10 @@ import { BUTTON_VARIANT, Button } from "../button/button.js";
  * and its way on stand (`EmptyState`). The container places it and lends
  * it no colour of its own.
  */
+
+import type { ReactNode } from "react";
+import { RetryIcon } from "../../face/glyphs.js";
+import { BUTTON_VARIANT, Button } from "../button/button.js";
 
 /** Where a failure stands: among the rows it failed to draw, or alone in the region it would have filled. */
 export const ERROR_STATE_PLACEMENT = {

@@ -1,12 +1,12 @@
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
-import type { Example } from "../examples";
-import { CatalogSection } from "../section";
-
 /**
  * error-states.tsx -- a failed read among rows with Retry beside it, one
  * alone in its region with Retry under it, one with no Retry, and long
  * words in a pane narrower than the line.
  */
+
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
 
 /** A press the catalog has nowhere to take. */
 function stay(): void {}

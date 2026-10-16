@@ -1,10 +1,3 @@
-import { createElement } from "react";
-import { expect, test } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { accessibilityViolations, mount } from "../../testing/browser.js";
-import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
-import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement } from "./error-state.js";
-
 /**
  * error-state.browser.test.ts -- a failure is one alert saying its sentence
  * and its Retry, at a contrast every theme holds; Retry is the keyboard's
@@ -12,6 +5,13 @@ import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement } from "./e
  * with no Retry says its sentence alone; and a centred one stands its Retry
  * under its words, an inline one beside them.
  */
+
+import { createElement } from "react";
+import { expect, test } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { accessibilityViolations, mount } from "../../testing/browser.js";
+import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
+import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement } from "./error-state.js";
 
 const LINE = "The inbox could not be read.";
 
