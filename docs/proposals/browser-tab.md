@@ -1,6 +1,8 @@
 # Proposal: a Browser tab in the side panel
 
-Status: research, awaiting Dean's decision. Nothing of it is built.
+Status: decided by Dean on 2026-10-16: §5 as recommended, a
+`WebContentsView` behind an experiment. That choice also approves the
+AGENTS.md line in §4. The build follows §6.
 
 The ask: "Browser tab. Similar to ChatGPT/Cursor/other devtools. Do some
 research on how feasible this would be. And if the solution is obvious, then
@@ -86,6 +88,22 @@ shown only while it is at rest and uncovered**:
    would be a bearer-less address of whatever the agent's server serves while
    the sandbox runs, which is a security decision in its own right. It also
    needs the sandbox held up while the tab is open, as a terminal holds it.
+
+   The v1 tab needs no port forwarding, since it runs on the Mac and reaches
+   the Mac's own `localhost` directly. Forwarding only matters for "Open
+   preview", which has two ways in:
+
+   - **Vercel's exposed ports**, as above. They're cheap, but the address is
+     open to anyone who has it.
+   - **A forward through Luke's service.** The terminal relay
+     (`apps/web/server/terminal/`) carries one sandbox port to a loopback port
+     on the Mac under the account's session, the way `ssh -L` does. Only the
+     signed-in account reaches it. The cost is an HTTP and WebSocket tunnel,
+     plus holding the sandbox up while the tab is open.
+
+   The second keeps an agent's unfinished app private, so it is the one
+   recommended when "Open preview" is taken up. The Browser tab opens either
+   address the same way.
 3. **The agent drives the browser (Cursor, Codex).** The agent already has
    Playwright and Chromium in its sandbox and screenshots its own work there
    (`coder-host/instructions.ts`). Driving the *developer's* view from a cloud
