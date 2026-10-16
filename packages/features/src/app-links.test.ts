@@ -82,19 +82,8 @@ test("once the launch is torn down a link opens nothing, and none is held for a 
   assert.deepEqual(opened, []);
 });
 
-test("a packaged build claims the scheme as itself, a live development run on its own binary and app, a fixture run not at all", () => {
-  const launch = {
-    executable: "/repo/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-    appPath: "/repo/apps/desktop",
-  };
-
-  assert.deepEqual(appLinkClaim({ ...launch, packaged: true, live: true }), [
-    launch.executable,
-    [],
-  ]);
-  assert.deepEqual(appLinkClaim({ ...launch, packaged: false, live: true }), [
-    launch.executable,
-    [launch.appPath],
-  ]);
-  assert.equal(appLinkClaim({ ...launch, packaged: false, live: false }), undefined);
+test("a packaged build claims the scheme as itself, a live development run gives back a claim stock Electron holds rather than taking it, a fixture run leaves it alone", () => {
+  assert.equal(appLinkClaim({ packaged: true, live: true }), "claim");
+  assert.equal(appLinkClaim({ packaged: false, live: true }), "release");
+  assert.equal(appLinkClaim({ packaged: false, live: false }), "leave");
 });

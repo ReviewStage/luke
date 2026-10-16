@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
+import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
@@ -510,14 +510,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       raiseVoiceWindow();
       configurePermissions();
 
-      // macOS is asked to send the app's own scheme here rather than to another Luke claiming it, a live development run's among them.
-      const linkClaim = appLinkClaim({
-        packaged: config.packaged,
-        live: runMode.sendsNetwork,
-        executable: process.execPath,
-        appPath: app.getAppPath(),
-      });
-      if (linkClaim !== undefined) app.setAsDefaultProtocolClient(APP_LINK_SCHEME, ...linkClaim);
+      // A packaged Luke asks macOS for its own scheme; a live development run gives back a claim stock Electron holds, which would open a bare Electron.
+      const linkClaim = appLinkClaim({ packaged: config.packaged, live: runMode.sendsNetwork });
+      if (linkClaim === APP_LINK_CLAIM.CLAIM) app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
+      if (linkClaim === APP_LINK_CLAIM.RELEASE) app.removeAsDefaultProtocolClient(APP_LINK_SCHEME);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
       app.on("browser-window-focus", panelFocused);
