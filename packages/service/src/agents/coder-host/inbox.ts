@@ -38,7 +38,8 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  *
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
- * hand such as a setting on GitHub, goes in the developer's inbox rather
+ * hand such as a setting on GitHub, and whatever is ready for the developer
+ * to look at or review, such as a pull request, goes in the inbox rather
  * than in a message, where it is lost in the transcript: an item of its own
  * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
@@ -65,7 +66,8 @@ export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,
     description:
-      "Put something you need from the developer in their inbox, apart from your transcript, where they answer it. " +
+      "Put something you need from the developer, or something ready for them to look at or review, such as a pull request " +
+      "you opened or a page you showed, in their inbox, apart from your transcript, where they answer it. " +
       "key is your own short lowercase slug for the item, such as branch-protection; posting under a key you used before " +
       "replaces that item and opens it again, so keep an item current under its key and never post it twice. " +
       "blocks is the context they need to act, in order: markdown blocks of short Markdown, a file, a pull request, or an " +
@@ -83,7 +85,7 @@ export const INBOX_TOOLS = {
       "say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
       "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
-      "should know; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
+      "should know or look at; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
       "need done or an item that asks nothing, and its answer is kept for you to read, though a note they type with it still reaches you as a message. " +
       `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
