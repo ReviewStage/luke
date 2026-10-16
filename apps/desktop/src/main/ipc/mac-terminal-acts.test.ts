@@ -288,3 +288,28 @@ it.effect("an open whose read of the run commands failed says so and starts noth
     assert.equal(opened.length, 0);
   }),
 );
+
+it.effect(
+  "a tab drawn again over its running terminal is shown it, though the run commands cannot be read",
+  () =>
+    Effect.gen(function* () {
+      let readable = true;
+      const { router, started, opened } = fixture(
+        [SET],
+        Effect.suspend(() => (readable ? Effect.void : Effect.die("unreadable"))),
+      );
+      const panel = panelOf();
+      yield* router.performAct({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+      started[0]?.output("ready");
+      readable = false;
+
+      const again = yield* router.performAct(
+        { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
+        panel,
+      );
+
+      assert.equal(again.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(started.length, 1);
+      assert.deepEqual(outputText(opened[1]?.posted ?? []), ["ready"]);
+    }),
+);

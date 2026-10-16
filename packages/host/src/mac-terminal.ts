@@ -30,8 +30,18 @@ export interface MacTerminalTools {
   readonly hangUp: (tty: string) => readonly [string, readonly string[]];
 }
 
+/**
+ * How macOS's `script` is started under Luke. Note that it refuses a socket
+ * for its input ("tcgetattr/ioctl: Operation not supported on socket"), and
+ * Node hands a child's input over a socket on macOS, a FIFO's included, so
+ * `cat` relays it through a real pipe; once `script` ends, its `cat` is ended
+ * too, so the wrapper ends with the terminal and says its exit code.
+ */
+const MACOS_SCRIPT_WRAPPER =
+  'cat | { /usr/bin/script -q /dev/null /bin/bash "$1"; code=$?; pkill -P $$ -x cat; exit "$code"; }';
+
 const MACOS_TERMINAL_TOOLS: MacTerminalTools = {
-  script: (file) => ["/usr/bin/script", ["-q", "/dev/null", "/bin/bash", file]],
+  script: (file) => ["/bin/sh", ["-c", MACOS_SCRIPT_WRAPPER, "sh", file]],
   resize: (tty, cols, rows) => [
     "/bin/stty",
     ["-f", tty, "rows", String(rows), "cols", String(cols)],

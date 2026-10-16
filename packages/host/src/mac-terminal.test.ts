@@ -143,3 +143,29 @@ test("a terminal that cannot start says why and ends, and Luke goes on", async (
   assert.equal(code, null);
   assert.match(printed, /Could not start a terminal: .*ENOENT/u);
 });
+
+// This Mac's own `script`, as Luke starts it: under a parent whose pipes are sockets, as Node's are on macOS.
+test.runIf(process.platform === "darwin")(
+  "on macOS the script runs on a real terminal, takes what is typed, and says how it ended",
+  async () => {
+    let printed = "";
+    let typed: (data: string) => void = () => undefined;
+    const ended = new Promise<number | null>((resolve) => {
+      const terminal = startMacTerminal({
+        build: (ttyFile) =>
+          [`tty > ${ttyFile}`, "tty", "read line", 'echo "got:$line"', "exit 3", ""].join("\n"),
+        onOutput: (bytes) => {
+          printed += Buffer.from(bytes).toString("utf8");
+        },
+        onExit: resolve,
+      });
+      typed = (data) => terminal.write(data);
+    });
+    typed("hello\n");
+
+    assert.equal(await ended, 3);
+    assert.match(printed, /\/dev\/ttys\d+/u);
+    assert.match(printed, /got:hello/u);
+    assert.doesNotMatch(printed, /Operation not supported/u);
+  },
+);

@@ -140,15 +140,20 @@ export function macTerminalActRows(
    * where it has not ended, its latest output replayed, or else a new one
    * started on the branch, its port posted before its script starts.
    */
+  /** The agent's terminal still running on the same branch handed a fresh port, the settings unread; whether there was one. */
+  const reattached = (sender: WebContents, params: MacTerminalOpenParams): boolean => {
+    const standing = panelOf(sender).terminals.get(params.agentId);
+    const same = standing?.repository === params.repository && standing.branch === params.branch;
+    if (standing === undefined || standing.exited || !same) return false;
+    attached(sender, params.agentId, standing);
+    standing.terminal.resize(params.cols, params.rows);
+    return true;
+  };
+
   const opened = (sender: WebContents, params: MacTerminalOpenParams, command: string | null) => {
     const { terminals } = panelOf(sender);
+    if (reattached(sender, params)) return;
     const standing = terminals.get(params.agentId);
-    const same = standing?.repository === params.repository && standing.branch === params.branch;
-    if (standing !== undefined && !standing.exited && same) {
-      attached(sender, params.agentId, standing);
-      standing.terminal.resize(params.cols, params.rows);
-      return;
-    }
     // An agent's terminal on another branch it pushed earlier is closed before the new one starts.
     if (standing !== undefined) closed(standing);
     // Note that output the script prints before its port is posted is kept, and replayed as the port is posted.
@@ -207,6 +212,8 @@ export function macTerminalActRows(
     },
     [ACT_KIND.MAC_TERMINAL_OPEN]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_OPEN, sender);
+      // A tab drawn again over its running terminal needs nothing read.
+      if (reattached(sender.sender, params)) return Effect.void;
       const panel = panelOf(sender.sender);
       const ask = ++asks;
       panel.asking.set(params.agentId, ask);
