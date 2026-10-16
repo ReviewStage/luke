@@ -62,6 +62,8 @@ export function useAgentPullRequest(input: {
     read: undefined,
   });
   if (last.current.agentId !== agentId) last.current = { agentId, read: undefined };
+  // Each read asked, numbered, so only the latest one's answer is kept.
+  const asks = useRef(0);
   const ended = !agentStillWriting(status);
 
   useEffect(() => {
@@ -71,18 +73,20 @@ export function useAgentPullRequest(input: {
     const at = latest.current.now();
     if (!forced && before !== undefined && at - before.at < PUBLISHED_REREAD_MS) return;
     last.current = { agentId, read: { at, ended } };
-    let live = true;
+    asks.current += 1;
+    const ask = asks.current;
+    // Note that the answer is kept by its ask, never dropped as the effect
+    // runs again, because a transcript page landing while the read is out
+    // runs it again inside the gap, which asks nothing, and the answer
+    // dropped would leave the chip unshown until the next page.
     latest.current.read(agentId).then(
       (answer) => {
-        if (live && !("failure" in answer)) {
+        if (ask === asks.current && !("failure" in answer)) {
           setHeld((was) => (was.agentId === agentId ? { agentId, published: answer } : was));
         }
       },
       () => undefined,
     );
-    return () => {
-      live = false;
-    };
   }, [agentId, shown, ended, messages]);
 
   return held.agentId === agentId ? held.published : undefined;
