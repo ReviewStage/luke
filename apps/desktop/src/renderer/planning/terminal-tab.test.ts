@@ -874,6 +874,41 @@ test("in a side panel too narrow for the list beside the screen, the list stands
   assert.equal(drawn(), false, "a shell chosen takes the list down");
 });
 
+// Note that the test is given longer than most, for the reason the one above is.
+test("in a side panel at its default width the shells float over the screen rather than stand beside it, peeked by the pointer resting on their toggle and gone once it leaves", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  layContainersAt({ "side-panel": 400 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const drawn = () => {
+    const list = tab.container.querySelector(".terminal-shells");
+    return list !== null && displayed(list);
+  };
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  const screen =
+    tab.container.querySelector(".terminal-tab-screen") ?? assert.fail("the screen is drawn");
+  const cross = (from: Element, to: Element, clientY: number) =>
+    act(() => {
+      from.dispatchEvent(
+        new PointerEvent("pointerout", { bubbles: true, relatedTarget: to, clientY }),
+      );
+      to.dispatchEvent(
+        new PointerEvent("pointerover", { bubbles: true, relatedTarget: from, clientY }),
+      );
+    });
+
+  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
+  assert.equal(toggle.dataset.place, "over");
+  cross(screen, toggle, 0);
+  assert.equal(drawn(), true, "the list floats over the screen");
+  cross(toggle, screen, -10);
+  assert.equal(drawn(), false, "leaving the toggle takes it down");
+  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
+});
+
 test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {
   vi.useFakeTimers();
   const tab = await mount();
