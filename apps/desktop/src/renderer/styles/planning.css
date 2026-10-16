@@ -1927,11 +1927,126 @@ button.skill-chip:hover,
    the round Send or Stop.
    It may narrow, so a long model name is cut short before the presses are. */
 .agent-composer-actions {
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
   gap: 4px;
+}
+
+/* The composer answers its card's width, not the window's, so it holds in
+   the main column and the side panel alike (`agent-composer.tsx`). The
+   presses never give way, the model chip's words do first, and the ⋯
+   stands only once it has something to take in. */
+.agent-composer > form {
+  container: composer / inline-size;
+}
+
+.agent-composer-actions > :is(.agent-servers, .agent-context) {
+  flex: none;
+}
+
+/* Note that the ⋯ is named under the foot, because desktop.css's
+   `.icon-button` comes later and would otherwise draw it. */
+.agent-composer-actions .agent-composer-more,
+.agent-model-chip .harness-mark {
+  display: none;
+}
+
+/* Too narrow for the published chips' words: each draws its mark alone,
+   its label and hint still naming it. */
+@container composer (max-width: 519px) {
+  .agent-composer :is(.agent-published-chip, .agent-changes-chip) {
+    padding: 0 var(--space-8);
+  }
+
+  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .chip-name {
+    display: none;
+  }
+}
+
+/* Too narrow for every press: the ⋯ takes in the Changes chip, the MCP
+   servers, the context ring, and the microphone. The servers' and the
+   ring's boxes stay, out of the row at its right end, so a popover the ⋯
+   opens for them hangs where the ⋯ stands. */
+@container composer (max-width: 399px) {
+  .agent-composer :is(.agent-changes-chip, .agent-servers-button, .agent-context-button),
+  .agent-composer .dictate-button {
+    display: none;
+  }
+
+  .agent-composer-actions > :is(.agent-servers, .agent-context) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+  }
+
+  .agent-composer-actions .agent-composer-more {
+    display: inline-flex;
+  }
+}
+
+/* Too narrow for the model's words: the chip draws its harness's mark
+   alone, where it has one, its label and hint still naming the choice. */
+@container composer (max-width: 299px) {
+  .agent-composer .agent-model-chip .chip:has(.harness-mark) {
+    padding: 0 var(--space-8);
+  }
+
+  .agent-composer .agent-model-chip .harness-mark {
+    display: block;
+  }
+
+  .agent-composer .agent-model-chip .chip:has(.harness-mark) :is(.model-label, .settings-chevron) {
+    display: none;
+  }
+}
+
+/* The narrowest: the + goes into the ⋯ too, leaving what the agent
+   published, the model, the ⋯, and Send. */
+@container composer (max-width: 239px) {
+  .agent-composer .agent-composer-attach {
+    display: none;
+  }
+}
+
+/* The Inbox's answer box draws the same card (`inbox-pane.tsx`): its quiet
+   line is cut short before its presses are, and goes once the card is too
+   narrow for both, when the presses tighten and, still too wide, stack at
+   the right rather than run past the card. */
+.inbox-answer-quiet {
+  flex: 1 1 0;
+}
+
+.inbox-answer-quiet [data-inbox-quiet] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-presses {
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: var(--space-8);
+}
+
+@container composer (max-width: 299px) {
+  .inbox-answer-foot > .inbox-answer-quiet {
+    display: none;
+  }
+
+  .inbox-presses {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .inbox-presses > button {
+    padding-inline: var(--space-8);
+  }
 }
 
 /* A dictation standing in place of the card's foot: the voice's bars
@@ -2016,7 +2131,7 @@ button.skill-chip:hover,
 .attached-file {
   position: relative;
   display: flex;
-  max-width: 220px;
+  max-width: min(220px, 100%);
   height: 48px;
   border: 1px solid var(--hairline);
   border-radius: 8px;

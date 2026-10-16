@@ -155,13 +155,20 @@ function ContextPopover({
 export function AgentContextRing({
   context,
   brief,
+  open: heldOpen,
+  onOpenChange,
 }: {
   /** What the agent's model's context holds, as the transcript's last page said; nothing before a step ended, which draws no ring. */
   context: CodingAgentContext | undefined;
   /** What the agent was handed, which names the brief's row. */
   brief: CodingAgentBrief | undefined;
+  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the ring's own otherwise. */
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }): React.JSX.Element | null {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = heldOpen ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);

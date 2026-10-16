@@ -36,7 +36,9 @@ import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
  * the service has said what stands, so a tab on an agent still reading the
  * repository wears nothing yet. Beside the pull request's chip stands a
  * Changes chip, which opens the pull request's files and their diffs in
- * the side panel (`agent-changes-tab.tsx`).
+ * the side panel (`agent-changes-tab.tsx`). A composer too narrow for
+ * their words draws each chip's mark alone, its hint and label still
+ * naming it (planning.css).
  */
 
 /** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
@@ -48,7 +50,6 @@ export interface PublishedDoors {
 }
 
 const MENU_LABEL = "Branch actions";
-const OPEN_HINT = "Open on GitHub";
 const CHECKS_FAILING = "Checks failing";
 
 /** What the chip's right-click offers for a branch: its name and the command that checks it out, each to the clipboard. */
@@ -75,7 +76,9 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
     return (
       <>
         <PullRequestMark pullRequest={published.pullRequest} />
-        <span className="agent-pr-number">{pullRequestNumberLabel(published.pullRequest)}</span>
+        <span className="chip-name agent-pr-number">
+          {pullRequestNumberLabel(published.pullRequest)}
+        </span>
       </>
     );
   }
@@ -100,9 +103,11 @@ export function PublishedChip({
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
   const label = pullRequest !== null ? pullRequestMarkLabel(pullRequest) : (branch ?? "");
+  // Named in the hint too, since a narrow composer draws the chip's mark alone.
+  const opens = pullRequest !== null ? pullRequestNumberLabel(pullRequest) : (branch ?? "");
   return (
     <>
-      <Tooltip label={OPEN_HINT}>
+      <Tooltip label={`Open ${opens} on GitHub`}>
         <Chip
           look={CHIP_LOOK.PILL}
           className="agent-published-chip"
@@ -144,7 +149,12 @@ export function ChangesChip({
   }
   return (
     <Tooltip label="Show changes">
-      <Chip look={CHIP_LOOK.PILL} aria-label="Show changes" onClick={openChanges}>
+      <Chip
+        look={CHIP_LOOK.PILL}
+        className="agent-changes-chip"
+        aria-label="Show changes"
+        onClick={openChanges}
+      >
         <FileDiffIcon className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="chip-name">Changes</span>
       </Chip>

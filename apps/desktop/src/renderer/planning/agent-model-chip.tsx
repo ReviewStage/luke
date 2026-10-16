@@ -3,8 +3,10 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
+import { HarnessMark } from "../harness-marks";
+import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";
-import { agentUsageLine } from "./coding-agent-model";
+import { agentUsageLine, choiceLabel, providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";
 import type { AgentModelControl } from "./use-agent-model";
@@ -31,7 +33,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * says what the agent has cost so far, tokens and dollars, once a turn has
  * settled. The menu closes on a pick, on Escape, and on
  * focus leaving it; Escape stops there, so it closes the menu and not the
- * panel behind it.
+ * panel behind it. The chip also carries its harness's mark, which a
+ * composer too narrow for the words draws in their place, so the choice
+ * is named by the chip's label and its tooltip rather than by its words.
  */
 
 export function AgentModelChip({
@@ -75,20 +79,27 @@ export function AgentModelChip({
     trigger.current?.focus();
   };
 
+  const provider = providerOf(model.choice.model);
+  const label = choiceLabel(model.choice, models ?? []).trim();
+
   return (
     <div className="agent-model-chip" ref={root}>
-      <Chip
-        ref={trigger}
-        look={look}
-        chevron
-        className={className}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        <ModelLabel choice={model.choice} models={models ?? []} />
-      </Chip>
+      <Tooltip label={label}>
+        <Chip
+          ref={trigger}
+          look={look}
+          chevron
+          className={className}
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => setOpen(!open)}
+        >
+          {provider === undefined ? null : <HarnessMark provider={provider} />}
+          <ModelLabel choice={model.choice} models={models ?? []} />
+        </Chip>
+      </Tooltip>
       {drawn.mounted ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ModelMenu

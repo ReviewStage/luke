@@ -17,10 +17,11 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { PlusIcon } from "@luke/ui";
+import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
 import { lapsedServer } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef, useState } from "react";
+import { FileDiffIcon } from "lucide-react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -29,6 +30,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
+import { ActionMenu, type MenuAction, riseAboveEnd, useActionMenu } from "../desktop/action-menu";
 import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
@@ -37,6 +39,7 @@ import { useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
+import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
 import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
@@ -123,6 +126,18 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * repository keeps, at the caret, and the one chosen is written into the
  * words as its chip, read as `/name`, which the agent loads before it acts
  * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
+ *
+ * The foot answers the card's own width, not the window's, so the box
+ * holds in the main column and the side panel alike, the way Cursor's and
+ * ChatGPT's narrow panes do (planning.css's `composer` container). As the
+ * card narrows, the chips naming what the agent published draw their marks
+ * alone; then a ⋯ takes in, in this order, the Changes chip, the MCP
+ * servers, the context ring, and the microphone; then the model chip draws
+ * its harness's mark alone; and last the + goes into the ⋯ too. The field
+ * and the round Send or Stop always stand whole. The ⋯ offers what the
+ * stylesheet hid as it opens, read off the foot itself, so the stylesheet
+ * is the one place the order is kept; a popover it opens hangs at the
+ * foot's right, where its own hidden press stood.
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -140,11 +155,91 @@ const BUTTON = {
   STOP: "Stop",
   STOPPING: "Stopping…",
   ATTACH: "Attach files",
+  MORE: "More",
 } as const;
+
+/** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
+const OVERFLOW_PRESS = {
+  ATTACH: "agent-composer-attach",
+  CHANGES: "agent-changes-chip",
+  SERVERS: "agent-servers-button",
+  CONTEXT: "agent-context-button",
+  DICTATE: "dictate-button",
+} as const;
+
+type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
+
+/** A press the ⋯ may take in, and what the menu offers in its place. */
+interface OverflowOffer {
+  press: OverflowPress;
+  action: MenuAction;
+}
 
 /** Whether a drag carries files, which is all the card takes from one. */
 function carriesFiles(event: React.DragEvent): boolean {
   return event.dataTransfer.types.includes("Files");
+}
+
+/** The presses standing on the foot that the stylesheet hid for want of room. */
+function hiddenPresses(foot: HTMLElement | null): readonly OverflowPress[] {
+  if (foot === null) return [];
+  return Object.values(OVERFLOW_PRESS).filter((press) => {
+    const element = foot.querySelector(`.${press}`);
+    return element !== null && getComputedStyle(element).display === "none";
+  });
+}
+
+/**
+ * The foot's ⋯, which the stylesheet shows only once the card is too narrow
+ * for every press: opened, it offers each press the stylesheet hid, read as
+ * it opens, so it never offers one still standing beside it. The card
+ * changing width closes it, since what it offers was read at the old
+ * width; the panel beside it may be dragged with no window resize.
+ */
+function ComposerMore({
+  foot,
+  offers,
+}: {
+  foot: RefObject<HTMLDivElement | null>;
+  offers: readonly OverflowOffer[];
+}): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const [taken, setTaken] = useState<readonly OverflowPress[]>([]);
+  const trigger = menu.trigger(riseAboveEnd);
+  const standing = menu.open !== undefined;
+  const { close } = menu;
+  useEffect(() => {
+    const card = foot.current;
+    if (!standing || card === null) return undefined;
+    const width = card.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => {
+      if (card.getBoundingClientRect().width !== width) close(false);
+    });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [standing, close, foot]);
+  const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
+  return (
+    <>
+      <Tooltip label={BUTTON.MORE}>
+        <button
+          type="button"
+          className="icon-button agent-composer-more"
+          aria-label={BUTTON.MORE}
+          {...trigger}
+          onClick={(event) => {
+            setTaken(hiddenPresses(foot.current));
+            trigger.onClick(event);
+          }}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={BUTTON.MORE} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+      )}
+    </>
+  );
 }
 
 export function AgentComposer({
@@ -194,6 +289,10 @@ export function AgentComposer({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const foot = useRef<HTMLDivElement>(null);
+  // The popovers the ⋯ may open in place of their hidden presses.
+  const [serversOpen, setServersOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [dropping, setDropping] = useState(false);
@@ -313,6 +412,64 @@ export function AgentComposer({
     onStop().finally(() => setStopping(false));
   };
 
+  // Note that a popover closed by key while the ⋯ stands hands focus to the
+  // ⋯, after its own close has handed it to its hidden press, because a
+  // hidden press can hold no keyboard; with the press drawn, the ⋯ is not.
+  const handBack = (set: (open: boolean) => void) => (open: boolean) => {
+    const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
+    const returning =
+      !open && (document.activeElement?.closest(".anchored-popover") ?? null) !== null;
+    set(open);
+    if (returning && more !== null && getComputedStyle(more).display !== "none") {
+      queueMicrotask(() => more.focus());
+    }
+  };
+
+  const offers: OverflowOffer[] = [
+    {
+      press: OVERFLOW_PRESS.ATTACH,
+      action: {
+        label: BUTTON.ATTACH,
+        icon: <PlusIcon />,
+        disabled: held,
+        onSelect: () => picker.current?.click(),
+      },
+    },
+    ...(published !== undefined && published.pullRequest !== null && doors.openChanges !== undefined
+      ? [
+          {
+            press: OVERFLOW_PRESS.CHANGES,
+            action: {
+              label: "Show changes",
+              icon: <FileDiffIcon aria-hidden="true" />,
+              onSelect: doors.openChanges,
+            },
+          },
+        ]
+      : []),
+    {
+      press: OVERFLOW_PRESS.SERVERS,
+      action: { label: "MCP servers", icon: <McpIcon />, onSelect: () => setServersOpen(true) },
+    },
+    ...(context === undefined
+      ? []
+      : [
+          {
+            press: OVERFLOW_PRESS.CONTEXT,
+            action: { label: contextHint(context), onSelect: () => setContextOpen(true) },
+          },
+        ]),
+    {
+      press: OVERFLOW_PRESS.DICTATE,
+      action: {
+        label: "Dictate",
+        icon: <MicrophoneIcon />,
+        disabled: held || module === undefined,
+        onSelect: dictation.start,
+      },
+    },
+  ];
+
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || held) return;
     setReading((count) => count + 1);
@@ -413,7 +570,7 @@ export function AgentComposer({
           {skillPicker.menu}
           {mentionPicker.menu}
         </ComposerField>
-        <PromptInputFooter>
+        <PromptInputFooter ref={foot}>
           {dictating ? (
             <DictationStrip dictation={dictation} />
           ) : (
@@ -454,9 +611,20 @@ export function AgentComposer({
                     usage={usage}
                   />
                 )}
-                <AgentServersButton servers={servers} statuses={statuses} />
-                <AgentContextRing context={context} brief={brief} />
+                <AgentServersButton
+                  servers={servers}
+                  statuses={statuses}
+                  open={serversOpen}
+                  onOpenChange={handBack(setServersOpen)}
+                />
+                <AgentContextRing
+                  context={context}
+                  brief={brief}
+                  open={contextOpen}
+                  onOpenChange={handBack(setContextOpen)}
+                />
                 <DictateButton dictation={dictation} disabled={held || module === undefined} />
+                <ComposerMore foot={foot} offers={offers} />
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit
