@@ -1976,3 +1976,26 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
   assert.deepEqual(first, [true]);
   assert.deepEqual(asked(), [true, false]);
 });
+
+test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
+  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  await act(async () => {
+    tab.control().onPinAgent("agent-1", true);
+    tab.control().onPinAgent("agent-1", false);
+  });
+
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true, account: "teammate@example.com" });
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+
+  assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
+});

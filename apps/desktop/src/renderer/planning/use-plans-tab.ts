@@ -1400,30 +1400,40 @@ export function usePlansTab(input: {
       });
   };
 
-  // Each agent's pins in flight, the newest last, which the next waits on.
-  const agentPinFlights = useRef(new Map<string, Promise<boolean>>());
+  // Each agent's pins in flight, the newest last, which the next waits on,
+  // each answering whether it landed, or nothing where it was never asked.
+  const agentPinFlights = useRef(new Map<string, Promise<boolean | undefined>>());
+  // The account signed in now, which a pin waiting its turn must still be pressed under.
+  const accountNow = useRef(input.account);
+  accountNow.current = input.account;
   // A fixture's agents are pinned nowhere, as its plans are marked nowhere. A
   // pin says nothing once it lands, since the row it moves is in sight; a
   // refusal puts the row back only while no later press replaced it, and
   // says so in a toast, since the menu that asked has closed. Note that one
   // agent's pins are asked one after another, because each writes as it
   // lands, so a Pin and an Unpin pressed together landing out of order would
-  // leave standing the one not pressed last.
+  // leave standing the one not pressed last. One still waiting when the
+  // account changes is never asked, since a pin is its presser's own and
+  // would land on whoever signed in since; the sign-out already let go of
+  // what it drew.
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
     const next = { pinned, at: Date.now() };
     setAgentPins((held) => new Map(held).set(agentId, next));
     const flights = agentPinFlights.current;
+    const pressedBy = input.account;
     const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
-      act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned }).then(
-        (answer) => "agent" in answer,
-        () => false,
-      ),
+      accountNow.current === pressedBy
+        ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned }).then(
+            (answer) => "agent" in answer,
+            () => false,
+          )
+        : undefined,
     );
     flights.set(agentId, asked);
     asked.then((changed) => {
       if (flights.get(agentId) === asked) flights.delete(agentId);
-      if (changed) return;
+      if (changed !== false) return;
       setAgentPins((held) =>
         held.get(agentId) === next
           ? new Map([...held].filter(([pending]) => pending !== agentId))
