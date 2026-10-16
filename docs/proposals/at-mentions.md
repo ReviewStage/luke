@@ -4,7 +4,8 @@ Status: **approved by Dean on 2026-10-14** ("I agree with the @-mentions
 build… I agree with all your recommendations for @-mentions"), and being
 built as the PR order in §8 describes; what has shipped is listed there.
 The link format was settled the same day (see "The link format (settled)"
-below).
+below). The gaps left after v1 were decided on 2026-10-16 ("The gaps,
+decided" below), and the ones built then have shipped.
 
 The design show lives at `docs/proposals/at-mentions/index.html`. It is
 one self-contained file, generated from the desktop renderer's real
@@ -72,7 +73,10 @@ message box.
       page), pasted whole into the message box or the plan, becomes a chip
       wearing the integration's mark;
     - its name is the address's readable form (`LUKE-142/fix-the-thing`,
-      `relay/pull/123`), since nothing here asks the provider for a title;
+      `relay/pull/123`). Where the workspace's own GitHub App or Linear
+      connection answers, a pull request's, a GitHub issue's, or a Linear
+      issue's chip also wears its state, and its card its key, title, and
+      who opened it or has it (`apps/desktop/src/renderer/tasks/use-link-standing.ts`, #3109);
     - it follows decision 13's rule: the integration's server is handed to
       the turn that takes the message on, with a note naming the page and
       the connection;
@@ -115,6 +119,37 @@ and `decodeMention`:
   address of the plan's repository reads as a file or a folder first, and
   any other GitHub page as a `link`. Every reader is handed the plan's
   repository for that.
+
+## The gaps, decided (Dean, 2026-10-16)
+
+Dean went through the gaps the shipped v1 left, in a show of them, and
+sorted each:
+
+- **Built now, and shipped** (§8, "What has shipped"):
+  - a pasted Luke address becomes its chip, and a bare one in a message is
+    handed as its mention (#3098);
+  - the `@` list narrows to one kind, shows up to 50 rows, and walks into
+    folders (#3099), and offers the task's pull requests (#3100);
+  - the `@` list offers every coding agent of the workspace (#3067), whose
+    mention resolves across the workspace (#3064);
+  - a page mention hands its reference, read with `read_page` (#3088);
+  - coding agents write mentions, and their tools answer each thing's
+    mention ready to write (#3093);
+  - an MCP server's chip hangs the popover's row (#3097);
+  - every chip hangs the card of what it names (#3102, #3106), a pull
+    request's or issue's names its author and a Linear issue's its assignee
+    (#3109), and a page's says who showed the version (#3126) over a live
+    preview (#3161).
+- **Later:** recent mentions on a bare `@`; Connect rows for servers the
+  account has not connected; Inbox item mentions.
+- **Never:** a gone state for files; the notetaker's eval in `test:agent`,
+  since that suite runs a scripted model, so the correction guard
+  `keepsMentions` (`packages/features/src/plan-template.ts`) is the check
+  (§5.4).
+- **Still deferred:** voice and calls; people beyond what #3170 shipped,
+  such as telling the person mentioned (decision 6); past calls;
+  per-integration search (decision 14); servers in the plan; and inlining
+  files (decision 2).
 
 ## Still open
 
@@ -450,10 +485,10 @@ reach at all. That is the test the category applied when it removed kinds
 | 1 | **Files and folders** in the plan's repository | Highest. Every product leads with it, and it removes a search step ("the bug is in @session-store.ts"). | Listing exists (the palette's); the agent reads with `read_file`. | **v1** |
 | 2 | **The plan, or one of its sections** | High, and only Luke has it. The coder can't re-read the plan, and a task-started agent never saw it. In the plan itself, a section mention is a cross-reference. | Sections come from the document the desktop holds; inline on send. | **v1** |
 | 3 | **Integration objects:** a Linear issue, Sentry issue, Notion page, Slack thread, GitHub PR or issue, PostHog insight, Granola meeting | High: it names the work. Dean's rule keeps it cheap, as title and link only. | A search over your own connections; nothing resolved at send. | Next (Dean, decision 1) |
-| 4 | **A pull request** of the plan's agents, or its Changes | Medium. A PR is how people name work. | List exists; a reference (number, branch); the agent uses git. | Next |
-| 5 | **An Inbox item** | Medium: "do what I answered in @…". | List exists; inline question and answer. | Next |
-| 6 | **A page** | Medium-low: a rendered spec or mock. | List exists; inline title and text excerpt. | Next |
-| 7 | **Another agent of the plan** | High for handoffs, but useless until a coding agent can read or message one. | Waits for coding-agent tools (Dean, decision 2). | Later |
+| 4 | **A pull request** of the plan's agents, or its Changes | Medium. A PR is how people name work. | A GitHub link mention, under the integration rule. | Shipped, #3100 |
+| 5 | **An Inbox item** | Medium: "do what I answered in @…". | List exists; inline question and answer. | Later (the gaps decision) |
+| 6 | **A page** | Medium-low: a rendered spec or mock. | A reference: title, id and version, read with `read_page`. | Shipped, #3031, #3088 |
+| 7 | **Another agent of the workspace** | High for handoffs, now that a coding agent can list and message one. | Handed by task, branch and pull request, never its conversation (decision 5). | Shipped, #3031, #3064, #3067 |
 | 8 | **A past call or turn** | Low for a coder. The plan already distils the calls, and Cascade removed conversation mentions. | Lists exist. | Not planned |
 | 9 | **A URL** | A pasted URL already reaches the model. Pasting a known kind's URL (GitHub PR, Linear issue) can turn it into its chip. | Small. | With integration objects |
 | 10 | **A person** | Who owns or reviews the work. Superseded decision 6. | The members read the window already holds; the agent is handed name and role. | Shipped, without notifications |
@@ -474,12 +509,14 @@ reach at all. That is the test the category applied when it removed kinds
   titles have them. The list closes when a typed space leaves it with no
   rows, on Esc, or when the caret leaves the word.
 - **Empty query:**
-  - up to four recent mentions on this plan;
-  - then one row per kind under "Mention from": Files and folders, Plan,
-    and each connected integration, and later Pull requests, Inbox and
-    Pages.
+  - up to four recent mentions on this plan (not built; "Later" in the
+    gaps decision);
+  - then one row per kind under "Mention from", as built (#3099, #3100):
+    Files and folders, Plan, Pages, Agents, Skills, Pull requests, and
+    each connected MCP server.
   - → or Enter on a kind row narrows the list to it, as does typing
-    `@linear:`. ⌫ on an empty query widens it again.
+    `@files:`, `@plan:`, `@pages:`, `@agents:`, `@skills:`, `@prs:` or a
+    server's provider (`@linear:`). ⌫ on an empty query widens it again.
 - **Typing:**
   - Every local kind is searched at once, ranked with the palette's own
     `pathScore` and `fuzzyScore`, moved into a shared module.
@@ -516,10 +553,12 @@ reach at all. That is the test the category applied when it removed kinds
   - an integration object, on its site.
 - **Editing:** a chip is one character to the caret. One ⌫ removes it
   whole, ⇧← selects it, and ⌘Z brings it back. Copy gives the markdown
-  link, and pasting the link gives the chip back.
-- **A subject that is gone,** such as a file no longer on main or a heading
-  no longer in the plan, keeps the label it was written with, struck
-  through, and its card says why. An integration object is never checked
+  link, and pasting the link gives the chip back. A Luke address pasted
+  bare, as a ⋯ Copy link gives it, becomes its chip too (#3098).
+- **A subject that is gone,** such as a heading no longer in the plan,
+  keeps the label it was written with, struck through, and its card says
+  why. A file is never checked: its gone state is "Never" in the gaps
+  decision. An integration object is never checked
   (Dean, decision 4), so its chip always reads as written.
 
 ### 4.3 The wire: a link in the words (target format pending Part 1)
@@ -548,7 +587,9 @@ it fixes [@LUKE-142 Token refresh fails after the Mac sleeps](https://linear.app
 - **One Schema,** in `packages/features/src/mention-link.ts`, decodes a
   target into a tagged `Mention` and encodes one back. `mentionsIn(text)`
   finds the mentions outside code. `MENTION_BOUNDS` caps a message at 20
-  mentions and a target at 400 characters.
+  mentions (`MAX_MENTIONS`) and a target at 24,000 characters
+  (`MAX_TARGET_CHARS`), a path at 1,000 (`MAX_PATH_CHARS`) and an address
+  at 2,000 (`MAX_URL_CHARS`).
 - **Why a link rather than a typed part:**
   - The message stays one string, so steer coalescing, receipt and
     optimistic-line matching, copy and the 16,000-character bound are
@@ -559,7 +600,8 @@ it fixes [@LUKE-142 Token refresh fails after the Mac sleeps](https://linear.app
 ### 4.4 What the agent receives, and the budget
 
 The words go to the model exactly as sent. When a message mentions plan
-sections (and later Inbox items or pages), the server adds one text part
+sections, or anything else in the table below it cannot read for itself
+(`packages/service/src/agents/mentioned-context.ts`), the server adds one text part
 after the words. It sits under a heading `receivedMessage` reads back the
 way it reads `Attached file:`, and it holds a snapshot of each section as
 it stood when the message was sent:
@@ -577,8 +619,10 @@ Refresh the session token five minutes before it lapses, …
 | Plan | Its markdown up to 12,000 characters, then its remaining headings |
 | Section | Its markdown up to 4,000 characters |
 | Integration object | Its title and link as written, plus a one-line note naming its integration ("LUKE-142 is a Linear issue; read it through the `linear` connection"). That integration is handed to the turn even if it is switched off for the agent (decision 13). Nothing is fetched at send. |
-| Next: PR | The link plus its number, title and branch |
-| Next: Inbox item, page | Up to 4,000 characters |
+| PR (#3100) | The GitHub link alone, a link mention like a pasted one, under the integration rule above |
+| Page (#3088) | Its title, id and version, and how to read it with `read_page` and revise it with `show_page`; never its HTML |
+| Agent (#3064) | Its task, branch and pull request, how to read its work with `gh` and `git`, and the id `message_agent` reaches it by; never its conversation |
+| Later: Inbox item | Not built |
 
 - **Budget:** the part holds at most 24,000 characters (about 6,000
   tokens). Excerpts are cut on a line, with a count of what was left out.
@@ -783,7 +827,7 @@ search moves to PR 7, which uses the same per-turn rule.
   tools.
 - **Luke's notes in the plan:** because the plan now holds mention links,
   the notetaker must keep a `[@…](…)` link intact when it rewrites a
-  section. That is one prompt line and one eval (§5.4).
+  section. That is one prompt line and the correction guard (§5.4).
 
 ### 4.8 A pasted link becomes a chip (decision 14)
 
@@ -796,9 +840,13 @@ search"). What stands in its place is generic:
   pastes as words, as does one pasted inside code.
 - **The chip.** The integration's mark and the address's readable form: the
   last steps of its path, a kind's word kept with the step after it
-  (`LUKE-142/fix-the-thing`, `relay/pull/123`). There is no title, since
-  nothing here asks the provider for one. A press opens the page in the
-  browser, and the card says the address.
+  (`LUKE-142/fix-the-thing`, `relay/pull/123`). A press opens the page in
+  the browser. A GitHub pull request or issue, or a Linear issue, is read
+  through the workspace's own GitHub App or Linear connection as the chip
+  is drawn (`apps/desktop/src/renderer/tasks/use-link-standing.ts`): where that answers, the chip
+  wears the page's state, its card its key, title, state, and who opened it
+  or has it (#3109) in place of the address, and a bare address is named
+  by its key and title. Where it doesn't, the card says the address.
 - **The stored text.** `[@LUKE-142/fix-the-thing](https://linear.app/acme/issue/LUKE-142/fix-the-thing)`:
   title and link, as decision 3 has it.
 - **The agent.** Decision 13's rule: the integration's server is handed to
@@ -875,11 +923,16 @@ each untouched block's exact source (`document-source.ts`).
 ### 5.4 Luke, the notetaker
 
 - **The prompt:** "Keep a `[@…](…)` link exactly as written when you
-  rewrite text around it."
-- **An eval** in `test:agent`, the offline brain eval: a section holding
-  two mentions is rewritten, and both survive.
-- **Not in v1:** Luke writing new mentions of its own. It could, from what
-  it reads, but that is later.
+  rewrite text around it." (`packages/service/src/agents/brain-host/brain.ts`).
+- **The check is the correction guard, not an eval.** `keepsMentions`
+  (`packages/features/src/plan-template.ts`) refuses a correction that drops
+  a mention, and its tests hold that. An eval in `test:agent` was planned
+  here, but that suite runs a scripted model, so it could not show the
+  notetaker keeping one; Dean set it to "Never" in the gaps decision.
+- **Status (2026-10-16):** coding agents write mentions of their own
+  (#3093). Luke's notetaker keeps mentions but does not write new ones; a
+  one-line follow-up could have it name a page it showed by the `mention`
+  its `show_page` now answers.
 
 ### 5.5 Coding agents
 
@@ -937,9 +990,10 @@ first PR.
     renamed.
   - Heading text plus the gone state is the least complex answer.
 - **"Copy link to section":** a section's heading hangs a ⋯ item that
-  copies `[@Rollout](luke://plan/<planId>#Rollout)`. Pasted into the
-  composer or the plan, it becomes the section's chip. The same link is what
-  the `@` list writes.
+  copies the section's bare address, so it pastes into Slack or a pull
+  request as a link (`apps/desktop/src/renderer/tasks/plan-body.tsx`). Pasted into the composer or
+  the plan, it becomes the section's chip (#3098), which the `@` list
+  writes as `[@Rollout](<address>)`.
 
 ## 6. Server side, by kind
 
@@ -948,8 +1002,10 @@ first PR.
 | File, folder | `mention-link` decode plus path normalization | Nothing; the agent uses `read_file`/`glob` | none (reference) |
 | Plan, section | `readPlan(userId, planId)` as `steer.ts` already does; `planSections` picks the heading | `planMarkdown(plan)` | 12,000 / 4,000 |
 | Integration object | Its integration, read from the link's host; handed to the turn by the same per-turn rule as a server mention | Nothing at send; the note names the integration | — |
-| Next: PR | Agent summaries' `pullRequest` | Number, title, branch | header only |
-| Next: Inbox item, page | Through the plan | Text | 4,000 |
+| PR | A link mention, its GitHub address (#3100) | Nothing at send | — |
+| Page | Its id, read off the agent's own task (`packages/service/src/agents/mentioned-reads.ts`) | Title and version; the agent reads it with `read_page` | none (reference) |
+| Agent | Its id, read across the sender's workspace | Task, branch, pull request | none (reference) |
+| Later: Inbox item | — | — | — |
 | Picker only | `/api/plans/{id}/mention-search` over your own connections | Hits' title, URL, kind | — |
 
 `mentionedContext(text, sender, agent)` sits beside `eveContent`. It decodes
@@ -1169,9 +1225,20 @@ VoiceOver, since CI can't see the Mac.
 | 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
 | links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
 | 10 | The task's pages and other agents in the `@` list, by their Luke links | merged, #3031 |
-| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | #3064 |
+| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | merged, #3064 |
 | 13 | `read_page`; a page mention hands its reference and `read_page`, never its HTML | merged, #3088 |
-| 14 | People: the People group, the person chip, and a person handed by name and role | this PR |
+| 14 | People: the People group, the person chip, and a person handed by name and role | merged, #3170 |
+| gaps | The `@` list offers every coding agent of the workspace, labelled by its task | merged, #3067 |
+| gaps | Coding agents write mentions; `show_page`, `read_page`, `list_agents`, `read_agent`, `start_agent` and `list_tasks` answer a ready `mention`; a line from another coding agent hands no MCP server it mentions | merged, #3093 |
+| gaps | An MCP server's chip hangs the popover's row, and says when the turn is handed it | merged, #3097 |
+| gaps | A pasted Luke address becomes its chip, and a bare one in a message is handed as its mention (`handedMentionsIn`) | merged, #3098 |
+| gaps | The `@` list narrows to one kind, shows up to 50 rows, and walks into folders | merged, #3099 |
+| gaps | A Pull requests group in the `@` list, written as GitHub links | merged, #3100 |
+| gaps | An agent's chip hangs the agent's card, on any task of the workspace or none | merged, #3102 |
+| gaps | Every chip hangs the card of what it names | merged, #3106 |
+| gaps | A pull request's and an issue's card names its author, a Linear issue's its assignee | merged, #3109 |
+| gaps | A page's tab, summary row, and chip hang one `PageCard` with a live preview | merged, #3161 |
+| gaps | A page version records who showed it, and its card names them | merged, #3126 |
 
 ## 9. Risks
 
@@ -1182,8 +1249,9 @@ VoiceOver, since CI can't see the Mac.
   of a block nobody touched (`document-source.ts`'s guarantee). PR 3's
   tests hold that.
 - **Luke dropping links.** Luke may rewrite a section and drop its links.
-  PR 4's prompt line and eval cover this; a regression shows as a vanished
-  chip, never as broken text.
+  PR 4's prompt line covers this, and the correction guard `keepsMentions`
+  refuses a correction that drops one (§5.4); a regression shows as a
+  vanished chip, never as broken text.
 - **Heading renames.** These leave section links in messages and in Luke's
   rewrites in the gone state (§5.6). The developer's own renames in the
   editor rewrite the plan's own references.
@@ -1194,4 +1262,5 @@ VoiceOver, since CI can't see the Mac.
 ## 10. Decided
 
 Every question this proposal raised was answered on 2026-10-14 (the
-decisions at the top), the link format included.
+decisions at the top), the link format included, and the gaps after v1 on
+2026-10-16 ("The gaps, decided").
