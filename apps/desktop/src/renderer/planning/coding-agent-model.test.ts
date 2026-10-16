@@ -11,7 +11,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
@@ -39,6 +39,7 @@ import {
   type SentLine,
   settledPlanEdits,
   showsPublishedRow,
+  startedAgentIds,
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -395,6 +396,41 @@ test("the plan edits that have answered are counted, not the ones still out or t
   ];
   assert.equal(settledPlanEdits(messages), 2);
   assert.equal(settledPlanEdits([]), 0);
+});
+
+test("the agents an agent started are those its start_agent calls answered, in order, under the tool's name or the one it had; a start refused or still out names none", () => {
+  const start = (callId: string, state: string, output?: WireRecord, tool = "start_agent") => ({
+    type: `tool-${tool}`,
+    toolCallId: callId,
+    state,
+    input: { prompt: "Write the expiry migration." },
+    ...(output === undefined ? undefined : { output }),
+  });
+  const messages: CodingAgentMessage[] = [
+    {
+      id: "m1",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        start("c1", "output-available", { status: "accepted", agent: { id: "agent-2" } }),
+        start("c2", "output-available", { status: "rejected", reason: "Not started." }),
+        start("c3", "input-available"),
+      ],
+    },
+    {
+      id: "m2",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        start(
+          "c4",
+          "output-available",
+          { status: "accepted", agent: { id: "agent-3" } },
+          "start_coding_agent",
+        ),
+      ],
+    },
+  ];
+  assert.deepEqual(startedAgentIds(messages), ["agent-2", "agent-3"]);
+  assert.deepEqual(startedAgentIds([]), []);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

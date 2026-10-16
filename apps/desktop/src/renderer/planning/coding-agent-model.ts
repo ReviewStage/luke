@@ -1003,6 +1003,16 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
     ).length;
 }
 
+/**
+ * The coding agents an agent's own calls started, by id, in the order its
+ * transcript holds them: each `start_agent` that answered an agent. A tab
+ * that sees one it had not reads its plan's agents again, as the plan does
+ * when Luke starts one, since nothing else tells the list.
+ */
+export function startedAgentIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages.flatMap(agentParts).flatMap((part) => startedAgentOf(part) ?? []);
+}
+
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;

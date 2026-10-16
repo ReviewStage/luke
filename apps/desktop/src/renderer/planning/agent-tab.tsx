@@ -18,7 +18,7 @@ import { DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
 import {
@@ -70,6 +70,7 @@ import {
   placedMessages,
   settledPlanEdits,
   showsPublishedRow,
+  startedAgentIds,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -1275,6 +1276,16 @@ export function AgentTab({
     seenEdits.current = settledEdits;
     tell(ACT_KIND.PLANNING_REFRESH);
   }, [settledEdits, tell]);
+  // An agent this one started joins the plan's agents only once they are read again, so
+  // one that landed after the tab opened has them read; those already there were read with the plan.
+  const started = useMemo(() => startedAgentIds(transcript.messages), [transcript.messages]);
+  const seenStarts = useRef<ReadonlySet<string>>(new Set(started));
+  const readAgents = control.onRetryList;
+  useEffect(() => {
+    const landed = started.some((id) => !seenStarts.current.has(id));
+    seenStarts.current = new Set(started);
+    if (landed) readAgents();
+  }, [started, readAgents]);
   const composer = useAgentComposer({
     agentId: agent.id,
     planId: agent.planId,
