@@ -24,6 +24,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
@@ -212,6 +213,7 @@ afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
 
@@ -836,6 +838,40 @@ test("the shells list folds away beside the screen, and its toggle asks the pane
   assert.equal(tab.container.querySelector(".terminal-shells"), null);
   await tab.press("Show shells");
   assert.equal(tab.toggled(), 1);
+});
+
+// Note that the test is given longer than most, because jsdom takes seconds
+// to lay the window's stylesheets for a width beside a running terminal.
+test("in a side panel too narrow for the list beside the screen, the list stands over the screen only while its own toggle holds it open, and a shell chosen there takes it down", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  layContainersAt({ "side-panel": 280 });
+  // Note that each element is read for its own display alone, which is where
+  // the rules read here hide one, because jsdom takes a tenth of a second to
+  // cascade an element through the window's stylesheets.
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const drawn = () => {
+    const list = tab.container.querySelector(".terminal-shells");
+    return list !== null && displayed(list);
+  };
+  const toggles = () =>
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].filter(displayed);
+
+  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
+  assert.deepEqual(
+    toggles().map((button) => button.getAttribute("aria-label")),
+    ["Show shells"],
+  );
+
+  await act(async () => toggles()[0]?.click());
+  await settle();
+  assert.equal(drawn(), true, "the list stands over the screen");
+  assert.equal(toggles()[0]?.getAttribute("aria-label"), "Hide shells");
+  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
+
+  await tab.choose("dev server");
+  assert.equal(drawn(), false, "a shell chosen takes the list down");
 });
 
 test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {

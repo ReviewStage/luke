@@ -60,13 +60,17 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * that commit, its GitHub page and its copy too, the commit named quietly
  * beside the path, and drawn afresh when the same file is opened at another.
  *
+ * In a side panel too narrow for the file and the tree side by side, the
+ * tree stands over the file's right edge instead, shut until its toggle
+ * opens it for this tab alone (`usePaneRoom`), and the crumbs fold what
+ * the bar has no room for (`file-breadcrumbs.tsx`).
+ *
  * The bar and the tree's slide are an agent's Changes tab's too
  * (`agent-changes-tab.tsx`), so a diff stands under the same bar, its file's
  * path as breadcrumbs, the pull request on GitHub, its ⋯, and the same
  * toggle of the same tree.
  */
 
-/** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
 /** What a pane's toggle says while the pane is open, and while it is not. */
 interface ToggleWords {
   readonly open: string;
@@ -75,15 +79,22 @@ interface ToggleWords {
 
 const FILES_TOGGLE: ToggleWords = { open: "Hide files", closed: "Show files" };
 
-/** The toggle at a bar's end that opens and closes the pane beside the tab: a File tab's tree, or a Terminal tab's shells. */
-export function TreeToggle({
+/** Where a toggle opens its pane: beside the tab, as the panel holds it, or over the tab, where the panel is too narrow for the two side by side. */
+const PANE_PLACE = { BESIDE: "beside", OVER: "over" } as const;
+
+type PanePlace = (typeof PANE_PLACE)[keyof typeof PANE_PLACE];
+
+/** One of a pane's toggles: the pane open or shut in its place, as `open` says. */
+function PlaceToggle({
+  place,
   open,
   onToggle,
-  words = FILES_TOGGLE,
+  words,
 }: {
+  place: PanePlace;
   open: boolean;
   onToggle: () => void;
-  words?: ToggleWords;
+  words: ToggleWords;
 }): React.JSX.Element {
   const label = open ? words.open : words.closed;
   return (
@@ -94,6 +105,7 @@ export function TreeToggle({
         aria-label={label}
         aria-expanded={open}
         data-open={String(open)}
+        data-place={place}
         onClick={onToggle}
       >
         <SidePanelIcon />
@@ -102,8 +114,48 @@ export function TreeToggle({
   );
 }
 
+/** A pane's toggles as its room hands them (`usePaneRoom`): beside the tab, as the panel holds it, and over it. */
+export interface PaneToggles {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly over: boolean;
+  readonly onToggleOver: () => void;
+}
+
+/**
+ * The toggle at a bar's end that opens and closes the pane beside the tab:
+ * a File tab's tree, or a Terminal tab's shells. It is drawn once for each
+ * place the pane can stand, and the stylesheet shows the one the panel's
+ * width leaves room for (`@container side-panel`), so a press always opens
+ * the pane where it is seen.
+ */
+export function TreeToggle({
+  toggles,
+  words = FILES_TOGGLE,
+}: {
+  toggles: PaneToggles;
+  words?: ToggleWords;
+}): React.JSX.Element {
+  return (
+    <>
+      <PlaceToggle
+        place={PANE_PLACE.BESIDE}
+        open={toggles.open}
+        onToggle={toggles.onToggle}
+        words={words}
+      />
+      <PlaceToggle
+        place={PANE_PLACE.OVER}
+        open={toggles.over}
+        onToggle={toggles.onToggleOver}
+        words={words}
+      />
+    </>
+  );
+}
+
 /** The tree as the view draws it: whether it is drawn, whether on its way out, and its box. */
-export interface TreeSlide {
+interface TreeSlide {
   drawn: boolean;
   leaving: boolean;
   pane: RefObject<HTMLElement | null>;
@@ -120,7 +172,7 @@ export interface TreeSlide {
  * motion or a capture run, it is let go before the frame is drawn. The tree
  * a File tab opens with stands at once, since nothing was toggled.
  */
-export function useTreeSlide(open: boolean): TreeSlide {
+function useTreeSlide(open: boolean): TreeSlide {
   const pane = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(open);
   const [leaving, setLeaving] = useState(false);
@@ -156,6 +208,63 @@ export function useTreeSlide(open: boolean): TreeSlide {
     exit.onfinish = () => setLeaving(false);
   }, [open]);
   return { drawn: open || leaving, leaving, pane };
+}
+
+/** A pane beside a tab, a File tab's tree or a Terminal tab's shells, wherever the panel's width lets it stand. */
+export interface PaneRoom {
+  /** The pane beside the tab, open or shut as the panel holds it for every tab of its kind. */
+  readonly beside: TreeSlide;
+  /** Whether the pane is drawn at all, beside the tab or over it. */
+  readonly drawn: boolean;
+  readonly toggles: PaneToggles;
+  /** Takes down the pane standing over the tab, as a file chosen in it does. */
+  readonly closeOver: () => void;
+  /** What the view's root wears, which the stylesheet places the pane by. */
+  readonly marks: { readonly "data-pane-beside": string; readonly "data-pane-over": string };
+  /** The handlers of the box the pane stands in: a press beside the pane standing over the tab, or Escape, takes it down. */
+  readonly body: {
+    readonly onPointerDown: (event: React.PointerEvent) => void;
+    readonly onKeyDown: (event: React.KeyboardEvent) => void;
+  };
+}
+
+/**
+ * The pane's room. Beside the tab it is open or shut as the panel holds it
+ * (`useTreeSlide`); where the panel is too narrow for the tab and the pane
+ * side by side (`@container side-panel`), the stylesheet draws it over the
+ * tab's right edge instead, shut until its own toggle opens it, and only
+ * for this tab, since a pane opened over a tab is a glance rather than a
+ * layout. Which of the two places is drawn is the stylesheet's alone, so
+ * the panel crossing its width moves the pane without a render.
+ */
+export function usePaneRoom(shown: {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}): PaneRoom {
+  const beside = useTreeSlide(shown.open);
+  const [over, setOver] = useState(false);
+  const closeOver = useCallback(() => setOver(false), []);
+  const { pane } = beside;
+  return {
+    beside,
+    drawn: beside.drawn || over,
+    toggles: { ...shown, over, onToggleOver: () => setOver((was) => !was) },
+    closeOver,
+    marks: { "data-pane-beside": String(beside.drawn), "data-pane-over": String(over) },
+    body: {
+      onPointerDown: (event) => {
+        if (!over || !(event.target instanceof Node) || pane.current?.contains(event.target))
+          return;
+        setOver(false);
+      },
+      onKeyDown: (event) => {
+        if (!over || event.key !== "Escape" || event.nativeEvent.isComposing) return;
+        // Note that the Escape is stopped here, because the window's own would close the panel.
+        event.stopPropagation();
+        setOver(false);
+      },
+    },
+  };
 }
 
 /** A File tab's history as its bar walks it: whether each way holds a file, and the step. */
@@ -235,8 +344,8 @@ export function FileViewBar({
   onGitHub: (() => void) | undefined;
   /** The bar's ⋯. */
   menu: ReactNode;
-  /** The tree's toggle, where there is a tree. */
-  tree?: { readonly open: boolean; readonly onToggle: () => void } | undefined;
+  /** The tree's toggles, where there is a tree. */
+  tree?: PaneToggles | undefined;
 }): React.JSX.Element {
   const { browse } = path;
   return (
@@ -270,7 +379,7 @@ export function FileViewBar({
           </button>
         </Tooltip>
         {menu}
-        {tree === undefined ? null : <TreeToggle open={tree.open} onToggle={tree.onToggle} />}
+        {tree === undefined ? null : <TreeToggle toggles={tree} />}
       </div>
     </header>
   );
@@ -386,9 +495,14 @@ export function FileView({
     [listFolder],
   );
   const browsing = repository !== null;
-  const tree = useTreeSlide(browsing && treeOpen);
+  const tree = usePaneRoom({ open: browsing && treeOpen, onToggle: onToggleTree });
+  // A file chosen in the tree standing over the tab takes the tree down, to show the file.
+  const browse = (path: string, newTab: boolean) => {
+    tree.closeOver();
+    onBrowse(path, newTab);
+  };
   return (
-    <div className="file-view">
+    <div className="file-view" {...tree.marks}>
       <FileViewBar
         history={history}
         path={{
@@ -408,9 +522,9 @@ export function FileView({
         menu={
           <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
         }
-        tree={browsing ? { open: treeOpen, onToggle: onToggleTree } : undefined}
+        tree={browsing ? tree.toggles : undefined}
       />
-      <div className="file-view-body">
+      <div className="file-view-body" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
@@ -429,9 +543,9 @@ export function FileView({
             shown={shown}
             listFolder={readFolderListing}
             readWhole={listWhole}
-            onOpen={onBrowse}
-            pane={tree.pane}
-            leaving={tree.leaving}
+            onOpen={browse}
+            pane={tree.beside.pane}
+            leaving={tree.beside.leaving}
           />
         ) : null}
       </div>
