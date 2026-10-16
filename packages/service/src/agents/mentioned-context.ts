@@ -52,7 +52,9 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * connections, whose tools it finds by search; a mention says which the
  * developer pointed it at, so it uses that one without hunting for it. The
  * turn the message opens is handed the server whatever the agent's switches
- * (`agent-runtime/servers.ts`), but a message steering a turn already running
+ * (`agent-runtime/servers.ts`), and an automation's run only the servers its
+ * automation's own prompt mentions, never a webhook body's or a GitHub
+ * event's; but a message steering a turn already running
  * reaches one handed only what it started with, so the note says a server
  * not among its connections joins at its next turn. An agent with no plan
  * is handed the notes alone.

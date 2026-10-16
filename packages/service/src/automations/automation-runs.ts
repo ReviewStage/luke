@@ -244,7 +244,11 @@ function webhookLines(run: ActedRun, room: number): readonly string[] {
  * and why, so the agent and the developer reading its tab both know it was
  * not typed by hand, and what it is told of the event that fired it; the
  * agent keeps the automation's name, the firing, the prompt alone, and a
- * webhook's body as its caller sent it, cut where the prompt cut it.
+ * webhook's body as its caller sent it, cut where the prompt cut it. An
+ * MCP server its words mention is handed to the agent whatever the
+ * automation switched off only where the automation's own prompt mentions
+ * it (`serverWords` on the start and the steer), never where the event's
+ * lines or the body do, since whoever wrote those is not its owner.
  */
 function automationStart(automation: Automation, run: ActedRun): AutomationStart {
   const lines = [
@@ -373,6 +377,7 @@ const steerClaimed = Effect.fnUntraced(function* (
       found.value,
       {
         text: automationStart(automation, run).prompt,
+        serverWords: automation.action.prompt,
         clientKey: run.id,
         sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
       },
@@ -567,6 +572,8 @@ const startClaimed = Effect.fnUntraced(function* (
       // The servers its owner switched off for it, as a Start switches them off for its agent.
       disabledServers: automation.action.disabledServers,
       prompt: handed.prompt,
+      // Only the automation's own prompt hands servers its owner switched off, never the words an outsider wrote after it.
+      serverWords: automation.action.prompt,
       rememberChoice: false,
       automationId: automation.id,
       automationOrigin: handed.origin,

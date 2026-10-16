@@ -66,6 +66,11 @@ import { anthropicFastAccess } from "./account-keys.js";
  * started with no plan is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a plan's is.
+ * The MCP servers the words mention are handed to the agent's first turn
+ * whatever its switches say, but an automation's run is handed only those
+ * its automation's own prompt mentions, never those of the webhook body or
+ * the GitHub event its prompt carries after it, since whoever wrote those
+ * is not the agent's developer.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -114,6 +119,8 @@ export type StartAsk = StartPlace & {
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
+  /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise. */
+  readonly serverWords?: string | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -230,6 +237,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
   const words = brief.prompt ?? (ask.taskId === null ? undefined : ask.note);
+  // Note that an automation's run names its own prompt, because the words an outsider wrote beside it switch on nothing.
+  const serverWords = ask.serverWords ?? words;
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
   const reads =
@@ -253,8 +262,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       repository: landing.repository,
       disabledServers: ask.disabledServers,
-      // The servers the prompt or the note mentions are its first turn's, whatever the switches say.
-      mentionedServers: words === undefined ? [] : mentionedServers(words, landing.repository),
+      // The servers those words mention are its first turn's, whatever the switches say.
+      mentionedServers:
+        serverWords === undefined ? [] : mentionedServers(serverWords, landing.repository),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
