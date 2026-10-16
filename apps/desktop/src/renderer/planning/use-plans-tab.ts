@@ -1,4 +1,5 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
@@ -272,7 +273,11 @@ export const AUTOMATIONS_PAGE = {
 
 export type AutomationsPlace =
   | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
-  | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.NEW;
+      /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
+      readonly preset?: AutomationPresetName;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.EDIT;
       readonly automationId: string;

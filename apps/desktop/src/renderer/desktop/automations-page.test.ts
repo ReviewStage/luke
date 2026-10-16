@@ -2065,14 +2065,55 @@ test("an automation whose task opens with no code review settings shows no Code 
   assert.ok(!cards(page).includes("Code review"));
 });
 
-test("a new automation started from Code review is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+/** The suggestion named, under the list. */
+function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
+  const found = [
+    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-row-open"),
+  ].find((each) => each.querySelector(".automation-row-name")?.textContent === name);
+  assert.ok(found, `no suggestion ${name}`);
+  return found;
+}
+
+test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
+  standing = [];
+  const empty = mount();
+  await settle();
+  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.ok(suggestion(empty, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  standing = [DIGEST, SWEEP, FAILING];
+  const full = mount();
+  await settle();
+  assert.equal(rows(full).length, 3);
+  assert.ok(suggestion(full, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const blank = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.deepEqual(cards(blank).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
+  assert.equal(
+    blank.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "",
+  );
+});
+
+test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
-  // Note that the press fills the draft in at once, so a Create pressed straight after it saves the review.
-  // Note that the owner is chosen first, as Dean asked, and the preset is offered under it.
-  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Start from", "Trigger"]);
-  act(() => button("Start from Code review").click());
+  act(() => suggestion(page, "Code review").click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
+  // Note that the page opens filled in, so a Create pressed straight away saves the review.
+  // Note that the owner is chosen first, as Dean asked, then its trigger and its own settings.
+  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Trigger", "Code review"]);
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Code review",
+  );
   assert.equal(
     pickerDetail(page, "Type"),
     "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
