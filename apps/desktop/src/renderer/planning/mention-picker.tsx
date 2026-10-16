@@ -900,7 +900,7 @@ function kindsOf(
 }
 
 /**
- * The `@` list for an editor on a plan's page:its rows read from the
+ * The `@` list for an editor on a plan's page: its rows read from the
  * plan's words as they stand and the repository's paths, placed by the word
  * in `room`, and a pick handed to `onChoose` as the mention's node; a list
  * that never opens where there is no plan to offer.
