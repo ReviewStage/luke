@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { ActorRef } from "./actor-ref";
+import { MemberDirectory } from "./member-directory";
 import { githubPageOf, OpenPersonProvider } from "./person-door";
 
 /**
@@ -39,11 +40,14 @@ let root: Root | undefined;
 let opened: string[] = [];
 /** The name each page was opened with, where the place knew one. */
 let names: (string | undefined)[] = [];
+/** The workspace each page was opened in, where the place named one. */
+let workspaces: (string | undefined)[] = [];
 let github: string[] = [];
 
 beforeEach(() => {
   opened = [];
   names = [];
+  workspaces = [];
   github = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -69,9 +73,10 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
     ? createElement(
         OpenPersonProvider,
         {
-          value: (userId: string, name?: string) => {
+          value: (userId: string, name?: string, workspaceId?: string) => {
             opened.push(userId);
             names.push(name);
+            workspaces.push(workspaceId);
           },
         },
         element,
@@ -155,4 +160,18 @@ test("a place's own door wins over the person's, on the name and on the card ali
 
 test("a GitHub login with no App's suffix is a person's profile, even marked a bot", () => {
   assert.equal(githubPageOf("renovate", true), "https://github.com/renovate");
+});
+
+test("a person named inside a workspace's members opens in that workspace, an agent's own where its page stands in another", () => {
+  const view = draw(
+    createElement(MemberDirectory, {
+      workspace: { id: "workspace-acme" },
+      readerId: "user-sam",
+      children: createElement(ActorRef, { actor: DANA }),
+    }),
+  );
+
+  press(view.querySelector(".actor-ref"));
+
+  assert.deepEqual(workspaces, ["workspace-acme"]);
 });

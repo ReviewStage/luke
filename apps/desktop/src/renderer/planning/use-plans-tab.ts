@@ -219,7 +219,8 @@ interface PersonViewControl {
   readonly userId: string | undefined;
   /** The name the place that opened the page knew them by, which names someone the page finds nowhere else. */
   readonly name: string | undefined;
-  readonly onOpen: (userId: string, name?: string) => void;
+  /** Opens their page in `workspaceId`, the window listing it first where it lists another; in the listed workspace where none is named. */
+  readonly onOpen: (userId: string, name?: string, workspaceId?: string) => void;
   readonly onClose: () => void;
 }
 
@@ -236,7 +237,13 @@ const STAND_IN = {
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | { readonly kind: typeof STAND_IN.PERSON; readonly userId: string; readonly name?: string }
+  | {
+      readonly kind: typeof STAND_IN.PERSON;
+      readonly userId: string;
+      readonly name?: string;
+      /** The workspace the page is the person's in, which it gives way to another listed in its place. */
+      readonly workspaceId: string | undefined;
+    }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace };
 
@@ -864,6 +871,11 @@ export function usePlansTab(input: {
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
+  // A person's page is theirs in the workspace it opened in, so another listed in its
+  // place, chosen or fallen back to as the account's workspaces change, closes it.
+  if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
+    setStandIn(undefined);
+  }
   const sidebar = sidebarPlans(planning.plans);
   const listedSidebar = sidebarPlans(
     listedWorkspace === undefined
@@ -1146,8 +1158,6 @@ export function usePlansTab(input: {
     (workspaceId: string) => {
       navigations.current += 1;
       const mine = navigations.current;
-      // A person's page is theirs in the workspace it was opened in, so it gives way to the one chosen.
-      setStandIn((held) => (held?.kind === STAND_IN.PERSON ? undefined : held));
       chooseListed(workspaceId);
       if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) return;
       const last = lastOpenIn.current.get(workspaceId);
@@ -2147,13 +2157,18 @@ export function usePlansTab(input: {
     personView: {
       userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
       name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
-      onOpen: guard((userId: string, name?: string) => {
+      onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
         setHistoryFor(undefined);
-        setStandIn(
-          name === undefined
-            ? { kind: STAND_IN.PERSON, userId }
-            : { kind: STAND_IN.PERSON, userId, name },
-        );
+        // Note that the workspace is listed first, because the page reads the listed workspace's work.
+        if (workspaceId !== undefined && workspaceId !== listedWorkspace?.id) {
+          switchWorkspace(workspaceId);
+        }
+        const opened = {
+          kind: STAND_IN.PERSON,
+          userId,
+          workspaceId: workspaceId ?? listedWorkspace?.id,
+        } as const;
+        setStandIn(name === undefined ? opened : { ...opened, name });
       }),
       onClose: guard(() => setStandIn(undefined)),
     },

@@ -2,6 +2,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createContext, useContext } from "react";
 import { useAct } from "./act";
+import { useMemberDirectory } from "./member-directory";
 
 /**
  * person-door.tsx -- where a press on a person goes: their page in the listed workspace, the page of someone who left, or a GitHub account's own page on GitHub.
@@ -19,8 +20,8 @@ import { useAct } from "./act";
  * opener, a person opens nothing either.
  */
 
-/** Opens a person's page by their account id, with the name the place knows them by. */
-type OpenPerson = (userId: string, name?: string) => void;
+/** Opens a person's page by their account id, with the name the place knows them by, in the workspace the place is in. */
+type OpenPerson = (userId: string, name?: string, workspaceId?: string) => void;
 
 const OpenPersonContext = createContext<OpenPerson | undefined>(undefined);
 
@@ -43,18 +44,20 @@ export function githubPageOf(login: string, bot: boolean): string {
 /** What a press on `actor` opens, where the window can open anything for them; nothing for the rest. */
 export function useActorDoor(actor: Actor): (() => void) | undefined {
   const openPerson = useContext(OpenPersonContext);
+  // Note that a person is opened in the workspace the place naming them reads its members of, an agent's own where its page stands in another.
+  const { workspaceId } = useMemberDirectory();
   const { tell } = useAct();
   if (openPerson === undefined) return undefined;
   switch (actor.kind) {
     case ACTOR_KIND.PERSON: {
       const { userId } = actor;
-      return () => openPerson(userId);
+      return () => openPerson(userId, undefined, workspaceId);
     }
     case ACTOR_KIND.SOMEONE: {
       // Note that someone who left is opened with the name the place knows them by, because their page may find them nowhere else.
       const { userId, name } = actor;
       if (actor.reason !== SOMEONE_REASON.FORMER || userId === undefined) return undefined;
-      return () => openPerson(userId, name);
+      return () => openPerson(userId, name, workspaceId);
     }
     case ACTOR_KIND.GITHUB: {
       const url = githubPageOf(actor.login, actor.bot);

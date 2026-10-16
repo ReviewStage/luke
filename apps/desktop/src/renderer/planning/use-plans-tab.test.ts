@@ -1014,6 +1014,21 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(tab.shownInboxes.at(-1), null);
 });
 
+test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().personView.onOpen("user-charles", "Charles Pan"));
+  const opened = tab.control().personView.userId;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const afterSwitch = tab.control().personView.userId;
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
+
+  assert.equal(opened, "user-charles");
+  assert.equal(afterSwitch, undefined);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads

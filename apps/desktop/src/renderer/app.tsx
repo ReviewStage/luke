@@ -605,10 +605,10 @@ export function App(): React.JSX.Element {
     movePlan: plans.onMovePlan,
   };
 
-  // A person pressed anywhere in the window opens their page on the Plans tab.
-  const openPerson = (userId: string, name?: string) => {
+  // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
+  const openPerson = (userId: string, name?: string, workspaceId?: string) => {
     changeTab(PANEL_TAB.PLANS);
-    plans.personView.onOpen(userId, name);
+    plans.personView.onOpen(userId, name, workspaceId);
   };
 
   return (

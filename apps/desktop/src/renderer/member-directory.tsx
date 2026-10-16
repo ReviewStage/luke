@@ -18,10 +18,12 @@ import { useAppState } from "./use-app-state";
  * while the members are unread, a person stands by the wire's name alone.
  */
 
-/** The members as read, and the reader's own account id. */
+/** The members as read, the reader's own account id, and the workspace they are the members of. */
 interface Directory {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** The workspace whose members these are, which a person named here is opened in. */
+  readonly workspaceId?: string | undefined;
 }
 
 const DirectoryContext = createContext<Directory>({ members: undefined, readerId: undefined });
@@ -38,7 +40,9 @@ export function MemberDirectory({
 }): React.JSX.Element {
   const members = useWorkspaceMembers(workspace);
   return (
-    <DirectoryContext.Provider value={{ members, readerId }}>{children}</DirectoryContext.Provider>
+    <DirectoryContext.Provider value={{ members, readerId, workspaceId: workspace?.id }}>
+      {children}
+    </DirectoryContext.Provider>
   );
 }
 
