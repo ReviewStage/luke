@@ -185,18 +185,20 @@ import {
   planningWorkspacePhotoAnswerSchema,
 } from "@luke/features/planning-view";
 import {
-  type PrRunCommandsAnswer,
   type PrRunLocation,
   type PrRunOutcome,
   type PrRunPullRequest,
-  type PrRunSetCommandParams,
   type PrRunStateEvent,
-  prRunCommandsAnswerSchema,
   prRunLocationSchema,
   prRunOutcomeSchema,
   prRunOutputEventSchema,
   prRunStateEventSchema,
 } from "@luke/features/pr-run-view";
+import {
+  type RepositoryRunSetRequest,
+  type RepositoryRunsAnswer,
+  repositoryRunsAnswerSchema,
+} from "@luke/features/repository-run-wire";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -598,10 +600,10 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
-  /** Every run command set on this Mac for the account signed in; none where the host could not answer. */
-  prRunCommands(): Effect.Effect<PrRunCommandsAnswer | undefined>;
-  /** One repository's run command set, or cleared with null; done or why not. */
-  prRunSetCommand(params: PrRunSetCommandParams): Effect.Effect<PrRunOutcome | undefined>;
+  /** The workspace's shared setup and run commands; none where the host could not answer. */
+  prRunCommands(params: { workspaceId: string }): Effect.Effect<RepositoryRunsAnswer | undefined>;
+  /** One repository's setup and run commands set for the workspace, or forgotten with both null; done or why not. */
+  prRunSetCommand(params: RepositoryRunSetRequest): Effect.Effect<PrRunOutcome | undefined>;
   /** A pull request run for the connection given, whose port already stands; done or why not. */
   prRunStart(
     params: PrRunPullRequest & { connectionId: string },
@@ -1711,17 +1713,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
         listener,
       ),
-    prRunCommands: () =>
+    prRunCommands: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PR_RUNS_COMMANDS),
-        terminalAnswer(prRunCommandsAnswerSchema),
+        client.call(GATEWAY_METHOD.PR_RUNS_COMMANDS, { workspaceId: params.workspaceId }),
+        terminalAnswer(repositoryRunsAnswerSchema),
       ),
     prRunSetCommand: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PR_RUNS_SET_COMMAND, {
           workspaceId: params.workspaceId,
           repository: params.repository,
-          command: params.command,
+          setupCommand: params.setupCommand,
+          runCommand: params.runCommand,
         }),
         terminalAnswer(prRunOutcomeSchema),
       ),

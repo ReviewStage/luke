@@ -6,6 +6,7 @@ import {
   HostedMacCommandClient,
   HostedPlanClient,
   HostedPrFetchClient,
+  HostedRepositoryRunClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
   type PlanActivityFrame,
@@ -50,6 +51,7 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { revokeInstallationToken } from "./pr-run-credential.js";
+import { freeLocalPort } from "./pr-run-process.js";
 import { createGatewayService } from "./service.js";
 import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
@@ -211,11 +213,15 @@ export const hostAssemblyLayer: Layer.Layer<
     const prRuns = yield* composePrRuns({
       kernel,
       account,
-      store: settings.store,
       client: new HostedPrFetchClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
+      runs: new HostedRepositoryRunClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      freePort: freeLocalPort,
       revoke: revokeInstallationToken,
       sourceUrl: (repository) => `https://github.com/${repository}.git`,
       ...(yield* prRunTools),

@@ -13,6 +13,7 @@ import {
   prRunOutputEventSchema,
   prRunStateEventSchema,
 } from "@luke/features/pr-run-view";
+import type { RepositoryRun } from "@luke/features/repository-run-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -46,6 +47,7 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 const ACCOUNT = "developer@luke.test";
 const PULL_REQUEST = { workspaceId: "ws_fixture", repository: "octocat/relay", number: 7 } as const;
 const TOKEN = "ghs_fixture_pull_request_token";
+const PORT = 43_210;
 
 const readState = readEither(prRunStateEventSchema);
 const readOutput = readEither(prRunOutputEventSchema);
@@ -65,7 +67,8 @@ function subject(options: { heads?: () => string | undefined } = {}) {
     const heard = yield* Queue.unbounded<Heard>();
     const asked: PrFetchRequest[] = [];
     const revoked: string[] = [];
-    const commands = new Map<string, Record<string, Record<string, string>>>();
+    // The workspace's shared commands, as the service keeps them.
+    let runs: RepositoryRun[] = [];
     let signedIn = true;
     const composer = yield* composePrRuns({
       kernel: {
@@ -80,18 +83,22 @@ function subject(options: { heads?: () => string | undefined } = {}) {
             ? { status: ACCOUNT_STATUS.SIGNED_IN, email: ACCOUNT, provider: "github" }
             : { status: ACCOUNT_STATUS.SIGNED_OUT },
       },
-      store: {
-        prRunCommandsOf: (accountEmail) => Effect.succeed(commands.get(accountEmail) ?? {}),
-        setPrRunCommand: (at, command) =>
+      runs: {
+        list: () => Effect.sync(() => runs),
+        set: (request) =>
           Effect.sync(() => {
-            const held = commands.get(at.accountEmail) ?? {};
-            const repositories = { ...held[at.workspaceId] };
-            if (command === undefined) delete repositories[at.repository.toLowerCase()];
-            else repositories[at.repository.toLowerCase()] = command;
-            commands.set(at.accountEmail, { ...held, [at.workspaceId]: repositories });
-            return true;
+            const { workspaceId: _workspace, ...run } = request;
+            runs = [
+              ...runs.filter((each) => each.repository !== run.repository.toLowerCase()),
+              {
+                ...run,
+                repository: run.repository.toLowerCase(),
+              },
+            ];
+            return runs;
           }),
       },
+      freePort: Effect.succeed(PORT),
       client: {
         fetch: (request) =>
           Effect.sync((): PrFetchOutcome => {
@@ -101,6 +108,7 @@ function subject(options: { heads?: () => string | undefined } = {}) {
               fixtureGit(origin.folder, ["rev-parse", `refs/pull/${request.prNumber}/head`]);
             return {
               headSha: head,
+              headRef: "fix-relay",
               token: Redacted.make(TOKEN),
               expiresAt: "2026-10-01T01:00:00Z",
             };
@@ -144,11 +152,12 @@ function subject(options: { heads?: () => string | undefined } = {}) {
           return [Buffer.from(Result.getOrThrow(Base64.decode(output.data))).toString("utf8")];
         })
         .join("");
-    const setCommand = (command: string | null) =>
+    const setCommand = (runCommand: string | null, setupCommand: string | null = null) =>
       call(GATEWAY_METHOD.PR_RUNS_SET_COMMAND, {
         workspaceId: PULL_REQUEST.workspaceId,
         repository: PULL_REQUEST.repository,
-        command,
+        setupCommand,
+        runCommand,
       });
     const start = (connectionId = "conn-1") =>
       call(GATEWAY_METHOD.PR_RUNS_START, { connectionId, ...PULL_REQUEST });
@@ -205,7 +214,7 @@ it.effect(
 
         assert.deepEqual(answered, {
           refused:
-            "Set a run command for octocat/relay in Settings, under Workspace › Repositories, then run it again.",
+            "octocat/relay has no run command yet. Fill it in under Settings › Workspace › Repositories, then run it again.",
         });
         assert.deepEqual(asked, []);
         assert.equal(existsSync(checkout), false);
@@ -450,4 +459,53 @@ it.effect(
         assert.doesNotMatch(printed("conn-1"), /after/u);
       }),
     ).pipe(Effect.provide(machine)),
+);
+
+it.effect(
+  "setup runs before the run command on a pull request's first Run, and again only when a lockfile changes; the run is handed its port",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { setCommand, start, until, printed, origin, checkout } = yield* subject();
+        yield* setCommand('echo "run on $LUKE_PORT"', "echo set-up >> ../setups");
+
+        yield* start();
+        const first = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
+        yield* start();
+        yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
+        origin.pointPullRequest(
+          PULL_REQUEST.number,
+          origin.commit({ "pnpm-lock.yaml": "lock: 2\n" }),
+        );
+        yield* start();
+        yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
+
+        assert.equal(first.phase, PR_RUN_PHASE.SUCCESS);
+        assert.match(printed(), new RegExp(`run on ${PORT}`, "u"));
+        assert.equal(
+          readFileSync(path.join(path.dirname(checkout), "setups"), "utf8"),
+          "set-up\nset-up\n",
+        );
+      }),
+    ).pipe(Effect.provide(machine)),
+);
+
+it.effect("a setup that fails ends the run before its command, and runs again next time", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { setCommand, start, until, checkout } = yield* subject();
+      yield* setCommand("touch ran", "exit 2");
+
+      yield* start();
+      const ended = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
+      yield* setCommand("touch ran", "true");
+      yield* start();
+      const again = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE]);
+
+      assert.equal(ended.phase, PR_RUN_PHASE.FAILURE);
+      assert.match(ended.message ?? "", /Setup exited 2/u);
+      assert.equal(again.phase, PR_RUN_PHASE.SUCCESS);
+      assert.equal(existsSync(path.join(checkout, "ran")), true);
+    }),
+  ).pipe(Effect.provide(machine)),
 );

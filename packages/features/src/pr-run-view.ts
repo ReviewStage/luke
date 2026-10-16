@@ -7,9 +7,8 @@ import { TERMINAL_FLOW } from "./terminal-view.js";
 /**
  * pr-run-view.ts -- running a pull request on this Mac: the repository's run command, a run's phases, and the port its output reaches the one panel on.
  *
- * A repository's run command is set in Settings on this Mac, kept for the
- * account signed in, by workspace and repository, and never by the pull
- * request itself. A run is asked of the panel that draws it: main mints a
+ * A repository's setup and run commands are the workspace's, shared by every
+ * member (`repository-run-wire.ts`), and never the pull request's. A run is asked of the panel that draws it: main mints a
  * connection for that panel and that pull request, posts the panel a port,
  * and the host fetches the pull request's newest head into Luke's own
  * checkout of it, runs the command there, and hands up what it prints as
@@ -20,9 +19,8 @@ import { TERMINAL_FLOW } from "./terminal-view.js";
  * and carries nothing of the token the host fetches with.
  */
 
-/** The most characters a run command may hold. */
+/** The bounds of what a run says. */
 export const PR_RUN_BOUNDS = {
-  MAX_COMMAND_CHARS: 4_096,
   /** The most characters a run's sentence about where it stands carries. */
   MAX_MESSAGE_CHARS: 2_000,
 } as const;
@@ -53,17 +51,6 @@ const connectionId = EffectSchema.String.check(
   EffectSchema.isMaxLength(64),
 );
 
-const runCommand = EffectSchema.String.check(
-  EffectSchema.isMinLength(1),
-  EffectSchema.isMaxLength(PR_RUN_BOUNDS.MAX_COMMAND_CHARS),
-);
-
-/** A repository of a workspace, which a run command is kept for. */
-const prRunRepositorySchema = EffectSchema.Struct({
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-});
-
 /** One pull request of a workspace's repository, which a run, its checkout, and its tab are named by. */
 export const prRunPullRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
@@ -73,22 +60,8 @@ export const prRunPullRequestSchema = EffectSchema.Struct({
 
 export type PrRunPullRequest = typeof prRunPullRequestSchema.Type;
 
-/** A repository's run command set, or cleared with null. */
-export const prRunSetCommandParamsSchema = EffectSchema.Struct({
-  ...prRunRepositorySchema.fields,
-  command: EffectSchema.NullOr(runCommand),
-});
-
-export type PrRunSetCommandParams = typeof prRunSetCommandParamsSchema.Type;
-
-/** Every run command set on this Mac for the account signed in. */
-export const prRunCommandsAnswerSchema = EffectSchema.Struct({
-  commands: EffectSchema.Array(
-    EffectSchema.Struct({ ...prRunRepositorySchema.fields, command: runCommand }),
-  ),
-});
-
-export type PrRunCommandsAnswer = typeof prRunCommandsAnswerSchema.Type;
+/** Reading a workspace's shared run commands names the workspace. */
+export const prRunWorkspaceParamsSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
 /** Where a run stands, as its tab draws it. */
 const prRunStateSchema = EffectSchema.Struct({

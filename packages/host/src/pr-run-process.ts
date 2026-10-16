@@ -1,3 +1,4 @@
+import { createServer } from "node:net";
 import { Duration, Effect, Fiber, Option, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
@@ -29,13 +30,20 @@ export interface RunShell {
   readonly path: string;
 }
 
-/** What the command's environment adds to the app's own: nothing that pages, git asking nothing, and where the checkout is. */
-function commandEnvironment(folder: string) {
+/**
+ * What the command's environment adds to the app's own: nothing that pages,
+ * git asking nothing, colour kept though the output is a pipe (the tab draws
+ * it on a terminal), where the checkout is, and whatever the caller adds.
+ */
+function commandEnvironment(folder: string, added: Readonly<Record<string, string>>) {
   return {
     PAGER: "cat",
     GIT_PAGER: "cat",
     GIT_TERMINAL_PROMPT: "0",
+    FORCE_COLOR: "1",
+    CLICOLOR_FORCE: "1",
     LUKE_PR_CHECKOUT: folder,
+    ...added,
   };
 }
 
@@ -45,12 +53,13 @@ export function runPullRequestCommand(
   folder: string,
   command: string,
   write: (bytes: Uint8Array) => Effect.Effect<void>,
+  environment: Readonly<Record<string, string>> = {},
 ): Effect.Effect<number | null, unknown, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(shell.path, ["-l", "-c", command], {
         cwd: folder,
-        env: commandEnvironment(folder),
+        env: commandEnvironment(folder, environment),
         extendEnv: true,
         stdin: "ignore",
         forceKillAfter: PR_RUN_PROCESS.KILL_GRACE,
@@ -63,3 +72,17 @@ export function runPullRequestCommand(
     }),
   );
 }
+
+/** The port a run is handed when the Mac finds none free, which a run command may still bind or not. */
+const FALLBACK_PORT = 3000;
+
+/** A port no process on this Mac holds now, asked of the system by listening on port 0 and letting it go. */
+export const freeLocalPort: Effect.Effect<number> = Effect.callback<number>((resume) => {
+  const server = createServer();
+  server.once("error", () => resume(Effect.succeed(FALLBACK_PORT)));
+  server.listen(0, "127.0.0.1", () => {
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : FALLBACK_PORT;
+    server.close(() => resume(Effect.succeed(port)));
+  });
+});

@@ -48,7 +48,6 @@ const SETTINGS_FIELD = {
   ACCOUNT: "account",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   EXPERIMENTS: "experiments",
-  PR_RUN_COMMANDS: "prRunCommands",
   VERSION: "version",
 } as const;
 
@@ -299,80 +298,6 @@ function storedExperiments(value: UnparsedWireValue): PersistedExperiments | und
 }
 
 /**
- * The commands this Mac runs a pull request with, by the account they were
- * set under, then workspace, then repository as GitHub spells it, lowercased:
- * each account keeps its own, so a sign-in as another account neither sees
- * nor erases them. They are this Mac's alone, never an account preference
- * synced to the service, and never in the snapshot every window is sent.
- */
-type PrRunCommands = Readonly<
-  Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
->;
-
-/** The most characters a stored run command may hold; a longer one is no command. */
-const MAX_PR_RUN_COMMAND_CHARS = 4_096;
-
-/** The record's own string entries that pass the reader given, every other entry dropped. */
-function ownEntries<Value>(
-  value: UnparsedWireValue,
-  read: (entry: UnparsedWireValue) => Value | undefined,
-): Record<string, Value> | undefined {
-  const held = readWireRecord(value);
-  if (!held) return undefined;
-  const kept: [string, Value][] = [];
-  for (const [key, entry] of Object.entries(held)) {
-    const read_ = read(entry);
-    if (key !== "" && read_ !== undefined) kept.push([key, read_]);
-  }
-  return kept.length === 0 ? undefined : Object.fromEntries(kept);
-}
-
-function storedPrRunCommands(value: UnparsedWireValue): PrRunCommands | undefined {
-  const command = (entry: UnparsedWireValue) =>
-    isWireString(entry) && entry.trim() !== "" && entry.length <= MAX_PR_RUN_COMMAND_CHARS
-      ? entry
-      : undefined;
-  return ownEntries(value, (account) =>
-    ownEntries(account, (workspace) => ownEntries(workspace, command)),
-  );
-}
-
-/** The entry an own key holds, never one the prototype lends. */
-function ownEntry<Value>(record: Readonly<Record<string, Value>> | undefined, key: string) {
-  return record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
-}
-
-/** The commands with one set or cleared, a level left empty dropped. */
-function withPrRunCommand(
-  commands: PrRunCommands | undefined,
-  path: {
-    readonly accountEmail: string;
-    readonly workspaceId: string;
-    readonly repository: string;
-  },
-  command: string | undefined,
-): PrRunCommands | undefined {
-  const account = ownEntry(commands, path.accountEmail);
-  const workspace = ownEntry(account, path.workspaceId);
-  const { [path.repository]: _cleared, ...otherRepositories } = workspace ?? {};
-  const repositories =
-    command === undefined
-      ? otherRepositories
-      : { ...otherRepositories, [path.repository]: command };
-  const { [path.workspaceId]: _workspace, ...otherWorkspaces } = account ?? {};
-  const workspaces =
-    Object.keys(repositories).length === 0
-      ? otherWorkspaces
-      : { ...otherWorkspaces, [path.workspaceId]: repositories };
-  const { [path.accountEmail]: _account, ...otherAccounts } = commands ?? {};
-  const accounts =
-    Object.keys(workspaces).length === 0
-      ? otherAccounts
-      : { ...otherAccounts, [path.accountEmail]: workspaces };
-  return Object.keys(accounts).length === 0 ? undefined : accounts;
-}
-
-/**
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
@@ -389,7 +314,6 @@ const PersistedSettingsSchema = Schema.Struct({
     settingsField(storedAccountPreferencesSync),
   ),
   [SETTINGS_FIELD.EXPERIMENTS]: Schema.optionalKey(settingsField(storedExperiments)),
-  [SETTINGS_FIELD.PR_RUN_COMMANDS]: Schema.optionalKey(settingsField(storedPrRunCommands)),
   ...storedSettingFields,
 });
 
@@ -421,10 +345,9 @@ const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(Acc
  * another account would let that account's edits stand in for this one's.
  */
 function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
-  const { account, accountPreferencesSync, experiments, prRunCommands, ...settings } = persisted;
+  const { account, accountPreferencesSync, experiments, ...settings } = persisted;
   return {
     ...settings,
-    ...(prRunCommands ? { prRunCommands } : undefined),
     ...(account ? { account } : undefined),
     ...(account && accountPreferencesSync?.accountEmail === account.email
       ? { accountPreferencesSync }
@@ -650,44 +573,6 @@ export class SettingsStore {
         return { ...persisted, experiments: { accountEmail, choices } };
       });
       return changed;
-    });
-  }
-
-  /** The run commands set on this Mac under the account named, by workspace and then repository, lowercased. */
-  prRunCommandsOf(
-    accountEmail: string,
-  ): Effect.Effect<Readonly<Record<string, Readonly<Record<string, string>>>>, PlatformError> {
-    return Effect.map(
-      this.#load(),
-      (persisted) => ownEntry(persisted.prRunCommands, accountEmail) ?? {},
-    );
-  }
-
-  /**
-   * Sets, or with none clears, the command this Mac runs a repository's pull
-   * requests with, under the account named, answering whether it was kept.
-   * One for an account no longer signed in is dropped, since it is no choice
-   * of the account that is.
-   */
-  setPrRunCommand(
-    path: {
-      readonly accountEmail: string;
-      readonly workspaceId: string;
-      readonly repository: string;
-    },
-    command: string | undefined,
-  ): Effect.Effect<boolean, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      let kept = false;
-      const keyed = { ...path, repository: path.repository.toLowerCase() };
-      yield* this.#mutate((persisted) => {
-        if (persisted.account?.email !== path.accountEmail) return undefined;
-        kept = true;
-        const next = withPrRunCommand(persisted.prRunCommands, keyed, command);
-        const { prRunCommands: _held, ...rest } = persisted;
-        return next === undefined ? rest : { ...rest, prRunCommands: next };
-      });
-      return kept;
     });
   }
 

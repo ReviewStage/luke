@@ -5,22 +5,27 @@ import {
   PR_RUN_BOUNDS,
   PR_RUN_FLOW,
   PR_RUN_PHASE,
-  type PrRunCommandsAnswer,
   type PrRunOutcome,
   type PrRunPullRequest,
   type PrRunState,
   prRunAckParamsSchema,
   prRunConnectionParamsSchema,
   prRunPullRequestSchema,
-  prRunSetCommandParamsSchema,
   prRunStartParamsSchema,
+  prRunWorkspaceParamsSchema,
 } from "@luke/features/pr-run-view";
+import {
+  type RepositoryRun,
+  type RepositoryRunSetRequest,
+  repositoryRunSetRequestSchema,
+} from "@luke/features/repository-run-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
+  RefusedRefusal,
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -50,17 +55,18 @@ import {
   type CheckoutPlace,
   type CheckoutStep,
   checkoutPlace,
+  type FetchedHead,
   type FetchInto,
   fetchPullRequestHead,
   type GitTool,
   locateCheckout,
+  markSetUp,
   refreshCheckout,
   removeCheckout,
 } from "./pr-run-checkout.js";
 import { type CredentialHelperRuntime, servedCredential } from "./pr-run-credential.js";
 import { type RunShell, runPullRequestCommand } from "./pr-run-process.js";
 import type { RunMode } from "./run-mode.js";
-import type { SettingsStore } from "./settings-store.js";
 
 /**
  * compose-pr-runs.ts -- a pull request run on this Mac: fetched into Luke's own checkout of it, its repository's run command run from that checkout's root, and what it prints handed to the one panel that asked.
@@ -137,11 +143,24 @@ interface PrFetchClient {
   fetch(request: PrFetchRequest): Effect.Effect<PrFetchOutcome, never, HttpClient.HttpClient>;
 }
 
+/** The workspace's shared setup and run commands, as this concern asks for them. */
+interface RepositoryRunClient {
+  list(
+    workspaceId: string,
+  ): Effect.Effect<readonly RepositoryRun[] | undefined, never, HttpClient.HttpClient>;
+  set(
+    request: RepositoryRunSetRequest,
+  ): Effect.Effect<readonly RepositoryRun[] | undefined, never, HttpClient.HttpClient>;
+}
+
 export interface PrRunsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive" | "snapshot">;
-  store: Pick<SettingsStore, "prRunCommandsOf" | "setPrRunCommand">;
   client: PrFetchClient;
+  /** The workspace's shared setup and run commands. */
+  runs: RepositoryRunClient;
+  /** A port no other process holds now, handed to a run as `LUKE_PORT`. */
+  freePort: Effect.Effect<number>;
   /** The token given up once its fetch is done; best effort, never failing. */
   revoke: (token: Redacted.Redacted<string>) => Effect.Effect<void>;
   /** Where a repository is fetched from: GitHub's HTTPS address for it. */
@@ -220,7 +239,8 @@ function composed(
   fibers: FiberMap.FiberMap<string>,
   services: Context.Context<ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem>,
 ): PrRunsComposer {
-  const { kernel, account, store, client, revoke, sourceUrl, git, shell, helper } = dependencies;
+  const { kernel, account, client, runs, freePort, revoke, sourceUrl, git, shell, helper } =
+    dependencies;
   /** Every pull request's slot, by workspace, then repository lowercased, then number. */
   const slots = new Map<string, Map<string, Map<number, Slot>>>();
   /** The slot each standing connection views. */
@@ -290,7 +310,7 @@ function composed(
   /** The pull request's head fetched into a repository folder on a token the service minted for it, asked again where the head moved meanwhile. */
   const fetchInto =
     (pullRequest: PrRunPullRequest, owner: string): FetchInto =>
-    (repositoryFolder) =>
+    (clone) =>
       Effect.gen(function* () {
         for (let attempt = 0; attempt < MAX_HEAD_ATTEMPTS; attempt += 1) {
           const grant = yield* Effect.provide(
@@ -307,18 +327,18 @@ function composed(
             yield* revoke(grant.token);
             return { refused: "The account signed in changed while the pull request was fetched." };
           }
-          const fetched: CheckoutStep<string> = yield* Effect.scoped(
+          const fetched: CheckoutStep<FetchedHead> = yield* Effect.scoped(
             Effect.gen(function* () {
               const configArgs = yield* servedCredential(
                 helper,
                 pullRequest.repository,
                 grant.token,
               );
-              return yield* fetchPullRequestHead(git, repositoryFolder, {
+              const head = yield* fetchPullRequestHead(git, clone, pullRequest.number, {
                 url: sourceUrl(pullRequest.repository),
-                ref: `refs/pull/${pullRequest.number}/head`,
                 configArgs,
               });
+              return "refused" in head ? head : { ok: { sha: head.ok, headRef: grant.headRef } };
             }),
           ).pipe(
             Effect.catch(() =>
@@ -326,43 +346,84 @@ function composed(
             ),
             Effect.ensuring(revoke(grant.token)),
           );
-          if ("refused" in fetched || fetched.ok === grant.headSha) return fetched;
+          if ("refused" in fetched || fetched.ok.sha === grant.headSha) return fetched;
         }
         return {
           refused: `${named(pullRequest)} kept moving while Luke fetched it. Run it again in a moment.`,
         };
       }).pipe(Effect.provideContext(services));
 
-  /** One run's whole life: the checkout refreshed, the command run, and how it ended said. */
-  const run = (slot: Slot, runId: string, command: string, owner: string, place: CheckoutPlace) =>
+  /** A command run in the checkout, its output to the tab; answers its status, or nothing where it could not start. */
+  const runIn = (slot: Slot, runId: string, folder: string, command: string, port: number) =>
+    Effect.map(
+      Effect.exit(
+        runPullRequestCommand(shell, folder, command, write(slot, runId), {
+          LUKE_PORT: String(port),
+        }),
+      ),
+      (ended) => (Exit.isSuccess(ended) ? { exitCode: ended.value } : undefined),
+    );
+
+  /**
+   * One run's whole life: the checkout refreshed, its setup run where it
+   * needs it, the run command run on a port of its own, and how it ended
+   * said. Note that a setup that fails ends the run, and is run again next
+   * time, since only a setup that finished is marked.
+   */
+  const run = (
+    slot: Slot,
+    runId: string,
+    commands: { readonly setup: string | null; readonly run: string },
+    owner: string,
+    place: CheckoutPlace,
+  ) =>
     Effect.gen(function* () {
       yield* tell(slot, {
         phase: PR_RUN_PHASE.PREPARING,
         message: "Fetching the pull request's newest commit…",
       });
-      const prepared = yield* refreshCheckout(git, place, fetchInto(slot.pullRequest, owner));
+      const prepared = yield* refreshCheckout(
+        git,
+        place,
+        slot.pullRequest.repository,
+        fetchInto(slot.pullRequest, owner),
+      );
       if ("refused" in prepared) {
         return yield* tell(slot, { phase: PR_RUN_PHASE.FAILURE, message: prepared.refused });
       }
       if (accountEmail() !== owner) {
         return yield* tell(slot, { phase: PR_RUN_PHASE.STOPPED });
       }
-      yield* tell(slot, { phase: PR_RUN_PHASE.RUNNING, sha: prepared.ok });
-      const ended = yield* Effect.exit(
-        runPullRequestCommand(shell, place.folder, command, write(slot, runId)),
-      );
-      if (Exit.isFailure(ended)) {
+      const { sha } = prepared.ok;
+      const port = yield* freePort;
+      if (prepared.ok.setupNeeded && commands.setup !== null) {
+        yield* tell(slot, { phase: PR_RUN_PHASE.PREPARING, sha, message: "Running setup…" });
+        const setUp = yield* runIn(slot, runId, place.folder, commands.setup, port);
+        if (setUp === undefined || setUp.exitCode !== 0) {
+          return yield* tell(slot, {
+            phase: PR_RUN_PHASE.FAILURE,
+            sha,
+            message:
+              setUp === undefined
+                ? "Luke could not start the setup command."
+                : `Setup exited ${setUp.exitCode ?? "on a signal"}, so the run command did not start.`,
+          });
+        }
+      }
+      if (prepared.ok.setupNeeded) yield* markSetUp(git, place, sha);
+      yield* tell(slot, { phase: PR_RUN_PHASE.RUNNING, sha, message: `LUKE_PORT=${port}` });
+      const ended = yield* runIn(slot, runId, place.folder, commands.run, port);
+      if (ended === undefined) {
         return yield* tell(slot, {
           phase: PR_RUN_PHASE.FAILURE,
-          sha: prepared.ok,
+          sha,
           message: "Luke could not start the run command.",
         });
       }
-      const exitCode = ended.value;
       yield* tell(slot, {
-        phase: exitCode === 0 ? PR_RUN_PHASE.SUCCESS : PR_RUN_PHASE.FAILURE,
-        sha: prepared.ok,
-        ...(exitCode === null ? undefined : { exitCode }),
+        phase: ended.exitCode === 0 ? PR_RUN_PHASE.SUCCESS : PR_RUN_PHASE.FAILURE,
+        sha,
+        ...(ended.exitCode === null ? undefined : { exitCode: ended.exitCode }),
       });
     }).pipe(
       Effect.onInterrupt(() => tell(slot, { phase: PR_RUN_PHASE.STOPPED })),
@@ -392,23 +453,27 @@ function composed(
       byConnection.set(connectionId, slot);
     });
 
-  /** The run command set for the pull request's repository under the account, or none. */
-  const commandFor = (owner: string, pullRequest: PrRunPullRequest) =>
-    Effect.map(
-      Effect.orElseSucceed(
-        store.prRunCommandsOf(owner),
-        (): Readonly<Record<string, Readonly<Record<string, string>>>> => ({}),
-      ),
-      (byWorkspace) => {
-        const repositories = Object.hasOwn(byWorkspace, pullRequest.workspaceId)
-          ? byWorkspace[pullRequest.workspaceId]
-          : undefined;
-        const key = pullRequest.repository.toLowerCase();
-        return repositories !== undefined && Object.hasOwn(repositories, key)
-          ? repositories[key]
-          : undefined;
-      },
-    );
+  /** The workspace's shared commands, read from the service as asked; nothing where it did not answer. */
+  const listed = (workspaceId: string) =>
+    Effect.provide(runs.list(workspaceId), FetchHttpClient.layer);
+
+  /** The pull request's repository's shared commands, read afresh for each run; why there are none otherwise. */
+  const commandsFor = (pullRequest: PrRunPullRequest) =>
+    Effect.map(listed(pullRequest.workspaceId), (all) => {
+      if (all === undefined) {
+        return {
+          refused: "Luke could not read this workspace's run commands. Run it again in a moment.",
+        };
+      }
+      const key = pullRequest.repository.toLowerCase();
+      const found = all.find((each) => each.repository.toLowerCase() === key);
+      if (found?.runCommand == null) {
+        return {
+          refused: `${pullRequest.repository} has no run command yet. Fill it in under Settings › Workspace › Repositories, then run it again.`,
+        };
+      }
+      return { setup: found.setupCommand, run: found.runCommand };
+    });
 
   /** A run started for the connection, or joined where one is still preparing; refused in words where it cannot start. */
   const start = (connectionId: string, pullRequest: PrRunPullRequest) =>
@@ -417,12 +482,8 @@ function composed(
       if (!gate() || owner === undefined) {
         return { refused: "Sign in to run a pull request on this Mac." } satisfies PrRunOutcome;
       }
-      const command = yield* commandFor(owner, pullRequest);
-      if (command === undefined) {
-        return {
-          refused: `Set a run command for ${pullRequest.repository} in Settings, under Workspace › Repositories, then run it again.`,
-        } satisfies PrRunOutcome;
-      }
+      const commands = yield* commandsFor(pullRequest);
+      if ("refused" in commands) return { refused: commands.refused } satisfies PrRunOutcome;
       const place = checkoutPlace(kernel.stateRoot, { ...pullRequest, accountEmail: owner });
       if (place === undefined) {
         return {
@@ -445,7 +506,7 @@ function composed(
           const runId = `run-${runsStarted}`;
           slot.runId = runId;
           slot.phase = PR_RUN_PHASE.PREPARING;
-          yield* FiberMap.run(fibers, runId, run(slot, runId, command, owner, place));
+          yield* FiberMap.run(fibers, runId, run(slot, runId, commands, owner, place));
           return { done: true } satisfies PrRunOutcome;
         }),
       );
@@ -470,41 +531,35 @@ function composed(
   };
 
   const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.PR_RUNS_COMMANDS]: () =>
+    [GATEWAY_METHOD.PR_RUNS_COMMANDS]: (params) =>
       Effect.gen(function* () {
-        const owner = accountEmail();
-        const commands: PrRunCommandsAnswer["commands"][number][] = [];
-        if (owner === undefined) return carried({ commands });
-        const byWorkspace = yield* Effect.orElseSucceed(store.prRunCommandsOf(owner), () => ({}));
-        for (const [workspaceId, repositories] of Object.entries(byWorkspace)) {
-          for (const [repository, command] of Object.entries(repositories)) {
-            commands.push({ workspaceId, repository, command });
-          }
+        const { workspaceId } = yield* read(
+          prRunWorkspaceParamsSchema,
+          params,
+          "reading run commands names the workspace",
+        );
+        if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
+        const all = yield* listed(workspaceId);
+        if (all === undefined) {
+          return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
         }
-        return carried({ commands } satisfies PrRunCommandsAnswer);
+        return carried({ runs: all });
       }),
     [GATEWAY_METHOD.PR_RUNS_SET_COMMAND]: (params) =>
       Effect.gen(function* () {
         const asked = yield* read(
-          prRunSetCommandParamsSchema,
+          repositoryRunSetRequestSchema,
           params,
-          "a run command names its workspace, its repository, and the command or null",
+          "run commands name their workspace, their repository, and each command or null",
         );
-        const owner = accountEmail();
-        if (owner === undefined) {
-          return carried({ refused: "Sign in to set a run command." } satisfies PrRunOutcome);
+        if (!gate()) {
+          return carried({ refused: "Sign in to set run commands." } satisfies PrRunOutcome);
         }
-        const command = asked.command?.trim() || undefined;
-        const kept = yield* Effect.orElseSucceed(
-          store.setPrRunCommand(
-            { accountEmail: owner, workspaceId: asked.workspaceId, repository: asked.repository },
-            command,
-          ),
-          () => false,
-        );
-        const outcome: PrRunOutcome = kept
-          ? { done: true }
-          : { refused: "Luke could not save the run command." };
+        const saved = yield* Effect.provide(runs.set(asked), FetchHttpClient.layer);
+        const outcome: PrRunOutcome =
+          saved === undefined
+            ? { refused: "Luke could not save the repository's commands. Try again in a moment." }
+            : { done: true };
         return carried(outcome);
       }),
     [GATEWAY_METHOD.PR_RUNS_START]: (params) =>
@@ -622,7 +677,7 @@ function composed(
             if (slot.runId !== undefined) {
               return { refused: "Stop the run before deleting its local checkout." };
             }
-            const removed = yield* removeCheckout(place);
+            const removed = yield* removeCheckout(git, place).pipe(Effect.provideContext(services));
             return removed
               ? { done: true as const }
               : {

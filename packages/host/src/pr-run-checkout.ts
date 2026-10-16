@@ -1,4 +1,4 @@
-import { lstat, mkdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
@@ -6,52 +6,70 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 /**
  * pr-run-checkout.ts -- Luke's own checkout of one pull request on this Mac: where it lives, whether it may be refreshed, and the refresh.
  *
- * Every pull request run on this Mac has one folder of its own, under
- * `<state root>/pr-runs/<account>/<workspace>/<owner>/<name>/pr-<number>`,
- * each segment held to a shape that cannot climb out of it; nothing else on
- * the Mac is touched, the developer's own working trees least of all. The
- * folder is a real Git repository, so a run command may use Git, kept from
- * run to run so what the command installed is there next time.
+ * Every repository has one clone of Luke's own, a bare repository at
+ * `<state root>/pr-runs/<account>/<workspace>/<owner>/<name>/repository.git`
+ * whose `origin` is the repository's GitHub address, with no credential in
+ * it; every pull request run from it is a worktree beside it, `pr-<number>`,
+ * on a branch named for the pull request's head branch whose upstream is
+ * `refs/pull/<number>/head`, so Git and `gh` read it as the pull request's
+ * own checkout. Each segment is held to a shape that cannot climb out of
+ * the folder, and nothing else on the Mac is touched, the developer's own
+ * working trees least of all. A worktree is kept from run to run, so what
+ * setup installed there is there next time.
  *
  * A refresh never discards anything the developer or a run left. A folder
- * Luke did not make, a checkout moved off the commit Luke last put there (a
- * commit made in it, a branch checked out), and one with edits to tracked
- * files are refused before anything is fetched; a newest commit that adds a
- * file the checkout already holds untracked or ignored is refused before
- * anything is checked out; and Git's own checkout, never forced, refuses
+ * Luke did not make, a worktree moved off the commit Luke last put there (a
+ * commit made in it, another branch checked out), and one with edits to
+ * tracked files are refused before anything is fetched; a newest commit that
+ * adds a file the worktree already holds untracked or ignored is refused
+ * before anything is checked out; and Git's own `reset --keep` refuses
  * whatever else it would overwrite. Each refusal says to delete the local
- * checkout to start over. The first checkout of a pull request is built in a
- * sibling staging folder and renamed into place only once whole, so a fetch
- * that fails, or a run stopped while it prepares, leaves no half-made
- * checkout behind; a later refresh fetches into the checkout's own object
- * store, which moves no file, and the checkout of the fetched commit is the
- * one step that is never interrupted.
+ * checkout to start over. A fetch goes into the clone's object store, which
+ * moves no file, and the step that moves the worktree is never interrupted.
  *
- * Every Git this module runs is told exactly which repository it works on
- * and reads no system or global configuration, no hooks, no credential
- * helper but the one a fetch is handed, and no file-system monitor, so
- * nothing configured elsewhere on the Mac runs in it or sees what it fetches
- * with. Submodules are not fetched and Git LFS content is not smudged: a
- * checkout holds the repository's own files and LFS pointer files.
+ * Whether the run needs its setup is answered beside the commit: a worktree
+ * never set up needs it, and one set up before needs it again only where
+ * the newest commit changes a lockfile or a package manifest since.
+ *
+ * Every Git this module runs reads no system or global configuration, no
+ * hooks, no credential helper but the one a fetch is handed, and no
+ * file-system monitor, so nothing configured elsewhere on the Mac runs in it
+ * or sees what it fetches with. Submodules are not fetched and Git LFS
+ * content is not smudged: a checkout holds the repository's own files and
+ * LFS pointer files.
  */
 
 /** The folder under the state root that every pull request's checkout lives in. */
 export const PR_RUNS_FOLDER = "pr-runs";
 
-/** The ref a checkout's last fetched head is kept under, and the one naming the commit Luke last checked out. */
-const LUKE_REF = {
-  FETCHED: "refs/luke/fetched",
-  HEAD: "refs/luke/head",
-} as const;
-
-/** The suffix of the sibling folder a first checkout is built in. */
-const STAGING_SUFFIX = ".staging";
+/** The clone's own folder beside the worktrees. */
+const CLONE_FOLDER = "repository.git";
 
 /** The most of a Git's output a step keeps, which is far past anything this module reads. */
 const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 /** The most colliding file names a refusal lists. */
 const MAX_LISTED_COLLISIONS = 5;
+
+/** The files whose change means a checkout's setup is run again: lockfiles and the manifests they follow. */
+const SETUP_FILES = new Set([
+  "package.json",
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lockb",
+  "bun.lock",
+  "Gemfile.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Pipfile.lock",
+  "requirements.txt",
+  "Cargo.lock",
+  "go.sum",
+  "composer.lock",
+  "mix.lock",
+  "Podfile.lock",
+]);
 
 /** The shapes a checkout folder's segments are held to: none may be empty, `.`, `..`, or hold a separator. */
 const SEGMENT = {
@@ -71,10 +89,12 @@ export interface CheckoutOwner {
   readonly number: number;
 }
 
-/** Where a pull request's checkout lives: the folder every checkout lives under, and its own. */
+/** Where a pull request's checkout lives: the folder every checkout lives under, the repository's clone, and the pull request's worktree. */
 export interface CheckoutPlace {
   readonly root: string;
+  readonly clone: string;
   readonly folder: string;
+  readonly number: number;
 }
 
 /** The Git this module runs, and the environment it runs under in place of the app's own. */
@@ -104,10 +124,22 @@ export const CHECKOUT_REFUSAL = {
 /** A step's result: where it got to, or why it stopped, in the developer's words. */
 export type CheckoutStep<A> = { readonly ok: A } | { readonly refused: string };
 
-/** How a fetch into a repository folder came out: the commit fetched, or why there is none. */
+/** The pull request's head as a fetch found it: its commit, and its head branch's name. */
+export interface FetchedHead {
+  readonly sha: string;
+  readonly headRef: string;
+}
+
+/** A fetch of the pull request's head into the clone. */
 export type FetchInto = (
-  repositoryFolder: string,
-) => Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner>;
+  clone: string,
+) => Effect.Effect<CheckoutStep<FetchedHead>, never, ChildProcessSpawner.ChildProcessSpawner>;
+
+/** The checkout as a refresh left it: the commit it stands on, and whether its setup must run before the run. */
+export interface PreparedCheckout {
+  readonly sha: string;
+  readonly setupNeeded: boolean;
+}
 
 /** The flags every Git step is run with, which keep configuration from elsewhere on the Mac out of it. */
 const HARDENED_FLAGS = [
@@ -143,7 +175,20 @@ const HARDENED_ENVIRONMENT = {
   LC_ALL: "C",
 } as const;
 
-/** The checkout's folder for the pull request, or nothing where a segment is not of its shape. */
+/** The refs Luke keeps in the clone for one pull request. */
+function lukeRefs(number: number) {
+  const base = `refs/luke/pr/${number}`;
+  return {
+    /** The head its last fetch found. */
+    FETCHED: `${base}/fetched`,
+    /** The commit Luke last put its worktree on. */
+    HEAD: `${base}/head`,
+    /** The commit its setup last finished on. */
+    SET_UP: `${base}/set-up`,
+  } as const;
+}
+
+/** The checkout's folders for the pull request, or nothing where a segment is not of its shape. */
 export function checkoutPlace(stateRoot: string, owner: CheckoutOwner): CheckoutPlace | undefined {
   const account = owner.accountEmail.toLowerCase();
   const [repositoryOwner = "", name = "", extra] = owner.repository.toLowerCase().split("/");
@@ -157,21 +202,25 @@ export function checkoutPlace(stateRoot: string, owner: CheckoutOwner): Checkout
     owner.number >= 1;
   if (!shaped) return undefined;
   const root = path.join(stateRoot, PR_RUNS_FOLDER);
-  const folder = path.join(
+  const repositoryFolder = path.join(root, account, owner.workspaceId, repositoryOwner, name);
+  return {
     root,
-    account,
-    owner.workspaceId,
-    repositoryOwner,
-    name,
-    `pr-${owner.number}`,
-  );
-  return { root, folder };
+    clone: path.join(repositoryFolder, CLONE_FOLDER),
+    folder: path.join(repositoryFolder, `pr-${owner.number}`),
+    number: owner.number,
+  };
 }
 
-/** What a path is, without following a link: nothing, a folder, or something else. */
-function entryKind(at: string): Effect.Effect<"none" | "folder" | "other"> {
+/** What a path is, without following a link: nothing, a folder, a file, or something else. */
+function entryKind(at: string): Effect.Effect<"none" | "folder" | "file" | "other"> {
   return Effect.tryPromise(() => lstat(at)).pipe(
-    Effect.map((stats) => (stats.isDirectory() ? ("folder" as const) : ("other" as const))),
+    Effect.map((stats) =>
+      stats.isDirectory()
+        ? ("folder" as const)
+        : stats.isFile()
+          ? ("file" as const)
+          : ("other" as const),
+    ),
     Effect.catch(() => Effect.succeed("none" as const)),
   );
 }
@@ -181,11 +230,11 @@ function entryKind(at: string): Effect.Effect<"none" | "folder" | "other"> {
  * of them a link: what lets a removal or a reveal trust the path it was
  * built from. Note that the root itself is under the state root Luke made.
  */
-function placeContained(place: CheckoutPlace): Effect.Effect<boolean> {
+function placeContained(root: string, folder: string): Effect.Effect<boolean> {
   return Effect.gen(function* () {
-    const relative = path.relative(place.root, place.folder);
+    const relative = path.relative(root, folder);
     if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) return false;
-    let at = place.root;
+    let at = root;
     for (const segment of ["", ...relative.split(path.sep)]) {
       at = segment === "" ? at : path.join(at, segment);
       if ((yield* entryKind(at)) !== "folder") return false;
@@ -216,18 +265,26 @@ function collected(stream: Stream.Stream<Uint8Array, unknown>): Effect.Effect<st
   );
 }
 
-/** One Git step on the repository whose working tree is `folder`, run whole; one that could not start answers a null status. */
+/**
+ * One Git step, run whole: on the clone where `at` names it (`--git-dir`), or
+ * in a worktree's folder, where Git is kept from looking past it for a
+ * repository. One that could not start answers a null status.
+ */
 function git(
   tool: GitTool,
-  folder: string,
+  at: { readonly clone: string } | { readonly worktree: string },
   args: readonly string[],
 ): Effect.Effect<GitRun, never, ChildProcessSpawner.ChildProcessSpawner> {
-  const pinned = [`--git-dir=${path.join(folder, ".git")}`, `--work-tree=${folder}`];
+  const onClone = "clone" in at;
+  const cwd = onClone ? at.clone : at.worktree;
+  const pinned = onClone ? [`--git-dir=${at.clone}`] : [];
+  // Note that a worktree's Git is held to the worktree, because a folder above it that is a repository must never be read instead.
+  const ceiling = onClone ? {} : { GIT_CEILING_DIRECTORIES: path.dirname(at.worktree) };
   return Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(tool.path, [...pinned, ...HARDENED_FLAGS, ...args], {
-        cwd: folder,
-        env: { ...tool.environment, ...HARDENED_ENVIRONMENT },
+        cwd,
+        env: { ...tool.environment, ...HARDENED_ENVIRONMENT, ...ceiling },
         extendEnv: false,
         stdin: "ignore",
       });
@@ -254,35 +311,87 @@ function lastLine(text: string): string {
   return (lines.at(-1) ?? "").trim();
 }
 
-/** The commit a ref names, or nothing where it names none. */
-function commitOf(tool: GitTool, folder: string, ref: string) {
+/** The commit a ref names in the clone, or nothing where it names none. */
+function commitOf(tool: GitTool, clone: string, ref: string) {
   return Effect.map(
-    git(tool, folder, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]),
+    git(tool, { clone }, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]),
     (run) => (run.exitCode === 0 ? run.stdout.trim() : undefined),
   );
 }
 
-/**
- * How the checkout stands: none yet, or the commit Luke last checked out with
- * nothing of the developer's or a run's that a refresh would lose, or why it
- * may not be refreshed.
- */
-function checkoutStanding(
-  tool: GitTool,
-  folder: string,
-): Effect.Effect<CheckoutStep<string | undefined>, never, ChildProcessSpawner.ChildProcessSpawner> {
+/** The repository's GitHub address, which the clone's `origin` names; no credential is ever in it. */
+export function githubAddress(repository: string): string {
+  return `https://github.com/${repository}.git`;
+}
+
+/** The clone made where there is none, its `origin` the repository's GitHub address; answers whether it stands. */
+function ensureClone(tool: GitTool, clone: string, repository: string) {
   return Effect.gen(function* () {
-    const kind = yield* entryKind(folder);
+    const kind = yield* entryKind(clone);
+    if (kind === "folder") return true;
+    if (kind !== "none") return false;
+    const made = yield* Effect.tryPromise(() => mkdir(clone, { recursive: true })).pipe(
+      Effect.as(true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    if (!made) return false;
+    const steps: readonly (readonly string[])[] = [
+      ["init", "--bare", "--quiet", "--template="],
+      ["config", "remote.origin.url", githubAddress(repository)],
+      ["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
+    ];
+    for (const step of steps) {
+      if ((yield* git(tool, { clone }, step)).exitCode !== 0) return false;
+    }
+    return true;
+  });
+}
+
+/** A branch name for the pull request's worktree: its head branch's own where Git takes it and no other worktree holds it, else `pr-<number>`. */
+function branchFor(tool: GitTool, clone: string, number: number, headRef: string) {
+  return Effect.gen(function* () {
+    const fallback = `pr-${number}`;
+    const formed = yield* git(tool, { clone }, ["check-ref-format", "--branch", headRef]);
+    if (formed.exitCode !== 0) return fallback;
+    const listed = yield* git(tool, { clone }, ["worktree", "list", "--porcelain"]);
+    const held = listed.stdout.split("\n").includes(`branch refs/heads/${headRef}`);
+    return held ? fallback : headRef;
+  });
+}
+
+/**
+ * How the worktree stands: none yet, or the commit Luke last put it on, on
+ * its branch, with nothing of the developer's or a run's that a refresh
+ * would lose; or why it may not be refreshed.
+ */
+function worktreeStanding(
+  tool: GitTool,
+  place: CheckoutPlace,
+): Effect.Effect<
+  CheckoutStep<{ readonly placed: string; readonly branch: string } | undefined>,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner
+> {
+  return Effect.gen(function* () {
+    const kind = yield* entryKind(place.folder);
     if (kind === "none") return { ok: undefined };
-    if (kind !== "folder" || (yield* entryKind(path.join(folder, ".git"))) !== "folder") {
+    // A worktree's `.git` is a file naming its clone; a folder there is a repository Luke did not make.
+    if (kind !== "folder" || (yield* entryKind(path.join(place.folder, ".git"))) !== "file") {
       return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
     }
-    const placed = yield* commitOf(tool, folder, LUKE_REF.HEAD);
+    const placed = yield* commitOf(tool, place.clone, lukeRefs(place.number).HEAD);
     if (placed === undefined) return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
-    const head = yield* commitOf(tool, folder, "HEAD");
-    const onBranch = yield* git(tool, folder, ["symbolic-ref", "--quiet", "HEAD"]);
-    if (head !== placed || onBranch.exitCode === 0) return { refused: CHECKOUT_REFUSAL.MOVED };
-    const status = yield* git(tool, folder, [
+    const head = yield* git(tool, { worktree: place.folder }, ["rev-parse", "--verify", "HEAD"]);
+    const branch = yield* git(tool, { worktree: place.folder }, [
+      "symbolic-ref",
+      "--quiet",
+      "--short",
+      "HEAD",
+    ]);
+    if (head.stdout.trim() !== placed || branch.exitCode !== 0) {
+      return { refused: CHECKOUT_REFUSAL.MOVED };
+    }
+    const status = yield* git(tool, { worktree: place.folder }, [
       "status",
       "--porcelain=v1",
       "--untracked-files=no",
@@ -290,134 +399,200 @@ function checkoutStanding(
     ]);
     if (status.exitCode !== 0) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
     if (status.stdout !== "") return { refused: CHECKOUT_REFUSAL.EDITED };
-    return { ok: placed };
+    return { ok: { placed, branch: branch.stdout.trim() } };
   });
 }
 
-/** The files `to` adds over `from` that the folder already holds, untracked or ignored, as many as a refusal lists. */
-function collisions(tool: GitTool, folder: string, from: string, to: string) {
-  return Effect.gen(function* () {
-    const added = yield* git(tool, folder, [
+/** The files `to` changes over `from`, as named in the tree; nothing where Git could not say. */
+function changedFiles(tool: GitTool, clone: string, from: string, to: string, filter: string) {
+  return Effect.map(
+    git(tool, { clone }, [
       "diff",
       "--name-only",
       "--no-renames",
-      "--diff-filter=A",
+      `--diff-filter=${filter}`,
       "-z",
       from,
       to,
-    ]);
-    if (added.exitCode !== 0) return undefined;
+    ]),
+    (run) =>
+      run.exitCode === 0 ? run.stdout.split("\0").filter((file) => file !== "") : undefined,
+  );
+}
+
+/** The files `to` adds over `from` that the worktree already holds, untracked or ignored, as many as a refusal lists. */
+function collisions(tool: GitTool, place: CheckoutPlace, from: string, to: string) {
+  return Effect.gen(function* () {
+    const added = yield* changedFiles(tool, place.clone, from, to, "A");
+    if (added === undefined) return undefined;
     const found: string[] = [];
-    for (const file of added.stdout.split("\0")) {
-      if (file === "" || found.length >= MAX_LISTED_COLLISIONS) continue;
-      if ((yield* entryKind(path.join(folder, file))) !== "none") found.push(file);
+    for (const file of added) {
+      if (found.length >= MAX_LISTED_COLLISIONS) break;
+      if ((yield* entryKind(path.join(place.folder, file))) !== "none") found.push(file);
     }
     return found;
   });
 }
 
-/** The fetched commit checked out, detached, and named as the one Luke placed; never interrupted halfway. */
-function placeCommit(tool: GitTool, folder: string, sha: string) {
+/** Whether the run needs its setup on `sha`: never set up, or a lockfile or manifest changed since it last was. */
+function setupNeeded(tool: GitTool, place: CheckoutPlace, sha: string) {
+  return Effect.gen(function* () {
+    const setUp = yield* commitOf(tool, place.clone, lukeRefs(place.number).SET_UP);
+    if (setUp === undefined) return true;
+    if (setUp === sha) return false;
+    const changed = yield* changedFiles(tool, place.clone, setUp, sha, "ACDMRT");
+    return (
+      changed === undefined || changed.some((file) => SETUP_FILES.has(path.posix.basename(file)))
+    );
+  });
+}
+
+/** The worktree made on the fetched commit, on a branch of its own whose upstream is the pull request; never interrupted halfway. */
+function addWorktree(
+  tool: GitTool,
+  place: CheckoutPlace,
+  fetched: FetchedHead,
+): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.uninterruptible(
     Effect.gen(function* () {
-      const checkout = yield* git(tool, folder, ["checkout", "--quiet", "--detach", sha]);
-      if (checkout.exitCode !== 0) {
+      const branch = yield* branchFor(tool, place.clone, place.number, fetched.headRef);
+      // A worktree whose folder went away without Git hearing of it would hold its branch, so the clone's list is pruned first.
+      yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
+      const added = yield* git(tool, { clone: place.clone }, [
+        "worktree",
+        "add",
+        "--quiet",
+        "-B",
+        branch,
+        place.folder,
+        fetched.sha,
+      ]);
+      if (added.exitCode !== 0) {
+        yield* Effect.ignore(
+          Effect.tryPromise(() => rm(place.folder, { recursive: true, force: true })),
+        );
+        yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
         return {
-          refused: `Git would not check the newest commit out over the local checkout (${lastLine(checkout.stderr)}). Delete the local checkout to start over.`,
+          refused: `Git could not make the local checkout (${lastLine(added.stderr)}).`,
         };
       }
-      const named = yield* git(tool, folder, ["update-ref", LUKE_REF.HEAD, sha]);
+      const upstream: readonly (readonly string[])[] = [
+        ["config", `branch.${branch}.remote`, "origin"],
+        ["config", `branch.${branch}.merge`, `refs/pull/${place.number}/head`],
+        ["update-ref", lukeRefs(place.number).HEAD, fetched.sha],
+      ];
+      for (const step of upstream) {
+        if ((yield* git(tool, { clone: place.clone }, step)).exitCode !== 0) {
+          return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
+        }
+      }
+      return { ok: fetched.sha };
+    }),
+  );
+}
+
+/** The worktree's branch moved to the fetched commit with Git's own `reset --keep`, which loses nothing; never interrupted halfway. */
+function moveWorktree(
+  tool: GitTool,
+  place: CheckoutPlace,
+  sha: string,
+): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
+  return Effect.uninterruptible(
+    Effect.gen(function* () {
+      const moved = yield* git(tool, { worktree: place.folder }, [
+        "reset",
+        "--quiet",
+        "--keep",
+        sha,
+      ]);
+      if (moved.exitCode !== 0) {
+        return {
+          refused: `Git would not move the local checkout to the newest commit (${lastLine(moved.stderr)}). Delete the local checkout to start over.`,
+        };
+      }
+      const named = yield* git(tool, { clone: place.clone }, [
+        "update-ref",
+        lukeRefs(place.number).HEAD,
+        sha,
+      ]);
       if (named.exitCode !== 0) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
       return { ok: sha };
     }),
   );
 }
 
-/** The staging folder removed, where it is a folder of its own and not a link. */
-function removeStaging(staging: string): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    if ((yield* entryKind(staging)) === "none") return;
-    yield* Effect.ignore(Effect.tryPromise(() => rm(staging, { recursive: true, force: true })));
-  });
-}
-
-/** A first checkout: a repository made in the staging folder, fetched into, checked out, and renamed into place whole. */
-function firstCheckout(tool: GitTool, folder: string, fetchInto: FetchInto) {
-  const staging = `${folder}${STAGING_SUFFIX}`;
-  const built = Effect.gen(function* () {
-    yield* removeStaging(staging);
-    const made = yield* Effect.tryPromise(() => mkdir(staging, { recursive: true })).pipe(
-      Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
-    );
-    if (!made) return { refused: "Luke could not make a folder for the local checkout." };
-    const init = yield* git(tool, staging, ["init", "--quiet", "--template="]);
-    if (init.exitCode !== 0) {
-      return { refused: `Git could not make the local checkout (${lastLine(init.stderr)}).` };
-    }
-    const fetched = yield* fetchInto(staging);
-    if ("refused" in fetched) return fetched;
-    const placed = yield* placeCommit(tool, staging, fetched.ok);
-    if ("refused" in placed) return placed;
-    const moved = yield* Effect.tryPromise(() => rename(staging, folder)).pipe(
-      Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
-    );
-    return moved ? placed : { refused: "Luke could not move the local checkout into place." };
-  });
-  // Note that the staging folder goes however the build ended, a stop included, because a finished build has already renamed it away.
-  return Effect.ensuring(built, removeStaging(staging));
-}
-
 /**
- * The pull request's checkout brought to the commit `fetchInto` fetches:
+ * The pull request's worktree brought to the commit `fetchInto` fetches:
  * made where there is none, refreshed where it stands with nothing a
- * refresh would lose, refused otherwise. Answers the commit checked out.
+ * refresh would lose, refused otherwise. Answers the commit it stands on and
+ * whether its setup must run.
  */
 export function refreshCheckout(
   tool: GitTool,
   place: CheckoutPlace,
+  repository: string,
   fetchInto: FetchInto,
-): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.Effect<CheckoutStep<PreparedCheckout>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
+    const repositoryFolder = path.dirname(place.folder);
     const madeRoot = yield* Effect.tryPromise(() =>
-      mkdir(path.dirname(place.folder), { recursive: true }),
+      mkdir(repositoryFolder, { recursive: true }),
     ).pipe(
-      Effect.andThen(placeContained({ root: place.root, folder: path.dirname(place.folder) })),
+      Effect.andThen(placeContained(place.root, repositoryFolder)),
       Effect.catch(() => Effect.succeed(false)),
     );
-    if (!madeRoot) return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
-    const standing = yield* checkoutStanding(tool, place.folder);
-    if ("refused" in standing) return standing;
-    if (standing.ok === undefined) return yield* firstCheckout(tool, place.folder, fetchInto);
-    const placed = standing.ok;
-    const fetched = yield* fetchInto(place.folder);
-    if ("refused" in fetched) return fetched;
-    if (fetched.ok === placed) return { ok: placed };
-    const colliding = yield* collisions(tool, place.folder, placed, fetched.ok);
-    if (colliding === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
-    if (colliding.length > 0) {
-      return {
-        refused: `The pull request's newest commit adds files the local checkout already holds (${colliding.join(", ")}), which Luke never overwrites. Delete the local checkout to start over.`,
-      };
+    if (!madeRoot || !(yield* ensureClone(tool, place.clone, repository))) {
+      return { refused: CHECKOUT_REFUSAL.NOT_LUKES };
     }
-    return yield* placeCommit(tool, place.folder, fetched.ok);
+    const standing = yield* worktreeStanding(tool, place);
+    if ("refused" in standing) return standing;
+    const fetched = yield* fetchInto(place.clone);
+    if ("refused" in fetched) return fetched;
+    const sha = fetched.ok.sha;
+    if (standing.ok === undefined) {
+      const added = yield* addWorktree(tool, place, fetched.ok);
+      if ("refused" in added) return added;
+    } else if (standing.ok.placed !== sha) {
+      const colliding = yield* collisions(tool, place, standing.ok.placed, sha);
+      if (colliding === undefined) return { refused: CHECKOUT_REFUSAL.GIT_FAILED };
+      if (colliding.length > 0) {
+        return {
+          refused: `The pull request's newest commit adds files the local checkout already holds (${colliding.join(", ")}), which Luke never overwrites. Delete the local checkout to start over.`,
+        };
+      }
+      const moved = yield* moveWorktree(tool, place, sha);
+      if ("refused" in moved) return moved;
+    }
+    return { ok: { sha, setupNeeded: yield* setupNeeded(tool, place, sha) } };
   });
 }
 
+/** The commit the setup just finished on, kept so the next run skips it until a lockfile changes. */
+export function markSetUp(
+  tool: GitTool,
+  place: CheckoutPlace,
+  sha: string,
+): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> {
+  return Effect.asVoid(
+    git(tool, { clone: place.clone }, ["update-ref", lukeRefs(place.number).SET_UP, sha]),
+  );
+}
+
 /**
- * The pull request's head fetched from `url` into the repository folder and
- * read back: the commit fetched under `refs/luke/fetched`, whatever it is,
- * which the caller holds to the commit it was told to expect. `configArgs`
- * are the credential's own flags, placed after the hardened ones.
+ * The pull request's head fetched from `url` into the clone and read back:
+ * the commit fetched under the pull request's own ref, whatever it is, which
+ * the caller holds to the commit it was told to expect. `configArgs` are
+ * the credential's own flags, placed after the hardened ones.
  */
 export function fetchPullRequestHead(
   tool: GitTool,
-  repositoryFolder: string,
-  source: { readonly url: string; readonly ref: string; readonly configArgs: readonly string[] },
+  clone: string,
+  number: number,
+  source: { readonly url: string; readonly configArgs: readonly string[] },
 ): Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
-    const fetched = yield* git(tool, repositoryFolder, [
+    const fetchedRef = lukeRefs(number).FETCHED;
+    const fetched = yield* git(tool, { clone }, [
       ...source.configArgs,
       "fetch",
       "--quiet",
@@ -425,33 +600,64 @@ export function fetchPullRequestHead(
       "--no-write-fetch-head",
       "--no-recurse-submodules",
       source.url,
-      `+${source.ref}:${LUKE_REF.FETCHED}`,
+      `+refs/pull/${number}/head:${fetchedRef}`,
     ]);
     if (fetched.exitCode !== 0) {
       const why = fetched.exitCode === null ? "Git could not be started" : lastLine(fetched.stderr);
       return { refused: `Luke could not fetch the pull request (${why}).` };
     }
-    const sha = yield* commitOf(tool, repositoryFolder, LUKE_REF.FETCHED);
+    const sha = yield* commitOf(tool, clone, fetchedRef);
     return sha === undefined
       ? { refused: "Luke fetched the pull request but found no commit at its head." }
       : { ok: sha };
   });
 }
 
-/** Removes a pull request's checkout, where every folder down to it is a real one; answers whether nothing is left there. */
-export function removeCheckout(place: CheckoutPlace): Effect.Effect<boolean> {
+/**
+ * Removes a pull request's checkout, where every folder down to it is a real
+ * one, and lets the clone forget it: its worktree, its branch, and Luke's
+ * refs for it. The clone stays for the repository's next pull request.
+ * Answers whether nothing is left there.
+ */
+export function removeCheckout(
+  tool: GitTool,
+  place: CheckoutPlace,
+): Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
-    if ((yield* entryKind(place.folder)) === "none") return true;
-    if (!(yield* placeContained(place))) return false;
-    // Note that a recursive removal deletes a link inside the checkout rather than following it.
-    return yield* Effect.tryPromise(() => rm(place.folder, { recursive: true, force: true })).pipe(
-      Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
-    );
+    if ((yield* entryKind(place.folder)) !== "none") {
+      if (!(yield* placeContained(place.root, place.folder))) return false;
+      const branch = yield* git(tool, { worktree: place.folder }, [
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "HEAD",
+      ]);
+      // Note that a recursive removal deletes a link inside the checkout rather than following it.
+      const removed = yield* Effect.tryPromise(() =>
+        rm(place.folder, { recursive: true, force: true }),
+      ).pipe(
+        Effect.as(true),
+        Effect.catch(() => Effect.succeed(false)),
+      );
+      if (!removed) return false;
+      if ((yield* entryKind(place.clone)) === "folder" && branch.exitCode === 0) {
+        yield* git(tool, { clone: place.clone }, ["worktree", "prune"]);
+        yield* git(tool, { clone: place.clone }, ["branch", "-D", branch.stdout.trim()]);
+      }
+    }
+    if ((yield* entryKind(place.clone)) === "folder") {
+      const refs = lukeRefs(place.number);
+      for (const ref of [refs.FETCHED, refs.HEAD, refs.SET_UP]) {
+        yield* git(tool, { clone: place.clone }, ["update-ref", "-d", ref]);
+      }
+    }
+    return true;
   });
 }
 
 /** The checkout's folder where it stands as a real folder under the root, for a reveal; nothing otherwise. */
 export function locateCheckout(place: CheckoutPlace): Effect.Effect<string | undefined> {
-  return Effect.map(placeContained(place), (contained) => (contained ? place.folder : undefined));
+  return Effect.map(placeContained(place.root, place.folder), (contained) =>
+    contained ? place.folder : undefined,
+  );
 }

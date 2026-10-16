@@ -164,12 +164,12 @@ import {
   planningWorkspaceRenameParamsSchema,
   planningWorkspaceTransferParamsSchema,
 } from "@luke/features/planning-view";
+import { prRunPullRequestSchema, prRunWorkspaceParamsSchema } from "@luke/features/pr-run-view";
 import {
-  type PrRunCommandsAnswer,
-  prRunCommandsAnswerSchema,
-  prRunPullRequestSchema,
-  prRunSetCommandParamsSchema,
-} from "@luke/features/pr-run-view";
+  type RepositoryRunsAnswer,
+  repositoryRunSetRequestSchema,
+  repositoryRunsAnswerSchema,
+} from "@luke/features/repository-run-wire";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -1365,14 +1365,14 @@ export const ACT = {
     refusal: "Could not close that shell.",
   },
   [ACT_KIND.PR_RUN_COMMANDS]: {
-    payload: noPayload,
-    result: wireResult<PrRunCommandsAnswer>(isReadable(prRunCommandsAnswerSchema)),
-    refusal: "Could not read the run commands set on this Mac.",
+    payload: actSchema(prRunWorkspaceParamsSchema),
+    result: wireResult<RepositoryRunsAnswer>(isReadable(repositoryRunsAnswerSchema)),
+    refusal: "Could not read this workspace's run commands.",
   },
   [ACT_KIND.PR_RUN_SET_COMMAND]: {
-    payload: actSchema(prRunSetCommandParamsSchema),
+    payload: actSchema(repositoryRunSetRequestSchema),
     result: answersNothing,
-    refusal: "Could not save the run command.",
+    refusal: "Could not save the repository's commands.",
   },
   [ACT_KIND.PR_RUN_START]: {
     payload: actSchema(prRunPullRequestSchema),

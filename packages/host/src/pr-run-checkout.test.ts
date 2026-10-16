@@ -12,6 +12,7 @@ import {
   type FetchInto,
   fetchPullRequestHead,
   locateCheckout,
+  markSetUp,
   PR_RUNS_FOLDER,
   refreshCheckout,
   removeCheckout,
@@ -20,10 +21,12 @@ import { fixtureGit, fixtureGitTool, pullRequestOrigin } from "./testing/pull-re
 
 /**
  * Luke's own checkout of a pull request, over real Git and a repository on
- * disk standing in for GitHub: a first run makes it at the pull request's
- * head, a later one moves it to the newest head and keeps what the last run
- * installed, and anything a refresh would lose (an edit, a commit, a file in
- * the way) is refused and left exactly as it stood.
+ * disk standing in for GitHub: a first run makes the repository's clone and
+ * the pull request's worktree, on its head branch with GitHub as `origin`;
+ * a later one moves it to the newest head and keeps what setup installed;
+ * setup is asked for again only where a lockfile changed; and anything a
+ * refresh would lose (an edit, a commit, a file in the way) is refused and
+ * left exactly as it stood.
  */
 
 const machine = NodeChildProcessSpawner.layer.pipe(
@@ -37,30 +40,40 @@ const OWNER = {
   number: 7,
 } as const;
 
-/** An origin with pull request 7 at its first commit, a state root, the checkout's place, and a fetch from the origin. */
+/** An origin with pull request 7 at its first commit, a state root, the checkout's place, and refreshes fetching from the origin. */
 const fixture = Effect.gen(function* () {
   const scratch = yield* temporaryDirectoryScoped("luke-pr-checkout-");
   const origin = pullRequestOrigin(path.join(scratch, "origin"));
-  const first = origin.commit({ "README.md": "first\n", ".gitignore": "node_modules/\n" });
+  const first = origin.commit({
+    "README.md": "first\n",
+    ".gitignore": "node_modules/\n",
+    "pnpm-lock.yaml": "lock: 1\n",
+  });
   origin.pointPullRequest(OWNER.number, first);
   const stateRoot = path.join(scratch, "state");
-  const place = checkoutPlace(stateRoot, OWNER);
-  assert.ok(place);
   const tool = fixtureGitTool(scratch);
-  const fetchInto: FetchInto = (folder) =>
-    fetchPullRequestHead(tool, folder, {
-      url: origin.folder,
-      ref: `refs/pull/${OWNER.number}/head`,
-      configArgs: [],
-    });
-  const refresh = (into: FetchInto = fetchInto) => refreshCheckout(tool, place, into);
-  return { scratch, origin, first, stateRoot, place, tool, refresh };
+  const fetchFrom =
+    (url: string, number: number, headRef: string): FetchInto =>
+    (clone) =>
+      Effect.map(fetchPullRequestHead(tool, clone, number, { url, configArgs: [] }), (step) =>
+        "refused" in step ? step : { ok: { sha: step.ok, headRef } },
+      );
+  const placeOf = (number: number): CheckoutPlace => {
+    const place = checkoutPlace(stateRoot, { ...OWNER, number });
+    assert.ok(place);
+    return place;
+  };
+  const place = placeOf(OWNER.number);
+  const refresh = (into: FetchInto = fetchFrom(origin.folder, OWNER.number, "fix-relay")) =>
+    refreshCheckout(tool, place, OWNER.repository, into);
+  return { scratch, origin, first, stateRoot, place, placeOf, tool, fetchFrom, refresh };
 });
 
-const headOf = (place: CheckoutPlace) => fixtureGit(place.folder, ["rev-parse", "HEAD"]);
+const inWorktree = (place: CheckoutPlace, args: readonly string[]) =>
+  fixtureGit(place.folder, args);
 
 it.effect(
-  "a first run makes the checkout at the pull request's head, under the account, workspace, and repository",
+  "a first run makes the repository's clone and the pull request's worktree on its head branch, with GitHub as origin",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -68,42 +81,52 @@ it.effect(
 
         const outcome = yield* refresh();
 
-        assert.deepEqual(outcome, { ok: first });
-        assert.equal(
-          place.folder,
-          path.join(
-            stateRoot,
-            PR_RUNS_FOLDER,
-            "developer@luke.test",
-            "ws_fixture",
-            "octocat",
-            "relay",
-            "pr-7",
-          ),
+        assert.deepEqual(outcome, { ok: { sha: first, setupNeeded: true } });
+        const repositoryFolder = path.join(
+          stateRoot,
+          PR_RUNS_FOLDER,
+          "developer@luke.test",
+          "ws_fixture",
+          "octocat",
+          "relay",
         );
-        assert.equal(headOf(place), first);
+        assert.equal(place.folder, path.join(repositoryFolder, "pr-7"));
+        assert.equal(place.clone, path.join(repositoryFolder, "repository.git"));
+        assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), first);
+        assert.equal(inWorktree(place, ["symbolic-ref", "--short", "HEAD"]), "fix-relay");
+        assert.equal(
+          inWorktree(place, ["remote", "get-url", "origin"]),
+          "https://github.com/Octocat/Relay.git",
+        );
+        assert.equal(inWorktree(place, ["config", "branch.fix-relay.merge"]), "refs/pull/7/head");
         assert.equal(readFileSync(path.join(place.folder, "README.md"), "utf8"), "first\n");
-        assert.equal(existsSync(`${place.folder}.staging`), false);
       }),
     ).pipe(Effect.provide(machine)),
 );
 
 it.effect(
-  "a later run moves the checkout to the newest head and keeps what the last run installed",
+  "a later run moves the worktree to the newest head, keeps what setup installed, and asks for setup again only when a lockfile changed",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { origin, place, refresh } = yield* fixture;
-        yield* refresh();
+        const { origin, place, tool, refresh } = yield* fixture;
+        const made = yield* refresh();
+        assert.ok("ok" in made);
+        yield* markSetUp(tool, place, made.ok.sha);
         mkdirSync(path.join(place.folder, "node_modules"));
         writeFileSync(path.join(place.folder, "node_modules", "installed.js"), "kept\n");
+
         const second = origin.commit({ "README.md": "second\n", "src/added.ts": "new\n" });
         origin.pointPullRequest(OWNER.number, second);
+        const unchangedLock = yield* refresh();
+        const third = origin.commit({ "pnpm-lock.yaml": "lock: 2\n" });
+        origin.pointPullRequest(OWNER.number, third);
+        const changedLock = yield* refresh();
 
-        const outcome = yield* refresh();
-
-        assert.deepEqual(outcome, { ok: second });
-        assert.equal(headOf(place), second);
+        assert.deepEqual(unchangedLock, { ok: { sha: second, setupNeeded: false } });
+        assert.deepEqual(changedLock, { ok: { sha: third, setupNeeded: true } });
+        assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), third);
+        assert.equal(inWorktree(place, ["symbolic-ref", "--short", "HEAD"]), "fix-relay");
         assert.equal(readFileSync(path.join(place.folder, "README.md"), "utf8"), "second\n");
         assert.equal(
           readFileSync(path.join(place.folder, "node_modules", "installed.js"), "utf8"),
@@ -125,32 +148,32 @@ it.effect("an edit to a tracked file is refused and left as it stands", () =>
 
       assert.deepEqual(outcome, { refused: CHECKOUT_REFUSAL.EDITED });
       assert.equal(readFileSync(path.join(place.folder, "README.md"), "utf8"), "my edit\n");
-      assert.equal(headOf(place), first);
+      assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), first);
     }),
   ).pipe(Effect.provide(machine)),
 );
 
-it.effect("a commit made in the checkout is refused and kept", () =>
+it.effect("a commit made in the worktree is refused and kept", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const { origin, place, refresh } = yield* fixture;
       yield* refresh();
       writeFileSync(path.join(place.folder, "local.txt"), "mine\n");
-      fixtureGit(place.folder, ["add", "local.txt"]);
-      fixtureGit(place.folder, ["commit", "--quiet", "-m", "local"]);
-      const local = headOf(place);
+      inWorktree(place, ["add", "local.txt"]);
+      inWorktree(place, ["commit", "--quiet", "-m", "local"]);
+      const local = inWorktree(place, ["rev-parse", "HEAD"]);
       origin.pointPullRequest(OWNER.number, origin.commit({ "README.md": "second\n" }));
 
       const outcome = yield* refresh();
 
       assert.deepEqual(outcome, { refused: CHECKOUT_REFUSAL.MOVED });
-      assert.equal(headOf(place), local);
+      assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), local);
     }),
   ).pipe(Effect.provide(machine)),
 );
 
 it.effect(
-  "a newest commit that adds a file the checkout holds untracked or ignored is refused, and the file kept",
+  "a newest commit that adds a file the worktree holds untracked or ignored is refused, and the file kept",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -170,38 +193,55 @@ it.effect(
         assert.match(outcome.refused, /notes\.md/u);
         assert.match(outcome.refused, /node_modules\/pinned\.js/u);
         assert.equal(readFileSync(path.join(place.folder, "notes.md"), "utf8"), "untracked\n");
-        assert.equal(
-          readFileSync(path.join(place.folder, "node_modules", "pinned.js"), "utf8"),
-          "ignored\n",
-        );
-        assert.equal(headOf(place), first);
+        assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), first);
       }),
     ).pipe(Effect.provide(machine)),
 );
 
+it.effect("a fetch that fails leaves the worktree where it stood, and a first one makes none", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { scratch, first, place, fetchFrom, refresh } = yield* fixture;
+      const unreachable = fetchFrom(
+        path.join(scratch, "no-such-origin"),
+        OWNER.number,
+        "fix-relay",
+      );
+
+      const firstFailure = yield* refresh(unreachable);
+      assert.ok("refused" in firstFailure);
+      assert.equal(existsSync(place.folder), false);
+
+      yield* refresh();
+      const laterFailure = yield* refresh(unreachable);
+      assert.ok("refused" in laterFailure);
+      assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), first);
+    }),
+  ).pipe(Effect.provide(machine)),
+);
+
 it.effect(
-  "a fetch that fails leaves the checkout where it stood, and a first one leaves nothing behind",
+  "two pull requests of one repository share its clone, and a head branch already held takes the pull request's number",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { scratch, first, place, tool, refresh } = yield* fixture;
-        const unreachable: FetchInto = (folder) =>
-          fetchPullRequestHead(tool, folder, {
-            url: path.join(scratch, "no-such-origin"),
-            ref: "refs/pull/7/head",
-            configArgs: [],
-          });
-
-        const firstFailure = yield* refresh(unreachable);
-        assert.ok("refused" in firstFailure);
-        assert.equal(existsSync(place.folder), false);
-        assert.equal(existsSync(`${place.folder}.staging`), false);
+        const { origin, first, place, placeOf, tool, fetchFrom, refresh } = yield* fixture;
+        const other = origin.commit({ "OTHER.md": "eight\n" });
+        origin.pointPullRequest(8, other);
+        const eight = placeOf(8);
 
         yield* refresh();
-        const laterFailure = yield* refresh(unreachable);
-        assert.ok("refused" in laterFailure);
-        assert.equal(headOf(place), first);
-        assert.equal(readFileSync(path.join(place.folder, "README.md"), "utf8"), "first\n");
+        const outcome = yield* refreshCheckout(
+          tool,
+          eight,
+          OWNER.repository,
+          fetchFrom(origin.folder, 8, "fix-relay"),
+        );
+
+        assert.deepEqual(outcome, { ok: { sha: other, setupNeeded: true } });
+        assert.equal(eight.clone, place.clone);
+        assert.equal(inWorktree(eight, ["symbolic-ref", "--short", "HEAD"]), "pr-8");
+        assert.equal(inWorktree(place, ["rev-parse", "HEAD"]), first);
       }),
     ).pipe(Effect.provide(machine)),
 );
@@ -240,11 +280,11 @@ it.effect("a segment that could climb out of the checkout's folder names no plac
 );
 
 it.effect(
-  "a deletion removes the checkout without following a link inside it, and refuses one reached through a link",
+  "a deletion removes the worktree without following a link inside it, refuses one reached through a link, and the next run makes it afresh",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { scratch, place, refresh } = yield* fixture;
+        const { scratch, first, place, tool, refresh } = yield* fixture;
         yield* refresh();
         const outside = path.join(scratch, "outside");
         mkdirSync(outside);
@@ -252,9 +292,10 @@ it.effect(
         symlinkSync(outside, path.join(place.folder, "linked"));
 
         assert.equal(yield* locateCheckout(place), place.folder);
-        assert.equal(yield* removeCheckout(place), true);
+        assert.equal(yield* removeCheckout(tool, place), true);
         assert.equal(existsSync(place.folder), false);
         assert.equal(readFileSync(path.join(outside, "precious.txt"), "utf8"), "keep\n");
+        assert.deepEqual(yield* refresh(), { ok: { sha: first, setupNeeded: true } });
 
         // A repository folder swapped for a link to somewhere else is no checkout of Luke's to reveal or delete.
         const repositoryFolder = path.dirname(place.folder);
@@ -265,7 +306,7 @@ it.effect(
         symlinkSync(elsewhere, repositoryFolder);
 
         assert.equal(yield* locateCheckout(place), undefined);
-        assert.equal(yield* removeCheckout(place), false);
+        assert.equal(yield* removeCheckout(tool, place), false);
         assert.equal(readFileSync(path.join(elsewhere, "pr-7", "precious.txt"), "utf8"), "keep\n");
       }),
     ).pipe(Effect.provide(machine)),

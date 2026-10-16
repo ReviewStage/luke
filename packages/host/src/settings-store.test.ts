@@ -117,13 +117,6 @@ interface PromisedSettingsStore {
   ): Promise<boolean>;
   retireStoredApiKeys(): Promise<void>;
   cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
-  prRunCommandsOf(
-    accountEmail: string,
-  ): Promise<Readonly<Record<string, Readonly<Record<string, string>>>>>;
-  setPrRunCommand(
-    at: { accountEmail: string; workspaceId: string; repository: string },
-    command: string | undefined,
-  ): Promise<boolean>;
 }
 
 function awaitedStoreOf(
@@ -151,8 +144,6 @@ function awaitedStoreOf(
     retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
     cacheExperiments: (accountEmail, choices) =>
       awaited(store.cacheExperiments(accountEmail, choices)),
-    prRunCommandsOf: (accountEmail) => awaited(store.prRunCommandsOf(accountEmail)),
-    setPrRunCommand: (at, command) => awaited(store.setPrRunCommand(at, command)),
   };
 }
 
@@ -365,46 +356,6 @@ test("the experiments the service answered stand for the account signed in, acro
   assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn), false);
   assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
   assert.deepEqual((await store.snapshot()).experiments, factoryOn);
-});
-
-test("a run command is kept on this Mac for the account, workspace, and repository it was set for, and never in the snapshot", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const other = { ...TEST_ACCOUNT, email: "someone-else@example.com" };
-  const relay = {
-    accountEmail: TEST_ACCOUNT.email,
-    workspaceId: "ws_one",
-    repository: "Octocat/Relay",
-  };
-  await store.setAccount(TEST_ACCOUNT);
-
-  assert.equal(await store.setPrRunCommand(relay, "pnpm install && pnpm dev"), true);
-  assert.equal(
-    await store.setPrRunCommand({ ...relay, workspaceId: "ws_two" }, "make serve"),
-    true,
-  );
-
-  // Kept across a reopen, by workspace and then repository, whose name is read without case.
-  assert.deepEqual(await storeIn(directory).prRunCommandsOf(TEST_ACCOUNT.email), {
-    ws_one: { "octocat/relay": "pnpm install && pnpm dev" },
-    ws_two: { "octocat/relay": "make serve" },
-  });
-  assert.equal(JSON.stringify(await store.snapshot()).includes("pnpm dev"), false);
-
-  // Another account signed in sees none of them, sets none for the first, and the first finds them again.
-  await store.setAccount(other);
-  assert.deepEqual(await store.prRunCommandsOf(other.email), {});
-  assert.equal(await store.setPrRunCommand(relay, "rm -rf /"), false);
-  await store.setAccount(TEST_ACCOUNT);
-  assert.deepEqual((await store.prRunCommandsOf(TEST_ACCOUNT.email)).ws_one, {
-    "octocat/relay": "pnpm install && pnpm dev",
-  });
-
-  // A cleared command is gone.
-  assert.equal(await store.setPrRunCommand(relay, undefined), true);
-  assert.deepEqual(await store.prRunCommandsOf(TEST_ACCOUNT.email), {
-    ws_two: { "octocat/relay": "make serve" },
-  });
 });
 
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
