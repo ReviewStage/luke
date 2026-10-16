@@ -42,6 +42,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../planning/use-plans-tab";
@@ -386,6 +387,20 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   assert.ok(row, `no row for ${title}`);
   return row;
 }
+
+test("the Inbox's list fades under its bar, and the chosen item's thread under its crumbs and over its box, rather than being sliced at either", async () => {
+  const { page } = mount();
+  await settle();
+  const sheets = layFades();
+  try {
+    const list = page.querySelector(".inbox-plans-scroll") ?? assert.fail("the items are listed");
+    const thread = page.querySelector(".inbox-board") ?? assert.fail("the chosen item stands");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: false });
+    assert.deepEqual(fadedEdges(thread), { top: true, bottom: true });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();

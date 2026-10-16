@@ -409,7 +409,7 @@ function TemplateState({
   }
   // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
   return (
-    <div className="settings-page-scroll" aria-busy="true">
+    <div className="settings-page-scroll scroll-fade-top" aria-busy="true">
       <header className="settings-page-head">
         <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
       </header>

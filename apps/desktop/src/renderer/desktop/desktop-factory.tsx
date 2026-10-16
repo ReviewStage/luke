@@ -682,7 +682,7 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
           <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
         </div>
       </header>
-      <div className="factory-scroll">
+      <div className="factory-scroll scroll-fade-top">
         {/* A question that could not be read is not shown as though none waits. */}
         {questions.failed ? (
           <ReadFailure line={QUESTIONS_UNREAD_LINE} onRetry={questions.onRetry} />

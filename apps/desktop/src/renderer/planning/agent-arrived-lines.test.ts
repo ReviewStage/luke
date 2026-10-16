@@ -22,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { MemberDirectory } from "../member-directory";
 import { AgentTab } from "./agent-tab";
 
@@ -193,6 +194,17 @@ function openEveryFold(container: HTMLElement): void {
     if (line.getAttribute("aria-expanded") === "false") act(() => line.click());
   }
 }
+
+test("the agent's lines fade under the bar or banner standing over the tab and over the box below them, rather than being sliced at either", async () => {
+  const container = await drawnTab([TASK, journal(true)], CODING_AGENT_STATUS.COMPLETED);
+  const sheets = layFades();
+  try {
+    const log = container.querySelector('[role="log"]') ?? assert.fail("the agent's log stands");
+    assert.deepEqual(fadedEdges(log), { top: true, bottom: true });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("in a finished turn, a line GitHub sent while it ran splits its fold, the steps before it folded above it and the steps after it below", async () => {
   // The service keeps the line ahead of the journal, which closed behind it.

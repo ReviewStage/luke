@@ -1653,7 +1653,7 @@ export function AutomationEditor({
         runsPanel={runsPanel}
       />
       <div className="automation-editor-layout">
-        <div className="automations-scroll">
+        <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
             <input
               className="automation-editor-name"

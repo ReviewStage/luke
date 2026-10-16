@@ -24,6 +24,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { OpenFeedbackProvider } from "../open-feedback";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { DesktopFactory } from "./desktop-factory";
@@ -192,6 +193,17 @@ function row(page: HTMLElement, words: string): HTMLButtonElement {
   assert.ok(found, `${words} stands`);
   return found;
 }
+
+test("the stations' rows fade under the Factory bar as they scroll up beneath it, rather than being sliced at its hairline", () => {
+  const { page } = mount([DRAFT, SEARCH, BILLING, INVITES]);
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".factory-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("each plan stands in its station, and what waits on the developer leads the station it holds up, each row naming its task", () => {
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {

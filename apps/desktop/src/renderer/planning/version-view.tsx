@@ -293,7 +293,7 @@ export function VersionView({
         ) : null}
       </header>
       <div className="desktop-document">
-        <div className="plan-document-scroll">
+        <div className="plan-document-scroll scroll-fade">
           <VersionContent viewing={viewing} title={title} section={section} plan={plan} />
         </div>
       </div>

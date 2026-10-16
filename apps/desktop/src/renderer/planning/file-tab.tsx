@@ -190,7 +190,7 @@ function FileLinesView({
   });
 
   return (
-    <div className="code-lines file-tab-lines" ref={scroller} {...look}>
+    <div className="code-lines file-tab-lines scroll-fade-top" ref={scroller} {...look}>
       {above === undefined ? null : (
         <EdgeRow
           key={above.firstLine}
@@ -433,7 +433,7 @@ export function FileTab({
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <div className="code-lines file-tab-lines" {...look}>
+          <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
             <CodeLineRows
               firstLine={snippet.firstLine}
               lines={snippet.lines}

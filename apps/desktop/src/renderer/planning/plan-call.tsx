@@ -447,8 +447,8 @@ export function PlanCall({
       {video}
       {drawn ? (
         <Conversation>
-          {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-          <ConversationContent className="pt-0">
+          {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; lines fade beneath it. */}
+          <ConversationContent className="checkpoint-log scroll-fade pt-0">
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--section-gap)">

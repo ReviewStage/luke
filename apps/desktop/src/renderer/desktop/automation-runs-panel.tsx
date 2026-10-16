@@ -207,7 +207,7 @@ export function AutomationRunsPanel({
   return (
     <div className="automation-runs-pane" style={{ width: panel.width }}>
       <div className="side-panel-resize" {...edge} />
-      <aside className="automation-runs" aria-label="Runs">
+      <aside className="automation-runs scroll-fade-top" aria-label="Runs">
         <h2 className="settings-group-title">Runs</h2>
         {!created ? (
           <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>

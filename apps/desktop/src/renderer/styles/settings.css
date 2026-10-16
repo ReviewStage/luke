@@ -1,9 +1,7 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
 /* Scrolls on the same terms as the session list: contained, never chaining out
-   to the root, with the tab bar left outside the scrolling box, and dissolving
-   at its foot through the same shared fade — a page taller than the panel must
-   melt into the surface above Luke's caption, not be sliced off against it. */
+   to the root, with the tab bar left outside the scrolling box. */
 .settings {
   /* Named because the pinned header's dissolve band below must span exactly
      this: the two drifting apart is what would leave a passing row sliced
@@ -17,8 +15,6 @@
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
-  animation: scroll-edge-fade linear both;
-  animation-timeline: scroll(self block);
   /* Its rows answer the page's width (`@container settings` below), which
      every card spans, rather than the window's: the column beside the page
      list is as narrow at a wide nav as a small window makes it. */

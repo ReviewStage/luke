@@ -166,7 +166,7 @@ function PageSource({
   }
   return (
     <section className="file-tab" aria-label={`${title} source`}>
-      <div className="code-lines file-tab-lines" {...look}>
+      <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
         <CodeLineRows firstLine={1} lines={read.lines} pointed={{ path: title }} />
       </div>
     </section>

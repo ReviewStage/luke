@@ -774,7 +774,7 @@ export function PlanSummary({
   return (
     <>
       {layout.mode === SUMMARY_MODE.NONE ? null : (
-        <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
+        <aside className="plan-summary scroll-fade" aria-label="Summary" data-mode={layout.mode}>
           <SummaryChevron layout={layout} cardId={cardId} />
           {layout.mode === SUMMARY_MODE.COLUMN ? (
             <SummaryList sections={sections} agents={plans.agents} shown={plans.shown} />

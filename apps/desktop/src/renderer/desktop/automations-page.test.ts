@@ -38,6 +38,7 @@ import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -1145,6 +1146,27 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
+});
+
+test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
+  window.localStorage.clear();
+  const list = mount();
+  await settle();
+  const rows = list.querySelector(".automations-scroll") ?? assert.fail("the list scrolls");
+  act(() => root?.unmount());
+
+  const edit = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const form = edit.querySelector(".automations-scroll") ?? assert.fail("the page scrolls");
+  const runs = edit.querySelector("aside[aria-label='Runs']") ?? assert.fail("the runs stand");
+  const sheets = layFades();
+  try {
+    for (const scroller of [rows, form, runs]) {
+      assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+    }
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {

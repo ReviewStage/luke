@@ -1077,7 +1077,7 @@ export function CommandPalette({
         />
       </div>
       <FilterChips filter={filter} onFilter={changeFilter} />
-      <Command.List className="command-palette-list" label="Results">
+      <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
           <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
         ) : (

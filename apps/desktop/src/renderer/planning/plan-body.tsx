@@ -832,7 +832,7 @@ export function PlanBody({
     );
   return (
     <PlanPictures planId={plan.id} text={plan.document.body}>
-      <div ref={scroller} className="plan-document-scroll">
+      <div ref={scroller} className="plan-document-scroll scroll-fade">
         {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />

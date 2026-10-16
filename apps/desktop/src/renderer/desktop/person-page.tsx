@@ -388,7 +388,7 @@ function PersonColumn({
           onShowTasks={showTasks}
         />
       </header>
-      <div className="home-scroll">
+      <div className="home-scroll scroll-fade-top">
         <div className="home-column person-column">
           <PersonHead person={person} />
           {page.working.length === 0 ? null : (

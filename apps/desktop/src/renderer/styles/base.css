@@ -294,37 +294,100 @@
   }
 }
 
-/* How every scroll container in the panel meets its bottom edge: content
-   dissolves into the surface over `--scroll-fade` rather than being sliced,
-   and the fade lifts as the last row arrives. A scroll timeline is exactly
-   the right tool: with nothing to scroll it never becomes active, so content
-   that fits is left alone without asking JavaScript whether it overflows.
-   Shared here because the session list and the settings tab must meet the
-   caption riding below them the same way. */
-@keyframes scroll-edge-fade {
+/* How a scroller meets an edge something stands pinned at: a toolbar, a
+   banner, a bar at its foot, a band stuck inside it, or the window's drag
+   strip. Content dissolves over `--scroll-fade` rather than being sliced
+   against that edge. A scroller wears `scroll-fade` to fade at both edges,
+   or `scroll-fade-top` where only its top meets something pinned.
+
+   Each edge's depth is a registered length that a scroll timeline eases
+   from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
+   of scrolling. So a scroller at rest at that end is left whole, and one
+   with nothing to scroll never fades, because its timeline never becomes
+   active. The two depths are composed into one mask, rather than each edge
+   animating a mask of its own, because the second animation's mask would
+   replace the first's.
+
+   It is a mask, not a gradient in a ground colour, so its black is an
+   alpha: content dissolves into whatever ground the scroller stands on, in
+   either appearance, over a tinted row or a lit code line alike. A scroll
+   timeline is not motion, so reduced motion leaves it be. Its scroll padding
+   brings whatever the keys move to clear of a faded edge; a scroller that
+   pads further keeps its own. A band stuck inside the scroller that must
+   stand whole, a call's checkpoint, sets `--fade-inset-top` to its height,
+   and the fade starts beneath it; it pads its scroll past both. */
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-inset-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Registered so it does not inherit: as the depths ease, only the scroller
+   is restyled, never the whole log inside it. A scroller that keeps a spot
+   whole beside it (the summary's chevron) adds a mask layer to this one. */
+@property --scroll-fade-mask {
+  syntax: "*";
+  inherits: false;
+}
+
+.scroll-fade,
+.scroll-fade-top {
+  --scroll-fade-mask: linear-gradient(
+    to bottom,
+    #000 var(--fade-inset-top),
+    transparent var(--fade-inset-top),
+    #000 calc(var(--fade-inset-top) + var(--fade-top)),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  scroll-padding-top: var(--scroll-fade);
+  mask-image: var(--scroll-fade-mask);
+  animation-name: scroll-fade-rise, scroll-fade-lift;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(self block), scroll(self block);
+  animation-range:
+    0 var(--scroll-fade),
+    calc(100% - var(--scroll-fade)) 100%;
+}
+
+.scroll-fade {
+  scroll-padding-bottom: var(--scroll-fade);
+}
+
+.scroll-fade-top {
+  animation-name: scroll-fade-rise, none;
+}
+
+@keyframes scroll-fade-rise {
   from {
-    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+    --fade-top: 0px;
   }
 
   to {
-    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+    --fade-top: var(--scroll-fade);
   }
 }
 
-/* The same fade at a scroll container's top edge, where something stands
-   pinned over it, as the drag strip over the plan template does: content scrolled up
-   past the edge dissolves into the surface over `--scroll-fade` rather than
-   being sliced against the banner. A container runs it on its own scroll
-   timeline over its first `--scroll-fade` of scrolling, so a page at rest at
-   its top is left whole and the fade has fully risen by the time a line
-   could reach the edge. */
-@keyframes scroll-top-fade {
+@keyframes scroll-fade-lift {
   from {
-    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+    --fade-bottom: var(--scroll-fade);
   }
 
   to {
-    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade));
+    --fade-bottom: 0px;
   }
 }
 

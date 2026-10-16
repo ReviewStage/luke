@@ -24,6 +24,7 @@ import {
   ringOf,
   scrollRoomOf,
 } from "#testing/focus-ring";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { type CallCardInput, callControls } from "../call/call-card";
@@ -272,6 +273,19 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
   assert.equal(current?.textContent, "Profile");
   assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
+});
+
+test("Settings' page list fades over the sidebar's foot and a page fades into the drag strip above it, rather than being sliced at either", () => {
+  const page = mount(createElement(SettingsHarness));
+  const sheets = layFades();
+  try {
+    const list = page.querySelector(".sidebar-section") ?? assert.fail("the pages are listed");
+    const column = page.querySelector(".settings-page-scroll") ?? assert.fail("a page stands");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
+    assert.deepEqual(fadedEdges(column), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {

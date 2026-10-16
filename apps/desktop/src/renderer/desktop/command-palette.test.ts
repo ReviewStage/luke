@@ -29,6 +29,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
@@ -247,6 +248,17 @@ const SETTINGS_PAGES = [
   "About",
   "Keyboard shortcuts",
 ];
+
+test("the results fade under the filters above them and over the keys' hints below them, rather than being sliced at either hairline", () => {
+  openPalette();
+  const sheets = layFades();
+  try {
+    const list = document.querySelector(".command-palette-list") ?? assert.fail("results stand");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("the Settings filter lists every Settings page by its name, ahead of the settings", () => {
   openPalette();
