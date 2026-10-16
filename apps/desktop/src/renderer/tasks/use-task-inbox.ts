@@ -59,9 +59,10 @@ import {
  * posted its item again, is let go, since the service deleted it too. A
  * picture landing before the hook's own read of the items does is kept all
  * the same, since the Inbox draws an item from its list's read first and
- * nothing would ask for the picture again; one landing after that read,
- * which no item names, is not. A read that did not answer is held as
- * failed, and the card offers to try again.
+ * nothing would ask for the picture again, and so is one landing after
+ * that read failed, when the Inbox draws from its list's read again; one
+ * landing while that read stands, which no item names, is not. A read
+ * that did not answer is held as failed, and the card offers to try again.
  *
  * What the developer has put on a card and not sent is its draft, kept by
  * item at the revision it was written against (`../composer-drafts.ts`), so
@@ -208,10 +209,12 @@ export function useTaskInbox(input: {
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
-  // The attachments the items name now, so a picture an item no longer names is let go, and one landing for it after the read is not kept.
+  // The attachments the items name now, so a picture an item no longer names is let go, and one
+  // landing for it while this hook's read is what the pane draws is not kept.
   const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
-  const namedNow = useRef({ read: held.read, named });
-  namedNow.current = { read: held.read, named };
+  // Note that a read that failed is drawn no longer, since the Inbox falls back to its list's read.
+  const namedNow = useRef({ drawn: held.read && !held.failed, named });
+  namedNow.current = { drawn: held.read && !held.failed, named };
   useEffect(() => {
     setImages((standing) => imagesNamed(standing, named));
   }, [named]);
@@ -343,11 +346,12 @@ export function useTaskInbox(input: {
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another plan, or after this hook's read let its
-          // item's block go, is kept for nobody. Note that one landing before that read is kept, because
-          // the Inbox's pane draws the item from its list's read first, and nothing would ask again.
-          const { read, named: namedThen } = namedNow.current;
-          const kept = latest.current.taskId === askedOn && (!read || namedThen.has(attachmentId));
+          // An image landing after the window moved to another plan, or after this hook's drawn read let
+          // its item's block go, is kept for nobody. Note that one landing while that read is not drawn,
+          // before it lands or after it failed, is kept, because the Inbox's pane draws the item from its
+          // list's read then, and nothing would ask for the picture again.
+          const { drawn, named: namedThen } = namedNow.current;
+          const kept = latest.current.taskId === askedOn && (!drawn || namedThen.has(attachmentId));
           setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
         });
     },

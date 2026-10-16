@@ -1684,6 +1684,31 @@ test("once the chosen plan's own held read fails, the list's read of that plan s
   assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
 });
 
+test("once the chosen plan's own held read fails, an image the list's read draws since still lands", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const { page } = mount();
+  await settle();
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72",
+    alt: "The retry schedule",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, blocks: [shot] }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
+    "The retry schedule",
+  );
+});
+
 test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {
   const first = pending();
   const second = pending();
