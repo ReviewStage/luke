@@ -49,7 +49,9 @@ import { codingAgentStatusOf } from "./status.js";
  * to eve and onto the row (`attached-files.ts`), and so does what the words
  * mention of the plan, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
- * are another coding agent's, which hand none; the writer fences the write against the caller
+ * are another coding agent's or a reviewer's, which hand none, or an
+ * automation's run, which hands only those its automation's own prompt
+ * mentions; the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
@@ -85,6 +87,8 @@ export interface SteerLine {
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
+  /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
+  readonly serverWords?: string | undefined;
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */
@@ -189,11 +193,13 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.
   const services = yield* Effect.context<DatabaseServices>();
-  // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, because which servers an agent is handed is its developer's to switch, never another agent's or a reviewer's.
+  // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, and an automation's
+  // run hands only what its own prompt mentions, because which servers an agent is handed is its developer's to switch,
+  // never another agent's, a reviewer's, or a webhook caller's.
   const servers =
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
-      : mentionedServers(line.text, task?.task.repository ?? null);
+      : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
   const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
