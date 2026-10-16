@@ -20,10 +20,5 @@ export default defineTool({
   toModelOutput: (output) => pictureLookModelOutput(unparsedWire(output as WireBoundaryInput)),
   execute: async (input, ctx) =>
     // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-    lookAtPlanPicture(
-      ctx.session.auth,
-      ctx.session.id,
-      ctx.session.turn.id,
-      unparsedWire(input as WireBoundaryInput),
-    ),
+    lookAtPlanPicture(ctx.session.auth, ctx.session.id, unparsedWire(input as WireBoundaryInput)),
 });

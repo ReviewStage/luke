@@ -23,7 +23,6 @@ import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/pa
 import {
   PICTURE_LOOK_REFUSAL,
   type PictureLookResult,
-  pictureLooks,
   pictureNotLooked,
   runLookAtPicture,
 } from "../../plans/picture-look.js";
@@ -269,12 +268,10 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
   /**
    * Runs one `look_at_picture` call (`../../plans/picture-look.ts`): one of
-   * the pictures of the agent's plan, read as the member whose turn this is,
-   * under the turn's bound of looks, named with its session as `research`'s is.
+   * the pictures of the agent's plan, read as the member whose turn this is.
    */
   lookAtPicture(
     admitted: AdmittedConversation,
-    turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<PictureLookResult, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
@@ -325,7 +322,6 @@ function describeFailure(failure: CheckoutFailure): string {
 /** The host over the deployment's seams. */
 export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
-  const looks = pictureLooks();
   const agentOf = (admitted: AdmittedConversation) =>
     Effect.map(
       readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
@@ -596,16 +592,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
       ),
 
-    lookAtPicture: (admitted, turn, input) =>
+    lookAtPicture: (admitted, input) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return pictureNotLooked(found.failure);
         const { planId } = found.success;
         if (planId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.PLANLESS);
         // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        const plan = { userId: admitted.caller, planId };
-        const turnId = hostTurnId(turn.sessionId, turn.eveTurnId);
-        return yield* runLookAtPicture({ plan, turnId, looks }, input);
+        return yield* runLookAtPicture({ userId: admitted.caller, planId }, input);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),

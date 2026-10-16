@@ -8,7 +8,6 @@ import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type { ToolModelOutput } from "eve/tools";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
-import { TurnBudget } from "../agents/turn-budget.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
@@ -22,7 +21,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * more, and a picture is a large cost in a model's context, so the picture
  * itself is not sent with the plan: the model names one by its address when
  * the words are not enough, as the planning model looks at its whiteboard
- * (`board-look.ts`), and a turn may look at only so many.
+ * (`board-look.ts`).
  *
  * The picture is read as the account the turn runs as, through the plan's
  * membership gate (`readPlanAttachment`), and only under the plan the
@@ -38,11 +37,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * look at any other picture Luke keeps answers in the same words.
  */
 
-export const PICTURE_LOOK = {
-  /** The most pictures one turn may look at, so a model that looks at every picture cannot fill its context with them. */
-  MAX_PER_TURN: 4,
-  /** The turns a budget keeps count of, past which the oldest is forgotten. */
-  TRACKED_TURNS: 1_024,
+const PICTURE_LOOK = {
   /** The longest address a call may name; a picture's address is well under it. */
   MAX_ADDRESS_CHARS: 512,
 } as const;
@@ -52,7 +47,6 @@ export const PICTURE_LOOK_REFUSAL = {
   UNREADABLE: "Not looked: name the picture by its address, copied from the plan's text.",
   ELSEWHERE: "Not looked: that address is not a picture in this task's plan.",
   NO_PICTURE: "Not looked: this task's plan holds no such picture.",
-  TOO_MANY: `Not looked: a turn may look at ${PICTURE_LOOK.MAX_PER_TURN} pictures at most. Go on from the alt text.`,
   PLANLESS: "Not looked: you work on no task, so there is no plan to look in.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
 } as const;
@@ -87,26 +81,13 @@ export const LOOK_AT_PICTURE_TOOL = {
     "See one of the pictures in the task's plan, such as a screenshot or a mockup. Every picture " +
     'is written in the plan as ![alt text](address "caption"), and its alt text and caption ' +
     "already say what it shows: look only when they do not tell you enough for what you are " +
-    `doing. A turn may look at ${PICTURE_LOOK.MAX_PER_TURN} pictures at most. Answers the ` +
-    "picture, or `not-looked` and why.",
+    "doing. Answers the picture, or `not-looked` and why.",
   inputSchema: LOOK_INPUT,
 } as const;
 
 /** A call that showed nothing, and why. */
 export function pictureNotLooked(reason: string): PictureLookResult {
   return { status: PICTURE_LOOK_STATUS.NOT_LOOKED, reason };
-}
-
-/** A count of how many pictures each turn has looked at in this instance (`../agents/turn-budget.ts`), for the host that runs the turns to keep. */
-export function pictureLooks(): TurnBudget {
-  return new TurnBudget(PICTURE_LOOK.MAX_PER_TURN, PICTURE_LOOK.TRACKED_TURNS);
-}
-
-/** Where a look reads: the account and plan the service bound, the turn it is spent in, and the host's count of each turn's looks. */
-export interface PictureLookCall {
-  readonly plan: PlanDocumentBinding;
-  readonly turnId: string;
-  readonly looks: TurnBudget;
 }
 
 /** A picture as a look answers it: its type and its bytes in base64. */
@@ -120,32 +101,26 @@ function looked(picture: Picture): PictureLookResult {
 
 /**
  * One call of `look_at_picture`: the picture the address names, where it is
- * a picture of the plan the call is bound to that the account reads, and
- * the turn has looks left; `not-looked` and why otherwise. Only a look that
- * answers a picture spends one of the turn's looks.
+ * a picture of the plan the call is bound to that the account reads;
+ * `not-looked` and why otherwise.
  */
 export function runLookAtPicture(
-  call: PictureLookCall,
+  plan: PlanDocumentBinding,
   input: UnparsedWireValue,
 ): Effect.Effect<PictureLookResult, never, DatabaseServices> {
   const read = readInput(input);
   if (Result.isFailure(read))
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE));
   const named = planAttachmentOf(read.success.address.trim());
-  if (named === undefined || named.planId !== call.plan.planId) {
+  if (named === undefined || named.planId !== plan.planId) {
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
   }
-  // A turn with no look left reads no picture's bytes only to refuse them.
-  if (call.looks.exhausted(call.turnId)) {
-    return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
-  }
-  return readPlanAttachment(call.plan.userId, call.plan.planId, named.attachmentId).pipe(
-    Effect.map((picture) => {
-      if (Option.isNone(picture)) return pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE);
-      // Spent once the picture is in hand and before it is answered, in one step, so calls run at once never pass the bound.
-      if (!call.looks.take(call.turnId)) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY);
-      return looked(picture.value);
-    }),
+  return readPlanAttachment(plan.userId, plan.planId, named.attachmentId).pipe(
+    Effect.map((picture) =>
+      Option.isNone(picture)
+        ? pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE)
+        : looked(picture.value),
+    ),
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
   );
