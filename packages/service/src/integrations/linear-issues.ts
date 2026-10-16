@@ -80,6 +80,7 @@ const IssueNodeSchema = Schema.Struct({
   title: Schema.String,
   url: Schema.String,
   state: Schema.optionalKey(Schema.NullOr(Schema.Struct({ name: Schema.String }))),
+  assignee: Schema.optionalKey(Schema.NullOr(Schema.Struct({ name: Schema.String }))),
 });
 
 const IssueListSchema = Schema.Struct({
@@ -111,7 +112,7 @@ const IssueByIdentifierSchema = Schema.Struct({
   data: Schema.Struct({ issue: Schema.NullOr(IssueNodeSchema) }),
 });
 
-const ISSUE_FIELDS = "id identifier title url state { name }";
+const ISSUE_FIELDS = "id identifier title url state { name } assignee { name }";
 
 const QUERY = {
   RECENT: `query LukeRecentIssues($first: Int!) { issues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`,
@@ -167,12 +168,14 @@ function graphql<S extends Schema.Top>(
 
 function summaryOf(node: typeof IssueNodeSchema.Type): LinearIssueSummary {
   const state = node.state?.name;
+  const assignee = node.assignee?.name;
   return {
     id: node.id,
     identifier: node.identifier,
     title: node.title,
     url: node.url,
     ...(state !== undefined ? { state } : undefined),
+    ...(assignee !== undefined ? { assignee } : undefined),
   };
 }
 

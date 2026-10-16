@@ -11,7 +11,7 @@
  * own link reads it as one. A repository with its issues turned off answers
  * gone, which is none as well. Where it stands is read as GitHub draws its
  * mark: open, closed as done, or closed as not planned, which a duplicate is
- * closed as too.
+ * closed as too. Who opened it is read off the same answer, by login.
  */
 
 import { ISSUE_STATE, type IssueState } from "@luke/features/github-repositories-wire";
@@ -31,6 +31,8 @@ export interface GitHubIssue {
   readonly title: string;
   readonly url: string;
   readonly state: IssueState;
+  /** The login of who opened it, where GitHub named one. */
+  readonly author?: string;
 }
 
 /** GitHub's own word for a closed issue, and its reasons for closing one that read as not planned. */
@@ -43,6 +45,8 @@ const IssueSchema = Schema.Struct({
   html_url: Schema.String,
   state: Schema.String,
   state_reason: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Who opened it; null where their account is gone. */
+  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
   /** Present only where the number is a pull request's. */
   pull_request: Schema.optional(Schema.Unknown),
 });
@@ -78,6 +82,7 @@ export function issueByNumber(
               title: record.title,
               url: record.html_url,
               state: stateOf(record),
+              ...(record.user == null ? undefined : { author: record.user.login }),
             })
           : Option.none(),
       );

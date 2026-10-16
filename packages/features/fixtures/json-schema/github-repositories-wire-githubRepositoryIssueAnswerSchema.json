@@ -23,6 +23,9 @@
                 "closed",
                 "not-planned"
               ]
+            },
+            "author": {
+              "type": "string"
             }
           },
           "required": [

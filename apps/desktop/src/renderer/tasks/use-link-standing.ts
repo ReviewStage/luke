@@ -15,7 +15,7 @@ import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /**
- * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, read through the workspace's own connection.
+ * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, and who it is with, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one the place drawing them names, as the window's Inbox
@@ -59,6 +59,18 @@ export interface LinkStanding {
   readonly state: string | undefined;
   readonly pullRequest: { readonly number: number; readonly state: PullRequestState } | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
+  /** Who it is with, as its card says it: who opened a pull request or a GitHub issue, or who a Linear issue is assigned to; none where its provider named no one. */
+  readonly byline: string | undefined;
+}
+
+/** What a card says of who opened a pull request or a GitHub issue, by their GitHub login. */
+function openedBy(login: string | undefined): string | undefined {
+  return login === undefined ? undefined : `Opened by ${login}`;
+}
+
+/** What a card says of who a Linear issue is assigned to. */
+function assignedTo(name: string | undefined): string | undefined {
+  return name === undefined ? undefined : `Assigned to ${name}`;
 }
 
 /** A pull request's state in words, as its chip says it. */
@@ -154,7 +166,14 @@ function readStanding(
     }).then(([issue]) =>
       issue === undefined
         ? undefined
-        : { key, title: issue.title, state: issue.state, pullRequest: undefined, issue: undefined },
+        : {
+            key,
+            title: issue.title,
+            state: issue.state,
+            pullRequest: undefined,
+            issue: undefined,
+            byline: assignedTo(issue.assignee),
+          },
     );
   }
   const numbered = { workspaceId, repository: asked.repository, number: asked.number };
@@ -168,6 +187,7 @@ function readStanding(
             state: ISSUE_WORDS[issue.state],
             pullRequest: undefined,
             issue: { number: issue.number, state: issue.state },
+            byline: openedBy(issue.author),
           },
     );
   }
@@ -184,6 +204,7 @@ function readStanding(
           state: PULL_REQUEST_WORDS[pullRequest.state],
           pullRequest: { number: pullRequest.number, state: pullRequest.state },
           issue: undefined,
+          byline: openedBy(pullRequest.author),
         },
   );
 }

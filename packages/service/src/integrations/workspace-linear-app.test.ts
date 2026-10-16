@@ -51,6 +51,7 @@ const LINEAR_NODE = {
   title: "Start a plan from Linear",
   url: "https://linear.app/acme/issue/ENG-1",
   state: { name: "Todo" },
+  assignee: { name: "Sam Okafor" },
 };
 
 /** An account with a user row; its id. */
@@ -225,6 +226,7 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
                 title: LINEAR_NODE.title,
                 url: LINEAR_NODE.url,
                 state: "Todo",
+                assignee: "Sam Okafor",
               },
             ],
           },
@@ -240,7 +242,7 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
   );
 
   it.effect(
-    "a member reads one issue by its identifier, its state among it, through the workspace's grant, and none for an identifier Linear holds no issue for",
+    "a member reads one issue by its identifier, its state and its assignee among it, through the workspace's grant, and none for an identifier Linear holds no issue for",
     () =>
       Effect.gen(function* () {
         const group = yield* standing();
@@ -263,11 +265,16 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
                 title: LINEAR_NODE.title,
                 url: LINEAR_NODE.url,
                 state: "Todo",
+                assignee: "Sam Okafor",
               },
             ],
           },
         });
         assert.deepEqual(unknown, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.ok(
+          group.linear.asked[0]?.query.includes("assignee { name }"),
+          "Linear is asked who it is assigned to",
+        );
         assert.notEqual(strangers.status, HOSTED_HTTP_STATUS.OK);
         assert.notEqual(malformed.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(
