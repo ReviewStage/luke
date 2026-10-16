@@ -44,6 +44,7 @@ import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { INLINE_DIFF } from "../diff-view/contract";
 import { EmptyState } from "../empty-state";
 import { ReadFailure } from "../read-failure";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -621,7 +622,7 @@ function ThreadCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
-  const look = { ...useDiffLook(false), changedWords: false };
+  const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);

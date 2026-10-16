@@ -1348,6 +1348,52 @@ button.file-ref:hover .file-ref-path {
   color: var(--state-working);
 }
 
+/* The Files changed bar's diff settings (diff-settings.tsx): the button,
+   and under it a popover in the context popover's look, its rows the
+   settings page's own, scrolling within the room the panel leaves. */
+.diff-settings {
+  position: relative;
+  display: flex;
+}
+
+.diff-settings-popover {
+  display: flex;
+  max-height: min(560px, 70vh);
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  overflow-y: auto;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.diff-settings-popover:focus-visible {
+  outline: none; /* no ring: a popover holding focus for its controls */
+}
+
+.diff-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: calc(-1 * var(--space-8));
+}
+
+.diff-settings-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.diff-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 /* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
    of its own, in the panel's look (diff-view/index.ts); its box fills the
    File tab's place and scrolls as a File tab's lines do. */

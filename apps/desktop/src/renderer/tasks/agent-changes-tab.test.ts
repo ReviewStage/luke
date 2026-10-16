@@ -166,19 +166,67 @@ function choose(label: string): void {
   act(() => item.click());
 }
 
-test("a diff is handed over whole as git writes it, unified with its changed words marked, numbered and wrapped", async () => {
+/** How a diff is drawn until told otherwise: today's File tab look, and stage-cli's for what is new. */
+const DEFAULT_LOOK = {
+  layout: "unified",
+  indicators: "bars",
+  inlineDiff: "word-alt",
+  backgrounds: true,
+  lineNumbers: true,
+  wrap: true,
+  themes: { dark: "github-dark-default", light: "github-light-default" },
+  font: "sf-mono",
+  fontSize: "11.5",
+  lineHeight: "normal",
+  ligatures: false,
+};
+
+/** Opens the bar's diff settings, answering the popover. */
+function openSettings(): HTMLElement {
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]');
+  act(() => button?.click());
+  return (
+    document.querySelector<HTMLElement>('[role="dialog"][aria-label="Diff settings"]') ??
+    assert.fail("the diff settings open")
+  );
+}
+
+/** The popover's control of a name: a segment by its words, or a switch by its label. */
+function settingControl(popover: HTMLElement, selector: string, name: string): HTMLButtonElement {
+  const found = [...popover.querySelectorAll<HTMLButtonElement>(selector)].find(
+    (each) => each.textContent === name || each.getAttribute("aria-label") === name,
+  );
+  return found ?? assert.fail(`the settings offer ${name}`);
+}
+
+test("a diff is handed over whole as git writes it, drawn as today's File tab look until told otherwise", async () => {
   const props = await drawTab();
 
   assert.equal(
     props.patch,
     `diff --git a/src/seats.ts b/src/seats.ts\n--- a/src/seats.ts\n+++ b/src/seats.ts\n${PATCH}\n`,
   );
-  assert.deepEqual(props.look, {
-    layout: "unified",
-    changedWords: true,
-    lineNumbers: true,
-    wrap: true,
-  });
+  assert.deepEqual(props.look, DEFAULT_LOOK);
+});
+
+test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
+  await drawTab();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Classic (+/-)").click());
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  act(() => settingControl(popover, '[role="switch"]', "Backgrounds").click());
+
+  const expected = {
+    ...DEFAULT_LOOK,
+    layout: "split",
+    indicators: "classic",
+    ligatures: true,
+    backgrounds: false,
+  };
+  assert.deepEqual(lastDrawn().look, expected);
+  assert.deepEqual((await drawTab()).look, expected);
 });
 
 test("Split view draws the diff side by side, which the next view keeps", async () => {
@@ -194,16 +242,13 @@ test("with Highlight changed words turned off a changed line is tinted whole, fo
   await drawTab();
 
   choose("Highlight changed words");
-  assert.equal(lastDrawn().look.changedWords, false);
+  assert.equal(lastDrawn().look.inlineDiff, "none");
 
-  assert.equal((await drawTab()).look.changedWords, false);
+  assert.equal((await drawTab()).look.inlineDiff, "none");
 });
 
-test("a diff too narrow to split is drawn unified with Split view dimmed, and split again once there is room", async () => {
-  window.localStorage.setItem(
-    "luke.file-view",
-    JSON.stringify({ lineNumbers: true, wordWrap: true, diffLayout: "split", changedWords: true }),
-  );
+test("a diff too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
+  window.localStorage.setItem("luke.file-view", JSON.stringify({ diffLayout: "split" }));
   await drawTab();
   assert.equal(lastDrawn().look.layout, "split");
 
@@ -214,6 +259,7 @@ test("a diff too narrow to split is drawn unified with Split view dimmed, and sp
   assert.equal(item.getAttribute("aria-disabled") ?? String(item.disabled), "true");
   assert.equal(item.getAttribute("aria-checked"), "false");
   act(() => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+  assert.match(openSettings().textContent ?? "", /Needs a wider panel/u);
 
   boxWidth = 900;
   act(() => relayout());
@@ -223,15 +269,22 @@ test("a diff too narrow to split is drawn unified with Split view dimmed, and sp
 test("a kept setting that no longer reads takes its default and leaves the others as they were kept", async () => {
   window.localStorage.setItem(
     "luke.file-view",
-    JSON.stringify({ lineNumbers: false, wordWrap: false, diffLayout: "sideways" }),
+    JSON.stringify({
+      lineNumbers: false,
+      wordWrap: false,
+      diffLayout: "sideways",
+      darkTheme: "dracula",
+      lightTheme: "dracula",
+      diffFontSize: "11.5",
+    }),
   );
 
   const { look } = await drawTab();
 
   assert.deepEqual(look, {
-    layout: "unified",
-    changedWords: true,
+    ...DEFAULT_LOOK,
     lineNumbers: false,
     wrap: false,
+    themes: { dark: "dracula", light: "github-light-default" },
   });
 });

@@ -38,24 +38,39 @@ export function useSplitRoom(element: HTMLElement | null): boolean {
   return roomy;
 }
 
-/** How the File tabs' settings draw a diff, unified where a split has no room. */
+/** How the diff settings draw a diff (`file-view-settings.ts`), unified where a split has no room. */
 export function useDiffLook(roomy: boolean): DiffLook {
   const { settings } = useFileViewSettings();
   return {
     layout: roomy ? settings.diffLayout : DIFF_LAYOUT.UNIFIED,
-    changedWords: settings.changedWords,
+    indicators: settings.diffIndicators,
+    inlineDiff: settings.inlineDiff,
+    backgrounds: settings.diffBackgrounds,
     lineNumbers: settings.lineNumbers,
     wrap: settings.wordWrap,
+    themes: { dark: settings.darkTheme, light: settings.lightTheme },
+    font: settings.diffFont,
+    fontSize: settings.diffFontSize,
+    lineHeight: settings.diffLineHeight,
+    ligatures: settings.diffLigatures,
   };
 }
 
-/** Whether two looks draw a diff alike. */
+/** Whether two looks draw a diff alike: every setting the same, each appearance's theme among them. */
 function sameLook(a: DiffLook, b: DiffLook): boolean {
   return (
     a.layout === b.layout &&
-    a.changedWords === b.changedWords &&
+    a.indicators === b.indicators &&
+    a.inlineDiff === b.inlineDiff &&
+    a.backgrounds === b.backgrounds &&
     a.lineNumbers === b.lineNumbers &&
-    a.wrap === b.wrap
+    a.wrap === b.wrap &&
+    a.themes.dark === b.themes.dark &&
+    a.themes.light === b.themes.light &&
+    a.font === b.font &&
+    a.fontSize === b.fontSize &&
+    a.lineHeight === b.lineHeight &&
+    a.ligatures === b.ligatures
   );
 }
 
