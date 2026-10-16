@@ -47,6 +47,8 @@
     "./place-chip-model": "./src/place-chip-model.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./plan-attachment-wire": "./src/plan-attachment-wire.js",
+    "./plan-comment-anchor": "./src/plan-comment-anchor.js",
+    "./plan-comment-wire": "./src/plan-comment-wire.js",
     "./plan-document": "./src/plan-document.js",
     "./plan-document-template": "./src/plan-document-template.js",
     "./plan-edit": "./src/plan-edit.js",

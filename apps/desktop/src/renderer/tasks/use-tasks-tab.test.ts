@@ -436,6 +436,50 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
+test("a task started opens with the side panel hidden, a refused start shows it again as it stood, and a panel opened before the start answers stays open", async () => {
+  const answers: Array<(answer: ActResultFor<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onToggleFullScreen());
+
+  const send = () => {
+    let note: Promise<string | undefined> = Promise.resolve(undefined);
+    act(() => {
+      note = tab
+        .control()
+        .newTask.start("Dark mode", null, tab.control().newTask.workspaceId, true);
+    });
+    return note;
+  };
+  act(() => tab.control().onNewTask());
+  const refused = send();
+  assert.equal(panel().open, false, "the panel hides as the start is sent");
+  await act(async () => {
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await refused;
+  });
+  assert.deepEqual(
+    panelOf(tab),
+    { open: true, tab: SIDE_PANEL_TAB.BOARD },
+    "a refusal shows it again",
+  );
+  assert.equal(panel().fullScreen, false, "beside the document");
+
+  const started = send();
+  assert.equal(panel().open, false);
+  // The host turns to the new plan before the start answers, and the developer opens its panel.
+  act(() => panel().onToggle());
+  await act(async () => {
+    answers[1]?.({ planId: OTHER_TASK_ID });
+    await started;
+  });
+  assert.equal(panel().open, true, "the late answer leaves the panel the developer opened");
+});
+
 test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
   const asked: unknown[] = [];
   const page = {

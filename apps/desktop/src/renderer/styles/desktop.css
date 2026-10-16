@@ -8044,6 +8044,49 @@ button.automation-run:hover {
   color: var(--text-tertiary);
 }
 
+/* New task's name field and the Linear issues matching it are one well:
+   while issues stand, the field's foot opens onto the list under it, so the
+   list reads as the field's own suggestions rather than a menu over the
+   card. */
+.new-task-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.new-task-name[data-matching="true"] .dialog-name-field {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.new-task-matches {
+  display: flex;
+  max-height: 280px; /* off-scale: seven rows and the heading */
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-top: 0;
+  border-radius: 0 0 var(--control-radius) var(--control-radius);
+  background: var(--desktop-well);
+}
+
+/* The list's keys stay in the field, so its one highlight is the row the
+   arrows or the pointer stand on, and the pointer's own hover draws nothing. */
+.new-task-matches .menu-item:hover {
+  background: none;
+}
+
+.new-task-matches .menu-item[aria-selected="true"] {
+  background: var(--raised-strong);
+}
+
+/* An issue's key and state stand at the row's end, and its title gives way. */
+.new-task-matches .task-compose-menu-detail {
+  margin-left: auto;
+  padding-left: var(--space-12);
+}
+
 .confirm-dialog-actions > .repository-chip {
   margin-right: auto;
 }
@@ -8489,35 +8532,4 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .run-card-figure dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
-}
-
-/* New plan's Linear issue picker (`linear-issue-picker.tsx`) stands beside
-   the sidebar, level with the button it came from, and a notch on its
-   leading edge points back at that button, so the picker reads as New
-   plan's own rather than a menu of the page it floats over. */
-.sidebar-new-plan-wrap {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-.searchable-menu.linear-issue-picker {
-  z-index: 20;
-  top: calc(var(--space-8) * -1);
-  left: calc(100% + var(--space-12));
-  width: 380px;
-  overflow: visible;
-}
-
-.searchable-menu.linear-issue-picker::before {
-  position: absolute;
-  top: calc(var(--space-8) + var(--control-height) / 2 - 6px);
-  left: -6px;
-  width: 12px;
-  height: 12px;
-  border-bottom: 1px solid var(--hairline);
-  border-left: 1px solid var(--hairline);
-  background: inherit;
-  content: "";
-  transform: rotate(45deg);
 }

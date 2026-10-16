@@ -42,11 +42,11 @@ import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { tasksControl } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../tasks/coding-agent-model";
-import { useSidePanel } from "../tasks/use-side-panel";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
@@ -180,9 +180,14 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
           archives.push(request.payload);
+          // The agent answered is the one the page read, brought back, which names no archive.
+          const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
+          const { archivedAt: _archived, ...back } = shown;
+          // Brought back, the agent is read so from then on.
+          if (!archiveRefused) pages = [{ agent: back }];
           const value = archiveRefused
             ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { agent: { ...PAGE, archivedAt: undefined } };
+            : { agent: back };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
@@ -296,6 +301,9 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
 });
 
 /** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
+/** The side panel the page last drew, whose toggle the shell's button presses. */
+let drawnPanel: SidePanelControl | undefined;
+
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
@@ -307,6 +315,7 @@ function PanelPage(): React.JSX.Element {
     [],
     agents,
   );
+  drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
     tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
@@ -378,7 +387,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("with its last tab closed, the panel offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+test("its last tab closed shuts the panel, and shown again it offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -436,8 +445,12 @@ test("with its last tab closed, the panel offers in place every row its + offers
   assert.ok(close, "the worker's tab closes");
   act(() => close.click());
   await settle();
+  assert.equal(container.querySelector("aside.side-panel"), null, "the panel shuts");
 
-  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  act(() => drawnPanel?.onToggle());
+  await settle();
+  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the toggle shows it");
+  const well = shown.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
   const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
   assert.deepEqual(
     rows.map((each) => each.textContent),
@@ -453,7 +466,7 @@ test("with its last tab closed, the panel offers in place every row its + offers
   act(() => changes.click());
   await settle();
   assert.ok(
-    [...panel.querySelectorAll("[role='tab']")].some((tab) =>
+    [...shown.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes("Changes"),
     ),
     "the Changes tab stands in the panel",
@@ -589,6 +602,39 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
+});
+
+/** The task open beneath the page. */
+const OPEN_TASK = "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b";
+
+test("an agent of the open task brought back on its page has the task's agents read again, so its tab and ⌘K stand where it does, and one of another task's has none", async () => {
+  /** How many times the open task's agents are read again around an Unarchive on the page of an agent of `planId`. */
+  const readsAround = async (planId: string): Promise<number> => {
+    let reads = 0;
+    pages = [{ agent: { ...PAGE, planId, archivedAt: 2 } }];
+    const page = mount(
+      tasksControl({
+        activeTaskId: OPEN_TASK,
+        agents: codingAgentsControl({ onRetryList: () => (reads += 1) }),
+      }),
+    );
+    await settle();
+    const drawn = reads;
+    const unarchive = [...page.querySelectorAll("button")].find(
+      (each) => each.textContent === "Unarchive",
+    );
+    assert.ok(unarchive, "the archived agent offers Unarchive");
+    act(() => unarchive.click());
+    await settle();
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    assert.equal(drawn, 0, "drawing the page reads nothing of the task");
+    return reads;
+  };
+
+  assert.equal(await readsAround(OPEN_TASK), 1);
+  assert.equal(await readsAround("6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d9e"), 0);
 });
 
 test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {

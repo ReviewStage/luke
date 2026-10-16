@@ -23,8 +23,9 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
  * again before it is archived unasked, because nothing follows an agent
  * whose tab is not shown, and a turn begun since, by Luke or another
  * window, is asked about first like any other. Archived, the agent leaves its tab, the
- * summary, the "+" menu, ⌘K, and the sidebar's card and marks, while its
- * transcript and its pull request are kept, and a toast offers Undo
+ * summary, the "+" menu, and the sidebar's card and marks, while its
+ * transcript and its pull request are kept, ⌘K still finds it, saying it is
+ * archived and opening its own page, and a toast offers Undo
  * (`use-coding-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the

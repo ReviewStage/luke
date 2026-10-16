@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { act, createElement } from "react";
@@ -306,4 +307,66 @@ test("Tab from the workspace picker's open list moves on to the Plan switch besi
   const backward = await tabFromList(true);
 
   assert.deepEqual([forward, backward], ["Plan with Luke", "Workspace: Acme"]);
+});
+
+test("issues put away with Escape come back for the workspace chosen next, its own issues matched against the name as typed", async () => {
+  const issuesOf = (workspaceId: string): readonly LinearIssueSummary[] => [
+    {
+      id: `${workspaceId}-1`,
+      identifier: workspaceId === ACME.id ? "ACME-1" : "ME-1",
+      title: "Rotate the deploy key",
+      url: "https://linear.app/x/issue/1",
+    },
+  ];
+  const control = tasksControl();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(NewTaskDialog, {
+        newTask: {
+          ...control.newTask,
+          open: true,
+          workspaces: [PERSONAL, ACME],
+          workspaceId: PERSONAL.id,
+          repositoriesIn: chooserFor,
+          linearIssuesIn: (workspaceId) =>
+            workspaceId === undefined ? undefined : () => Promise.resolve(issuesOf(workspaceId)),
+        },
+      }),
+    ),
+  );
+  await settle();
+  const name =
+    document.querySelector<HTMLInputElement>('input[aria-label="Task name"]') ??
+    assert.fail("the name field stands");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "deploy");
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  const listed = () =>
+    [...document.querySelectorAll('[role="listbox"] .task-compose-menu-detail')].map(
+      (detail) => detail.textContent,
+    );
+  const before = listed();
+  act(() => {
+    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  const dismissed = listed();
+
+  const workspaceChip =
+    document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Personal"]') ??
+    assert.fail("the title's workspace is a chip");
+  act(() => workspaceChip.click());
+  await settle();
+  const menu =
+    document.querySelector('[role="dialog"][aria-label="Workspace"]') ??
+    assert.fail("the chip opens its menu");
+  act(() => optionNamed(menu, "Acme").click());
+  await settle();
+
+  assert.deepEqual(before, ["ME-1"]);
+  assert.deepEqual(dismissed, []);
+  assert.deepEqual(listed(), ["ACME-1"]);
 });

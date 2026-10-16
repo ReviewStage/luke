@@ -44,8 +44,8 @@ import { NO_LOOKS } from "./tasks/use-task-looks";
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
  * wait there while another task is open and while the agent's tab is away,
- * which its task's sidebar row and its tab mark with the Draft pencil
- * meanwhile, and only meanwhile, the box in sight showing them itself,
+ * which its task's sidebar row marks with the Draft pencil while another
+ * task is open, and only then, no tab of the task open marking its own,
  * outlast a reload of the window, and go with the message that sends them;
  * and an inbox card's answer, kept the same way, until the agent changes
  * the item it answers.
@@ -238,7 +238,7 @@ test("words typed in one task's agent's box wait there while another task is ope
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
 });
 
-test("an agent's tab wears the Draft pencil while another tab is chosen, and not while its own box is in sight", async () => {
+test("an agent's tab wears no Draft pencil, whichever of its task's tabs is chosen", async () => {
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES);
   typeInComposer(app.container, "Expire invites after a week");
@@ -246,10 +246,8 @@ test("an agent's tab wears the Draft pencil while another tab is chosen, and not
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its box shows its words");
 
   await app.show(INVITES, { onTask: true });
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), true, "the draft is marked while away");
-
-  await app.show(INVITES);
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its task is still the one open");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false);
 });
 
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
@@ -545,7 +543,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
   };
 }
 
-test("an inbox card's answer and a draft agent's first message mark their tabs while another is chosen, and their open task's row not at all", async () => {
+test("an inbox card's answer and a draft agent's first message mark neither their tabs nor their open task's row", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -568,23 +566,16 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
     ]),
   );
   const tabs = [MAIN_TAB.INBOX, { draft: DRAFT_KEY }];
-  const onTask = await columnOn(tabs, MAIN_TAB.PLAN);
-  assert.equal(onTask.tabDrafted(TAB_WORDS.INBOX), true);
-  assert.equal(onTask.tabDrafted(TAB_WORDS.NEW_AGENT), true);
-  assert.equal(onTask.rowDrafted(), false, "its tabs mark both");
-  onTask.unmount();
-
-  const onInbox = await columnOn(tabs, MAIN_TAB.INBOX);
-  assert.equal(onInbox.tabDrafted(TAB_WORDS.INBOX), false, "the Inbox shows its answer");
-  assert.equal(onInbox.tabDrafted(TAB_WORDS.NEW_AGENT), true);
-  onInbox.unmount();
-
-  const onDraft = await columnOn(tabs, { draft: DRAFT_KEY });
-  assert.equal(onDraft.tabDrafted(TAB_WORDS.NEW_AGENT), false, "its box shows its words");
-  assert.equal(onDraft.tabDrafted(TAB_WORDS.INBOX), true);
+  for (const chosen of [MAIN_TAB.PLAN, MAIN_TAB.INBOX, { draft: DRAFT_KEY }]) {
+    const column = await columnOn(tabs, chosen);
+    assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
+    assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
+    assert.equal(column.rowDrafted(), false);
+    column.unmount();
+  }
 });
 
-test("a draft behind no open tab of its task's, or behind a failed agent's, keeps the task's row marked while it is open", async () => {
+test("a draft behind no open tab of its task's, or behind a failed agent's, leaves the task's row unmarked while it is open", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -592,18 +583,13 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, keep
     ]),
   );
   const closed = await columnOn([], MAIN_TAB.PLAN);
-  assert.equal(closed.rowDrafted(), true, "the agent's tab is closed, so the row marks it");
+  assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
-
-  const open = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.PLAN);
-  assert.equal(open.rowDrafted(), false, "its open tab marks it instead");
-  assert.equal(open.tabDrafted(INVITES.agent.title ?? ""), true);
-  open.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
   const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.PLAN, failed);
-  assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false, "its failure's mark stands");
-  assert.equal(marked.rowDrafted(), true, "so the row marks the draft");
+  assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
+  assert.equal(marked.rowDrafted(), false);
 });
 
 /** An item of the Teammate invitations agent's, open and asking for an approval, at `revision`. */

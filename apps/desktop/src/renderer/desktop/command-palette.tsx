@@ -19,7 +19,8 @@
  * beside it, so two plans of one name can be told apart, and an archived
  * plan says so. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
- * place naming an agent does (`agent-ref.tsx`), a subagent
+ * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
+ * says so, its own page, a subagent
  * its tab as the side panel's "+" would, a file in a tab of its own as one
  * chosen in a File tab's tree would, a Settings page opens as the Settings
  * sidebar's row for it does, and a setting lands on its row as the settings
@@ -82,9 +83,10 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
-import { TAB_KIND, tabLook } from "../tasks/tab-look";
+import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { markReadItem } from "../tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
@@ -219,6 +221,9 @@ const FILTER_HINT = {
 
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
+
+/** What an archived task's or agent's detail says of it. */
+const ARCHIVED_WORD = "Archived";
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
@@ -382,7 +387,7 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
 
 /** A plan's muted words: its repository, and whether it is archived. */
 function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
-  const words = [task.repository, archived ? "Archived" : null].filter((word) => word !== null);
+  const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
@@ -460,8 +465,9 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 /**
  * The open plan's Inbox and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
- * lists them, each in its row's look and words, found by its row's words,
- * and beside the plan's name; none while no plan is open. An agent opens as
+ * lists them, then its archived agents (`archivedAgentRows`), each in its
+ * row's look and words, found by its row's words, and beside the plan's
+ * name; none while no plan is open. An agent opens as
  * its notification's click opens it, the Inbox the same way, and a
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
@@ -487,7 +493,7 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
   const entries = [...inbox, ...agents, ...subagents];
-  return entries.map(({ row, endMark, onPick, agent }) => ({
+  const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
     detail: [row.detail, taskName].filter((word) => word !== undefined).join(" · ") || undefined,
@@ -502,6 +508,43 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
     terms: [...(row.terms ?? [row.label]), ...(taskName === undefined ? [] : [taskName])],
     onChoose: () => show(onPick),
   }));
+  return [...standing, ...archivedAgentRows(tasks, taskName, show)];
+}
+
+/**
+ * The open plan's archived agents, in the order started, each in its tab's
+ * look and found by its name as a standing one is, its detail saying it is
+ * archived before the plan's name, and hanging its card. Note that one opens
+ * on its own page, as an archived agent the sidebar lists does, because its
+ * tab is gone from the plan's column and its page is where it is read and
+ * brought back.
+ */
+function archivedAgentRows(
+  tasks: TasksControl,
+  taskName: string | undefined,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
+  const { agents } = tasks;
+  return (agents.archived ?? []).map((agent) => {
+    const look = tabLook({
+      kind: TAB_KIND.AGENT,
+      name: agentTabLabel(agent, agents.models),
+      agent,
+    });
+    return {
+      ...look,
+      detail: [ARCHIVED_WORD, taskName].filter((word) => word !== undefined).join(" · "),
+      endMark: agentEndMark(agent, true),
+      card: (
+        <AgentCard
+          subject={agentSubject(agents, agent.id, NOTHING_HELD, false)}
+          models={agents.models}
+        />
+      ),
+      terms: [look.label, ...(taskName === undefined ? [] : [taskName])],
+      onChoose: () => show(() => tasks.agentView.onOpen(agent.id)),
+    };
+  });
 }
 
 /**

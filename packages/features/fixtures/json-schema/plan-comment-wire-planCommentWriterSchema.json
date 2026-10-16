@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "actor": {
+      "type": "string",
+      "enum": [
+        "member",
+        "luke",
+        "agent"
+      ]
+    },
+    "by": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "actor"
+  ],
+  "additionalProperties": false
+}

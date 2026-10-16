@@ -21,6 +21,7 @@ import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { VoiceView } from "@luke/voice/voice-view";
+import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
  * tasks-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
@@ -130,6 +131,46 @@ export function workspaceReaches(
 export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
   const title = issue.title.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
   return title === "" ? issue.identifier : title;
+}
+
+/** How many of a workspace's Linear issues New task offers under its name field at once. */
+export const ISSUE_MATCH_LIMIT = 6;
+
+/**
+ * How closely an issue answers what was typed, nearest first: its key or
+ * its number typed whole, then every word typed at the start of a word of
+ * its title, then every word anywhere in its title or key.
+ */
+function issueNearness(
+  issue: Pick<LinearIssueSummary, "identifier" | "title">,
+  tokens: readonly string[],
+): number {
+  const key = issue.identifier.toLowerCase();
+  const number = key.slice(key.lastIndexOf("-") + 1);
+  if (tokens.some((token) => token === key || token === number)) return 0;
+  const words = issue.title.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  if (tokens.every((token) => words.some((word) => word.startsWith(token)))) return 1;
+  return 2;
+}
+
+/**
+ * The issues New task offers for the name typed so far: those whose title or
+ * key holds every word typed, case aside, nearest first and otherwise in the
+ * order Linear listed them, at most `ISSUE_MATCH_LIMIT` of them; none for a
+ * blank name, which leaves the field a plain name.
+ */
+export function matchingIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
+  issues: readonly Issue[],
+  typed: string,
+): readonly Issue[] {
+  const tokens = searchTokens(typed);
+  if (tokens.length === 0) return [];
+  return issues
+    .filter((issue) => matchesTokens([issue.title, issue.identifier], tokens))
+    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens) }))
+    .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
+    .slice(0, ISSUE_MATCH_LIMIT)
+    .map(({ issue }) => issue);
 }
 
 /**

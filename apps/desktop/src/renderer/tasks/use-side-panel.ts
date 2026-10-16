@@ -42,7 +42,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * right that the developer opens and closes, as every devtool window's
  * secondary sidebar does. What opens it on its own is Luke drawing on a
  * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
- * does; a subagent's tab opened from an agent's transcript opens it too. Not to be confused with "the
+ * does; a subagent's tab opened from an agent's transcript opens it too. A
+ * task just started opens with it hidden, whatever the task before it showed
+ * (`use-tasks-tab.ts`), since a new task has nothing in it yet. Not to be confused with "the
  * panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
@@ -92,7 +94,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * chooses the one viewed before it on that plan that still stands, as an editor or a browser
  * does, kept with the plan's other choices so it holds across a launch;
  * only where none does, its neighbour (`replacementOf`). Closing the last
- * leaves the panel open and empty rather than shutting it.
+ * shuts the panel too, as an editor's secondary side bar goes once its last
+ * view closes, and leaves full screen with it; the toggle shows it again,
+ * empty, offering the tabs closed in place.
  *
  * A tab of any kind is dragged or moved from the keyboard to any place in
  * the strip, among tabs of every kind, as an editor's are. The plan keeps
@@ -497,6 +501,8 @@ export interface SidePanelControl {
   width: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
+  /** Shows or hides the panel as asked, as a task being started does; hiding it leaves full screen too. */
+  onSetOpen: (open: boolean) => void;
   onToggleFullScreen: () => void;
   /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -506,7 +512,7 @@ export interface SidePanelControl {
   onChoose: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the plan given, as `onChoose` does on the open plan: what a pin or a notification asks, the plan opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
-  /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the plan that still stands, else its neighbour, the one after it where there is one. */
+  /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the plan that still stands, else its neighbour, the one after it where there is one; closing the last the strip draws shuts the panel. */
   onClose: (tab: SidePanelTab) => void;
   /** Moves the tab to the place `to` in the strip, among tabs of every kind, leaving the chosen one chosen. */
   onMove: (tab: SidePanelTab, to: number) => void;
@@ -1073,7 +1079,7 @@ function withChosenViewed(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs):
  * The state with the tab closed, gone from those viewed on the plan, and
  * another chosen in its place if it was the one shown (`replacementOf`). A
  * fixed tab closes on the open plan alone; closing a pinned tab leaves its
- * pin.
+ * pin. Closing the last tab the plan's strip draws shuts the panel.
  */
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
   const closed: HeldState | undefined = isFixedTab(tab)
@@ -1098,11 +1104,16 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
               : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
+  const left = stripOf(forgotten, drawn);
+  // Note that only a close that empties the strip shuts the panel, because a
+  // tab the strip never drew may close without the developer seeing it go.
+  const shut = left.length === 0 && stripOf(held, drawn).length > 0;
+  const kept = shut ? { ...forgotten, open: false } : forgotten;
   const shown = shownIn(held, drawn);
-  if (shown === undefined || !sameTab(shown, tab)) return forgotten;
-  const recent = taskTabs(forgotten, drawn.task.id).recent ?? [];
-  const replacement = replacementOf(stripOf(forgotten, drawn), recent, stripOf(held, drawn), tab);
-  return { ...forgotten, tab: replacement };
+  if (shown === undefined || !sameTab(shown, tab)) return kept;
+  const recent = taskTabs(kept, drawn.task.id).recent ?? [];
+  const replacement = replacementOf(left, recent, stripOf(held, drawn), tab);
+  return { ...kept, tab: replacement };
 }
 
 /**
@@ -1444,6 +1455,12 @@ export function useSidePanel(
     }
     heldMacTerminals.current = kept.macTerminals;
   }, [kept.macTerminals, tell]);
+  // A panel shut, by its toggle or by its last tab closing, shows again
+  // beside the document and with no ask of its "+" standing.
+  if (!state.open && (fullScreen || newTabAsked)) {
+    setFullScreen(false);
+    setNewTabAsked(false);
+  }
   // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>
@@ -1523,6 +1540,15 @@ export function useSidePanel(
     setFullScreen(false);
     setNewTabAsked(false);
   }, [update]);
+  const onSetOpen = useCallback(
+    (open: boolean) => {
+      update((held) => (held.open === open ? held : { ...held, open }));
+      if (open) return;
+      setFullScreen(false);
+      setNewTabAsked(false);
+    },
+    [update],
+  );
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
@@ -1682,6 +1708,7 @@ export function useSidePanel(
     fullScreen: state.open && fullScreen,
     newTabAsked: state.open && newTabAsked,
     onToggle,
+    onSetOpen,
     onToggleFullScreen,
     onNewTab,
     onNewTabAnswered,

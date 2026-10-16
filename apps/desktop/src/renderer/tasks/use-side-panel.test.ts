@@ -242,3 +242,25 @@ test("the agent whose Terminal tab was shown last on a plan is the plan's own, w
   panel.render({ task: OTHER_TASK, taskAgents: [] });
   assert.equal(panel.control().lastTerminal, undefined);
 });
+
+test("closing the last tab shuts the panel and leaves full screen, and the toggle shows it again empty, offering the tabs closed", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT] });
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  act(() => panel.control().onToggleFullScreen());
+  assert.equal(panel.control().fullScreen, true);
+
+  for (const tab of SIDE_PANEL_TABS) act(() => panel.control().onClose(tab));
+  assert.equal(panel.control().open, true, "a tab still stands, so the panel does");
+  assert.deepEqual(panel.control().strip, [{ changes: AGENT }]);
+
+  act(() => panel.control().onClose({ changes: AGENT }));
+  assert.equal(panel.control().open, false);
+  assert.equal(panel.control().fullScreen, false);
+
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, true);
+  assert.equal(panel.control().fullScreen, false, "shown again beside the document");
+  assert.deepEqual(panel.control().strip, []);
+  assert.equal(panel.control().tab, undefined);
+  assert.deepEqual(panel.control().closedTabs, SIDE_PANEL_TABS);
+});
