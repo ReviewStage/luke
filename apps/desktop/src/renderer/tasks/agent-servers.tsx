@@ -167,7 +167,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
         <span
-          className="spinner agent-servers-waiting"
+          className="luke-spinner agent-servers-waiting"
           data-size={SPINNER_SIZE.INLINE}
           role="status"
           title={row.note}

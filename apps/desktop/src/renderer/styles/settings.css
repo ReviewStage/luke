@@ -649,7 +649,7 @@
 }
 
 /* A sign-in waiting on the browser wears the window's ring, at the line's size. */
-.settings-state .spinner {
+.settings-state .luke-spinner {
   width: 12px;
   height: 12px;
 }
