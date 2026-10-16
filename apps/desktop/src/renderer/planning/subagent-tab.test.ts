@@ -60,6 +60,7 @@ function toolPart(tool: string, callId: string, input: WireRecord, output?: Wire
 async function workerTab(
   status: CodingAgentStatus,
   parts: readonly WireRecord[],
+  opened: { task: string; first?: string; later?: string } = { task: "Audit the CSV writers" },
 ): Promise<HTMLElement> {
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
   let reads = 0;
@@ -69,7 +70,27 @@ async function workerTab(
       reads += 1;
       if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       return Promise.resolve({
-        messages: [{ id: "worker-turn", role: "assistant", parts: [...parts] }],
+        messages: [
+          ...(opened.first === undefined
+            ? []
+            : [
+                {
+                  id: "worker-task",
+                  role: "user" as const,
+                  parts: [{ type: "text", text: opened.first }],
+                },
+              ]),
+          { id: "worker-turn", role: "assistant", parts: [...parts] },
+          ...(opened.later === undefined
+            ? []
+            : [
+                {
+                  id: "worker-later",
+                  role: "user" as const,
+                  parts: [{ type: "text", text: opened.later }],
+                },
+              ]),
+        ],
         cursor: "1:0",
         status,
         title: null,
@@ -85,7 +106,7 @@ async function workerTab(
         createElement(AgentSubagentTab, {
           agentId: AGENT.id,
           callId: "delegation-call",
-          task: "Audit the CSV writers",
+          task: opened.task,
           status,
           control,
           shown: true,
@@ -133,4 +154,15 @@ test("a worker that finished folds its lead under one line, its last words stand
   assert.ok(container.textContent?.includes("Both writers quote fields the same way."));
   act(() => fold?.click());
   assert.deepEqual(callRows(container), ["Searched toCsv", "Read src/csv.ts"]);
+});
+
+test("a worker opened by its link, which carries no task's words, draws the task its own first row says, and no later task as the developer's", async () => {
+  const container = await workerTab(CODING_AGENT_STATUS.COMPLETED, [], {
+    task: "",
+    first: "Audit retries.",
+    later: "Also check the timeouts.",
+  });
+
+  assert.match(container.textContent ?? "", /Audit retries\./u);
+  assert.equal(container.querySelectorAll(".is-user:not(.agent-origin)").length, 0);
 });

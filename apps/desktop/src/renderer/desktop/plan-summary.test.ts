@@ -8,12 +8,14 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { LinkWorkspaceProvider } from "../copy-link-item";
 import { PlanSummary, type SummaryLayout } from "./plan-summary";
 import type { HeldTranscripts } from "./strip-tabs";
 
@@ -92,7 +94,7 @@ afterEach(() => {
 });
 
 /** The summary of a plan whose running agent opened the pull request, the plan's column showing `shown`; every agent it opens recorded. */
-function mount(shown: "agent" | "plan") {
+function mount(shown: "agent" | "plan", linkWorkspace?: string) {
   const opened: string[] = [];
   const base = plansControl();
   const plans = plansControl({
@@ -115,15 +117,19 @@ function mount(shown: "agent" | "plan") {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlanSummary, {
-          plans,
-          layout: PINNED,
-          cardId: "summary-card",
-          inbox: { open: [], settled: [] },
-          held: HELD,
-          repository: "acme/relay",
-          onOpenAgent: (agentId) => opened.push(agentId),
-        }),
+        createElement(
+          LinkWorkspaceProvider,
+          { value: linkWorkspace },
+          createElement(PlanSummary, {
+            plans,
+            layout: PINNED,
+            cardId: "summary-card",
+            inbox: { open: [], settled: [] },
+            held: HELD,
+            repository: "acme/relay",
+            onOpenAgent: (agentId) => opened.push(agentId),
+          }),
+        ),
       ),
     ),
   );
@@ -172,4 +178,34 @@ test("the agent's card hung from a Changes card previews its running step while 
   };
   assert.match(latestStep("agent"), /Writing the expiry tests\./u);
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
+});
+
+test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+  const { page } = mount("plan", "acme");
+  const row = [...page.querySelectorAll<HTMLElement>(".plan-summary-row")].find((each) =>
+    each.textContent?.includes(AGENT.title ?? ""),
+  );
+  assert.ok(row, "the agent's row is listed");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  const labels = items.map((each) => each.textContent);
+  const copy = items.find((each) => each.textContent === "Copy link");
+  assert.ok(copy);
+  await act(async () => copy.click());
+
+  assert.deepEqual(labels, ["Copy link", "Archive agent"]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
 });

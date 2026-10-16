@@ -85,38 +85,36 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
   return home?.slug ?? workspaceId ?? "";
 }
 
-/** The link a tab of the side panel has of its own, on its task; none for a tab whose thing has no link. */
-function panelLink(
+/** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, a terminal. */
+export function panelTabPlace(
   planId: string,
   tab: SidePanelTab | undefined,
-):
-  | (Omit<LinkAtHand, "link"> & {
-      readonly place: LinkPlace;
-    })
-  | undefined {
+): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.CALL)
-    return { place: { kind: LINK_PLACE.CALL, planId }, thing: LINK_THING.CALL };
-  if (isPageTab(tab)) {
-    return { place: { kind: LINK_PLACE.PAGE, planId, pageId: tab.page }, thing: LINK_THING.PAGE };
+  if (tab === SIDE_PANEL_TAB.CALL) return { kind: LINK_PLACE.CALL, planId };
+  if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId, pageId: tab.page };
+  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId, agentId: tab.changes };
+  if (!isSubagentTab(tab)) return undefined;
+  const agent = tab.delegation?.agent;
+  return agent === undefined
+    ? { kind: LINK_PLACE.WORKER, planId, callId: tab.subagent }
+    : { kind: LINK_PLACE.WORKER, planId, agentId: agent, callId: tab.subagent };
+}
+
+/** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
+function panelThing(place: LinkPlace): LinkThing | undefined {
+  switch (place.kind) {
+    case LINK_PLACE.CALL:
+      return LINK_THING.CALL;
+    case LINK_PLACE.PAGE:
+      return LINK_THING.PAGE;
+    case LINK_PLACE.CHANGES:
+      return LINK_THING.CHANGES;
+    case LINK_PLACE.WORKER:
+      return LINK_THING.WORKER;
+    default:
+      return undefined;
   }
-  if (isChangesTab(tab)) {
-    return {
-      place: { kind: LINK_PLACE.CHANGES, planId, agentId: tab.changes },
-      thing: LINK_THING.CHANGES,
-    };
-  }
-  if (isSubagentTab(tab)) {
-    const agent = tab.delegation?.agent;
-    return {
-      place:
-        agent === undefined
-          ? { kind: LINK_PLACE.WORKER, planId, callId: tab.subagent }
-          : { kind: LINK_PLACE.WORKER, planId, agentId: agent, callId: tab.subagent },
-      thing: LINK_THING.WORKER,
-    };
-  }
-  return undefined;
 }
 
 /** The links of the task drawn: its version chosen, its tabs', and its own, the most specific first. */
@@ -152,9 +150,12 @@ function taskLinks(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
           thing: LINK_THING.AGENT,
           name: plans.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = plans.sidePanel.open ? panelLink(plan.id, plans.sidePanel.tab) : undefined;
+  const held = plans.sidePanel.open ? panelTabPlace(plan.id, plans.sidePanel.tab) : undefined;
+  const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
-    held === undefined ? undefined : { link: { workspace, place: held.place }, thing: held.thing };
+    held === undefined || thing === undefined
+      ? undefined
+      : { link: { workspace, place: held }, thing };
   // A panel filling the window hides the work column, so its tab is at hand whatever holds the keyboard.
   const panelFirst = at.sidePanelFocused || plans.sidePanel.fullScreen;
   const order = panelFirst ? [panel, agent, task] : [agent, panel, task];

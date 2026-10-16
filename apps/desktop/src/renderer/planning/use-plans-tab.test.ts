@@ -692,6 +692,40 @@ test("a Luke link to an agent with no task opens its page, and one under a task 
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 });
 
+test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.WORKER, planId: PLAN.id, agentId: AGENT_ID, callId: "toolu_1" },
+    }),
+  );
+  const worker = panelOf(tab);
+  const column = tab.control().mainTabs.tab;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CHANGES, planId: PLAN.id, agentId: AGENT_ID },
+    }),
+  );
+
+  assert.deepEqual(worker, {
+    open: true,
+    tab: { subagent: "toolu_1", delegation: { agent: AGENT_ID, task: "" } },
+  });
+  assert.deepEqual(
+    column,
+    { agent: AGENT_ID },
+    "the worker's agent's tab opens with it, which draws the worker",
+  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
 test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   const alerts = "alerts";

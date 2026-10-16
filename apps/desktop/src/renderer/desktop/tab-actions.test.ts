@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Plan } from "@luke/features/plan-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -197,12 +198,13 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
       [
         "Rename",
         "Open terminal",
+        "Copy link",
         "Copy concise transcript",
         "Copy full transcript",
         "Archive agent",
       ],
     ],
-    [side, ["Copy concise transcript", "Copy full transcript"]],
+    [side, ["Copy link", "Copy concise transcript", "Copy full transcript"]],
   ] as const) {
     const fromRightClick = rightClickChosen(bar);
     const fromMore = pressBarMore(bar);
@@ -229,11 +231,8 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
   const without: { main: MainTab; side: SidePanelTab }[] = [
     { main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.BOARD },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.CODE },
-    { main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.CALL },
     { main: MAIN_TAB.INBOX, side: { file: "src/invite.ts" } },
-    { main: MAIN_TAB.INBOX, side: { changes: AGENT.id } },
     { main: MAIN_TAB.INBOX, side: { terminal: AGENT.id } },
-    { main: MAIN_TAB.INBOX, side: { page: PAGE_ID } },
   ];
   for (const chosen of without) {
     const container = mountEveryTab(chosen);
@@ -247,4 +246,70 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
     act(() => roots.pop()?.unmount());
     container.remove();
   }
+});
+
+/** Main's clipboard, keeping each copy the window asks of it. */
+function installClipboard(): string[] {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+  return copied;
+}
+
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the task's, the agent's, its worker's, its Changes', a page's, or the Call tab's link", async () => {
+  const copied = installClipboard();
+  const task = `https://tryluke.dev/workspace-personal/plan/${PLAN.id}`;
+  const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
+    [{ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD }, "main", task],
+    [
+      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.BOARD },
+      "main",
+      `${task}/agent/${AGENT.id}`,
+    ],
+    [{ main: MAIN_TAB.INBOX, side: SUBAGENT }, "side", `${task}/agent/${AGENT.id}/worker/call-1`],
+    [
+      { main: MAIN_TAB.INBOX, side: { changes: AGENT.id } },
+      "side",
+      `${task}/agent/${AGENT.id}/changes`,
+    ],
+    [{ main: MAIN_TAB.INBOX, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
+    [{ main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.CALL }, "side", `${task}/call`],
+  ];
+  for (const [chosen, column] of cases) {
+    const container = mountEveryTab(chosen);
+    const tab = bars(container)[column].querySelector<HTMLElement>(
+      '[role="tab"][aria-selected="true"]',
+    );
+    assert.ok(tab);
+    act(() => {
+      tab.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 40,
+          clientY: 20,
+        }),
+      );
+    });
+    const item = [
+      ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+    ].find((each) => each.textContent === "Copy link");
+    assert.ok(item, `the ${tab.textContent} tab offers Copy link`);
+    await act(async () => item.click());
+    act(() => roots.pop()?.unmount());
+    container.remove();
+  }
+
+  assert.deepEqual(
+    copied,
+    cases.map(([, , link]) => link),
+  );
 });

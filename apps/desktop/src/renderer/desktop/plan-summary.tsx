@@ -3,6 +3,7 @@ import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { agentPlace, useCopyLinkItem } from "../copy-link-item";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { ChangesCard, peopleOf } from "../planning/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../planning/agent-ref";
@@ -481,7 +482,7 @@ function SummaryRow({
   );
 }
 
-/** An agent's row, whose right-click offers Archive agent, asking first while the agent still works. */
+/** An agent's row, whose right-click offers Copy link and Archive agent, asking first while the agent still works. */
 function AgentSummaryRow({
   entry,
   agent,
@@ -497,6 +498,7 @@ function AgentSummaryRow({
 }) {
   const archive = useAgentArchive(agent, agents, shown);
   const menu = useActionMenu(shown);
+  const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>
       <SummaryRow entry={entry} onPick={onPick} onContextMenu={menu.contextMenu()} />
@@ -504,7 +506,7 @@ function AgentSummaryRow({
         <ActionMenu
           label="Agent actions"
           menu={menu.drawn}
-          groups={[[archive.action]]}
+          groups={copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]]}
           onClose={menu.close}
         />
       )}

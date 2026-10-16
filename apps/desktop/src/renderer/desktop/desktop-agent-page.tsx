@@ -3,6 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { EllipsisIcon } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -11,6 +12,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
@@ -24,7 +26,9 @@ import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
@@ -60,7 +64,7 @@ import { useTabViews } from "./strip-tabs";
  * Changes chip its pull request's changes, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would. An archived agent takes no message, so its composer gives
+ * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
  * way to its own Unarchive. An agent the service will not hand the reader,
  * deleted or of a workspace they are not in, as a link may name, is not
  * found, and nothing of it is drawn. Whoever sent it a message is read against its
@@ -84,6 +88,44 @@ const NO_CALLS = {
   region: { kind: TRANSCRIPT_REGION.EMPTY },
   onRetry: nothing,
 } as const;
+
+/** What the page's ⋯ is called. */
+const ACTIONS_LABEL = "Agent actions";
+
+/** The page's ⋯, offering the agent's Copy link. */
+function AgentPageActions({
+  agent,
+  shown,
+}: {
+  agent: { readonly id: string; readonly planId: string | null };
+  shown: boolean;
+}): React.JSX.Element | null {
+  const menu = useActionMenu(shown);
+  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  if (copyLink === undefined) return null;
+  return (
+    <>
+      <Tooltip label={ACTIONS_LABEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={ACTIONS_LABEL}
+          {...menu.trigger()}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
 
 /** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
 function AgentMentions({
@@ -229,6 +271,11 @@ export function DesktopAgentPage({
           <h1 className="desktop-toolbar-title">{agentTabLabel(agent, control.models)}</h1>
         )}
       </div>
+      {agent === undefined ? null : (
+        <div className="desktop-toolbar-actions">
+          <AgentPageActions agent={agent} shown={plans.shown} />
+        </div>
+      )}
     </header>
   );
   if (agent === undefined) {
@@ -248,65 +295,67 @@ export function DesktopAgentPage({
     );
   }
   return (
-    <MemberDirectory workspace={workspace} readerId={plans.me}>
-      <AutomationDirectory
-        workspace={listed}
-        on={automationsOn}
-        wanted={agent.automationId !== undefined}
-        onOpen={openAutomation}
-      >
-        <SkillFiles source={control.readSkills} onOpen={openSkill}>
-          <AgentMentions value={mentions}>
-            <div ref={onArea} className="desktop-plan" data-panel-open={String(sidePanel.open)}>
-              {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-              <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
-                {toolbar}
-                <FindScope
-                  className="desktop-plan-column"
-                  active={plans.shown && !sideFocused}
-                  subject={tab}
-                >
-                  <AgentPane
-                    label={agentTabLabel(agent, control.models)}
-                    tabbed={false}
-                    tab={tab}
+    <LinkWorkspaceProvider value={listed?.slug ?? workspaceId}>
+      <MemberDirectory workspace={workspace} readerId={plans.me}>
+        <AutomationDirectory
+          workspace={listed}
+          on={automationsOn}
+          wanted={agent.automationId !== undefined}
+          onOpen={openAutomation}
+        >
+          <SkillFiles source={control.readSkills} onOpen={openSkill}>
+            <AgentMentions value={mentions}>
+              <div ref={onArea} className="desktop-plan" data-panel-open={String(sidePanel.open)}>
+                {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+                <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
+                  {toolbar}
+                  <FindScope
+                    className="desktop-plan-column"
+                    active={plans.shown && !sideFocused}
+                    subject={tab}
+                  >
+                    <AgentPane
+                      label={agentTabLabel(agent, control.models)}
+                      tabbed={false}
+                      tab={tab}
+                      agents={control}
+                      shown={shown}
+                      views={views}
+                      onOpenDelegation={openDelegation}
+                      onOpenChanges={openChanges}
+                      onOpenTarget={openTarget}
+                      cards={cards}
+                    />
+                  </FindScope>
+                </section>
+                {drawing.panel ? (
+                  <SidePanel
+                    {...drawing}
+                    panel={drawing.panel}
+                    unread={NO_UNREAD}
+                    holder={SIDE_PANEL_HOLDER.AGENT}
+                    planId={agentId}
+                    repository={agentRepository ?? null}
+                    board={undefined}
+                    shownCode={undefined}
+                    pages={undefined}
+                    transcript={NO_CALLS}
+                    work={work}
                     agents={control}
-                    shown={shown}
+                    openAgents={openAgents}
+                    shownAgent={shown ? agentId : undefined}
                     views={views}
-                    onOpenDelegation={openDelegation}
-                    onOpenChanges={openChanges}
+                    shown={plans.shown}
+                    focused={sideFocused}
                     onOpenTarget={openTarget}
                     cards={cards}
                   />
-                </FindScope>
-              </section>
-              {drawing.panel ? (
-                <SidePanel
-                  {...drawing}
-                  panel={drawing.panel}
-                  unread={NO_UNREAD}
-                  holder={SIDE_PANEL_HOLDER.AGENT}
-                  planId={agentId}
-                  repository={agentRepository ?? null}
-                  board={undefined}
-                  shownCode={undefined}
-                  pages={undefined}
-                  transcript={NO_CALLS}
-                  work={work}
-                  agents={control}
-                  openAgents={openAgents}
-                  shownAgent={shown ? agentId : undefined}
-                  views={views}
-                  shown={plans.shown}
-                  focused={sideFocused}
-                  onOpenTarget={openTarget}
-                  cards={cards}
-                />
-              ) : null}
-            </div>
-          </AgentMentions>
-        </SkillFiles>
-      </AutomationDirectory>
-    </MemberDirectory>
+                ) : null}
+              </div>
+            </AgentMentions>
+          </SkillFiles>
+        </AutomationDirectory>
+      </MemberDirectory>
+    </LinkWorkspaceProvider>
   );
 }

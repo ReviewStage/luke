@@ -1772,8 +1772,8 @@ export function usePlansTab(input: {
   /**
    * A Luke link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
-   * plan's place. A worker of an agent's, its Changes, or one of its
-   * messages opens the agent's tab until each has a door of its own. Note
+   * plan's place. One of an agent's messages opens the agent's tab until it
+   * has a door of its own. Note
    * that nothing is checked here: a place the account cannot read is read
    * all the same, and its read says it is not there.
    */
@@ -1802,9 +1802,18 @@ export function usePlansTab(input: {
       case LINK_PLACE.TURN:
         showSource(place.planId, { kind: REVISION_SOURCE.WORK, at: place.at });
         return;
+      // Note that an agent's worker's tab is opened with no task words, since a link carries none; its own rows name its task once they land.
+      // An agent's worker is drawn only while its agent's tab is open, so the agent's tab opens with it.
       case LINK_PLACE.WORKER:
-        if (place.agentId === undefined) showPanelTab(place.planId, { subagent: place.callId });
-        else showColumnTab(place.planId, { agent: place.agentId });
+        if (place.agentId === undefined) {
+          showPanelTab(place.planId, { subagent: place.callId });
+          return;
+        }
+        showColumnTab(place.planId, { agent: place.agentId });
+        showPanelTab(place.planId, {
+          subagent: place.callId,
+          delegation: { agent: place.agentId, task: "" },
+        });
         return;
       case LINK_PLACE.CHANGES:
         showPanelTab(place.planId, { changes: place.agentId });
