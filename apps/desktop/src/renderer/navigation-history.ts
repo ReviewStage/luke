@@ -20,6 +20,12 @@
  * source, a tab from the command palette, a notification's — is a visit
  * after it, though it opens on the same plan, so Back returns to it; only a
  * restore lands on the plan as Back would, where the plan stands behind.
+ *
+ * Each Automations page is a step of its own, the list and each automation's
+ * page alike, so Back from an automation opened from the list returns to the
+ * list. A new automation's page is one step with the automation it makes,
+ * which stands in its place once Create lands, so Back from what it made
+ * returns to wherever the new page was opened from.
  */
 
 import { EXPERIMENT } from "@luke/settings";
@@ -27,7 +33,12 @@ import type { SettingsView } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { HistorySpot } from "./tasks/use-plan-history";
-import type { LeaveGuard, TasksControl } from "./tasks/use-tasks-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type LeaveGuard,
+  type TasksControl,
+} from "./tasks/use-tasks-tab";
 import { useExperiment } from "./use-app-state";
 
 /** The most places the history holds; the oldest go first. */
@@ -72,7 +83,7 @@ type Place =
       readonly workspaceId: string | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
-  | { readonly kind: typeof PLACE_KIND.AUTOMATIONS }
+  | { readonly kind: typeof PLACE_KIND.AUTOMATIONS; readonly page: AutomationsPlace }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -82,9 +93,41 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the Automations page, or Settings on any page. */
+/** Whether two Automations pages are one step: the list, a new automation's page, or the same automation's, on whichever of its runs. */
+function sameAutomationsPage(one: AutomationsPlace, other: AutomationsPlace): boolean {
+  if (one.kind === AUTOMATIONS_PAGE.EDIT && other.kind === AUTOMATIONS_PAGE.EDIT) {
+    return one.automationId === other.automationId;
+  }
+  return one.kind === other.kind;
+}
+
+/** Whether one Automations page stands as it was opened: a new one on the same suggestion, an automation's on the same run. */
+function sameAutomationsOpening(one: AutomationsPlace, other: AutomationsPlace): boolean {
+  if (one.kind === AUTOMATIONS_PAGE.NEW && other.kind === AUTOMATIONS_PAGE.NEW) {
+    return one.preset === other.preset;
+  }
+  if (one.kind === AUTOMATIONS_PAGE.EDIT && other.kind === AUTOMATIONS_PAGE.EDIT) {
+    return one.runId === other.runId;
+  }
+  return true;
+}
+
+/** Whether `place` is the automation a new automation's page standing made, which takes that page's step rather than being a visit after it. */
+function madeFromNew(standing: Place, place: Place): boolean {
+  return (
+    standing.kind === PLACE_KIND.AUTOMATIONS &&
+    standing.page.kind === AUTOMATIONS_PAGE.NEW &&
+    place.kind === PLACE_KIND.AUTOMATIONS &&
+    place.page.kind === AUTOMATIONS_PAGE.EDIT
+  );
+}
+
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
+  if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
+    return sameAutomationsPage(one.page, other.page);
+  }
   if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   if ("userId" in one && "userId" in other) {
@@ -102,8 +145,11 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
   );
 }
 
-/** Whether a step stands as it stood: Settings on the same page, a version history where it was, a person's page by the name it was last opened with. */
+/** Whether a step stands as it stood: Settings on the same page, a version history where it was, a person's page by the name it was last opened with, an Automations page as it was opened. */
 function samePlace(one: Place, other: Place): boolean {
+  if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
+    return sameAutomationsOpening(one.page, other.page);
+  }
   if (one.kind === PLACE_KIND.SETTINGS && other.kind === PLACE_KIND.SETTINGS) {
     return one.view === other.view;
   }
@@ -119,11 +165,15 @@ function samePlace(one: Place, other: Place): boolean {
 /**
  * The trail with the window standing on `place`. A step already standing is
  * the same trail, but for a Settings page turned or a version history moved
- * within, which the standing step takes in place. Any other place is a visit,
- * whichever door opened it.
+ * within, which the standing step takes in place, and so does the automation
+ * a new automation's page made. Any other place is a visit, whichever door
+ * opened it.
  */
 function visited(trail: Trail, place: Place): Trail {
   const standing = trail.places[trail.at];
+  if (standing !== undefined && madeFromNew(standing, place)) {
+    return { places: trail.places.with(trail.at, place), at: trail.at };
+  }
   if (standing !== undefined && sameStep(standing, place)) {
     if (samePlace(standing, place)) return trail;
     return { places: trail.places.with(trail.at, place), at: trail.at };
@@ -282,6 +332,7 @@ export function useWindowHistory(input: {
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = plans.automationsView.open;
+  const automationsPage = plans.automationsView.place;
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
@@ -303,7 +354,7 @@ export function useWindowHistory(input: {
       };
     }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
-    if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
+    if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
@@ -322,6 +373,7 @@ export function useWindowHistory(input: {
     listedWorkspace,
     factoryOpen,
     automationsOpen,
+    automationsPage,
   ]);
   const reachable = (to: Place) => {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
@@ -361,7 +413,7 @@ export function useWindowHistory(input: {
       return;
     }
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      plans.automationsView.onOpen();
+      plans.automationsView.onOpen(to.page);
       return;
     }
     // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, and the Automations page stand over.
