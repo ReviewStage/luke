@@ -4508,7 +4508,7 @@ body:has(.app-stage[data-capture="true"])
 
 /* Note that the press reaches past its own box to the row's, because the
    gap before the switch and the inset after it would otherwise be filled
-   by the hover yet answer no press; the switch stands above it. */
+   by the hover yet answer no press. */
 .automation-row-open::after {
   position: absolute;
   border-radius: inherit;
@@ -4516,6 +4516,10 @@ body:has(.app-stage[data-capture="true"])
   inset: 0;
 }
 
+/* The row's cells and its switch stand above that reach, so the owner's and
+   the next run's titles still answer the pointer; a press on a cell still
+   reaches the button it stands in. */
+.automation-row-open > *,
 .automation-row > .switch {
   position: relative;
   z-index: 1;
