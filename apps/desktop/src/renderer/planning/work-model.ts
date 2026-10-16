@@ -150,17 +150,21 @@ const UNANSWERED: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The calls of the open plan's work by which Luke started a coding agent
- * and which have answered, by call id, so the plan's agents are read again
- * as one lands and the agent's tab appears as it does after a Start; none
- * where the plan has had no turn or its work is unread.
+ * The calls of the open plan's work by which Luke started, archived, or
+ * brought back a coding agent and which have answered, by call id, so the
+ * plan's agents are read again as one lands and the agent's tab appears or
+ * leaves as it does after a Start or an Archive; none where the plan has
+ * had no turn or its work is unread.
  */
-export function startedAgentCallIds(conversation: PlanConversation): readonly string[] {
+export function agentListCallIds(conversation: PlanConversation): readonly string[] {
   // A start is read under the tool's name and the one it had before every agent was offered it.
   const starts = new Set(
-    [AGENT_TOOL.START_AGENT, RETIRED_TOOL.START_CODING_AGENT].map(
-      (tool) => `${TOOL_PART_TYPE_PREFIX}${tool}`,
-    ),
+    [
+      AGENT_TOOL.START_AGENT,
+      RETIRED_TOOL.START_CODING_AGENT,
+      AGENT_TOOL.ARCHIVE_AGENT,
+      AGENT_TOOL.UNARCHIVE_AGENT,
+    ].map((tool) => `${TOOL_PART_TYPE_PREFIX}${tool}`),
   );
   return (conversation?.messages ?? []).flatMap((message) =>
     message.parts.flatMap((part) =>

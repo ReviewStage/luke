@@ -139,7 +139,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -1019,14 +1019,12 @@ export function usePlansTab(input: {
     () => workerCallIds(workRowsOf(viewed.conversation, false)),
     [viewed.conversation],
   );
-  // An agent Luke started in the call is in the work before it is in the
-  // list, so the list is read again as its start answers, and the tab
-  // appears as it does after a Start; a start already in the work when the
-  // plan opens is read with the plan.
-  const startedByLuke = useMemo(
-    () => startedAgentCallIds(viewed.conversation),
-    [viewed.conversation],
-  );
+  // An agent Luke started, archived, or brought back in the call moves in
+  // the work before it moves in the list, so the list is read again as the
+  // call answers, and the tab appears or leaves as it does after a Start or
+  // an Archive; a call already in the work when the plan opens is read with
+  // the plan.
+  const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
   const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
     planId: undefined,
     ids: new Set(),

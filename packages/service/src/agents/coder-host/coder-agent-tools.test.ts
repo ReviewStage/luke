@@ -746,6 +746,37 @@ test("archive_agent refuses an agent still working, the caller itself, an agent 
   }
 });
 
+test("archive_agent refuses an agent whose turn a Stop was asked of but which still runs, since the turn goes on until eve ends it", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const target = {
+    userId: agents.teammates.userId,
+    conversationId: agents.teammates.conversationId,
+  };
+  const turnId = randomUUID();
+  await database.run(
+    Effect.gen(function* () {
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW,
+      });
+      yield* writer.requestTurnCancel(target, { turnId, at: new Date(NOW) });
+    }),
+  );
+
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ARCHIVE_AGENT_REFUSAL.WORKING,
+  });
+});
+
 test("an agent whose starter has left the workspace archives no agent of it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);

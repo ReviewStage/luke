@@ -2,6 +2,7 @@ import { ArchiveIcon } from "@luke/ui";
 import { useState } from "react";
 import { BANNER_LOOK, Banner } from "../banner";
 import { BusyLabel } from "../spinner";
+import type { ArchivedByReading } from "./coding-agent-model";
 
 /**
  * archived-plan.tsx -- what an archived plan draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
@@ -45,15 +46,20 @@ export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): Re
 }
 
 /**
- * What stands in an agent's composer's place while its plan is archived:
- * why nothing is sent, and Unarchive. An agent still running when its plan
- * was archived finishes the turn it is on, so its Stop stands beside them.
+ * What stands in an agent's composer's place while its plan, or the agent
+ * itself, is archived: why nothing is sent, and Unarchive, after who
+ * archived the agent and why where it was the agent that was archived. An
+ * agent still running when its plan was archived finishes the turn it is
+ * on, so its Stop stands beside them.
  */
 export function ArchivedComposerNote({
   onUnarchive,
   stop,
+  archivedBy,
 }: {
   onUnarchive: () => void;
+  /** Who archived the agent and why, where the agent itself was archived and the service said. */
+  archivedBy?: ArchivedByReading | undefined;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
   stop?: (() => Promise<void>) | undefined;
 }): React.JSX.Element {
@@ -86,7 +92,15 @@ export function ArchivedComposerNote({
         </>
       }
     >
-      <p className="archived-composer-line">{ARCHIVED_PLAN_COPY.COMPOSER}</p>
+      <div className="archived-composer-words">
+        {archivedBy === undefined ? null : (
+          <p className="archived-composer-by">
+            {archivedBy.words}
+            {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
+          </p>
+        )}
+        <p className="archived-composer-line">{ARCHIVED_PLAN_COPY.COMPOSER}</p>
+      </div>
     </Banner>
   );
 }

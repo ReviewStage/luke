@@ -568,6 +568,16 @@ function namedCall(
   };
 }
 
+/** A call about one agent named by the agent's title its answer gives, as the agent's tab names it; nothing before the answer, whose input holds only an id. */
+function answeredAgentCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const agent = isRecord(output) ? output.agent : undefined;
+  return { ...namedCall(kind, input, output, undefined), subject: stringAt(agent, "title") ?? "" };
+}
+
 /** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
@@ -637,6 +647,10 @@ function planningToolView(
         output,
         stringAt(input, "prompt") === undefined ? "task" : "prompt",
       );
+    case AGENT_TOOL.ARCHIVE_AGENT:
+      return answeredAgentCall(CALL_KIND.ARCHIVE_AGENT, input, output);
+    case AGENT_TOOL.UNARCHIVE_AGENT:
+      return answeredAgentCall(CALL_KIND.UNARCHIVE_AGENT, input, output);
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -813,6 +827,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.READ_AGENT, namedAgent],
   [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
+  [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],

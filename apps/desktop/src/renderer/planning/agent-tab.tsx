@@ -55,10 +55,12 @@ import {
   AGENT_PART,
   type AgentPart,
   agentLines,
+  agentListCallIds,
   agentRows,
   agentStillWriting,
   agentTabLabel,
   agentWorkingPhase,
+  archivedByReading,
   delegates,
   dockedTodos,
   endLine,
@@ -70,7 +72,6 @@ import {
   placedMessages,
   settledPlanEdits,
   showsPublishedRow,
-  startedAgentIds,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -1196,6 +1197,11 @@ function AgentTabView({
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
             stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            archivedBy={
+              agent.archivedAt === undefined || agent.archivedBy === undefined
+                ? undefined
+                : archivedByReading(agent.archivedBy, readerId)
+            }
           />
         ) : (
           <AgentComposer
@@ -1279,16 +1285,17 @@ export function AgentTab({
     seenEdits.current = settledEdits;
     tell(ACT_KIND.TASKS_REFRESH);
   }, [settledEdits, tell]);
-  // An agent this one started joins the plan's agents only once they are read again, so
-  // one that landed after the tab opened has them read; those already there were read with the plan.
-  const started = useMemo(() => startedAgentIds(transcript.messages), [transcript.messages]);
-  const seenStarts = useRef<ReadonlySet<string>>(new Set(started));
+  // An agent this one started, archived, or brought back moves in the plan's agents only once
+  // they are read again, so a call that answered after the tab opened has them read; those
+  // already there were read with the plan.
+  const listCalls = useMemo(() => agentListCallIds(transcript.messages), [transcript.messages]);
+  const seenListCalls = useRef<ReadonlySet<string>>(new Set(listCalls));
   const readAgents = control.onRetryList;
   useEffect(() => {
-    const landed = started.some((id) => !seenStarts.current.has(id));
-    seenStarts.current = new Set(started);
+    const landed = listCalls.some((id) => !seenListCalls.current.has(id));
+    seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
-  }, [started, readAgents]);
+  }, [listCalls, readAgents]);
   const composer = useAgentComposer({
     agentId: agent.id,
     planId: agent.planId,

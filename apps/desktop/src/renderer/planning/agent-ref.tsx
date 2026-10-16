@@ -18,6 +18,7 @@ import {
   agentStateWords,
   agentStillWriting,
   agentTabLabel,
+  archivedByReading,
   providerOf,
   teammateRef,
 } from "./coding-agent-model";
@@ -98,6 +99,10 @@ export function agentCardReading(
       automationId: agent.automationId,
       tile: agentActor(agent, label),
       pullRequest: agents.pullRequests.get(agent.id),
+      archivedBy:
+        archivedAt === undefined || agent.archivedBy === undefined
+          ? undefined
+          : archivedByReading(agent.archivedBy, agents.me),
     };
   };
 }

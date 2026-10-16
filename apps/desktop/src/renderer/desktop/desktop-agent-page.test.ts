@@ -15,6 +15,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
@@ -497,6 +498,31 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
+});
+
+test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {
+  pages = [
+    {
+      agent: {
+        ...PAGE,
+        archivedAt: 2,
+        archivedBy: {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          member: { userId: "user-dean", name: "Dean Stratakos" },
+          agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
+          reason: "Its pull request merged.",
+        },
+      },
+    },
+  ];
+  const page = mount();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".archived-composer-by")?.textContent,
+    "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+  );
+  assert.ok([...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"));
 });
 
 test("an Unarchive the service refuses says why, and the agent stays archived", async () => {

@@ -5,6 +5,7 @@ import {
   type CodingAgent,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
+  RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
   unarchiveCodingAgentFrom,
@@ -979,6 +980,26 @@ function archiveAnswer(
   };
 }
 
+/**
+ * Whether an agent stands idle for an archive: no line awaits its turn, its
+ * newest turn is neither queued nor running, a Stop requested of it or not,
+ * since a stopped turn still runs until eve ends it, and it is past its
+ * start where it has no turn yet.
+ */
+const idleForArchive = (agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const turns = yield* latestTurnsOfReached([agent.conversationId]);
+    const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
+    if (awaiting.has(agent.conversationId)) return false;
+    const turn = turns.get(agent.conversationId);
+    if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
+    const now = yield* Clock.currentTimeMillis;
+    return (
+      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) !==
+      CODING_AGENT_STATUS.STARTING
+    );
+  });
+
 /** One call of `archive_agent`: an idle agent of the caller's workspace archived for the caller's member, by the caller and for the reason given, or why it was not. */
 export function runArchiveAgent(
   call: CodingAgentCall,
@@ -1004,13 +1025,7 @@ export function runArchiveAgent(
         callerUserId(caller),
         agent.id,
         archiverOf(caller, reason),
-        (standing) =>
-          Effect.map(standingsOf([standing]), (read) => {
-            const { status } = read(standing);
-            return (
-              status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING
-            );
-          }),
+        idleForArchive,
       );
       if (archived === IDLE_ARCHIVE.NOT_FOUND) {
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
