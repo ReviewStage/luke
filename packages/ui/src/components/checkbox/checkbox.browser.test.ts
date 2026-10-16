@@ -12,8 +12,8 @@ import { Checkbox } from "./checkbox.js";
  */
 
 /** A choice the caller holds, every change it was handed listed after it. */
-function Signed({ mixed = false, disabled = false }): React.JSX.Element {
-  const [signed, setSigned] = useState(false);
+function Signed({ mixed = false, disabled = false, start = false }): React.JSX.Element {
+  const [signed, setSigned] = useState(start);
   const [heard, setHeard] = useState<boolean[]>([]);
   return createElement(
     "div",
@@ -52,6 +52,12 @@ test("a mixed box reads as mixed and a press resolves it to checked", async () =
   const box = page.getByRole("checkbox", { name: "Include my name and email" });
   await expect.element(box).toBePartiallyChecked();
   await box.click();
+  expect(heard()).toBe("true");
+});
+
+test("a mixed box resolves to checked whether its caller last held it checked or not", async () => {
+  await mount(createElement(Signed, { mixed: true, start: true }));
+  await page.getByRole("checkbox", { name: "Include my name and email" }).click();
   expect(heard()).toBe("true");
 });
 
