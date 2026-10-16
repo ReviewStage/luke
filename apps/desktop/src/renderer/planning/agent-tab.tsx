@@ -923,7 +923,7 @@ function AgentTranscriptView({
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
 }): React.JSX.Element {
-  const { members } = useMemberDirectory();
+  const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -954,7 +954,9 @@ function AgentTranscriptView({
                 briefTitle={briefTitle}
                 origin={message === plan ? origin : undefined}
                 sender={
-                  message === task ? briefSender : lineSender(message.sentBy, readerId, members)
+                  message === task
+                    ? briefSender
+                    : lineSender(message.sentBy, readerId, members, former)
                 }
               />
               {earlierOmitted && message === plan ? (
@@ -1077,7 +1079,7 @@ function AgentTabView({
   const working = agentStillWriting(agent.status);
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
-  const { members } = useMemberDirectory();
+  const { members, former } = useMemberDirectory();
   const origin = agentOrigin({
     agent,
     run,
@@ -1088,7 +1090,7 @@ function AgentTabView({
   });
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
+      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <AgentTranscriptView
             messages={lines}
@@ -1316,8 +1318,8 @@ export function AgentSubagentTab({
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
   const pictures = useAgentPictureDoor(agentId, callId);
-  const { members } = useMemberDirectory();
-  const macOwner = macOwnerOf(owner?.startedBy, members, control.me);
+  const { members, former } = useMemberDirectory();
+  const macOwner = macOwnerOf(owner?.startedBy, members, control.me, former);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;

@@ -342,3 +342,26 @@ test("a member who left keeps the picture the read of who left names them by, an
     false,
   );
 });
+
+test("a linked GitHub login who left keeps their picture and their account's name now, from the read of who left", () => {
+  const former = [
+    {
+      userId: "user-lee",
+      name: "Lee Chen",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
+  ];
+  assert.deepEqual(
+    githubActor(
+      { login: "leepark", bot: false, userId: "user-lee" },
+      { members: [DANA, SAM], readerId: SAM.userId, agent: undefined, former },
+    ),
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "Lee Chen",
+      userId: "user-lee",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
+  );
+});

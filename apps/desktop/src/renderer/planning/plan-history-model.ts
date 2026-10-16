@@ -7,7 +7,7 @@ import {
   type PlanEditor,
   type PlanRevisionLine,
 } from "@luke/features/plan-wire";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -81,6 +81,8 @@ export interface HistoryReader {
   readonly pictureUrl: string | undefined;
   /** The workspace's members as last read, which add a teammate's picture and say who has left; none while unread. */
   readonly members?: readonly WorkspaceMember[];
+  /** Who the workspace's work names but left, whose pictures they keep, grayed; none while unread. */
+  readonly former?: readonly FormerMember[];
 }
 
 /**
@@ -92,7 +94,7 @@ export interface HistoryReader {
  */
 function personOf(by: PlanEditor | undefined, reader: HistoryReader, own: boolean): Actor {
   const yours = own || (by !== undefined && reader.id !== undefined && by.userId === reader.id);
-  if (!yours) return personActor(by, reader.members, undefined);
+  if (!yours) return personActor(by, reader.members, undefined, reader.former);
   const you: PersonActor = {
     kind: ACTOR_KIND.PERSON,
     userId: reader.id ?? "",

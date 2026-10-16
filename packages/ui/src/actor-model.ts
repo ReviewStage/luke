@@ -223,13 +223,15 @@ export function personActor(
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
+    // Note that the read of who left names them as their account does now, so a name changed since the work stood is the new one.
+    const named = former?.find((each) => each.userId === ref.userId);
     const left = {
       kind: ACTOR_KIND.SOMEONE,
       reason: SOMEONE_REASON.FORMER,
-      name: ref.name,
+      name: named?.name ?? ref.name,
       userId: ref.userId,
     } as const;
-    const pictureUrl = former?.find((each) => each.userId === ref.userId)?.pictureUrl;
+    const pictureUrl = named?.pictureUrl;
     return pictureUrl === undefined ? left : { ...left, pictureUrl };
   }
   const person: PersonActor = { kind: ACTOR_KIND.PERSON, userId: ref.userId, name: ref.name, you };
@@ -481,6 +483,8 @@ export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
 export interface GitHubPlace {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures a linked login who left keeps. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly agent: Actor | undefined;
 }
 
@@ -498,7 +502,7 @@ export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
   if (person.userId !== undefined) {
     const member = place.members?.find((each) => each.userId === person.userId);
     const ref = { userId: person.userId, name: member?.name ?? person.login };
-    return personActor(ref, place.members, place.readerId);
+    return personActor(ref, place.members, place.readerId, place.former);
   }
   const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login: person.login, bot: person.bot };
   return person.avatarUrl === undefined ? actor : { ...actor, avatarUrl: person.avatarUrl };

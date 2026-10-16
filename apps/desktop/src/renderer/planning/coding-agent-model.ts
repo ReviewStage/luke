@@ -40,7 +40,7 @@ import {
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -154,9 +154,10 @@ export function macOwnerOf(
   startedBy: PlanEditor | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor | undefined {
   if (startedBy === undefined || readerId === undefined) return undefined;
-  return personActor(startedBy, members, readerId);
+  return personActor(startedBy, members, readerId, former);
 }
 
 /** Where an actor's work stands, as a tab's glyph state says it. */
@@ -193,6 +194,7 @@ export function lineSender(
   sentBy: CodingAgentSender | undefined,
   readerId: string | undefined,
   members: readonly WorkspaceMember[] | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor | undefined {
   if (sentBy === undefined) return undefined;
   if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
@@ -209,7 +211,7 @@ export function lineSender(
     case undefined:
       return sentBy.userId === undefined
         ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
-        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId);
+        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId, former);
   }
 }
 

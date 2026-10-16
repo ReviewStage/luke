@@ -86,10 +86,10 @@ interface Named {
 
 /** Names the people as the members around the caller and the agent say. */
 function useNamer(agent: PullRequestAgent): (person: GitHubPerson) => Named {
-  const { members, readerId } = useMemberDirectory();
+  const { members, readerId, former } = useMemberDirectory();
   const { subject, models } = agent;
   return (person) => {
-    const actor = githubActor(person, { members, readerId, agent: subject?.tile });
+    const actor = githubActor(person, { members, readerId, former, agent: subject?.tile });
     const card =
       actor.kind === ACTOR_KIND.AGENT && subject !== undefined ? (
         <AgentCard subject={subject} models={models} />
