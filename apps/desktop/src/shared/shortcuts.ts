@@ -55,7 +55,7 @@ export const APP_COMMAND = {
   EXIT_VERSION_HISTORY: "exit-version-history",
   HOME: "home",
   INBOX: "inbox",
-  EXIT_INBOX: "exit-inbox",
+  INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
   EXIT_AGENT_PAGE: "exit-agent-page",
@@ -383,8 +383,8 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
-  [APP_COMMAND.EXIT_INBOX]: {
-    label: "Exit inbox",
+  [APP_COMMAND.INBOX_LIST]: {
+    label: "Back to inbox list",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.PREVIOUS_INBOX_ITEM]: {
@@ -464,7 +464,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
-      APP_COMMAND.EXIT_INBOX,
+      APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.EXIT_AGENT_PAGE,

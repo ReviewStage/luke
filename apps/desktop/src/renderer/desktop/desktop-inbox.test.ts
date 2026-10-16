@@ -1058,7 +1058,7 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });
 
-test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape leaves the Inbox", async () => {
+test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   layOut(page, 800);
@@ -1086,10 +1086,12 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   );
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
-  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  act(() => runAppCommand(APP_COMMAND.INBOX_LIST));
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0]);
-  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
-  assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
+  act(() => {
+    assert.equal(runAppCommand(APP_COMMAND.INBOX_LIST), false, "the list offers no Escape");
+  });
+  assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
 test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {

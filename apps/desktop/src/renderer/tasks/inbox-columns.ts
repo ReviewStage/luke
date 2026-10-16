@@ -141,7 +141,7 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
         }
       : undefined;
   useAppCommand(APP_COMMAND.BACK, back);
-  useAppCommand(APP_COMMAND.EXIT_INBOX, back);
+  useAppCommand(APP_COMMAND.INBOX_LIST, back);
   return {
     ref,
     shown,
