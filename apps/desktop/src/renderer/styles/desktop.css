@@ -4794,6 +4794,49 @@ body:has(.app-stage[data-capture="true"])
   margin-top: var(--space-24);
 }
 
+/* The suggested automations, at the list's measure, a group's gap below it. */
+.automation-suggestions {
+  width: 100%;
+  max-width: var(--reading-width);
+  margin-inline: auto;
+}
+
+.automation-group + .automation-suggestions {
+  margin-top: var(--space-24);
+}
+
+/* An empty list stands its empty state with the suggestions under it, the
+   two together a little above the room's middle, shared two to three as an
+   empty state alone stands. */
+.automations-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+.automations-empty::before,
+.automations-empty::after {
+  content: "";
+}
+
+.automations-empty::before {
+  flex: 2 1 0;
+}
+
+.automations-empty::after {
+  flex: 3 1 0;
+}
+
+.automations-empty > .empty-state {
+  flex: none;
+  overflow: visible;
+}
+
+.automations-empty > .automation-suggestions {
+  margin-top: var(--space-16);
+}
+
 /* One automation's row: its clock wearing its newest run's state, its name
    over what fires it, its owner, when it runs next in the tertiary ink, a
    failure's mark, and its switch, divided by the card's hairlines. */
@@ -4921,6 +4964,92 @@ body:has(.app-stage[data-capture="true"])
 :root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
+/* The suggested automations, each a card of its own in a grid that wraps
+   as more are suggested: the glyph of what fires it on a tile, a plus at
+   its corner, its name, and what it does, read whole. The whole card is one
+   press, lifting to the raised fill under the pointer. */
+.automation-suggestion-cards {
+  display: grid;
+  gap: var(--space-12);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
+}
+
+.automation-suggestion {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-6);
+  padding: var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  color: inherit;
+  text-align: left;
+}
+
+.automation-suggestion:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.automation-suggestion:focus-visible {
+  outline: none;
+}
+
+:root[data-keyboard="true"] .automation-suggestion:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
+.automation-suggestion:disabled {
+  opacity: 0.5;
+}
+
+.automation-suggestion-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.automation-suggestion-glyph {
+  display: grid;
+  width: 32px; /* off-scale */
+  height: 32px; /* off-scale */
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.automation-suggestion-glyph svg,
+.automation-suggestion-add {
+  width: 16px;
+  height: 16px;
+}
+
+.automation-suggestion-add {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.automation-suggestion:hover:not(:disabled) .automation-suggestion-add {
+  color: var(--text-primary);
+}
+
+.automation-suggestion-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.automation-suggestion-detail {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its

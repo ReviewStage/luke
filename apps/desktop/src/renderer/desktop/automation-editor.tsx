@@ -1,7 +1,7 @@
 import {
-  CODE_REVIEW_DESCRIPTION,
+  type AutomationPresetName,
+  automationPreset,
   type CodeReviewSettings,
-  codeReviewPreset,
   readCodeReviewSettings,
   withCodeReviewSettings,
 } from "@luke/features/automation-code-review";
@@ -64,7 +64,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ChevronRightIcon, GitPullRequestIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
@@ -1346,7 +1346,6 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
-  onStartFromCodeReview,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1361,8 +1360,6 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
-  /** Fills the draft in from the code review preset; offered only while the automation is new. */
-  onStartFromCodeReview: (() => void) | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
@@ -1385,24 +1382,6 @@ function EditorForm({
           />
         </SettingsGroup>
       ) : null}
-      {onStartFromCodeReview === undefined ? null : (
-        <SettingsGroup title="Start from">
-          <div className="settings-row">
-            <span className="settings-copy">
-              <strong>Code review</strong>
-              <small>{CODE_REVIEW_DESCRIPTION}</small>
-            </span>
-            <button
-              type="button"
-              className="toolbar-button bordered-button"
-              onClick={onStartFromCodeReview}
-            >
-              <GitPullRequestIcon />
-              Start from Code review
-            </button>
-          </div>
-        </SettingsGroup>
-      )}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -1477,11 +1456,13 @@ function EditorForm({
 
 /**
  * One automation's page, or a new one's where none is given. A new one,
- * once made, is handed to `onCreated`, which stands its own page where
- * this one stood; a deleted one goes back to the list.
+ * opened from a suggestion on the list, starts filled in from its preset;
+ * once made, it is handed to `onCreated`, which stands its own page where
+ * this one stood. A deleted one goes back to the list.
  */
 export function AutomationEditor({
   automation,
+  preset,
   workspace,
   offersOwner,
   repositories,
@@ -1493,6 +1474,8 @@ export function AutomationEditor({
   leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
+  /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
+  preset?: AutomationPresetName | undefined;
   workspace: Workspace | undefined;
   /** Whether the workspace is shared, so an automation in it may be the workspace's rather than its maker's. */
   offersOwner: boolean;
@@ -1519,12 +1502,16 @@ export function AutomationEditor({
     timezone: windowZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
-  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
-  const [start] = useState(() =>
-    automation === undefined
-      ? { ...automationDraft(undefined, defaults), repository: repositories.recent[0] ?? null }
-      : automationDraft(automation, defaults),
-  );
+  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,
+  // filled in from the preset of the suggestion it was opened from.
+  const [start] = useState(() => {
+    if (automation !== undefined) return automationDraft(automation, defaults);
+    const blank = {
+      ...automationDraft(undefined, defaults),
+      repository: repositories.recent[0] ?? null,
+    };
+    return preset === undefined ? blank : presetDraft(blank, automationPreset(preset));
+  });
   const [draft, setDraft] = useState(start);
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1554,10 +1541,6 @@ export function AutomationEditor({
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
   const problems = draftProblems(draft, planBacked, new Date());
-  const startFromCodeReview = () => {
-    setDraft((was) => presetDraft(was, codeReviewPreset()));
-    setRefusal(undefined);
-  };
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -1685,7 +1668,6 @@ export function AutomationEditor({
               shownSecret={shownSecret}
               onSecret={setShownSecret}
               savedAgentId={savedAgentId}
-              onStartFromCodeReview={automation === undefined ? startFromCodeReview : undefined}
               onDraft={editDraft}
             />
           </div>
