@@ -12,7 +12,7 @@ match the app. The campus is SVG drawn by the page's script.
 
 ## Third version: character first, cues quiet
 
-V2 drew every cue at once on identical blocks. V3 goes back to the first
+V2 drew every cue at once on identical blocks. V3 went back to the first
 version's architecture:
 
 - a tower and a hall;
@@ -54,14 +54,13 @@ illustrative details the gate needs are:
 | --- | --- | --- |
 | A building | one listed task | data |
 | Which plot, and so which silhouette | the task's place in `createdAt` order on a fixed master plan | derived each draw, never stored. The silhouette is art direction and means nothing. |
-| Lit windows | blue: an agent running; orange: an open Inbox item; red: a failed agent; green: this Mac's call; a few soft lights: nothing happening | data |
-| Smoke from a stack | an agent running | data |
+| Agents (crew, stacks, drones, or windows) | one mark per agent in `agents.total`, in its status's colour, dashed when not named | data |
 | A beacon | an open Inbox item | data |
 | Rings | `callTaskId` | data |
 | A crane and scaffolding | an agent running and `pullRequestTotal` = 0 | derived |
 | A purple flag on a roof | every named pull request merged | derived |
-| A crate | one named pull request. **Volume** is additions + deletions on one shared scale, so an edge grows with ∛lines. The key labels this as not linear. Green and red are the shares, split across its width. | data |
-| A dashed "?" crate at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
+| A pull request's cargo (ship, containers, parcels, or crates) | one named pull request, sized on the style's one shared scale from additions + deletions, with its additions' and deletions' shares | data |
+| A dashed "?" piece of cargo at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
 | The merge gate's yard | open pull requests in three lanes by `checks` (failing, running, ready nearest the gate), each lane lit at its head, placed by PR number | data. It is not GitHub's merge queue and implies no order. |
 | The gatehouse and its lowered barrier | merging happens on GitHub; there is no merge action | relationship |
 | The shipped lot past the gate | merged pull requests the summaries name | data, labelled as a sample, not all-time |
@@ -78,32 +77,43 @@ Exact numbers appear only on hover or selection:
 The toolbar names its two kinds of waiting separately ("1 question · 1 ready
 to merge"), and the Inbox badge counts Inbox items only.
 
-## Luke, walking
+## Agents and pull requests, several ways each
 
-A small Luke stands on the campus. He is a UI affordance, not work data.
+The page's header switches how agents and pull requests are drawn. The rest of
+the campus stays the same. Nothing is stored; a link can name a pair with
+`?agents=` and `?cargo=`.
 
-- **Taking the keyboard:** a click on the campus, or Tab to it, gives it the
-  keyboard. The hint at the bottom says so.
-- **Walking:** the arrow keys walk him, relative to the screen, in every turned
-  view. He keeps within the campus and the shipped lot, and goes around
-  buildings, crates, trees, the gatehouse and the barrier.
-- **Walking up to something** opens the same inspector a click does, with no
-  camera jump:
-  - stepping onto a plot opens that task, and its roof lifts;
-  - stepping up to a crate opens its task with that PR marked;
-  - stepping into the gate's yard opens the gate;
-  - stepping into the lot opens Shipped.
+**Agents.** Each style draws one mark per agent in `agents.total`, with no
+cap. All of them use the same colours: blue running, orange asked a question,
+red failed, quiet when the turn ended, and dashed when the summary doesn't
+name the agent.
 
-  Walking off closes what walking opened. A click selection stays until
-  another object is reached or Escape closes it. Each arrival is announced
-  once to screen readers; steps are not.
-- **Wandering:** left alone for about 2.6 seconds, he wanders the roads. He
-  never opens, closes or changes anything, and a key press takes over at once.
-- **When walking stops:** the keys only walk while the campus holds focus, not
-  on the map's controls, the pane or anything else. Tab always leaves. Held
-  keys stop on blur, on a move to a control, and when the page is hidden.
-- **Reduced motion:** wandering is off; walking still works.
-- **Nothing is kept:** his position and the camera are the window's alone.
+- **Crew** (default): a worker per agent at the building's door, in a hard hat
+  of the agent's state. Running workers bob with a tool in hand, and the one
+  that asked holds up a "?".
+- **Stacks:** a chimney per agent on the roof. It smokes while the agent runs,
+  shows a lamp when the agent asks or fails, and is cold when its turn ended.
+- **Drones:** a drone per agent. Running drones circle the roof, the one that
+  asked hovers with its light on, and idle ones are parked on the roof.
+- **Windows** (V3): lit windows and the building's own smoke.
+
+In every style except Windows, the windows only glow, so the agents carry the
+state. Opening a building shows each agent at its own desk inside, as before.
+
+**Pull requests.** Every style uses one shared scale for every PR, open or
+merged. Exact numbers stay in the card and the inspector.
+
+- **Ship** (default): merged PRs are containers loaded onto a ship in a
+  harbour past the gate. Open ones wait as containers on the quay, in the gate's
+  lanes.
+- **Containers:** steel containers whose **length is lines changed, linear**
+  (one tile per 150 lines). The diff is a painted band along the side, in
+  additions' and deletions' shares, rather than a coloured box.
+- **Parcels:** a pallet of small boxes, **one per 25 lines** of additions and
+  one per 25 of deletions, rounded up, so the count is the measure. The colour
+  is only the tape: green for additions, red for deletions.
+- **Crates** (V3): cubes whose volume is lines changed (edge ∝ ∛lines, not
+  linear), split green and red across their width.
 
 ## Limitations
 
@@ -115,3 +125,5 @@ A small Luke stands on the campus. He is a UI affordance, not work data.
 - **The master plan has eight plots.** More tasks need a rule for growing it.
 - **Labels can crowd in turned views.** They're placed for the default view.
 - **Shared space.** The studio and the block's crane stand close to the gate.
+- **The ship holds a sample's worth.** More merged pull requests would need a
+  second ship, or a longer one.

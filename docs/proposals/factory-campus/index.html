@@ -166,6 +166,7 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 }
 .show-chip[data-tone="illustrative"] { color: var(--state-attention); border-color: currentColor; }
 .show-head .spacer { flex: 1; }
+.show-label { color: var(--page-ink); font-size: 11.5px; font-weight: 600; }
 .segmented {
   display: inline-flex;
   margin: 0;
@@ -294,18 +295,16 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .stage[data-dragging] #camera, #camera[data-instant] { transition: none; }
 
 /* The campus. */
-.stage:focus { outline: none; } /* no ring: the stage's inset edge (.stage:focus-visible) draws it */
-.stage:focus-visible { box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring); }
 .bldg, .crate, .yard-hit { cursor: pointer; transition: opacity var(--duration-fast) ease; }
 .bldg:focus-visible, .crate:focus-visible, .yard-hit:focus-visible { outline: none; } /* no ring: the plot's or the crate's own outline takes the ring's colour */
 .scene[data-focused] .bldg:not([data-open]), .scene[data-focused] .crate:not([data-mine]) { opacity: 0.45; }
 .bldg .lift { transition: transform var(--duration-hover) ease; }
 .bldg:hover .lift { transform: translateY(-3px); }
-.bldg .shell, .bldg .upper, .bldg .cut, .bldg .fx-roof { transition: opacity var(--duration-fast) ease, transform var(--duration-shape) var(--spring); }
+.bldg .shell, .bldg .upper, .bldg .cut, .bldg .fx-roof, .bldg .agents { transition: opacity var(--duration-fast) ease, transform var(--duration-shape) var(--spring); }
 .bldg .cut { opacity: 0; pointer-events: none; }
 .bldg[data-open] .shell { opacity: 0; }
 .bldg[data-open] .upper { opacity: 0; transform: translateY(-48px); }
-.bldg[data-open] .fx-roof { opacity: 0; }
+.bldg[data-open] .fx-roof, .bldg[data-open] .agents { opacity: 0; }
 .bldg[data-open] .cut { opacity: 1; }
 .plot-edge, .crate-edge, .yard-edge { fill: none; stroke: var(--text-primary); stroke-width: 1.4; opacity: 0; transition: opacity var(--duration-hover) ease; vector-effect: non-scaling-stroke; }
 .plot[data-hover] .plot-edge, .crate:hover .crate-edge, .yard-hit:hover .yard-edge { opacity: 0.4; }
@@ -333,10 +332,9 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .flag { animation: flag 2.2s ease-in-out infinite; transform-origin: left center; }
 @keyframes flag { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-6deg) scaleX(0.92); } }
 .bubble { animation: bob 2.8s ease-in-out infinite; }
+.hop { animation: hop 0.9s ease-in-out infinite; }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-#avatar .body { transform-box: fill-box; transform-origin: center bottom; }
-#avatar[data-walking] .body { animation: step 0.36s ease-in-out infinite; animation-play-state: var(--loop-motion); }
-@keyframes step { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
 
 /* Names float over the campus at a constant size. */
 .tag { pointer-events: none; transition: opacity var(--duration-quick) ease; }
@@ -347,22 +345,7 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .agent-tag text { font-size: 7px; font-weight: 600; fill: var(--text-primary); }
 .agent-tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
 
-/* What floats over the stage: the walking hint, the map's controls and its key, a crate's card, a notice. */
-.walk-hint {
-  position: absolute; left: 50%; bottom: var(--space-16); transform: translateX(-50%);
-  display: flex; align-items: center; gap: var(--space-8);
-  padding: var(--space-6) var(--space-12); border: 1px solid var(--hairline-strong); border-radius: 999px;
-  background: var(--surface-popover); color: var(--text-secondary); font-size: 12px; white-space: nowrap; pointer-events: none;
-  box-shadow: 0 8px 24px var(--shadow);
-}
-.walk-hint kbd {
-  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 var(--space-4);
-  border: 1px solid var(--hairline-strong); border-radius: 4px; background: var(--raised); color: var(--text-primary);
-  font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-}
-.walk-hint .on { display: none; }
-.stage:focus-within .walk-hint .on { display: inline; }
-.stage:focus-within .walk-hint .off { display: none; }
+/* What floats over the stage: the map's controls and its key, a crate's card, a notice. */
 .map-controls {
   position: absolute; right: var(--space-16); bottom: var(--space-16);
   display: flex; flex-direction: column; gap: var(--space-2);
@@ -454,6 +437,22 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
   <span class="show-chip">Design exploration</span>
   <span class="show-chip" data-tone="illustrative">Illustrative data · nothing is live</span>
   <span class="spacer"></span>
+  <span class="show-label">Agents</span>
+  <fieldset class="segmented" id="agent-style">
+    <legend class="sr-only">Agents</legend>
+    <button type="button" data-agent-style="crew">Crew</button>
+    <button type="button" data-agent-style="stacks">Stacks</button>
+    <button type="button" data-agent-style="drones">Drones</button>
+    <button type="button" data-agent-style="windows">Windows</button>
+  </fieldset>
+  <span class="show-label">Pull requests</span>
+  <fieldset class="segmented" id="cargo-style">
+    <legend class="sr-only">Pull requests</legend>
+    <button type="button" data-cargo-style="ship">Ship</button>
+    <button type="button" data-cargo-style="containers">Containers</button>
+    <button type="button" data-cargo-style="parcels">Parcels</button>
+    <button type="button" data-cargo-style="crates">Crates</button>
+  </fieldset>
   <fieldset class="segmented">
     <legend class="sr-only">Appearance</legend>
     <button type="button" data-theme-choice="dark">Night</button>
@@ -495,7 +494,7 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
       <button type="button" class="toolbar-button" id="needs-you" data-tone="attention"></button>
     </div>
     <div class="work">
-      <div class="stage" id="stage" role="application" aria-roledescription="campus" aria-label="Campus. Arrow keys walk Luke; walking up to a building or a crate shows its details.">
+      <div class="stage" id="stage">
         <svg class="scene" id="scene" aria-hidden="false">
           <title>Campus</title>
           <defs>
@@ -514,7 +513,6 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
             <g id="layer-tags"></g>
           </g>
         </svg>
-        <div class="walk-hint" aria-hidden="true"><span class="off">Click the campus, then walk Luke with</span><span class="on">Walking</span> <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd><span class="on">· Tab to leave</span></div>
         <section class="key" id="key" aria-label="Key" data-hidden></section>
         <div class="crate-card" id="crate-card" data-hidden aria-hidden="true"></div>
         <div class="map-controls" role="toolbar" aria-label="Campus view">
@@ -526,7 +524,6 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
           <button type="button" class="icon-button" id="key-toggle" aria-label="Key" aria-pressed="false" data-g="circle-help"></button>
         </div>
         <div class="toast" id="toast" role="status" aria-live="polite" data-hidden></div>
-        <div class="sr-only" id="arrival" aria-live="polite"></div>
       </div>
       <aside class="inspector" id="inspector" aria-label="Details">
         <div class="inspector-body" id="inspector-body"></div>
@@ -854,21 +851,21 @@ const SLOTS = [
       { box: { x: 1.6, y: 1.6, w: 3, d: 3, z: 0, h: 3.3 }, mat: "wall", win: { rows: 5, per: 2, ...lit, seed: 13 }, role: "shell" },
       { box: { x: 2.1, y: 2.1, w: 2, d: 2, z: 3.3, h: 0.5 }, mat: "roof", role: "upper" },
     ],
-    roof: [3.1, 3.1, 3.8], stack: null },
+    roof: [3.1, 3.1, 3.8], stack: null, deck: { x: 1.75, y: 4.15, w: 2.7, d: 0.35, z: 3.3 } },
   /* A low hall with a raised back. */
   { plot: [5.8, 1, 3, 5.2], hollow: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, h: 1.9, mat: "wall2" },
     parts: (lit) => [
       { box: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, z: 0, h: 1.9 }, mat: "wall2", win: { rows: 2, per: 1.6, ...lit, seed: 17 }, role: "shell" },
       { box: { x: 6.2, y: 1.5, w: 2.2, d: 2, z: 1.9, h: 0.7 }, mat: "wall2", win: { rows: 1, per: 1.6, ...lit, ratio: (lit.ratio ?? 0.8) * 0.4, seed: 2 }, role: "upper" },
     ],
-    roof: [7.3, 2.5, 2.6], stack: null },
+    roof: [7.3, 2.5, 2.6], stack: null, deck: { x: 6.35, y: 3.7, w: 1.9, d: 1.8, z: 1.9 } },
   /* A warehouse. */
   { plot: [11.6, 0.6, 7.6, 4.2], hollow: { x: 12.2, y: 1.1, w: 6.2, d: 3, h: 1.5, mat: "wall" },
     parts: (lit) => [
       { box: { x: 12.2, y: 1.1, w: 6.2, d: 3, z: 0, h: 1.5 }, mat: "wall", win: { rows: 1, per: 1.5, ...lit, seed: 7 }, role: "shell" },
       { box: { x: 12.1, y: 1, w: 6.4, d: 3.2, z: 1.5, h: 0.14 }, mat: "roof", role: "upper" },
     ],
-    roof: [17.6, 1.8, 1.64], stack: null },
+    roof: [17.6, 1.8, 1.64], stack: null, deck: { x: 12.5, y: 1.4, w: 5.6, d: 2.4, z: 1.64 } },
   /* A sawtooth works with silos and a stack. */
   { plot: [0.6, 10.9, 8, 4.4], hollow: { x: 1.2, y: 11.5, w: 5, d: 3.2, h: 1.2, mat: "wall" },
     parts: (lit) => {
@@ -879,14 +876,14 @@ const SLOTS = [
       list.push({ cyl: [5.6, 12.1, 0.22, 1.2, 1.9, "wall2"], bands: [0.85], role: "upper" });
       return list;
     },
-    roof: [3.2, 12.6, 2.4], stack: [5.6, 12.1, 3.15] },
+    roof: [3.2, 12.6, 2.4], stack: [5.6, 12.1, 3.15], deck: { x: 1.4, y: 13.4, w: 4.6, d: 1.1, z: 1.2 } },
   /* A block, the one most often going up under a crane. */
   { plot: [16.8, 11.4, 3, 5], hollow: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, h: 2.2, mat: "wall" },
     parts: (lit) => [
       { box: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, z: 0, h: 2.2 }, mat: "wall", win: { rows: 3, per: 1.8, ...lit, seed: 21 }, role: "shell" },
       { box: { x: 17.25, y: 11.95, w: 2.2, d: 1.6, z: 2.2, h: 0.5 }, mat: "roof", role: "upper" },
     ],
-    roof: [18.35, 13.7, 2.9], stack: null, crane: { at: [19.55, 11.75], h: 3.8, jib: 2.7 } },
+    roof: [18.35, 13.7, 2.9], stack: null, deck: { x: 17.35, y: 13.7, w: 2.0, d: 1.7, z: 2.2 }, crane: { at: [19.55, 11.75], h: 3.8, jib: 2.7 } },
   /* A gabled workshop with a chimney. */
   { plot: [1, 15.8, 5.6, 3.8], hollow: { x: 1.5, y: 16.3, w: 4.6, d: 2.8, h: 1.35, mat: "wall2" },
     parts: (lit) => [
@@ -895,7 +892,7 @@ const SLOTS = [
       { box: { x: 1.4, y: 17.7, w: 4.8, d: 1.5, z: 1.35, hs: [0.9, 0.9, 0, 0] }, mat: "roof", role: "upper" },
       { box: { x: 4.6, y: 16.6, w: 0.4, d: 0.4, z: 1.6, h: 0.9 }, mat: "wall", role: "upper" },
     ],
-    roof: [2.4, 17.7, 2.3], stack: [4.8, 16.8, 2.55] },
+    roof: [2.4, 17.7, 2.3], stack: [4.8, 16.8, 2.55], deck: { x: 1.6, y: 17.62, w: 4.4, d: 0.16, z: 2.22 } },
   /* A glass studio. */
   { plot: [12, 12, 4.4, 4.4], hollow: { x: 12.6, y: 12.6, w: 3.2, d: 3.2, h: 1.1, mat: "glass" },
     parts: (lit) => [
@@ -903,7 +900,7 @@ const SLOTS = [
       { box: { x: 12.45, y: 12.45, w: 3.5, d: 3.5, z: 1.1, h: 0.16 }, mat: "roof", role: "upper" },
       { cyl: [14.2, 14.2, 0.07, 1.26, 1.3, "metal"], role: "upper" },
     ],
-    roof: [14.2, 14.2, 2.6], stack: null },
+    roof: [14.2, 14.2, 2.6], stack: null, deck: { x: 12.8, y: 12.8, w: 2.8, d: 2.8, z: 1.26 } },
 ];
 const NEW_PLOT = [12, 17.4, 4.4, 2.2];
 function placed() {
@@ -930,40 +927,113 @@ const LAMPS = [[8.7, 8.7], [11.3, 8.7], [8.7, 11.3], [11.3, 11.3], [8.7, 3], [11
 const REF_LINES = 100, REF_EDGE = 0.62;
 const edgeFor = (lines) => REF_EDGE * Math.cbrt(lines / REF_LINES);
 const UNKNOWN_EDGE = 0.5;
+/* Each style's own size for a pull request. Crates: volume is lines, an edge
+   grows with the cube root. Containers: length is lines, linear, one tile per
+   150. Parcels: one parcel per 25 lines of additions and per 25 of deletions,
+   rounded up, so the count is the measure. */
+const CONTAINER_PER_TILE = 150, CONTAINER_MIN = 0.4, CONTAINER_W = 0.55, CONTAINER_H = 0.5;
+const PARCEL_LINES = 25, PARCEL = 0.21, PARCEL_GAP = 0.03, PALLET = 1.0;
+const parcelCounts = (p) => [Math.ceil(p.additions / PARCEL_LINES), Math.ceil(p.deletions / PARCEL_LINES)];
+function sizeOf(p, orient = "x") {
+  const style = cargoStyle === "ship" ? "containers" : cargoStyle;
+  if (style === "containers") {
+    const len = p ? Math.max(CONTAINER_MIN, linesOf(p) / CONTAINER_PER_TILE) : 0.6;
+    return orient === "x" ? { w: len, d: CONTAINER_W, h: CONTAINER_H } : { w: CONTAINER_W, d: len, h: CONTAINER_H };
+  }
+  if (style === "parcels") {
+    const n = p ? parcelCounts(p).reduce((a, b) => a + b, 0) : 0;
+    return { w: PALLET, d: PALLET, h: 0.08 + Math.max(1, Math.ceil(n / 16)) * (PARCEL + PARCEL_GAP) };
+  }
+  const e = p ? edgeFor(linesOf(p)) : UNKNOWN_EDGE;
+  return { w: e, d: e, h: e + 0.06 };
+}
+/* The ship in the harbour lot, when merged pull requests ship by sea. */
+const SHIP = { cx: LOT.x + LOT.w / 2, y0: LOT.y + 0.5, y1: LOT.y + LOT.d - 1.0, half: 0.85, z0: -0.25, deck: 0.5, bow: 0.7, cabin: 0.75 };
 function cratePositions() {
   const list = [];
+  const push = (pr, x, y, size, where, extra = {}) => list.push({ pr, x, y, ...size, e: Math.max(size.w, size.d), where, z: 0, ...extra });
   for (const lane of LANES) {
     let x = YARD.x + 0.9;
     for (const p of awaiting().filter((q) => q.checks === lane.checks).sort((a, b) => a.number - b.number)) {
-      const e = edgeFor(linesOf(p));
-      list.push({ pr: p, x: x + e / 2, y: lane.y + LANE_D / 2, e, where: "gate" });
-      x += e + 0.5;
+      const size = sizeOf(p);
+      push(p, x + size.w / 2, lane.y + LANE_D / 2, size, "gate");
+      x += size.w + 0.4;
     }
   }
-  merged().sort((a, b) => a.number - b.number).forEach((p, i) => {
-    const e = edgeFor(linesOf(p));
-    list.push({ pr: p, x: LOT.x + 1.1 + (i % 2) * 2, y: LOT.y + 1.2 + Math.floor(i / 2) * 2, e, where: "shipped" });
-  });
+  const ship = merged().sort((a, b) => a.number - b.number);
+  if (cargoStyle === "ship") {
+    /* Loaded on deck in two rows, stern to bow. */
+    const cols = [SHIP.cx - 0.31, SHIP.cx + 0.31];
+    const start = SHIP.y0 + SHIP.cabin + 0.15;
+    const fill = [start, start];
+    for (const p of ship) {
+      const size = sizeOf(p, "y");
+      let c = fill[0] + size.d <= SHIP.y1 + 0.01 ? 0 : 1;
+      if (c === 1 && fill[1] + size.d > SHIP.y1 + 0.01 && fill[0] < fill[1]) c = 0;
+      push(p, cols[c], fill[c] + size.d / 2, size, "shipped", { z: SHIP.deck, orient: "y" });
+      fill[c] += size.d + 0.12;
+    }
+  } else {
+    let x = LOT.x + 0.5, y = LOT.y + 0.5, rowD = 0;
+    for (const p of ship) {
+      const size = sizeOf(p);
+      if (x + size.w > LOT.x + LOT.w - 0.4) { x = LOT.x + 0.5; y += rowD + 0.6; rowD = 0; }
+      push(p, x + size.w / 2, y + size.d / 2, size, "shipped");
+      x += size.w + 0.5; rowD = Math.max(rowD, size.d);
+    }
+  }
   for (const { task, slot } of placed()) {
     for (let k = 0; k < unnamedPRs(task); k++) {
       const [x, y, w, d] = slot.plot;
-      list.push({ unknown: true, taskId: task.id, k, x: x + w - 0.5 - k * 0.7, y: y + d - 0.4, e: UNKNOWN_EDGE, where: "door" });
+      const size = sizeOf(null);
+      list.push({ unknown: true, taskId: task.id, k, x: x + w - 0.3 - size.w / 2 - k * (size.w + 0.2), y: y + d - 0.15 - size.d / 2, ...size, e: Math.max(size.w, size.d), z: 0, where: "door" });
     }
   }
   return list;
 }
-
+/* A convex prism from a footprint, turned with the campus: its sides that face the viewer, then its top. */
+function prismSVG(points, z0, z1, color, topFill) {
+  const q = points.map(([x, y]) => R(x, y));
+  const cx = q.reduce((a, p) => a + p[0], 0) / q.length, cy = q.reduce((a, p) => a + p[1], 0) / q.length;
+  let s = "";
+  for (let i = 0; i < q.length; i++) {
+    const a = q[i], b = q[(i + 1) % q.length];
+    let nx = b[1] - a[1], ny = a[0] - b[0];
+    if (nx * ((a[0] + b[0]) / 2 - cx) + ny * ((a[1] + b[1]) / 2 - cy) < 0) { nx = -nx; ny = -ny; }
+    if (nx + ny <= 0) continue;
+    const m = Math.hypot(nx, ny);
+    s += poly([P(a[0], a[1], z0), P(b[0], b[1], z0), P(b[0], b[1], z1), P(a[0], a[1], z1)], shade(color, [nx / m, ny / m, 0]));
+  }
+  s += poly(q.map(([x, y]) => P(x, y, z1)), topFill || shade(color, TOP));
+  return s;
+}
+function shipSVG() {
+  const c = C();
+  const { cx, y0, y1, half, z0, deck, bow } = SHIP;
+  const hull = theme === "dark" ? "#2b3448" : "#3f5378";
+  const outline = [[cx - half, y0], [cx + half, y0], [cx + half, y1], [cx, y1 + bow], [cx - half, y1]];
+  /* A red keel at the waterline, the hull over it, then the bridge at the stern with its windows lit. */
+  let s = prismSVG(outline, z0, z0 + 0.16, "#8c2f2f");
+  s += prismSVG(outline, z0 + 0.16, deck, hull, theme === "dark" ? "#3a3d48" : "#d9dbe2");
+  s += boxSVG({ x: cx - 0.6, y: y0 + 0.05, w: 1.2, d: SHIP.cabin - 0.1, z: deck, h: 0.55 }, "wall", { win: { rows: 1, per: 2.2, lit: theme === "dark" ? c.lamp : null, ratio: 0.8, opacity: 0.7, seed: 8 } });
+  s += cylSVG(cx, y0 + 0.3, 0.1, deck + 0.55, 0.35, "#c9a227");
+  return s;
+}
 /* ------------------------------------------------------------------------
    Drawing.
    ------------------------------------------------------------------------ */
 const $ = (id) => document.getElementById(id);
+/* The two things being compared, switched in the page's header. Neither is stored. */
+let agentStyle = "crew";
+let cargoStyle = "ship";
 let openId = null;      /* a task id, or "gate", or "shipped" */
-let openSource = null;  /* "click" or "walk" */
 let hotPR = null;
 let hoverTask = null;
 let focusTask = null;
 
 function litFor(task) {
+  /* Outside the Windows style the agents carry the state, so the windows only glow. */
+  if (agentStyle !== "windows") return { lit: theme === "dark" ? "#f2d9a6" : C().idle, ratio: task.agents.total || task.id === callTaskId ? 0.42 : 0.18, opacity: theme === "dark" ? 0.5 : 0.5 };
   if (asking(task)) return { lit: css("--state-attention"), ratio: 0.85 };
   if (failed(task)) return { lit: css("--danger"), ratio: 0.7 };
   if (task.id === callTaskId) return { lit: css("--voice-developer"), ratio: 0.95 };
@@ -987,7 +1057,17 @@ function renderGround() {
   /* The gate's yard: paved, its three lanes marked only at their heads. */
   s += flat(YARD.x, YARD.y, YARD.w, YARD.d, theme === "dark" ? "#1c1d23" : "#e9eaee", 0.012);
   for (const lane of LANES) s += flat(YARD.x + 0.15, lane.y + LANE_D - 0.04, YARD.w - 0.3, 0.04, c.line, 0.02);
-  s += flat(LOT.x + 0.1, LOT.y + 0.1, LOT.w - 0.2, LOT.d - 0.2, theme === "dark" ? "#1f1d27" : "#ebe8f2", 0.012);
+  if (cargoStyle === "ship") {
+    /* The lot becomes a harbour: water, a few ripples, the quay's edge. */
+    s += flat(LOT.x - 0.2, LOT.y - 0.3, LOT.w + 0.2, LOT.d + 0.6, theme === "dark" ? "#0e1922" : "#b9d1e2", 0.005);
+    for (let i = 0; i < 9; i++) {
+      const rx = LOT.x + 0.3 + ((i * 1.37) % (LOT.w - 0.6)), ry = LOT.y + 0.2 + ((i * 2.11) % (LOT.d - 0.4));
+      s += flat(rx, ry, 0.5, 0.03, theme === "dark" ? "rgba(140,180,210,0.18)" : "rgba(255,255,255,0.6)", 0.01);
+    }
+    s += flat(N - 0.05, LOT.y - 0.3, 0.12, LOT.d + 0.6, theme === "dark" ? "#3a3c46" : "#c4c7d0", 0.02);
+  } else {
+    s += flat(LOT.x + 0.1, LOT.y + 0.1, LOT.w - 0.2, LOT.d - 0.2, theme === "dark" ? "#1f1d27" : "#ebe8f2", 0.012);
+  }
   $("layer-ground").innerHTML = s;
 }
 
@@ -1025,7 +1105,7 @@ function renderShadows() {
       if (p.cyl && p.solid) s += shadowCyl(p.cyl[0], p.cyl[1], p.cyl[2], p.cyl[4]);
     }
   }
-  for (const c of cratePositions()) s += shadowSVG({ x: c.x - c.e / 2, y: c.y - c.e / 2, w: c.e, d: c.e, z: 0, h: c.e });
+  for (const c of cratePositions()) if (!c.z) s += shadowSVG({ x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z: 0, h: c.h });
   for (const [x, y] of TREES) s += shadowCyl(x, y, 0.3, 1.1);
   s += shadowSVG({ ...GATEHOUSE, z: 0, h: 1 });
   $("layer-shadows").innerHTML = s;
@@ -1146,7 +1226,7 @@ function roofSignals(task, slot) {
     const col = css("--state-merged");
     s += `<line x1="${px}" y1="${py}" x2="${px}" y2="${py - 34}" stroke="${c.metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 34} l18,4 l-18,6 Z" fill="${col}"/>`;
   }
-  if (running(task) && slot.stack) {
+  if (agentStyle === "windows" && running(task) && slot.stack) {
     const [sx, sy] = PR_(...slot.stack);
     for (let i = 0; i < 5; i++) s += `<circle class="loop smoke" style="animation-delay:${-i * 0.96}s" cx="${sx}" cy="${sy}" r="5" fill="${c.smoke}" opacity="0"/>`;
   }
@@ -1202,33 +1282,216 @@ function buildingSVG(task, slot) {
     body += `<g class="${it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep"}">${it.svg}</g>`;
   }
   if (underway(task)) body += `<g class="upper">${scaffoldSVG(slot.hollow)}</g>`;
-  return `<g class="lift">${body}${roofSignals(task, slot)}</g>`;
+  return `<g class="lift">${body}${roofSignals(task, slot)}${agentsSVG(task, slot)}</g>`;
 }
 
-/* A crate is a pull request: green for its additions' share, red for its deletions', split across its width. */
-function crateSVG(c) {
-  const { x, y, e } = c;
-  const b = { x: x - e / 2, y: y - e / 2, w: e, d: e };
-  let s = "";
-  if (c.unknown) {
-    s += boxSVG({ ...b, z: 0, h: e }, "unknown", { edge: `stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2.5 2"` });
-    const [qx, qy] = PR_(x, y, e);
-    s += `<text x="${qx}" y="${qy + 3}" text-anchor="middle" font-size="8" font-weight="800" fill="${css("--text-secondary")}">?</text>`;
-  } else {
-    /* A pallet under it, then the two shares. */
-    s += boxSVG({ x: b.x - 0.05, y: b.y - 0.05, w: e + 0.1, d: e + 0.1, z: 0, h: 0.06 }, "crate");
-    const wa = (e * c.pr.additions) / linesOf(c.pr);
-    if (wa > 0) s += boxSVG({ x: b.x, y: b.y, w: wa, d: e, z: 0.06, h: e }, css("--state-complete"));
-    if (e - wa > 0) s += boxSVG({ x: b.x + wa, y: b.y, w: e - wa, d: e, z: 0.06, h: e }, css("--danger"));
+
+/* ------------------------------------------------------------------------
+   The agents, four ways. Each draws one mark per agent the task counts,
+   named or not, with no cap: blue running, orange asked a question, red
+   failed, quiet when its turn ended, dashed when the summary doesn't name it.
+   ------------------------------------------------------------------------ */
+function agentMarks(task) {
+  const list = [];
+  for (let i = 0; i < task.agents.total; i++) {
+    const agent = task.agents.named[i] || null;
+    list.push({ i, agent, tone: agent ? agentTone(agent) : null, asked: !!agent && INBOX.some((q) => q.agentId === agent.id) });
   }
-  const t = turnBox({ ...b, z: 0, h: e });
-  const outline = hull([[t.x0, t.y0, 0], [t.x1, t.y0, 0], [t.x1, t.y1, 0], [t.x0, t.y1, 0], [t.x0, t.y0, e + 0.06], [t.x1, t.y0, e + 0.06], [t.x1, t.y1, e + 0.06], [t.x0, t.y1, e + 0.06]].map(([a, bb, z]) => P(a, bb, z)));
+  return list;
+}
+/* Spread n marks over a rectangle, in rows, nearest the viewer last. */
+function spread(n, r) {
+  const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt((n * r.w) / Math.max(r.d, 0.2)))));
+  const rows = Math.ceil(n / cols);
+  const out = [];
+  for (let i = 0; i < n; i++) out.push([r.x + (r.w * ((i % cols) + 0.5)) / cols, r.y + (r.d * (Math.floor(i / cols) + 0.5)) / rows]);
+  return out;
+}
+function agentsSVG(task, slot) {
+  const marks = agentMarks(task);
+  if (!marks.length || agentStyle === "windows") return "";
+  /* Opened, the building shows its agents at their desks inside instead. */
+  if (agentStyle === "crew") return `<g class="agents">${crewSVG(marks, slot)}</g>`;
+  if (agentStyle === "stacks") return `<g class="agents">${stacksSVG(marks, slot)}</g>`;
+  return `<g class="agents" id="drones-${task.id}">${dronesSVG(marks, slot, task.id)}</g>`;
+}
+
+/* Crew: a worker per agent at the building's door, in a hard hat of its state. */
+function crewSVG(marks, slot) {
+  const [x, y, w, d] = slot.plot;
+  const hb = slot.hollow;
+  const strip = { x: x + 0.35, y: hb.y + hb.d + 0.18, w: w - 0.7, d: Math.max(0.3, y + d - (hb.y + hb.d) - 0.3) };
+  const at = spread(marks.length, strip).map((p, k) => ({ p, m: marks[k] })).sort((a, b) => depthOf(...a.p) - depthOf(...b.p));
+  let s = "";
+  for (const { p, m } of at) {
+    const [fx, fy] = PR_(p[0], p[1], 0.1);
+    const bx = 0, by = 0;
+    s += `<g transform="translate(${fx.toFixed(1)},${fy.toFixed(1)}) scale(1.6)">`;
+    if (!m.agent) {
+      s += `<g><path d="M${bx - 3.4},${by} L${bx - 2.8},${by - 9} Q${bx},${by - 11} ${bx + 2.8},${by - 9} L${bx + 3.4},${by} Z" fill="none" stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="1.8 1.4"/><circle cx="${bx}" cy="${by - 13}" r="3.2" fill="none" stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="1.8 1.4"/></g></g>`;
+      continue;
+    }
+    const hat = m.tone ? css(m.tone) : theme === "dark" ? "#8d8f99" : "#9ea2ad";
+    const busy = m.tone === "--state-working";
+    s += `<g class="${busy ? "loop hop" : ""}" style="animation-delay:${-m.i * 0.37}s">` +
+      `<ellipse cx="${bx}" cy="${by}" rx="4.5" ry="2.2" fill="rgba(0,0,0,0.25)"/>` +
+      `<path d="M${bx - 3.4},${by} L${bx - 2.8},${by - 9} Q${bx},${by - 11} ${bx + 2.8},${by - 9} L${bx + 3.4},${by} Q${bx},${by + 1.5} ${bx - 3.4},${by} Z" fill="#d97757"/>` +
+      `<circle cx="${bx}" cy="${by - 13}" r="3.2" fill="#e9b89c"/>` +
+      `<path d="M${bx - 4.2},${by - 13.6} Q${bx},${by - 19.5} ${bx + 4.2},${by - 13.6} Z" fill="${hat}" ${m.tone && theme === "dark" ? 'filter="url(#glow)"' : ""}/>` +
+      (busy ? `<line x1="${bx + 3}" y1="${by - 7}" x2="${bx + 7}" y2="${by - 11}" stroke="${C().metal}" stroke-width="1.4" stroke-linecap="round"/>` : "") +
+      (m.asked ? `<g class="loop bubble"><circle cx="${bx + 9}" cy="${by - 22}" r="6" fill="${css("--attention-mark-ground")}"/><text x="${bx + 9}" y="${by - 18.6}" text-anchor="middle" font-size="9" font-weight="800" fill="#fff">?</text></g>` : "") +
+      `</g></g>`;
+  }
+  return s;
+}
+
+/* Stacks: a chimney per agent on the roof. Smoke while it runs, a lamp when it asks or fails, cold when its turn ended. */
+function stacksSVG(marks, slot) {
+  const deck = slot.deck;
+  const at = spread(marks.length, deck).map((p, k) => ({ p, m: marks[k] })).sort((a, b) => depthOf(...a.p) - depthOf(...b.p));
+  const c = C();
+  let s = "";
+  const r = Math.min(0.16, (deck.w / Math.max(1, marks.length)) * 0.32);
+  for (const { p, m } of at) {
+    const h = 0.75;
+    if (!m.agent) {
+      const [bx, by] = PR_(p[0], p[1], deck.z), [, ty] = PR_(p[0], p[1], deck.z + h);
+      const rx = r * DX * Math.SQRT2;
+      s += `<path d="M${bx - rx},${by} L${bx - rx},${ty} M${bx + rx},${by} L${bx + rx},${ty}" stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2 1.5" fill="none"/><ellipse cx="${bx}" cy="${ty}" rx="${rx}" ry="${r * DY * Math.SQRT2}" fill="none" stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2 1.5"/>`;
+      continue;
+    }
+    s += cylSVG(p[0], p[1], r, deck.z, h, m.tone === "--state-working" ? "wall2" : "metal", { bands: [0.82] });
+    const [tx, ty] = PR_(p[0], p[1], deck.z + h);
+    if (m.tone === "--state-working") {
+      s += `<ellipse cx="${tx}" cy="${ty}" rx="${r * DX * 1.2}" ry="${r * DY * 1.2}" fill="${css("--state-working")}" opacity="0.8" filter="url(#glow)"/>`;
+      for (let k = 0; k < 4; k++) s += `<circle class="loop smoke" style="animation-delay:${-k * 1.2 - m.i * 0.5}s" cx="${tx}" cy="${ty}" r="4" fill="${c.smoke}" opacity="0"/>`;
+    } else if (m.tone) {
+      s += `<circle class="${m.asked ? "loop pulse" : ""}" cx="${tx}" cy="${ty - 5}" r="4" fill="${css(m.tone)}" filter="url(#glow)"/>`;
+    }
+  }
+  return s;
+}
+
+/* Drones: one per agent. Running ones circle the roof, one asking hovers with
+   its light on, a failed one sits on the roof lit red, an idle one is parked. */
+let droneClock = 0;
+function dronesSVG(marks, slot, taskId) {
+  const deck = slot.deck;
+  const hb = slot.hollow;
+  const cx = hb.x + hb.w / 2, cy = hb.y + hb.d / 2;
+  const parked = spread(marks.length, deck);
+  const flying = marks.filter((m) => m.tone === "--state-working" || m.asked);
+  const items = marks.map((m, k) => {
+    let x = parked[k][0], y = parked[k][1], z = deck.z + 0.05, air = false;
+    if (m.tone === "--state-working") {
+      const j = flying.indexOf(m);
+      const a = droneClock * 0.6 + (j * Math.PI * 2) / Math.max(1, flying.length) + taskId.length;
+      x = cx + Math.cos(a) * (hb.w / 2 + 0.5); y = cy + Math.sin(a) * (hb.d / 2 + 0.5); z = hb.h + 1.3 + 0.12 * Math.sin(droneClock * 2 + j); air = true;
+    } else if (m.asked) {
+      x = cx + 0.4; y = cy + hb.d / 2 + 0.3; z = hb.h + 1.0 + 0.08 * Math.sin(droneClock * 2.4); air = true;
+    }
+    return { m, x, y, z, air };
+  }).sort((a, b) => depthOf(a.x, a.y) - depthOf(b.x, b.y));
+  let s = "";
+  for (const it of items) {
+    const [px, py] = PR_(it.x, it.y, it.z);
+    if (it.air) { const [gx, gy] = PR_(it.x, it.y, 0.05); s += `<ellipse cx="${gx}" cy="${gy}" rx="7" ry="3.2" fill="rgba(0,0,0,0.22)"/>`; }
+    s += `<g transform="translate(${px.toFixed(1)},${py.toFixed(1)}) scale(1.7) translate(${(-px).toFixed(1)},${(-py).toFixed(1)})">`;
+    const dash = !it.m.agent ? `fill="none" stroke="${css("--text-tertiary")}" stroke-width="0.8" stroke-dasharray="1.6 1.2"` : `fill="${theme === "dark" ? "#d6d9e2" : "#3a3c46"}"`;
+    const rotor = (dx, dy) => `<ellipse cx="${px + dx}" cy="${py + dy}" rx="3.4" ry="1.3" ${it.m.agent ? `fill="${theme === "dark" ? "rgba(214,217,226,0.35)" : "rgba(58,60,70,0.3)"}"` : dash}/>`;
+    s += rotor(-5, -1) + rotor(5, -1) + rotor(-3.2, 1.6) + rotor(3.2, 1.6);
+    s += `<rect x="${px - 3.6}" y="${py - 2.2}" width="7.2" height="3.6" rx="1.6" ${dash}/>`;
+    if (it.m.tone) s += `<circle class="${it.m.asked ? "loop pulse" : ""}" cx="${px}" cy="${py - 0.4}" r="1.9" fill="${css(it.m.tone)}" filter="url(#glow)"/>`;
+    if (it.m.asked) s += `<g><circle cx="${px + 9}" cy="${py - 9}" r="5.5" fill="${css("--attention-mark-ground")}"/><text x="${px + 9}" y="${py - 5.8}" text-anchor="middle" font-size="8" font-weight="800" fill="#fff">?</text></g>`;
+    s += "</g>";
+  }
+  return s;
+}
+
+/* A pull request's cargo, in the chosen style, with its outline and its name. */
+function crateSVG(c) {
+  const style = cargoStyle === "ship" ? "containers" : cargoStyle;
+  const s = style === "containers" ? containerSVG(c) : style === "parcels" ? parcelsSVG(c) : cubeSVG(c);
+  const b = { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d };
+  const t = turnBox({ ...b, z: 0, h: c.h });
+  const z0 = c.z || 0, z1 = z0 + c.h;
+  const outline = hull([[t.x0, t.y0, z0], [t.x1, t.y0, z0], [t.x1, t.y1, z0], [t.x0, t.y1, z0], [t.x0, t.y0, z1], [t.x1, t.y0, z1], [t.x1, t.y1, z1], [t.x0, t.y1, z1]].map(([a, bb, z]) => P(a, bb, z)));
   const taskId = c.unknown ? c.taskId : c.pr.taskId;
   const name = c.unknown
     ? `A pull request of ${byId[taskId].name} its summary doesn't name: state and size unknown`
     : `Pull request #${c.pr.number}, ${c.pr.title}: ${c.pr.additions} additions, ${c.pr.deletions} deletions`;
   const key = c.unknown ? `u-${taskId}-${c.k}` : String(c.pr.number);
   return `<g class="crate" data-crate="${key}" data-task="${taskId}" data-where="${c.where}" tabindex="0" role="button" aria-label="${name}">${s}<polygon class="crate-edge" points="${pts(outline)}"/></g>`;
+}
+const DASHED = () => `stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2.5 2"`;
+function unknownMark(c) {
+  const [qx, qy] = PR_(c.x, c.y, (c.z || 0) + c.h);
+  return `<text x="${qx}" y="${qy + 3}" text-anchor="middle" font-size="8" font-weight="800" fill="${css("--text-secondary")}">?</text>`;
+}
+/* Crates: a cube on a pallet, split green and red across its width. */
+function cubeSVG(c) {
+  const e = c.w;
+  const b = { x: c.x - e / 2, y: c.y - e / 2 };
+  if (c.unknown) return boxSVG({ ...b, w: e, d: e, z: 0, h: e }, "unknown", { edge: DASHED() }) + unknownMark(c);
+  let s = boxSVG({ x: b.x - 0.05, y: b.y - 0.05, w: e + 0.1, d: e + 0.1, z: 0, h: 0.06 }, "crate");
+  const wa = (e * c.pr.additions) / linesOf(c.pr);
+  if (wa > 0) s += boxSVG({ x: b.x, y: b.y, w: wa, d: e, z: 0.06, h: e }, css("--state-complete"));
+  if (e - wa > 0) s += boxSVG({ x: b.x + wa, y: b.y, w: e - wa, d: e, z: 0.06, h: e }, css("--danger"));
+  return s;
+}
+/* Containers: a steel box as long as the change, its diff a painted band along its side. */
+function containerSVG(c) {
+  const z = c.z || 0;
+  const b = { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z, h: c.h };
+  if (c.unknown) return boxSVG(b, "unknown", { edge: DASHED() }) + unknownMark(c);
+  const merged = c.pr.state === PR.MERGED;
+  const body = merged ? (theme === "dark" ? "#5f5675" : "#b9b0cf") : theme === "dark" ? "#555b69" : "#c3c7d1";
+  let s = boxSVG(b, body);
+  const along = c.orient === "y" ? "y" : "x";
+  const share = c.pr.additions / linesOf(c.pr);
+  /* The long side the viewer sees, in the campus's own axes: its corrugations, then the band. */
+  const t = turnBox(b);
+  const faceX = along === "x" ? (rot % 2 === 0) : (rot % 2 === 1);
+  const seg = (u0, u1, za, zb) => {
+    /* u runs along the container's length in the turned view's face. */
+    if (faceX) return [P(t.x0 + u0, t.y1, za), P(t.x0 + u1, t.y1, za), P(t.x0 + u1, t.y1, zb), P(t.x0 + u0, t.y1, zb)];
+    return [P(t.x1, t.y0 + u0, za), P(t.x1, t.y0 + u1, za), P(t.x1, t.y0 + u1, zb), P(t.x1, t.y0 + u0, zb)];
+  };
+  const faceLen = faceX ? t.x1 - t.x0 : t.y1 - t.y0;
+  for (let u = 0.09; u < faceLen - 0.04; u += 0.11) {
+    const q = seg(u, u, z + 0.04, z + c.h - 0.04);
+    s += `<line x1="${q[0][0]}" y1="${q[0][1]}" x2="${q[3][0]}" y2="${q[3][1]}" stroke="rgba(0,0,0,${theme === "dark" ? 0.28 : 0.12})" stroke-width="0.7"/>`;
+  }
+  /* Whether the band starts with additions at the near or far end depends on the turn; keep additions first along the length. */
+  const flip = (along === "x" && (rot === 2 || rot === 3)) || (along === "y" && (rot === 1 || rot === 2));
+  const ua = flip ? faceLen * (1 - share) : 0;
+  const addSeg = flip ? [ua, faceLen] : [0, faceLen * share];
+  const delSeg = flip ? [0, ua] : [faceLen * share, faceLen];
+  const za = z + c.h * 0.36, zb = z + c.h * 0.56;
+  s += poly(seg(addSeg[0], addSeg[1], za, zb), css("--state-complete"), 'opacity="0.95"');
+  s += poly(seg(delSeg[0], delSeg[1], za, zb), css("--danger"), 'opacity="0.95"');
+  return s;
+}
+/* Parcels: a pallet of small boxes, one per 25 lines. Green tape for additions, red for deletions. */
+function parcelsSVG(c) {
+  const p0 = { x: c.x - PALLET / 2, y: c.y - PALLET / 2 };
+  let s = boxSVG({ ...p0, w: PALLET, d: PALLET, z: 0, h: 0.08 }, "crate");
+  if (c.unknown) return s + boxSVG({ x: p0.x + 0.1, y: p0.y + 0.1, w: PALLET - 0.2, d: PALLET - 0.2, z: 0.08, h: 0.4 }, "unknown", { edge: DASHED() }) + unknownMark(c);
+  const [na, nd] = parcelCounts(c.pr);
+  const tones = [...Array(na).fill("--state-complete"), ...Array(nd).fill("--danger")];
+  const cells = [];
+  tones.forEach((tone, i) => {
+    const layer = Math.floor(i / 16), k = i % 16;
+    cells.push({ tone, layer, x: p0.x + 0.03 + (k % 4) * (PARCEL + PARCEL_GAP), y: p0.y + 0.03 + Math.floor(k / 4) * (PARCEL + PARCEL_GAP) });
+  });
+  cells.sort((a, b) => a.layer - b.layer || depthOf(a.x, a.y) - depthOf(b.x, b.y));
+  const kraft = theme === "dark" ? "#8a6c4a" : "#d2b48c";
+  for (const cell of cells) {
+    const z = 0.08 + cell.layer * (PARCEL + PARCEL_GAP);
+    s += boxSVG({ x: cell.x, y: cell.y, w: PARCEL, d: PARCEL, z, h: PARCEL }, kraft);
+    s += flat(cell.x, cell.y + PARCEL * 0.38, PARCEL, PARCEL * 0.24, css(cell.tone), z + PARCEL + 0.002);
+  }
+  return s;
 }
 function laneLampSVG(lane) {
   const [gx, gy] = PR_(YARD.x + 0.35, lane.y + LANE_D / 2, 0);
@@ -1260,15 +1523,15 @@ function renderObjects() {
     const label = `${task.name}: ${statusLine(task)}`;
     list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: `<g class="bldg" data-id="${task.id}" tabindex="0" role="button" aria-label="${label}" ${openId === task.id ? "data-open" : ""}>${buildingSVG(task, slot)}</g>` });
   }
-  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y), svg: crateSVG(c) });
+  if (cargoStyle === "ship") list.push({ depth: depthOf(SHIP.cx, SHIP.y0 + 0.3), svg: shipSVG() });
+  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y) + (c.z ? 0.6 : 0), svg: crateSVG(c) });
   for (const [x, y] of TREES) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
   for (const [x, y] of LAMPS) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
   for (const lane of LANES) list.push({ depth: depthOf(YARD.x + 0.35, lane.y + LANE_D / 2), svg: laneLampSVG(lane) });
   list.push({ depth: depthOf(GATEHOUSE.x + 0.4, GATEHOUSE.y + 0.4), svg: gateSVG() });
-  list.push({ depth: depthOf(LOT.x + LOT.w - 0.4, LOT.y + 0.4), svg: lotFlagSVG() });
+  if (cargoStyle !== "ship") list.push({ depth: depthOf(LOT.x + LOT.w - 0.4, LOT.y + 0.4), svg: lotFlagSVG() });
   list.sort((a, b) => a.depth - b.depth);
-  $("layer-objects").innerHTML = list.map((i) => `<g data-depth="${i.depth.toFixed(3)}">${i.svg}</g>`).join("") + avatarSVG();
-  placeAvatar(true);
+  $("layer-objects").innerHTML = list.map((i) => `<g data-depth="${i.depth.toFixed(3)}">${i.svg}</g>`).join("");
 }
 function statusLine(t) {
   if (asking(t)) return "asked you a question";
@@ -1332,173 +1595,6 @@ function renderAll() {
 }
 
 /* ------------------------------------------------------------------------
-   Luke, walking. Arrow keys move him while the campus holds the keyboard;
-   walking onto a plot, up to a crate, or into a yard shows its details, as a
-   click does. Left alone he wanders the roads, and opens nothing. Where he
-   stands is the window's alone: nothing keeps it.
-   ------------------------------------------------------------------------ */
-const avatar = { x: 10.2, y: 6.8, face: 1, walking: false, path: null };
-const RADIUS = 0.22;
-const SPEED = 3.4, WANDER_SPEED = 1.1, IDLE_MS = 2600;
-const held = new Set();
-let lastManual = 0;
-let nearId = null;
-function avatarSVG() {
-  return `<g id="avatar" aria-hidden="true"><ellipse class="shadow" rx="7" ry="3.4" fill="rgba(0,0,0,0.3)"/><g class="body"></g></g>`;
-}
-function drawAvatarBody() {
-  const c = C();
-  const f = avatar.face;
-  /* A small round Luke: his tile's face on a soft body. */
-  return `<path d="M-7,-3 Q-8,-21 0,-22 Q8,-21 7,-3 Q0,1 -7,-3 Z" fill="${c.luke}" stroke="${theme === "dark" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.4)"}" stroke-width="0.8"/>` +
-    `<g transform="translate(${f * 0.8},-13) scale(${f * 0.085},0.085) rotate(-8) translate(-120,-124)"><path d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142" fill="none" stroke="${c.lukeInk}" stroke-width="16" stroke-linecap="round"/><circle cx="78" cy="92" r="13" fill="${c.lukeInk}"/><circle cx="162" cy="92" r="13" fill="${c.lukeInk}"/></g>`;
-}
-function placeAvatar(redraw) {
-  const g = $("avatar");
-  if (!g) return;
-  const [px, py] = PR_(avatar.x, avatar.y, 0.1);
-  g.setAttribute("transform", `translate(${px.toFixed(1)},${py.toFixed(1)}) scale(1.35)`);
-  const body = g.querySelector(".body");
-  if (redraw || body.dataset.face !== String(avatar.face)) { body.innerHTML = drawAvatarBody(); body.dataset.face = String(avatar.face); }
-  g.toggleAttribute("data-walking", avatar.walking);
-  /* Stand among the objects by depth, so a building in front hides him. */
-  const d = depthOf(avatar.x, avatar.y);
-  const layer = $("layer-objects");
-  let before = null;
-  for (const el of layer.children) { if (el !== g && Number(el.dataset.depth) > d) { before = el; break; } }
-  if (g.nextSibling !== before) layer.insertBefore(g, before);
-}
-
-/* Where he may stand: on the campus or the shipped lot, clear of every building, crate, tree, and the barrier. */
-function obstacles() {
-  const list = [];
-  for (const { task, slot } of placed()) {
-    const hb = slot.hollow;
-    list.push({ x: hb.x - 0.1, y: hb.y - 0.1, w: hb.w + 0.2, d: hb.d + 0.2 });
-    for (const p of slot.parts(litFor(task))) if (p.cyl && p.solid) list.push({ x: p.cyl[0] - p.cyl[2], y: p.cyl[1] - p.cyl[2], w: p.cyl[2] * 2, d: p.cyl[2] * 2 });
-    if (underway(task) && slot.crane) list.push({ x: slot.crane.at[0] - 0.15, y: slot.crane.at[1] - 0.15, w: 0.3, d: 0.3 });
-  }
-  for (const c of cratePositions()) list.push({ x: c.x - c.e / 2 - 0.05, y: c.y - c.e / 2 - 0.05, w: c.e + 0.1, d: c.e + 0.1 });
-  for (const [x, y] of TREES) list.push({ x: x - 0.2, y: y - 0.2, w: 0.4, d: 0.4 });
-  list.push(GATEHOUSE, BARRIER);
-  return list;
-}
-let OBST = [];
-function walkable(x, y) {
-  const onCampus = x > RADIUS && x < N - RADIUS && y > RADIUS && y < N - RADIUS;
-  const onLot = x >= N - RADIUS && x < LOT.x + LOT.w - RADIUS && y > LOT.y - 0.3 + RADIUS && y < LOT.y + LOT.d + 0.3 - RADIUS;
-  if (!onCampus && !onLot) return false;
-  return !OBST.some((o) => x > o.x - RADIUS && x < o.x + o.w + RADIUS && y > o.y - RADIUS && y < o.y + o.d + RADIUS);
-}
-function stepTo(nx, ny) {
-  if (walkable(nx, ny)) { avatar.x = nx; avatar.y = ny; return true; }
-  if (walkable(nx, avatar.y)) { avatar.x = nx; return true; }
-  if (walkable(avatar.x, ny)) { avatar.y = ny; return true; }
-  return false;
-}
-/* A screen direction, turned back into the campus's own axes. */
-function worldDir(sx, sy) {
-  /* Up the screen is −x −y in the turned view; right is +x −y. */
-  let vx = (sx + sy) / Math.SQRT2, vy = (sy - sx) / Math.SQRT2;
-  for (let i = 0; i < rot; i++) [vx, vy] = [vy, -vx];
-  return [vx, vy];
-}
-/* What he is next to, nearest first: a crate, then a plot, then a yard. */
-function nearWhat() {
-  let best = null, bd = 0.75;
-  for (const c of cratePositions()) {
-    const d = Math.hypot(c.x - avatar.x, c.y - avatar.y) - c.e / 2;
-    if (d < bd) { bd = d; best = c.unknown ? { kind: "task", id: c.taskId } : { kind: "crate", id: c.pr.taskId, pr: c.pr.number }; }
-  }
-  if (best) return best;
-  for (const { task, slot } of placed()) {
-    const [x, y, w, d] = slot.plot;
-    if (avatar.x > x && avatar.x < x + w && avatar.y > y && avatar.y < y + d) return { kind: "task", id: task.id };
-  }
-  const inside = (r) => avatar.x > r.x && avatar.x < r.x + r.w && avatar.y > r.y && avatar.y < r.y + r.d;
-  if (inside(YARD)) return { kind: "gate", id: "gate" };
-  if (inside(LOT)) return { kind: "shipped", id: "shipped" };
-  return null;
-}
-function arrive() {
-  const what = nearWhat();
-  const key = what ? `${what.id}:${what.pr ?? ""}` : null;
-  if (key === nearId) return;
-  nearId = key;
-  if (what) {
-    openDetails(what.id, what.pr, "walk");
-    $("arrival").textContent = `Next to ${what.kind === "gate" ? "the merge gate" : what.kind === "shipped" ? "the shipped lot" : byId[what.id].name}. Its details are open.`;
-  } else if (openSource === "walk") {
-    closeDetails(false);
-  }
-}
-/* The roads he wanders when left alone. */
-const ROAD = { nodes: [[0.6, 10], [5, 10], [10, 10], [14.5, 10], [19.2, 10], [10, 0.6], [10, 5], [10, 15], [10, 19.4], [21.2, 10.8], [23.6, 10.8]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [5, 6], [6, 2], [2, 7], [7, 8], [9, 10]] };
-const neighbours = (i) => ROAD.edges.flatMap(([a, b]) => (a === i ? [b] : b === i ? [a] : []));
-let wanderAt = null;
-function clearLine(a, b) {
-  const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.2);
-  for (let k = 1; k <= n; k++) { const t = k / n; if (!walkable(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)) return false; }
-  return true;
-}
-function pickWander() {
-  if (wanderAt === null) {
-    let best = null, bd = Infinity;
-    ROAD.nodes.forEach((n, i) => { const d = Math.hypot(n[0] - avatar.x, n[1] - avatar.y); if (d < bd && clearLine([avatar.x, avatar.y], n)) { bd = d; best = i; } });
-    if (best === null) return null;
-    wanderAt = best;
-    return ROAD.nodes[best];
-  }
-  const next = neighbours(wanderAt);
-  wanderAt = next[Math.floor(Math.random() * next.length)];
-  return ROAD.nodes[wanderAt];
-}
-const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-const DIRS = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
-function tickAvatar(now, dt) {
-  let sx = 0, sy = 0;
-  for (const k of held) { sx += DIRS[k][0]; sy += DIRS[k][1]; }
-  if (sx || sy) {
-    const m = Math.hypot(sx, sy);
-    const [vx, vy] = worldDir(sx / m, sy / m);
-    avatar.walking = stepTo(avatar.x + vx * SPEED * dt, avatar.y + vy * SPEED * dt);
-    if (sx) avatar.face = sx > 0 ? 1 : -1;
-    avatar.path = null; wanderAt = null;
-    lastManual = now;
-    arrive();
-    keepInView();
-  } else if (!reduced.matches && !document.hidden && now - lastManual > IDLE_MS) {
-    /* Wandering: along the roads, slowly; it opens and closes nothing. */
-    if (!avatar.path) avatar.path = pickWander();
-    if (avatar.path) {
-      const [tx, ty] = avatar.path;
-      const dx = tx - avatar.x, dy = ty - avatar.y, d = Math.hypot(dx, dy);
-      if (d < 0.05) { avatar.path = null; avatar.walking = false; }
-      else {
-        const s = Math.min(d, WANDER_SPEED * dt);
-        const moved = stepTo(avatar.x + (dx / d) * s, avatar.y + (dy / d) * s);
-        avatar.walking = moved;
-        if (!moved) { avatar.path = null; wanderAt = null; }
-        const screenDx = PR_(tx, ty, 0)[0] - PR_(avatar.x, avatar.y, 0)[0];
-        if (Math.abs(screenDx) > 2) avatar.face = screenDx > 0 ? 1 : -1;
-      }
-    } else avatar.walking = false;
-  } else avatar.walking = false;
-  placeAvatar(false);
-}
-/* While he is walked, the camera keeps him in sight. */
-function keepInView() {
-  const st = $("stage").getBoundingClientRect();
-  const [px, py] = PR_(avatar.x, avatar.y, 0);
-  const x = cam.x + px * cam.s, y = cam.y + py * cam.s;
-  const m = 90;
-  let dx = 0, dy = 0;
-  if (x < m) dx = m - x; else if (x > st.width - m) dx = st.width - m - x;
-  if (y < m) dy = m - y; else if (y > st.height - m - 40) dy = st.height - m - 40 - y;
-  if (dx || dy) { cam.x += dx; cam.y += dy; applyCamera(true); }
-}
-
-/* ------------------------------------------------------------------------
    The camera: ephemeral, as is everything a view holds.
    ------------------------------------------------------------------------ */
 const cam = { x: 0, y: 0, s: 1 };
@@ -1552,8 +1648,7 @@ function zoomBy(f, cx, cy) {
 }
 
 /* ------------------------------------------------------------------------
-   Details: a click flies to what was clicked; walking up opens the same
-   pane where Luke stands. Neither changes the work.
+   Details: a click flies to what was clicked. Nothing changes the work.
    ------------------------------------------------------------------------ */
 function syncMarks() {
   for (const p of document.querySelectorAll(".plot")) {
@@ -1577,9 +1672,8 @@ function syncMarks() {
   renderRoutes();
 }
 let shownPR = null;
-function openDetails(id, prNumber, source) {
+function openDetails(id, prNumber) {
   openId = id;
-  openSource = source;
   shownPR = prNumber ?? null;
   hotPR = prNumber ? allPRs().find((p) => p.number === prNumber) : null;
   syncMarks();
@@ -1587,11 +1681,10 @@ function openDetails(id, prNumber, source) {
   renderInspector();
 }
 function select(id, prNumber) {
-  openDetails(id, prNumber, "click");
-  nearId = null;
+  openDetails(id, prNumber);
   requestAnimationFrame(() => {
     const crate = prNumber && cratePositions().find((c) => !c.unknown && c.pr.number === prNumber);
-    if (crate) return flyTo(crate.x, crate.y, crate.e / 2, baseScale() * 2.4);
+    if (crate) return flyTo(crate.x, crate.y, (crate.z || 0) + crate.h / 2, baseScale() * 2.4);
     if (id === "gate") return flyTo(YARD.x + YARD.w / 2, YARD.y + YARD.d / 2, 0, baseScale() * 2);
     if (id === "shipped") return flyTo(LOT.x + LOT.w / 2, LOT.y + LOT.d / 2, 0, baseScale() * 2);
     const hb = slotOf(id).hollow;
@@ -1601,7 +1694,7 @@ function select(id, prNumber) {
 function closeDetails(refit) {
   if (!openId) return;
   const id = openId;
-  openId = null; openSource = null; hotPR = null; shownPR = null;
+  openId = null; hotPR = null; shownPR = null;
   syncMarks();
   $("inspector").removeAttribute("data-open");
   if (refit) {
@@ -1696,7 +1789,6 @@ function answer(itemId, choice) {
 }
 function refreshAll() {
   renderAll(); renderSidebar(); renderCensus(); renderKey();
-  OBST = obstacles();
   if (openId) renderInspector();
   applyCamera(true);
 }
@@ -1714,15 +1806,26 @@ function renderCensus() {
 }
 function renderKey() {
   const k = (svg, html) => `<div class="key-row"><svg viewBox="-11 -9 22 18" aria-hidden="true">${svg}</svg><span>${html}</span></div>`;
-  $("key").innerHTML =
-    k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${css("--state-working")}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${css("--state-working")}"/><circle cx="7" cy="-4" r="2.5" fill="${css("--text-tertiary")}"/>`, "<b>Lit windows, smoke</b>: an agent at work") +
-    k(`<circle r="4" fill="${css("--state-attention")}"/><circle r="8" fill="none" stroke="${css("--state-attention")}" stroke-width="1.5" opacity="0.6"/>`, "<b>Beacon</b>: a question in the Inbox") +
+  const ok = css("--state-complete"), no = css("--danger"), work = css("--state-working"), ask = css("--state-attention");
+  const agents = {
+    windows: k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${work}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${ask}"/>`, "<b>Windows</b> lit by what the task's agents are doing; smoke while one runs"),
+    crew: k(`<path d="M-4,-1 Q0,-7 4,-1 Z" fill="${work}"/><rect x="-3" y="0" width="6" height="7" rx="2" fill="#d97757"/>`, "<b>A worker per agent</b> at the door, its hard hat the agent's state"),
+    stacks: k(`<rect x="-3" y="-4" width="6" height="11" fill="${css("--text-secondary")}"/><circle cy="-7" r="3" fill="${work}"/>`, "<b>A chimney per agent</b>: smoke running, a lamp when it asks or fails, cold when done"),
+    drones: k(`<rect x="-5" y="-2" width="10" height="4" rx="2" fill="${css("--text-secondary")}"/><circle r="1.6" fill="${work}"/>`, "<b>A drone per agent</b>: circling while it runs, hovering when it asks, parked when done"),
+  };
+  const cargo = {
+    crates: k(`<rect x="-7" y="-7" width="10" height="14" fill="${ok}"/><rect x="3" y="-7" width="4" height="14" fill="${no}"/>`, "<b>Crate</b> per pull request: volume is lines changed, <b>not linear</b> (edge ∝ ∛lines), split by its additions and deletions"),
+    containers: k(`<rect x="-10" y="-4" width="20" height="8" fill="${css("--text-tertiary")}"/><rect x="-10" y="-1" width="14" height="2" fill="${ok}"/><rect x="4" y="-1" width="6" height="2" fill="${no}"/>`, "<b>Container</b> per pull request: length is lines changed, linear (150 a tile); the band is its additions and deletions"),
+    parcels: k(`<rect x="-8" y="-6" width="7" height="6" fill="#c9a77a"/><rect x="1" y="-6" width="7" height="6" fill="#c9a77a"/><rect x="-8" y="-4" width="7" height="2" fill="${ok}"/><rect x="1" y="-4" width="7" height="2" fill="${no}"/>`, "<b>Parcels</b>: one per 25 lines, rounded up; green tape for additions, red for deletions"),
+  };
+  cargo.ship = cargo.containers + k(`<path d="M-10,0 L8,0 L10,-3 L-10,-3 Z" fill="${css("--text-secondary")}"/>`, "<b>The ship</b> carries what merged; open ones wait on the quay");
+  $("key").innerHTML = agents[agentStyle] +
+    k(`<circle r="4" fill="${ask}"/><circle r="8" fill="none" stroke="${ask}" stroke-width="1.5" opacity="0.6"/>`, "<b>Beacon</b>: a question in the Inbox") +
     k(`<ellipse rx="9" ry="4.5" fill="none" stroke="${css("--voice-developer")}" stroke-width="1.5"/>`, "<b>Rings</b>: on this Mac's call") +
     k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "<b>Crane</b>: at work, no pull request yet") +
-    k(`<line x1="-4" y1="8" x2="-4" y2="-8" stroke="${css("--text-secondary")}" stroke-width="1.5"/><path d="M-4,-8 l11,3 l-11,4 Z" fill="${css("--state-merged")}"/>`, "<b>Flag</b>: every pull request it names, merged") +
-    k(`<rect x="-7" y="-7" width="10" height="14" fill="${css("--state-complete")}"/><rect x="3" y="-7" width="4" height="14" fill="${css("--danger")}"/>`, "<b>Crate</b>: a pull request. Volume is lines changed, <b>not linear</b> (edge ∝ ∛lines); green and red are the shares") +
-    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed crate</b>: not named, size unknown") +
-    k(`<circle cx="-5" r="3" fill="${css("--danger")}"/><circle cx="1" r="3" fill="${css("--state-attention")}"/><circle cx="7" r="3" fill="${css("--state-complete")}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue");
+    cargo[cargoStyle] +
+    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed</b>: not named in the summary, size unknown") +
+    k(`<circle cx="-5" r="3" fill="${no}"/><circle cx="1" r="3" fill="${ask}"/><circle cx="7" r="3" fill="${ok}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue");
 }
 
 function showCrateCard(el) {
@@ -1757,11 +1860,21 @@ function setTheme(t) {
   renderAll(); renderKey(); renderSidebar(); applyCamera(true);
 }
 for (const b of document.querySelectorAll("[data-theme-choice]")) b.addEventListener("click", () => setTheme(b.dataset.themeChoice));
+function markStyles() {
+  for (const b of document.querySelectorAll("[data-agent-style]")) b.setAttribute("aria-pressed", String(b.dataset.agentStyle === agentStyle));
+  for (const b of document.querySelectorAll("[data-cargo-style]")) b.setAttribute("aria-pressed", String(b.dataset.cargoStyle === cargoStyle));
+}
+function restyle() {
+  markStyles();
+  renderAll(); renderKey();
+  if (openId) renderInspector();
+  applyCamera(true);
+}
+for (const b of document.querySelectorAll("[data-agent-style]")) b.addEventListener("click", () => { agentStyle = b.dataset.agentStyle; restyle(); });
+for (const b of document.querySelectorAll("[data-cargo-style]")) b.addEventListener("click", () => { cargoStyle = b.dataset.cargoStyle; restyle(); });
 
 const scene = $("scene");
 const stage = $("stage");
-/* The campus takes the keyboard as one stop, so the arrows can walk Luke. */
-stage.tabIndex = 0;
 function activate(target) {
   const crate = target.closest(".crate");
   if (crate) { select(crate.dataset.task, Number(crate.dataset.crate) || undefined); return true; }
@@ -1794,26 +1907,16 @@ scene.addEventListener("focusin", (e) => {
 });
 scene.addEventListener("focusout", () => { focusTask = null; hideCrateCard(); syncMarks(); });
 
-/* The arrow keys walk Luke while the campus holds focus, and only there:
-   the map's controls, the pane, and the page keep their own keys, and Tab
-   always leaves. */
-stage.addEventListener("keydown", (e) => {
-  if (e.target.closest(".map-controls, .key, .toast")) return;
-  if (DIRS[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); held.add(e.key); return; }
-  if ((e.key === "Enter" || e.key === " ") && e.target !== stage && activate(e.target)) e.preventDefault();
+scene.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && activate(e.target)) e.preventDefault();
 });
-window.addEventListener("keyup", (e) => { held.delete(e.key); });
-/* Walking stops the moment the keyboard goes anywhere the arrows don't walk. */
-stage.addEventListener("focusout", (e) => { if (!stage.contains(e.relatedTarget) || e.relatedTarget.closest(".map-controls, .key, .toast")) held.clear(); });
-window.addEventListener("blur", () => held.clear());
-document.addEventListener("visibilitychange", () => { held.clear(); lastManual = performance.now(); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && openId) { closeDetails(openSource === "click"); nearId = null; }
+  if (e.key === "Escape" && openId) closeDetails(true);
   if (e.key === "r" && !e.metaKey && !e.target.closest("input, textarea")) turn();
 });
 $("task-list").addEventListener("click", (e) => { const r = e.target.closest(".task-row"); if (r) select(r.dataset.id); });
 $("inspector").addEventListener("click", (e) => {
-  if (e.target.closest("#insp-close")) { closeDetails(openSource === "click"); nearId = null; }
+  if (e.target.closest("#insp-close")) closeDetails(true);
   const a = e.target.closest("[data-answer]");
   if (a) answer(a.dataset.item, a.dataset.answer);
   if (e.target.closest("#open-task")) toast(`${glyph("open")}Opens the task`);
@@ -1842,8 +1945,6 @@ $("key-toggle").addEventListener("click", () => {
 let drag = null, dragMoved = false;
 stage.addEventListener("pointerdown", (e) => {
   if (e.target.closest(".map-controls, .key, .toast")) return;
-  /* A press on the campus gives it the keyboard, so the arrows walk at once. */
-  if (!e.target.closest(".bldg, .crate, .yard-hit, #new-plot")) stage.focus({ preventScroll: true });
   drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
   dragMoved = false;
 });
@@ -1875,16 +1976,23 @@ new ResizeObserver(() => {
   applyCamera(true);
 }).observe(stage);
 
+const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  tickAvatar(now, dt);
   if (!reduced.matches && !document.hidden) {
     craneAngle += dt * 0.18;
     const cr = $("crane");
     const spot = placed().find((p) => underway(p.task) && p.slot.crane);
     if (cr && spot) cr.innerHTML = craneSVG(spot.slot.crane);
+    droneClock += dt;
+    if (agentStyle === "drones") {
+      for (const { task, slot } of placed()) {
+        const g = $(`drones-${task.id}`);
+        if (g && agentMarks(task).some((m) => m.tone === "--state-working" || m.asked)) g.innerHTML = dronesSVG(agentMarks(task), slot, task.id);
+      }
+    }
   }
   requestAnimationFrame(frame);
 }
@@ -1895,10 +2003,12 @@ const themeParam = params.get("theme");
 const initialTheme = themeParam === "light" ? "light" : themeParam === "dark" ? "dark" : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 const openParam = [...TASKS.map((t) => t.id), "gate", "shipped"].find((id) => id === params.get("open"));
 const rotParam = ["1", "2", "3"].indexOf(params.get("rot")) + 1;
+agentStyle = ["crew", "stacks", "drones", "windows"].find((v) => v === params.get("agents")) ?? agentStyle;
+cargoStyle = ["ship", "containers", "parcels", "crates"].find((v) => v === params.get("cargo")) ?? cargoStyle;
+markStyles();
 renderSidebar();
 renderCensus();
 setTheme(initialTheme);
-OBST = obstacles();
 for (let i = 0; i < rotParam; i++) turn();
 fitCampus(true);
 if (openParam) select(openParam);
