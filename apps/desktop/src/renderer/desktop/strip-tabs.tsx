@@ -8,7 +8,7 @@ import {
   PlusIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
+import { LaptopIcon, ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -85,6 +85,8 @@ export interface TabDoors {
   onRename?: (() => void) | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell, for an agent's where a panel takes the tab. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens the agent's pushed branch in a terminal of this Mac in the side panel, for an agent's where a panel takes the tab. */
+  onOpenOnMac?: (() => void) | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
@@ -101,11 +103,11 @@ interface ContentActions {
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
+ * itself: an agent's Rename, its Open terminal and Open on this Mac, Copy link and a transcript's two copies,
  * and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, archive, copyLink } = doors;
+  const { onCopy, onRename, onOpenTerminal, onOpenOnMac, archive, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -120,6 +122,9 @@ function contentActions(doors: TabDoors): ContentActions {
               // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
               ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
             },
+            ...(onOpenOnMac === undefined
+              ? []
+              : [{ label: "Open on this Mac", icon: <LaptopIcon />, onSelect: onOpenOnMac }]),
           ],
     copies: [
       ...(copyLink === undefined ? [] : [copyLink]),

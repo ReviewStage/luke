@@ -1,4 +1,5 @@
 import type { CodeRef } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
@@ -9,9 +10,11 @@ import {
   isAgentTab,
   isChangesTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  type MacTerminalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
@@ -25,7 +28,8 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**
@@ -173,7 +177,8 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | MacTerminalStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -391,6 +396,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on each plan, by plan. */
   readonly lastTerminals: Readonly<Record<string, string>>;
+  /** The open tabs of this Mac's terminals, by agent, in the order opened. */
+  readonly macTerminals: readonly MacTerminalStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -747,8 +754,12 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isTerminalTab(tab) && planId !== undefined && held.lastTerminals[planId] !== tab.terminal
       ? { ...held.lastTerminals, [planId]: tab.terminal }
       : held.lastTerminals;
-  const chosen = open ?? tab;
+  const macTerminals = isMacTerminalTab(tab)
+    ? [...held.macTerminals.filter((each) => !sameTab(each, tab)), tab]
+    : held.macTerminals;
+  const chosen = isMacTerminalTab(tab) ? tab : (open ?? tab);
   return opened === held &&
+    macTerminals === held.macTerminals &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
@@ -756,7 +767,7 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, macTerminals, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -933,6 +944,14 @@ export function drawsTerminal(
   return drawn.planAgents?.includes(tab.terminal) === true;
 }
 
+/** Whether the plan draws the agent's tab of a terminal of this Mac: once its agents are read and the agent is among them, as a Terminal tab (`drawsTerminal`). */
+export function drawsMacTerminal(
+  tab: MacTerminalStripTab,
+  drawn: Pick<DrawnTabs, "planAgents">,
+): boolean {
+  return drawn.planAgents?.includes(tab.macTerminal) === true;
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -963,6 +982,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.macTerminals.filter((each) => drawsMacTerminal(each, drawn)),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -1025,7 +1045,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
           : isTerminalTab(tab)
             ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-            : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+            : isMacTerminalTab(tab)
+              ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
+              : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1200,6 +1222,7 @@ function settled(state: SidePanelState): HeldState {
     pages: [],
     terminals: [],
     lastTerminals: {},
+    macTerminals: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1297,6 +1320,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isMacTerminalTab(kept)) return drawsMacTerminal(kept, drawn) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
@@ -1361,6 +1385,17 @@ export function useSidePanel(
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const planId = plan.id;
   const state = stage === undefined ? kept : (moved ?? stage);
+  // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
+  const { tell } = useAct();
+  const heldMacTerminals = useRef(kept.macTerminals);
+  useEffect(() => {
+    for (const tab of heldMacTerminals.current) {
+      if (!kept.macTerminals.some((each) => sameTab(each, tab))) {
+        tell(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
+      }
+    }
+    heldMacTerminals.current = kept.macTerminals;
+  }, [kept.macTerminals, tell]);
   // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
   const planFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>

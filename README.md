@@ -69,8 +69,11 @@ out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
 repository and sets at the sandbox's firewall, never inside it, and Luke
 runs commands such as `ls`, `grep`, or `cat` there. A coding
 agent you start works in a sandbox of its own, on a full checkout, and pushes
-its branch and pull request through the same App, as the App's own bot. See
-[PRIVACY.md](PRIVACY.md) for details.
+its branch and pull request through the same App, as the App's own bot.
+Open on this Mac, in an agent tab's ⋯, fetches the agent's pushed branch into
+a worktree of your own clone, with your own git login, and runs the command
+you set under Settings › Workspace › Repositories in a terminal inside Luke;
+the code stays on your Mac. See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Contributing
 

@@ -19,6 +19,7 @@ import {
   inTaskOrder,
   isChangesTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -71,6 +72,7 @@ import {
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileView } from "../planning/file-view";
+import { MacTerminalTab } from "../planning/mac-terminal-tab";
 import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
@@ -660,7 +662,21 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
+  // A terminal of this Mac's tab names the branch it opened beside its word.
+  const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
+    tab,
+    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.branch }),
+    close: () => panel.onClose(tab),
+  }));
+  return [
+    ...fixed,
+    ...subagentTabs,
+    ...fileTabs,
+    ...changesTabs,
+    ...pageTabs,
+    ...terminalTabs,
+    ...macTerminalTabs,
+  ];
 }
 
 /**
@@ -1220,6 +1236,9 @@ function TabContent({
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isMacTerminalTab(tab)) {
+    return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
+  }
   if (isTerminalTab(tab)) {
     return (
       <TerminalTab
@@ -1702,7 +1721,9 @@ export function SidePanel({
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
-                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isMacTerminalTab(tab)
+                  ? TAB_WORDS.MAC_TERMINAL
+                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],

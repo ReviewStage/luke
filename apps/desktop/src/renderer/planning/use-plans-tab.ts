@@ -27,6 +27,7 @@ import {
   isChangesTab,
   isDraftTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -128,6 +129,7 @@ import {
 } from "./use-plan-history";
 import {
   drawsChanges,
+  drawsMacTerminal,
   drawsSubagent,
   drawsTerminal,
   inColumn,
@@ -2108,6 +2110,7 @@ export function usePlansTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { planAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { planAgents: agentIds });
+    if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { planAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, planning.activeTaskId, drawsAgain);

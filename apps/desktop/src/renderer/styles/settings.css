@@ -868,3 +868,22 @@
     flex-basis: 100%;
   }
 }
+
+/* One repository on the Workspace page's Repositories group: its name, then
+   its clone's folder and its run command, each a row of their own, a rule
+   between repositories. */
+.mac-repository {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-block: var(--space-8);
+}
+
+.mac-repository + .mac-repository {
+  border-top: 1px solid var(--hairline);
+}
+
+.mac-repository-command {
+  flex: 1;
+  font-family: var(--font-mono);
+}
