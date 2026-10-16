@@ -24,7 +24,7 @@ import {
   GITHUB_TRIGGER_EVENT,
   PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 
 /**
  * The Automations list as a window draws it: the workspace's automations
@@ -245,4 +245,57 @@ test("a run's line says why it did not start, else where its agent stands, or th
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
+  assert.equal(
+    automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })),
+    "Its agent failed",
+  );
+  assert.equal(
+    automationRunLine(
+      run({
+        agent: {
+          ...agent(CODING_AGENT_STATUS.FAILED),
+          failureReason: CODING_AGENT_FAILURE.SANDBOX,
+        },
+      }),
+    ),
+    "Its agent failed: the sandbox or checkout failed",
+  );
+  const keyRefused = run({
+    agent: {
+      ...agent(CODING_AGENT_STATUS.FAILED),
+      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+    },
+  });
+  assert.equal(
+    automationRunLine(keyRefused, "its creator"),
+    "Its agent failed: its creator's API key was refused or can't be read",
+    "another's automation names whose key, and no Settings the reader cannot mend",
+  );
+  assert.match(automationRunLine(keyRefused), /check Settings › Coding agents › API keys$/u);
+  const onTeammatesAgent = run({
+    agent: {
+      ...agent(CODING_AGENT_STATUS.FAILED),
+      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+      ownKey: false,
+    },
+  });
+  assert.equal(
+    automationRunLine(onTeammatesAgent),
+    "Its agent failed: its owner's API key was refused or can't be read",
+    "a same-agent run on a teammate's agent names that agent's owner, whoever made the automation",
+  );
+  assert.match(
+    automationRunLine(
+      run({
+        agent: {
+          ...agent(CODING_AGENT_STATUS.FAILED),
+          failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+          ownKey: true,
+        },
+      }),
+      "its creator",
+    ),
+    /check Settings › Coding agents › API keys$/u,
+    "the reader's own agent is the reader's key, even on another's automation",
+  );
 });

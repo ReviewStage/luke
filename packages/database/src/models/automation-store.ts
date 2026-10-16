@@ -533,9 +533,11 @@ const HistoryRowSchema = Schema.Struct({
   agentConversationId: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentCreatedAt: Schema.NullOr(InstantColumnSchema),
+  /** The account the agent runs as, whose keys its turns spend. */
+  agentUserId: Schema.NullOr(Schema.String),
 });
 
-/** One run as the history reads it, with the conversation, title, and start of the agent it started where that agent stands. */
+/** One run as the history reads it, with the conversation, title, start, and account of the agent it started where that agent stands. */
 export type AutomationRunInHistory = typeof HistoryRowSchema.Type;
 
 /** The runs of one automation the account may read, with each one's agent, newest first. */
@@ -554,6 +556,7 @@ const HISTORY_COLUMNS = {
   agentConversationId: codingAgent.conversationId,
   agentTitle: codingAgent.title,
   agentCreatedAt: codingAgent.createdAt,
+  agentUserId: codingAgent.userId,
 };
 
 const findRuns = SqlSchema.findAll({

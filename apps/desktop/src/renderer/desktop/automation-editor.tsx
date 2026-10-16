@@ -1483,6 +1483,7 @@ export function AutomationEditor({
         </div>
         <AutomationRunsPanel
           panel={runsPanel}
+          mine={automation === undefined || automation.mine === true}
           created={automation !== undefined}
           runs={runs.read}
           onRetry={runs.reload}

@@ -1,4 +1,5 @@
 import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -117,22 +118,6 @@ function withCost(line: string, usage: CodingAgentUsage | undefined): string {
   return cost === undefined ? line : `${line}${LINE_SEPARATOR}${cost}`;
 }
 
-/** What a failed turn's end line says after "Failed", by the service's one word for why; nothing for a reason it has no words for. */
-const AGENT_FAILURE_WORDS = {
-  [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
-  [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Coding agents › API keys",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
-    "Fast isn't available on your own API key; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
-    "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.OTHER]: undefined,
-} as const satisfies Record<CodingAgentFailure, string | undefined>;
-
 /**
  * The teammate who started an agent, by name, whose key pays for it and whose
  * Mac its commands run on; none for the reader's own agent, one whose starter
@@ -228,17 +213,6 @@ export function lineSender(
   }
 }
 
-/** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
-function teammateKeyWords(failure: CodingAgentFailure, starter: string): string | undefined {
-  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
-    return `${starter}'s API key was refused or can't be read`;
-  }
-  if (failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
-    return `Fast isn't available on ${starter}'s own API key; choose the model with Fast off`;
-  }
-  return AGENT_FAILURE_WORDS[failure];
-}
-
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
  * with what the turn cost where known; nothing for an agent still writing or
@@ -255,12 +229,7 @@ export function endLine(
     case CODING_AGENT_STATUS.CANCELLED:
       return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
-      const words =
-        failure === undefined
-          ? undefined
-          : starter === undefined
-            ? AGENT_FAILURE_WORDS[failure]
-            : teammateKeyWords(failure, starter);
+      const words = failure === undefined ? undefined : agentFailureWords(failure, starter);
       return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:
