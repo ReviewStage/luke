@@ -130,10 +130,13 @@ export function MemorySection({
   // Note that every change of workspace or reader starts a new scope, because a forget still out
   // from the one before answers that scope's list, which must never be drawn under this one.
   const scope = useRef(0);
+  /** The workspace the page shows now, which a forget answered after the page moved on checks against. */
+  const shown = useRef<string | undefined>(undefined);
 
   const workspaceId = workspace?.id;
   useEffect(() => {
     scope.current += 1;
+    shown.current = workspaceId;
     setForgetting(undefined);
   }, [signedIn, workspaceId, readerId]);
 
@@ -176,11 +179,14 @@ export function MemorySection({
             if (asked === scope.current) setForgetting(undefined);
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED };
           }
-          // A forget answered after the page moved on to another workspace or reader draws nothing.
           if (asked === scope.current) {
             setForgetting(undefined);
             setMemories(answer.memories);
+          } else if (shown.current === workspaceId) {
+            // Back on the workspace it was asked in, whose read may predate the forget: read again rather than draw an earlier scope's answer.
+            setAttempt((count) => count + 1);
           }
+          // A forget answered while the page shows another workspace draws nothing there.
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },

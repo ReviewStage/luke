@@ -273,6 +273,23 @@ test("a forget answered after the page moved on to another workspace leaves that
   assert.match(page.textContent ?? "", /planning calls in Globex/u);
 });
 
+test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {
+  holdForgets = [];
+  const { page, show } = await mount();
+  await forget(page, DEPLOYS);
+  await show(GLOBEX);
+  await show(ACME);
+  const listedOnReturn = words(page);
+
+  stored = [TESTS];
+  const release = holdForgets[0] ?? assert.fail("the forget was not sent");
+  release(done({ memories: stored }));
+  await settle();
+
+  assert.deepEqual(listedOnReturn, [DEPLOYS.text, TESTS.text]);
+  assert.deepEqual(words(page), [TESTS.text]);
+});
+
 test("another account signing in on the same workspace reads its memories again, as that reader may forget them", async () => {
   const { show } = await mount();
 
