@@ -732,6 +732,11 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           .pipe(Effect.provide(fake.layer));
 
         assert.ok(Option.isSome(minted));
+        assert.deepEqual(
+          (yield* installationsOfWorkspace(workspace)).map((one) => one.status),
+          [GITHUB_INSTALLATION_STATUS.ACTIVE],
+        );
+        // What GitHub is asked is the behavior here: the mended reach is kept rather than read again.
         assert.equal(fake.sent.filter((one) => one.url.endsWith("/installations/212")).length, 1);
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
