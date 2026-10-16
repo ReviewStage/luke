@@ -76,6 +76,7 @@ import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab";
+import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { TaskBoard } from "../tasks/task-board";
@@ -530,7 +531,9 @@ interface DrawnTab {
  * holds it only while shown; a planning worker's is the session the plan's
  * work already holds. A subagent's tab hangs a card on hover, previewing
  * its latest step from what its tab last held (`heldLatest`) or the plan's
- * work holds, and never reading the service for it.
+ * work holds, and never reading the service for it. A page's tab hangs the
+ * page's card, a preview of its newest version under its title
+ * (`page-card.tsx`).
  */
 function stripTabs(input: {
   panel: SidePanelControl;
@@ -553,9 +556,11 @@ function stripTabs(input: {
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
+  /** The open plan, whose pages a page tab's card previews. */
+  taskId: string;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, readWorker, onOpenAgent, shownAgent } = input;
+  const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -635,9 +640,13 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
+  // A page's tab hangs the page's card, previewing its newest version.
   const pageTabs = pages.map(({ tab, line }) => ({
     tab,
-    look: look(tab, tabLook({ kind: TAB_KIND.PAGE, title: line.title })),
+    look: look(tab, {
+      ...tabLook({ kind: TAB_KIND.PAGE, title: line.title }),
+      card: <PageCard taskId={taskId} page={line} />,
+    }),
     close: () => panel.onClose(tab),
   }));
   // A Terminal tab wears its agent's glyph and name, and hangs its agent's
@@ -685,7 +694,8 @@ function stripTabs(input: {
  * needs to say, so it hangs no pill, while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
  * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
- * agent whose it is (`ChangesCard`); no tab has a chord. A tab something arrived on
+ * agent whose it is (`ChangesCard`), and a page's a preview of the page
+ * (`PageCard`); no tab has a chord. A tab something arrived on
  * while another was shown reads in semibold until shown. Every tab, of
  * whatever kind, stands at the strip's end once opened, a subagent's
  * wearing the worker's glyph with a ring while it runs, until the developer
@@ -774,6 +784,7 @@ function PanelTabs({
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
     onOpenAgent,
     shownAgent,
+    taskId: planId,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();

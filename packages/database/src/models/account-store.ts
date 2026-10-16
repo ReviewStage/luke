@@ -4,8 +4,11 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
+  EXPERIMENT,
+  type Experiment,
   type ExperimentChoices,
   experimentChoicesFrom,
+  experimentOn,
   NO_EXPERIMENTS,
 } from "@luke/settings";
 import { WireValueSchema } from "@luke/wire";
@@ -192,6 +195,33 @@ export function readAccountPreferences(
     findPreference(userId),
     Option.match({ onNone: () => undefined, onSome: snapshotOf }),
   );
+}
+
+/**
+ * Whether the account has turned the experiment on: what a server-side gate
+ * asks before it offers an experimental feature to the account. An account
+ * that stored no snapshot, or never chose the experiment, reads as off.
+ */
+export function accountExperimentOn(
+  userId: string,
+  experiment: Experiment,
+): Effect.Effect<boolean, AccountSeamFailure, DatabaseServices> {
+  return Effect.map(
+    readAccountPreferences(userId),
+    (row) => row !== undefined && experimentOn(row.experiments, experiment),
+  );
+}
+
+/**
+ * Whether Chat is on for the account: the one read every server-side gate of
+ * Chat asks, for the account that owns the agent or the plan, before it
+ * offers a chat tool, reads the chat into a turn, wakes Luke, or answers a
+ * chat route. Off unless the account turned the experiment on.
+ */
+export function chatEnabledFor(
+  userId: string,
+): Effect.Effect<boolean, AccountSeamFailure, DatabaseServices> {
+  return accountExperimentOn(userId, EXPERIMENT.CHAT);
 }
 
 const PreferenceWriteSchema = Schema.Struct({

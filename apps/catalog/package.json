@@ -7,7 +7,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "tsc --project tsconfig.json",
+    "test:vitest": "vitest run"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
@@ -22,7 +23,10 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.1.2",
+    "@vitest/browser-playwright": "5.0.0",
+    "playwright": "1.64.1",
     "typescript": "catalog:",
-    "vite": "7.3.1"
+    "vite": "7.3.1",
+    "vitest": "catalog:"
   }
 }

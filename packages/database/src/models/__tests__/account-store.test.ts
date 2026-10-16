@@ -8,7 +8,12 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { accountPreference } from "../../schemas/preferences.js";
 import { getTestDB } from "../../testing/index.js";
-import { readAccountPreferences, writeAccountPreferences } from "../account-store.js";
+import {
+  accountExperimentOn,
+  chatEnabledFor,
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "../account-store.js";
 
 /**
  * The experiments part of an account's snapshot, over a real dialect: a
@@ -80,6 +85,33 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       });
       assert.equal(written.updatedAt, undefined);
       assert.deepEqual(written.preferences, {});
+    }),
+  );
+
+  it.effect(
+    "an experiment is off for an account until it turns it on, and off again once it turns it off, whatever its others",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), true);
+        assert.equal(yield* accountExperimentOn(yield* openAccount, EXPERIMENT.CHAT), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: false } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
+      }),
+  );
+
+  it.effect("Chat is off for an account until it turns the Chat experiment on", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      assert.equal(yield* chatEnabledFor(userId), false);
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      assert.equal(yield* chatEnabledFor(userId), false);
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+      assert.equal(yield* chatEnabledFor(userId), true);
     }),
   );
 

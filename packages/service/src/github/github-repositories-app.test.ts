@@ -59,6 +59,7 @@ function pullRecord(
   number: number,
   title: string,
   standing: { readonly merged: boolean; readonly draft: boolean },
+  user: { readonly login: string } | null = { login: "octo-dev" },
 ) {
   return {
     number,
@@ -71,13 +72,15 @@ function pullRecord(
     deletions: 3,
     changed_files: 2,
     head: { ref: `invites-${number}`, sha: `sha-${number}` },
+    user,
   };
 }
 
 /** The pull requests `acme/relay` holds: one open, one merged. */
 const RELAY_PULLS = new Map([
   [42, pullRecord(42, "Send invitations in batches", { merged: false, draft: false })],
-  [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false })],
+  // Its author's account is gone, which GitHub answers as no user.
+  [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false }, null)],
 ]);
 
 /** An issue of `acme/relay` as GitHub's API names it by number. */
@@ -465,7 +468,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, and state and nothing more, a merged one as merged",
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, and who opened it and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -502,6 +505,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               title: "Send invitations in batches",
               url: "https://github.com/acme/relay/pull/42",
               state: PULL_REQUEST_STATE.OPEN,
+              author: "octo-dev",
             },
           },
         });
@@ -601,7 +605,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads one issue of a repository the workspace's installation reaches by its number, its number, title, page, and state and nothing more, on a token minted for the one repository with issues read alone; a duplicate reads as not planned, and a pull request's number, a missing one, and an unreached repository answer none",
+    "a member reads one issue of a repository the workspace's installation reaches by its number, its number, title, page, state, and who opened it and nothing more, on a token minted for the one repository with issues read alone; a duplicate reads as not planned, and a pull request's number, a missing one, and an unreached repository answer none",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -649,6 +653,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               title: "Invitations expire too soon",
               url: page(7),
               state: ISSUE_STATE.OPEN,
+              author: "octo-dev",
             },
           },
         });

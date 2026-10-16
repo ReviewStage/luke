@@ -11,6 +11,7 @@ import { AgentTabCard } from "../tasks/agent-tab-card";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, newestFileNote } from "../tasks/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model";
+import { PageCard } from "../tasks/page-card";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -347,7 +348,8 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
  * agent's its tab's card, read from what its tab last held; a subagent's
  * its tab's card, from the session the plan's work holds; a file's its path
  * and Luke's note; a pull request's its title, number, and what it
- * changes, under the agent whose it is; the Inbox's what waits. The panel's kinds hang none, as their
+ * changes, under the agent whose it is; a page's a preview of its newest
+ * version; the Inbox's what waits. The panel's kinds hang none, as their
  * tabs hang none, since their names say all there is.
  */
 function withCards(
@@ -402,6 +404,13 @@ function withCards(
         />
       );
       return { ...entry, card };
+    }
+    if (row.section === ADD_SECTION.PAGES) {
+      // Note that a page's row is named by the page's id (`panelEntries`).
+      const page = tasks.pages?.find((each) => each.id === row.id);
+      const taskId = tasks.activeTaskId;
+      if (page === undefined || taskId === undefined) return entry;
+      return { ...entry, card: <PageCard taskId={taskId} page={page} /> };
     }
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;

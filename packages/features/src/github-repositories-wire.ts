@@ -96,6 +96,8 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   /** The pull request's own page on GitHub. */
   url: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type GitHubPullRequestSummary = typeof githubPullRequestSummarySchema.Type;
@@ -132,6 +134,8 @@ export const githubIssueSummarySchema = EffectSchema.Struct({
   /** The issue's own page on GitHub. */
   url: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
+  /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type GitHubIssueSummary = typeof githubIssueSummarySchema.Type;

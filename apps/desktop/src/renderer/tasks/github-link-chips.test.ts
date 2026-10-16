@@ -47,6 +47,7 @@ const RELAY_ISSUES = new Map([
       title: "Invitations expire too soon",
       url: OPEN_ISSUE,
       state: ISSUE_STATE.OPEN,
+      author: "octo-dev",
     },
   ],
   [
@@ -149,6 +150,7 @@ async function drawn(text: string, workspace: Workspace) {
                       title: "Expire old invitations",
                       url: MERGED,
                       state: PULL_REQUEST_STATE.MERGED,
+                      author: "octo-dev",
                     }
                   : null,
               }
@@ -263,4 +265,30 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
     asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE),
     [],
   );
+});
+
+/** The notes of the card a chip hangs: its key and state, who it is with, and its address. */
+function cardNotes(chip: Element | undefined): (string | null)[] {
+  assert.ok(chip, "the link is drawn as its chip");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map((note) => note.textContent);
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  return notes;
+}
+
+test("a pull request's and an issue's cards say who opened them, as the workspace's GitHub App answers it; one GitHub names no author of names no one", async () => {
+  const { container } = await drawn(
+    `Lands after ${MERGED}, and see ${OPEN_ISSUE} and ${SHELVED_ISSUE}.`,
+    ACME_WITH_GITHUB,
+  );
+  const [pullRequest, opened, shelved] = container.querySelectorAll(".mention-chip");
+
+  assert.deepEqual(cardNotes(pullRequest), ["relay#42 · Merged", "Opened by octo-dev", MERGED]);
+  assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev", OPEN_ISSUE]);
+  assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned", SHELVED_ISSUE]);
 });

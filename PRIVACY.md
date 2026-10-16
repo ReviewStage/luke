@@ -992,12 +992,16 @@ only when you press Send.
   agent's pull request, or a check fails on an agent's branch, GitHub tells
   our service the same way; our service reads who did it by their GitHub
   login, the pull request's number and branch, the link to the review,
-  comment, or failed commit, a review's verdict, and when, never what the
-  review or comment says, and sends that to the agents on that pull request
-  as a message, which their transcript keeps under that login until the
-  task is deleted. The agent then reads the review or comment itself with
-  the App's token, and what it reads lands in its transcript like any other
-  command's output. Our service also reads from GitHub, through
+  comment, or failed commit, a review's verdict, when, and what the review
+  or comment says; for a review it also reads that review's inline comments
+  from GitHub, each with its file and line, with a token the App mints for
+  the repository on the workspace's installation. It sends that to the
+  agents on that pull request as a message, which their transcript keeps
+  under that login until the task is deleted, and which reaches the model
+  that runs the agent like any other message. Whatever the message cut
+  short, or a failed check, the agent reads itself with the App's token,
+  and what it reads lands in its transcript like any other command's
+  output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
   open, a pull request's changed files for the Changes tab, a repository's
   skills, and the number, title, link, and state of a pull request or an

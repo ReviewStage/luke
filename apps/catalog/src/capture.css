@@ -1,0 +1,31 @@
+/* capture.css -- what holds a golden to the same pixels on every run: the
+   faces fixed to ones the workspace bundles, and every motion held still.
+
+   The desktop's own face is the Mac's system font, which a Linux runner does
+   not have, so a capture sets the desktop's words in the site's bundled
+   faces instead: a golden checks layout, spacing, and colour, not the Mac's
+   glyphs. Motion is held as a capture run of the app holds it, at the tokens:
+   durations zeroed, endless loops paused on their first frame. */
+
+:root {
+  --duration-shape: 0s;
+  --duration-exit: 0s;
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-hover: 0s;
+  --duration-pane: 0s;
+  --row-stagger: 0s;
+  --face-motion: paused;
+  --loop-motion: paused;
+  --scroll-glide: auto;
+}
+
+[data-luke-profile="desktop"] {
+  --luke-font-sans: "Geist Variable", sans-serif;
+  --luke-font-mono: "JetBrains Mono Variable", monospace;
+}
+
+/* A caret blinks on its own clock, so a focused field would differ frame to frame. */
+* {
+  caret-color: transparent;
+}

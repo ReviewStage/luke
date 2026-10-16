@@ -240,7 +240,7 @@ const AUTOMATION_WORDS = "Automation";
 
 /**
  * What a transcript opens on where something handed it its first message:
- * the sender line over the card, naming who, the card's kind where it is not
+ * the sender line under the card, naming who, the card's kind where it is not
  * the transcript's own lead, and the card's words where they are not the
  * message's own, an automation's prompt without the lines Luke adds of its
  * firing, with the webhook body that rode in with it.
@@ -604,15 +604,16 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
 /**
  * What the transcript opens on: the plan the agent was handed, an
  * automation's prompt, or the task a worker was, as a message sent to the
- * agent, at a sent message's measure under the line naming who sent it,
- * where the transcript names anyone: a card folded under its title, and a
- * webhook's body folded again inside it.
+ * agent, at a sent message's measure over the line naming who sent it and
+ * when, as a sent message's bubble stands over its own: a card folded under
+ * its title, and a webhook's body folded again inside it.
  */
 function PlanCard({
   text,
   lead,
   title = cardTitle(text),
   sender,
+  sentAt,
   body,
   messageId,
 }: {
@@ -624,12 +625,14 @@ function PlanCard({
   title?: string | undefined;
   /** The line naming who sent it (`TranscriptOrigin`); none where the transcript names nobody. */
   sender?: ReactNode;
+  /** When it was sent, named after who sent it; none where the transcript does not know. */
+  sentAt?: number | undefined;
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
 }): ReactNode {
+  const named = sender != null;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
-      {sender == null ? null : <span className="message-sender">{sender}</span>}
       <Plan data-task-card="" aria-label={lead.label} className="agent-origin-card">
         <PlanHeader>
           {lead.icon}
@@ -640,6 +643,12 @@ function PlanCard({
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
+      {!named && sentAt === undefined ? null : (
+        <div className="message-meta">
+          {named ? <span className="message-sender">{sender}</span> : null}
+          {sentAt === undefined ? null : <SentTime at={sentAt} named={named} />}
+        </div>
+      )}
     </Message>
   );
 }
@@ -900,6 +909,7 @@ export function AgentMessage({
         lead={origin?.lead ?? lead}
         title={briefTitle}
         sender={origin?.sender}
+        sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
       />
@@ -1480,7 +1490,7 @@ export function AgentSubagentTab({
   agentId: string;
   callId: string;
   task: string;
-  /** Who handed the worker its task, named over its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
+  /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: CodingAgentStatus;
   control: CodingAgentsControl;

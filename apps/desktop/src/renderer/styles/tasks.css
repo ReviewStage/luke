@@ -1392,6 +1392,40 @@ button.file-ref:hover .file-ref-path {
   border: 0;
 }
 
+/* A page's card (page-card.tsx) previews its newest version under its head:
+   the page laid out four times the card's width, a desktop window's, and
+   scaled down by as much into a box of a window's shape, its corners a
+   control's. The frame takes no pointer, so the card stays standing as the
+   pointer crosses it, and it fades in once loaded over a quiet ground that
+   holds its place meanwhile. */
+.page-card-preview {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+}
+
+.page-card-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.page-card-preview[data-loaded="true"] .page-card-frame {
+  opacity: 1;
+}
+
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
 .page-view-find {
