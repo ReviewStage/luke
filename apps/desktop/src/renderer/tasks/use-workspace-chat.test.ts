@@ -86,17 +86,21 @@ function scriptedService() {
 }
 
 /** The hook mounted over the service, its workspace and whether a channel is shown as given, the latest control kept. */
-function mount(service: ReturnType<typeof scriptedService>, workspaceId = "acme", reading = false) {
+function mount(
+  service: ReturnType<typeof scriptedService>,
+  workspaceId = "acme",
+  reading: string | undefined = undefined,
+) {
   let control: WorkspaceChatControl | undefined;
-  let set: ((next: { workspaceId: string; reading: boolean }) => void) | undefined;
-  function Harness(props: { workspaceId: string; reading: boolean }) {
+  let set: ((next: { workspaceId: string; reading: string | undefined }) => void) | undefined;
+  function Harness(props: { workspaceId: string; reading: string | undefined }) {
     control = useWorkspaceChat({ ...props, active: true, ...service });
     return null;
   }
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const render = (next: { workspaceId: string; reading: boolean }) =>
+  const render = (next: { workspaceId: string; reading: string | undefined }) =>
     act(() => root?.render(createElement(Harness, next)));
   set = render;
   render({ workspaceId, reading });
@@ -105,7 +109,7 @@ function mount(service: ReturnType<typeof scriptedService>, workspaceId = "acme"
       assert.ok(control);
       return control;
     },
-    rerender: (next: { workspaceId: string; reading: boolean }) => set?.(next),
+    rerender: (next: { workspaceId: string; reading: string | undefined }) => set?.(next),
   };
 }
 
@@ -221,27 +225,30 @@ test("an answer the service did not take, its ask changed first, says so and lea
   assert.equal(tab.control().chat?.messages[0]?.ask?.revision, 2);
 });
 
-test("while a channel is shown the developer has read to the newest message, told once per place it moves to; For you moves nothing", async () => {
+test("while a channel is shown the developer has read it to its newest message, told of that channel once per place it moves to; For you moves nothing", async () => {
   const service = scriptedService();
   const tab = mount(service);
   service.reads[0]?.settle(answered([message(1), message(2)], "2"));
   await settle();
   assert.equal(service.writes.length, 0);
-  tab.rerender({ workspaceId: "acme", reading: true });
+  tab.rerender({ workspaceId: "acme", reading: CHANNEL });
   await settle();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
-    [{ readTo: 2 }],
+    [{ readTo: 2, channelId: CHANNEL }],
   );
-  tab.rerender({ workspaceId: "acme", reading: true });
+  tab.rerender({ workspaceId: "acme", reading: CHANNEL });
   await settle();
   assert.equal(service.writes.length, 1);
-  service.writes[0]?.settle({ readSeq: 2 });
-  service.reads[1]?.settle(answered([message(3)], "3", 2));
+  service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
+  service.reads[1]?.settle(answered([message(3)], "3"));
   await settle();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
-    [{ readTo: 2 }, { readTo: 3 }],
+    [
+      { readTo: 2, channelId: CHANNEL },
+      { readTo: 3, channelId: CHANNEL },
+    ],
   );
 });
 
@@ -250,7 +257,7 @@ test("another workspace's chat starts from nothing of the last one's", async () 
   const tab = mount(service);
   service.reads[0]?.settle(answered([message(1)], "1"));
   await settle();
-  tab.rerender({ workspaceId: "ledger", reading: false });
+  tab.rerender({ workspaceId: "ledger", reading: undefined });
   await settle();
   assert.equal(tab.control().chat, undefined);
   assert.deepEqual(service.reads.at(-1)?.params, {

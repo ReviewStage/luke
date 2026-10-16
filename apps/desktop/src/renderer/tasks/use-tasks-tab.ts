@@ -1186,7 +1186,10 @@ export function useTasksTab(input: {
   const liveChat = useWorkspaceChat({
     workspaceId: listedWorkspace?.id,
     active: fixture === undefined && input.signedIn && chatOn,
-    reading: shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL,
+    reading:
+      shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
+        ? standIn.place.channelId
+        : undefined,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
   });

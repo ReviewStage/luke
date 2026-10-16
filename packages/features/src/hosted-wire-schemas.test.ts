@@ -96,6 +96,7 @@ const EFFECT_MODULE_SCHEMAS = {
     chatMessageAskSchema: chatWire.chatMessageAskSchema,
     chatMessageSchema: chatWire.chatMessageSchema,
     chatCursorSchema: chatWire.chatCursorSchema,
+    chatChannelReadSchema: chatWire.chatChannelReadSchema,
     chatAnswerSchema: chatWire.chatAnswerSchema,
     chatPostRequestSchema: chatWire.chatPostRequestSchema,
     chatAnswerRequestSchema: chatWire.chatAnswerRequestSchema,

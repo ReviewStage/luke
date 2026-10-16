@@ -101,7 +101,13 @@ function withRead(chat: ChatAnswer | undefined, answer: ChatAnswer): ChatAnswer 
 
 /** The chat held with a write's answer taken in: the message it names in place, or the cursor where it moved. */
 function withWrite(chat: ChatAnswer, answer: ChatWriteAnswer): ChatAnswer {
-  if ("readSeq" in answer) return { ...chat, readSeq: Math.max(chat.readSeq, answer.readSeq) };
+  if ("readSeq" in answer) {
+    return {
+      ...chat,
+      readSeq: Math.max(chat.readSeq, answer.readSeq),
+      ...(answer.reads === undefined ? undefined : { reads: answer.reads }),
+    };
+  }
   const message =
     "posted" in answer ? answer.posted : "ask" in answer ? answer.ask : answer.resolved;
   return { ...chat, messages: withMessages(chat.messages, [message]) };
@@ -129,17 +135,23 @@ function settledWords(
   return "taken" in answer && !answer.taken ? CHAT_NOT_TAKEN : undefined;
 }
 
-/** The newest message held, by its place; none in an empty chat. */
-function newestSeq(chat: ChatAnswer | undefined): number {
-  return chat?.messages.at(-1)?.seq ?? 0;
+/** The newest message held in a channel, by its place; none in an empty one. */
+function newestSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
+  return chat?.messages.findLast((message) => message.channelId === channelId)?.seq ?? 0;
+}
+
+/** How far the reader has read a channel: its own cursor there where it read further, else its cursor everywhere. */
+function readSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
+  const own = chat?.reads?.find((each) => each.channelId === channelId)?.readSeq ?? 0;
+  return Math.max(chat?.readSeq ?? 0, own);
 }
 
 export function useWorkspaceChat(input: {
   workspaceId: string | undefined;
   /** Whether the chat is read at all: a live run, signed in. */
   active: boolean;
-  /** Whether a channel of Chat is on screen, so what it holds has been read. */
-  reading: boolean;
+  /** The channel of Chat on screen, whose messages have been read; none while For you or nothing of Chat is. */
+  reading: string | undefined;
   readChat: ChatReader;
   writeChat: ChatWriter;
 }): WorkspaceChatControl {
@@ -219,18 +231,21 @@ export function useWorkspaceChat(input: {
     [workspaceId, write],
   );
 
-  // While a channel is shown, the developer has read to the newest message held: told once per place.
-  const newest = newestSeq(held.chat);
-  const readSeq = held.chat?.readSeq ?? 0;
-  const told = useRef<{ readonly workspaceId: string | undefined; readonly seq: number }>({
-    workspaceId,
-    seq: 0,
-  });
+  // While a channel is shown, the developer has read it to the newest message it holds: told once per place, of that channel alone.
+  const newest = reading === undefined ? 0 : newestSeqIn(held.chat, reading);
+  const readSeq = reading === undefined ? 0 : readSeqIn(held.chat, reading);
+  const told = useRef<{
+    readonly workspaceId: string | undefined;
+    readonly channelId: string | undefined;
+    readonly seq: number;
+  }>({ workspaceId, channelId: undefined, seq: 0 });
   useEffect(() => {
-    const already = told.current.workspaceId === workspaceId ? told.current.seq : 0;
-    if (!reading || newest <= readSeq || newest <= already) return;
-    told.current = { workspaceId, seq: newest };
-    void write({ readTo: newest });
+    if (reading === undefined) return;
+    const same = told.current.workspaceId === workspaceId && told.current.channelId === reading;
+    const already = same ? told.current.seq : 0;
+    if (newest <= readSeq || newest <= already) return;
+    told.current = { workspaceId, channelId: reading, seq: newest };
+    void write({ readTo: newest, channelId: reading });
   }, [reading, newest, readSeq, workspaceId, write]);
 
   return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer };
