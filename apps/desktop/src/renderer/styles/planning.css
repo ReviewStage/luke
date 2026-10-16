@@ -2466,27 +2466,18 @@ button.attached-file-face:hover img {
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
-   why on one quiet row, with Unarchive as the press that opens it again. */
-.archived-composer {
-  flex-direction: row;
-  align-items: center;
-}
-
-.archived-composer-line {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.archived-composer-line svg {
+   why on one quiet row (`banner.tsx`), with Unarchive as the press that
+   opens it again. */
+.archived-composer .banner-row > svg {
   width: 14px;
   height: 14px;
   flex: none;
+  color: var(--text-secondary);
+}
+
+.archived-composer-line {
+  color: var(--text-secondary);
+  font-size: 12.5px;
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

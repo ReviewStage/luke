@@ -14,6 +14,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
+import { BANNER_LOOK, Banner } from "../banner";
 import type { PlanReader } from "../planning/edit-ref";
 import { PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
@@ -290,19 +291,19 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
  */
 function TemplateNote(): React.JSX.Element {
   return (
-    <section
-      className="document-banner template-note"
-      aria-label={PAGE_LINE.NOTE}
-      {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+    <Banner
+      look={BANNER_LOOK.CARD}
+      className="template-note"
+      anchor={searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+      glyph={
+        <span className="document-banner-glyph" aria-hidden="true">
+          <InfoIcon />
+        </span>
+      }
     >
-      <span className="document-banner-glyph" aria-hidden="true">
-        <InfoIcon />
-      </span>
-      <div className="document-banner-words">
-        <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
-        <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
-      </div>
-    </section>
+      <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
+      <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+    </Banner>
   );
 }
 
