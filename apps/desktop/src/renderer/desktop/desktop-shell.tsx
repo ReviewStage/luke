@@ -420,17 +420,19 @@ export function DesktopShell({
   if (tasks.history.open) {
     return (
       <div className="desktop-shell">
-        {/* A chip in a version's words names an agent's model and starter as the plan's own words do. */}
+        {/* A chip in a version's words hangs the cards the plan's own words do. */}
         <MentionedAgents value={mentionedAgents}>
-          <DesktopVersionHistory
-            sidebar={sidebar}
-            history={history}
-            subject={taskVersionSubject(tasks)}
-            account={account}
-            call={call}
-            onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
-            onRestored={history.onLeaveVersionHistory}
-          />
+          <ChipCards value={chipCards}>
+            <DesktopVersionHistory
+              sidebar={sidebar}
+              history={history}
+              subject={taskVersionSubject(tasks)}
+              account={account}
+              call={call}
+              onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
+              onRestored={history.onLeaveVersionHistory}
+            />
+          </ChipCards>
         </MentionedAgents>
         <CaptionStrip {...captions} />
         {newTaskDialog}

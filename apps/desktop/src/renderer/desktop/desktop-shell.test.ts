@@ -963,3 +963,36 @@ test("a chip of another task's agent in a plan's version history names who start
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Started by.*Sam Okafor/u);
 });
+
+test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
+  const body = `## Rollout\n\nAs in [@the plan](https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
+  const control = tasksControl();
+  const page = mount(false, false, {
+    page: TASKS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    tasks: [DOCUMENT_TASK],
+    history: {
+      ...control.history,
+      open: true,
+      viewing: {
+        line: {
+          seq: 2,
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          startedAt: 0,
+          changes: 1,
+        },
+        current: true,
+        read: { kind: HISTORY_READ.READY, document: { body, assumptions: [] }, previous: null },
+      },
+    },
+  });
+  const chip = page.querySelector(".mention-chip");
+  assert.ok(chip, "the version draws the plan's chip");
+
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const card = document.querySelector(".tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+});
