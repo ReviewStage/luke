@@ -3339,7 +3339,8 @@ button.inbox-option:hover:not(:disabled) {
 /* A picture in written words (`picture-block.tsx`): its own block, at its
    own width up to the column's and no taller than a screenful's worth, on
    the section's fill while its bytes are read, a press opening the file
-   viewer. Its caption stands under it in the secondary ink. */
+   viewer. Its caption stands under it in the secondary ink, and may run
+   wider than a skinny picture, whose frame still hugs the picture. */
 .picture-block {
   display: block;
   width: fit-content;
@@ -3350,6 +3351,7 @@ button.inbox-option:hover:not(:disabled) {
 .picture-frame {
   position: relative;
   display: block;
+  width: fit-content;
   max-width: 100%;
   padding: 0;
   border: 1px solid var(--hairline);
@@ -3416,7 +3418,9 @@ button.picture-frame {
 }
 
 /* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
-   block, ringed while selected, its tools over its top corner. */
+   block, ringed while selected, its tools hung above it from its left edge.
+   The block's top margin is the wrapper's, so the wrapper's top is the
+   picture's own and the tools are measured from it. */
 .editor-picture {
   display: block;
 }
@@ -3426,6 +3430,11 @@ button.picture-frame {
   display: block;
   width: fit-content;
   max-width: 100%;
+  margin-top: var(--space-12);
+}
+
+.editor-picture-drawn > .picture-block {
+  margin-top: 0;
 }
 
 .editor-picture-drawn[data-selected="true"] .picture-frame {
@@ -3433,11 +3442,17 @@ button.picture-frame {
   outline-offset: 2px;
 }
 
+/* Note that the tools are as wide as their own names, past a skinny
+   picture's edge where they need to be, and never wrap, because the
+   picture's box is no measure for them. Above it, they cover none of the
+   picture, only the line before it while it is selected. */
 .picture-tools {
   position: absolute;
-  top: calc(var(--space-12) + var(--space-8));
-  right: var(--space-8);
+  z-index: 1;
+  top: 0;
+  left: 0;
   display: flex;
+  width: max-content;
   align-items: center;
   gap: 2px;
   padding: 3px;
@@ -3445,11 +3460,14 @@ button.picture-frame {
   border-radius: 9px;
   background: var(--surface-popover);
   box-shadow: 0 6px 18px var(--shadow-deep);
+  translate: 0 calc(-100% - var(--space-8));
+  white-space: nowrap;
 }
 
 .picture-tool {
   display: inline-flex;
   height: 26px;
+  flex: none;
   align-items: center;
   gap: var(--space-4);
   padding: 0 var(--space-8);
@@ -3462,6 +3480,13 @@ button.picture-frame {
   font-weight: 500;
 }
 
+/* A tool that is its glyph alone, in a column too narrow for its name, is square. */
+.picture-tools[data-worded="false"] .picture-tool {
+  width: 26px;
+  justify-content: center;
+  padding: 0;
+}
+
 .picture-tool:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
@@ -3469,6 +3494,7 @@ button.picture-frame {
 .picture-tool > svg {
   width: 14px;
   height: 14px;
+  flex: none;
 }
 
 .picture-tool[data-tone="danger"] {

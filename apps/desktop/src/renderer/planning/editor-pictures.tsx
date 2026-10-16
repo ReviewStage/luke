@@ -4,7 +4,7 @@ import { PICTURE_KEEP_FAILURE } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -20,6 +20,7 @@ import type {
 } from "../plan-editor/contract";
 import { RetryButton } from "../retry-button";
 import { Spinner } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -35,7 +36,10 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
  * Retry and Remove. A picture of another plan pasted in is read as that
  * plan's and kept again on this one, so this plan's readers can see it.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
- * under it, Enlarge, and Delete. Insert image (⌥⌘I, ⌘K, the Edit menu)
+ * under it, Enlarge, and Delete. They hang above the picture from its left
+ * edge, as wide as their own names, so a skinny picture neither squeezes
+ * them nor sits under them; in a column too narrow for their names each is
+ * its glyph, named by its tooltip. Insert image (⌥⌘I, ⌘K, the Edit menu)
  * chooses files while the text is edited.
  */
 
@@ -67,6 +71,17 @@ const DESCRIBING = {
 } as const;
 
 type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
+
+/** The narrowest column a selected picture's tools say their names in; narrower, each is its glyph. */
+const TOOLS_WORDED_PX = 360;
+
+/** One of a selected picture's tools: its name, its glyph, what a press does, and whether it destroys. */
+interface PictureTool {
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly run: () => void;
+  readonly danger?: boolean;
+}
 
 /** The image types Insert image offers to choose. */
 const CHOSEN_TYPES = "image/png,image/jpeg,image/webp,image/gif,image/heic";
@@ -187,7 +202,64 @@ function DescribeField({
   );
 }
 
-/** A kept picture in the editor: drawn as the document draws it, its tools over it while selected. */
+/**
+ * Whether the column a picture stands in has room for its tools' names, as
+ * the window lays it out; a column not laid out measures nothing and keeps
+ * them named.
+ */
+function useToolsWorded(column: HTMLElement): boolean {
+  const [worded, setWorded] = useState(true);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const width = column.getBoundingClientRect().width;
+      if (width > 0) setWorded(width >= TOOLS_WORDED_PX);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [column]);
+  return worded;
+}
+
+/** A selected picture's tools, above it: each its glyph and its name, or its glyph and a tooltip where the column is too narrow. */
+function PictureTools({
+  column,
+  tools,
+}: {
+  column: HTMLElement;
+  tools: readonly PictureTool[];
+}): React.JSX.Element {
+  const worded = useToolsWorded(column);
+  return (
+    <span
+      className="picture-tools"
+      role="toolbar"
+      aria-label="Picture"
+      data-worded={String(worded)}
+    >
+      {tools.map(({ label, icon, run, danger = false }) => (
+        <Tooltip key={label} label={worded ? undefined : label}>
+          <button
+            type="button"
+            className="picture-tool"
+            aria-label={label}
+            data-tone={danger ? "danger" : undefined}
+            onClick={(event) => {
+              event.stopPropagation();
+              run();
+            }}
+          >
+            {icon}
+            {worded ? label : null}
+          </button>
+        </Tooltip>
+      ))}
+    </span>
+  );
+}
+
+/** A kept picture in the editor: drawn as the document draws it, its tools above it while selected. */
 function KeptPicture({
   drawn,
   door,
@@ -200,20 +272,33 @@ function KeptPicture({
   const state = usePicture(named?.planId ?? "", named?.attachmentId ?? "", door.read);
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
   const own = named?.planId === door.planId;
-  const tool = (label: string, icon: ReactNode, run: () => void, danger = false) => (
-    <button
-      type="button"
-      className="picture-tool"
-      data-tone={danger ? "danger" : undefined}
-      onClick={(event) => {
-        event.stopPropagation();
-        run();
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  const tools: PictureTool[] = [
+    {
+      label: TOOL.ALT,
+      icon: <TextCursorInputIcon aria-hidden="true" />,
+      run: () => setDescribing(DESCRIBING.ALT),
+    },
+    {
+      label: TOOL.CAPTION,
+      icon: <CaptionsIcon aria-hidden="true" />,
+      run: () => setDescribing(DESCRIBING.CAPTION),
+    },
+    ...(own && named !== undefined
+      ? [
+          {
+            label: TOOL.ENLARGE,
+            icon: <Maximize2Icon aria-hidden="true" />,
+            run: () => door.open(named.attachmentId),
+          },
+        ]
+      : []),
+    {
+      label: TOOL.DELETE,
+      icon: <Trash2Icon aria-hidden="true" />,
+      run: doors.remove,
+      danger: true,
+    },
+  ];
   return (
     <span className="editor-picture-drawn" data-selected={String(selected)}>
       <PictureBlock
@@ -221,22 +306,7 @@ function KeptPicture({
         alt={picture.alt}
         caption={picture.title === "" ? undefined : picture.title}
       />
-      {selected ? (
-        <span className="picture-tools" role="toolbar" aria-label="Picture">
-          {tool(TOOL.ALT, <TextCursorInputIcon aria-hidden="true" />, () =>
-            setDescribing(DESCRIBING.ALT),
-          )}
-          {tool(TOOL.CAPTION, <CaptionsIcon aria-hidden="true" />, () =>
-            setDescribing(DESCRIBING.CAPTION),
-          )}
-          {own && named !== undefined
-            ? tool(TOOL.ENLARGE, <Maximize2Icon aria-hidden="true" />, () =>
-                door.open(named.attachmentId),
-              )
-            : null}
-          {tool(TOOL.DELETE, <Trash2Icon aria-hidden="true" />, doors.remove, true)}
-        </span>
-      ) : null}
+      {selected ? <PictureTools column={drawn.element} tools={tools} /> : null}
       {describing === undefined ? null : (
         <DescribeField
           describing={describing}

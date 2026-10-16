@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { Plan } from "@luke/features/plan-wire";
 import { PICTURE_KEEP_FAILURE, type PlanningPictureKeepAnswer } from "@luke/features/planning-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
+import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -19,9 +23,14 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * at once from the Mac's own bytes, dimmed, with "Uploading" where its
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
- * and Insert image is offered while the text is edited, and only then.
+ * and Insert image is offered while the text is edited, and only then; a
+ * selected picture's tools are as wide as their names whatever the
+ * picture's width, and only their glyphs, each named, in a narrow column.
  * Synthetic plan and pictures.
  */
+
+/** The window's stylesheet for a plan, which says how a picture's tools stand. */
+const PLANNING_CSS = readFileSync(path.join(import.meta.dirname, "../styles/planning.css"), "utf8");
 
 const PLAN_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
@@ -86,6 +95,7 @@ afterEach(() => {
   saved.length = 0;
   keeping = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 async function settle(): Promise<void> {
@@ -256,5 +266,84 @@ test("Escape while a picture is being kept leaves the editor open until it is, t
       .at(-1)
       ?.includes(`![Screenshot](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${KEPT_ID})`),
     "the saved text names the kept picture",
+  );
+});
+
+/** The kept picture in the editor selected, as a press on it selects it, and its tools. */
+function selectPicture(container: HTMLElement): HTMLElement {
+  const editable =
+    container.querySelector<TiptapEditorHTMLElement>(".ProseMirror") ??
+    assert.fail("the editor stands");
+  const editor = editable.editor ?? assert.fail("the editor runs");
+  let at: number | undefined;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === "image") at = pos;
+  });
+  act(() => {
+    editor.commands.setNodeSelection(at ?? assert.fail("the picture is in the text"));
+  });
+  return (
+    container.querySelector<HTMLElement>(".editor-picture [role='toolbar']") ??
+    assert.fail("the selected picture offers its tools")
+  );
+}
+
+/** The column the picture stands in laid out at `width`, as the window would report it. */
+function layOutColumn(container: HTMLElement, width: number): void {
+  const column =
+    container.querySelector<HTMLElement>(".editor-picture") ?? assert.fail("the picture stands");
+  column.getBoundingClientRect = () => new DOMRect(0, 0, width, 600);
+  act(() => relayout());
+}
+
+test("a selected picture's tools are as wide as their names, never the picture's width, and each name stays on one line", async () => {
+  document.head.appendChild(document.createElement("style")).textContent = PLANNING_CSS;
+  const container = await editing();
+  await pasteScreenshot(container);
+  await keepAsked();
+  await answerKeep({ id: KEPT_ID });
+
+  const tools = selectPicture(container);
+  layOutColumn(container, 720);
+
+  const buttons = [...tools.querySelectorAll("button")];
+  assert.deepEqual(
+    buttons.map((button) => button.textContent),
+    ["Alt text", "Caption", "Enlarge", "Delete"],
+  );
+  // Its width is its own content's, not the skinny picture's box it hangs from.
+  assert.equal(getComputedStyle(tools).width, "max-content");
+  assert.equal(getComputedStyle(tools).whiteSpace, "nowrap");
+  // And the ring hugs the picture, however wide its caption runs.
+  const frame =
+    container.querySelector<HTMLElement>(".editor-picture .picture-frame") ??
+    assert.fail("the picture is framed");
+  assert.equal(getComputedStyle(frame).width, "fit-content");
+});
+
+test("in a column too narrow for their names, a selected picture's tools are their glyphs, each still named", async () => {
+  const container = await editing();
+  await pasteScreenshot(container);
+  await keepAsked();
+  await answerKeep({ id: KEPT_ID });
+
+  const tools = selectPicture(container);
+  layOutColumn(container, 280);
+
+  const buttons = [...tools.querySelectorAll("button")];
+  assert.deepEqual(
+    buttons.map((button) => button.textContent),
+    ["", "", "", ""],
+  );
+  assert.deepEqual(
+    buttons.map((button) => button.getAttribute("aria-label")),
+    ["Alt text", "Caption", "Enlarge", "Delete"],
+  );
+
+  // Given the room again, they say their names.
+  layOutColumn(container, 720);
+  assert.deepEqual(
+    [...tools.querySelectorAll("button")].map((button) => button.textContent),
+    ["Alt text", "Caption", "Enlarge", "Delete"],
   );
 });
