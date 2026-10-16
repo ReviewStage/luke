@@ -428,7 +428,7 @@ function composed(
     Effect.gen(function* () {
       yield* tell(slot, {
         phase: PR_RUN_PHASE.PREPARING,
-        message: "Fetching the pull request's newest commit…",
+        message: "Copying the agent's work from its sandbox…",
       });
       // Note that the repository's clone is changed by one run at a time, because two pull requests of it share it.
       const prepared = yield* repositoryLock(place.clone).withPermits(1)(
@@ -550,7 +550,7 @@ function composed(
           if (slot.runId !== undefined && slot.phase === PR_RUN_PHASE.PREPARING) {
             yield* tell(slot, {
               phase: PR_RUN_PHASE.PREPARING,
-              message: "Fetching the pull request's newest commit…",
+              message: "Copying the agent's work from its sandbox…",
             });
             return { done: true } satisfies PrRunOutcome;
           }
