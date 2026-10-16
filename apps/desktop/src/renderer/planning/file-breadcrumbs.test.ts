@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { relayout } from "#testing/resize-observer";
 import type { FolderListing } from "../file-tree/contract";
 import { FileViewBar } from "./file-view";
 
@@ -120,4 +121,30 @@ test("a bar narrower than 300px draws the repository and every folder as one “
   ]);
   bar.press("Folders: acme/relay/packages/db/src/members/invites");
   assert.ok(document.querySelector('[role="dialog"][aria-label="packages/db/src/members"]'));
+});
+
+test("a file at the repository's root keeps the repository's crumb however narrow the bar", () => {
+  assert.deepEqual(barAt(299, "README.md").crumbs(), [REPOSITORY, "README.md"]);
+});
+
+test("a path six folders deep or deeper draws its middle folders as the one “…” on a wide bar too", () => {
+  assert.deepEqual(barAt(700, "a/b/c/d/e/f/deep.ts").crumbs(), [
+    REPOSITORY,
+    "Folders: a/b/c/d/e",
+    "f",
+    "deep.ts",
+  ]);
+});
+
+test("a crumb's tree goes once the bar is resized, its crumb perhaps folded out of sight", () => {
+  const bar = barAt(700);
+  bar.press("src");
+  assert.ok(document.querySelector('[role="dialog"]'));
+  act(() => relayout());
+  act(() => relayout());
+  assert.equal(
+    document.querySelector('[role="dialog"]') !== null,
+    false,
+    "the tree stands no more",
+  );
 });

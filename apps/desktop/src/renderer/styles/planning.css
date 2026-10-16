@@ -1066,6 +1066,19 @@ button.file-ref:hover .file-ref-path {
   flex-shrink: 0;
 }
 
+/* A path six folders deep or deeper draws its middle folders as the one
+   "…" on a bar of any width it does not fold further, since their floors
+   alone would push the file's own name out of the bar. */
+@container file-bar (min-width: 300px) {
+  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-folded-crumb="middle"] {
+    display: flex;
+  }
+
+  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-middle="true"] {
+    display: none;
+  }
+}
+
 /* A bar narrower than 520px draws the folders between the repository and
    the file's own folder as one "…", which names them in its pill. */
 @container file-bar (max-width: 519px) {

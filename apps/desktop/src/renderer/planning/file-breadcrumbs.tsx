@@ -147,10 +147,22 @@ function CrumbTree({
       latest.current.onClose(false);
     };
     const leave = () => latest.current.onClose(false);
+    // The bar resized, its panel dragged, may fold the crumb the tree hangs
+    // from out of sight (planning.css), so the tree goes, as it does when the
+    // window resizes. Note that it watches only while a tree stands, and
+    // reads nothing of the layout.
+    const bar = opener.closest(".file-view-bar");
+    let first = true;
+    const folded = new ResizeObserver(() => {
+      if (first) first = false;
+      else leave();
+    });
+    if (bar !== null) folded.observe(bar);
     document.addEventListener("pointerdown", pressed, true);
     window.addEventListener("blur", leave);
     window.addEventListener("resize", leave);
     return () => {
+      folded.disconnect();
       document.removeEventListener("pointerdown", pressed, true);
       window.removeEventListener("blur", leave);
       window.removeEventListener("resize", leave);
@@ -282,7 +294,7 @@ export function FileBreadcrumbs({
       key={folderOf(segments, at)}
       data-crumb={at}
       data-middle={String(at >= 1 && at <= middle && middle > 1)}
-      data-folder={String(at < segments.length)}
+      data-folder={String(at < segments.length && folders > 0)}
     >
       {at === 0 ? null : <CrumbChevron />}
       <button
