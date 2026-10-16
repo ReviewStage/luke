@@ -89,15 +89,28 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawn(text: string, workspace: Workspace) {
+/** Hands the window a later reading of main's document, as main delivers one when the workspace changes. */
+let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
+
+/** Lets every reading and read the window asked for land. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** The words drawn in a window holding `workspace`, on the plan's page or, as the window's own Inbox draws an item's, off any, and every act the window asked. */
+async function drawn(text: string, workspace: Workspace, onPlan = true) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
+      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+        deliver = listener;
+        return () => undefined;
+      },
       requestAppState: () => Promise.resolve(state),
       act: (request: Act): Promise<ActOutcome> => {
         asked.push(request);
@@ -122,20 +135,16 @@ async function drawn(text: string, workspace: Workspace) {
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
+  const words = createElement(TranscriptWords, { text });
   act(() =>
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlanMentions, {
-          value: PAGE,
-          children: createElement(TranscriptWords, { text }),
-        }),
+        onPlan ? createElement(PlanMentions, { value: PAGE, children: words }) : words,
       ),
     ),
   );
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await settle();
   return { container, asked };
 }
 
@@ -176,4 +185,26 @@ test("where the workspace has no Linear connected, nothing is asked and the chip
     asked.filter((each) => each.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES),
     [],
   );
+});
+
+test("off a plan, as in the window's own Inbox, the issue is read through the account's one workspace with Linear connected", async () => {
+  const { container, asked } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR, false);
+
+  assert.deepEqual(chips(container), [["ENG-1 Start a plan from Linear", "In Progress"]]);
+  assert.deepEqual(
+    asked
+      .filter((each) => each.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES)
+      .map((each) => each.payload),
+    [{ workspaceId: "workspace-acme", identifier: "ENG-1" }],
+  );
+});
+
+test("once the workspace disconnects Linear, the chip says what the address says again", async () => {
+  const { container } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR);
+  assert.deepEqual(chips(container), [["ENG-1 Start a plan from Linear", "In Progress"]]);
+
+  act(() => deliver({ ...stateWith(ACME), version: 2 }));
+  await settle();
+
+  assert.deepEqual(chips(container), [["ENG-1/start-a-plan-from-linear", null]]);
 });
