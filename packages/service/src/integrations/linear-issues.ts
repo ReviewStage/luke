@@ -179,7 +179,9 @@ function summaryOf(node: typeof IssueNodeSchema.Type): LinearIssueSummary {
 /**
  * The workspace's Linear token while its row stands connected, or why
  * there is none. A grant Connect no longer holds marks the row expired, so
- * the settings row says so and an owner or admin can connect again.
+ * the settings row says so and an owner or admin can connect again; a
+ * connected row on a deployment that names no workspace connector is
+ * unavailable, never not connected.
  */
 export const workspaceLinearToken = /* @__PURE__ */ Effect.fn("web/workspaceLinearToken")(
   function* (
@@ -204,7 +206,10 @@ export const workspaceLinearToken = /* @__PURE__ */ Effect.fn("web/workspaceLine
         yield* expireWorkspaceIntegration(organizationId, INTEGRATION_PROVIDER.LINEAR);
         return Result.fail(LINEAR_READ_FAILURE.EXPIRED);
       case INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED:
-        return Result.fail(LINEAR_READ_FAILURE.NOT_CONNECTED);
+        // Note that a connected row is unavailable rather than not connected, because a turn
+        // answered not connected reads the member's own Linear in the workspace's place.
+        yield* Effect.logWarning("The deployment names no workspace Linear connector");
+        return Result.fail(LINEAR_READ_FAILURE.UNAVAILABLE);
       case INTEGRATION_CONNECT_FAILURE.UNAVAILABLE:
         yield* Effect.logWarning(
           "Vercel Connect gave no workspace Linear token",
