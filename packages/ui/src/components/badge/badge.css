@@ -1,0 +1,57 @@
+/* badge.css -- a capsule of the tone's tint holding its words in the tone's
+   ink, at a caption's type, so it sits on a line of body words without
+   lifting it. */
+
+@layer components {
+  .luke-badge {
+    --luke-badge-ink: var(--luke-color-text-muted);
+    display: inline-flex;
+    /* Note that a badge may shrink below its words and wrap them, because a
+       label wider than its row must stay inside it rather than paint past
+       its edge; a row that wraps its items moves the badge to a line of its
+       own first. */
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-space-4);
+    max-width: 100%;
+    padding: var(--luke-space-2) var(--luke-space-8);
+    border-radius: var(--luke-radius-full);
+    background: color-mix(in srgb, var(--luke-badge-ink) 12%, transparent);
+    /* The words are the tone a fifth of the way to the text's own ink,
+       deeper on a light ground and brighter on a dark one, so a caption's
+       small type holds AA on the tint in every theme. */
+    color: color-mix(in srgb, var(--luke-badge-ink) 80%, var(--luke-color-text));
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-badge svg {
+    flex: none;
+    width: 12px;
+    height: 12px;
+  }
+
+  .luke-badge[data-tone="working"] {
+    --luke-badge-ink: var(--luke-color-working);
+  }
+
+  .luke-badge[data-tone="attention"] {
+    --luke-badge-ink: var(--luke-color-attention);
+  }
+
+  .luke-badge[data-tone="complete"] {
+    --luke-badge-ink: var(--luke-color-complete);
+  }
+
+  .luke-badge[data-tone="merged"] {
+    --luke-badge-ink: var(--luke-color-merged);
+  }
+
+  .luke-badge[data-tone="danger"] {
+    --luke-badge-ink: var(--luke-color-danger-text);
+  }
+}
