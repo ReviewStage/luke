@@ -4102,12 +4102,6 @@ button.picture-frame {
   outline: none;
 }
 
-.picture-describe-hint {
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
    and the wait said where its caption will stand with the window's own
    spinner; a failed upload says so there, as every failure does. */

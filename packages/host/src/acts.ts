@@ -611,7 +611,7 @@ export const GITHUB_LAST_SIGN_IN_REFUSAL =
 
 /** What a Linear read is refused with where the workspace's Linear could not be read. */
 export const LINEAR_UNAVAILABLE_REFUSAL =
-  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it in Settings › Workspace." as const;
+  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =

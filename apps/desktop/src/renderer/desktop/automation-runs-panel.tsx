@@ -49,7 +49,7 @@ const CREATOR = "its creator";
 const RUN_ACTIONS = "Run actions";
 
 /** What the panel says while the automation has no run, over how to have one. */
-const NO_RUNS_TITLE = "No runs yet";
+const NO_RUNS_LINE = "No runs yet";
 
 /** The glyph each standing of a run wears. */
 export const STANDING_GLYPH = {
@@ -210,9 +210,7 @@ export function AutomationRunsPanel({
       <aside className="automation-runs scroll-fade-top" aria-label="Runs">
         <h2 className="settings-group-title">Runs</h2>
         {!created ? (
-          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-            Create it, then Run now to try it.
-          </EmptyState>
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
           <ReadFailure
             line="Its runs could not be read."
@@ -220,9 +218,7 @@ export function AutomationRunsPanel({
             place={READ_FAILURE_PLACE.INLINE}
           />
         ) : runs.runs.length === 0 ? (
-          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-            Run now to try it.
-          </EmptyState>
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
           <div className="automation-runs-list">
             {runs.runs.map((run) => (
