@@ -256,9 +256,10 @@ const STAND_IN = {
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   CHAT: "chat",
+  ISSUES: "issues",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, or Chat with the place shown in it. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
@@ -271,7 +272,8 @@ type StandIn =
     }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace }
-  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace };
+  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace }
+  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
 
 /** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
 interface FactoryViewControl {
@@ -337,6 +339,8 @@ interface ChatViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
+  /** Opens it on a place, from wherever the window stands: what a chat notice's Open in Chat asks. */
+  readonly onShow: (place: ChatPlace) => void;
   /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
@@ -348,6 +352,29 @@ type ChatStager = typeof import("./chat-fixture");
 
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
+
+/** Which Issues page stands: the list, or one issue's. */
+export const ISSUES_PAGE = {
+  LIST: "list",
+  ISSUE: "issue",
+} as const;
+
+export type IssuesPlace =
+  | { readonly kind: typeof ISSUES_PAGE.LIST }
+  | { readonly kind: typeof ISSUES_PAGE.ISSUE; readonly issueId: string };
+
+/** The list, where the Issues pages open with none asked for. */
+const ISSUES_LIST: IssuesPlace = { kind: ISSUES_PAGE.LIST };
+
+/** The window's Issues pages: whether one stands in the plan's place, which, and the presses that open, move between, and leave them. */
+interface IssuesViewControl {
+  readonly open: boolean;
+  /** The page standing, the list while none does. */
+  readonly place: IssuesPlace;
+  /** Opens the page asked for, the list where none is. */
+  readonly onOpen: (place?: IssuesPlace) => void;
+  readonly onClose: () => void;
+}
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
@@ -510,6 +537,8 @@ export interface TasksControl {
   factoryView: FactoryViewControl;
   /** The window's Automations page: whether it stands in the plan's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
+  /** The window's Issues page: whether it stands in the plan's place, which, and its presses (`issues-page.tsx`). */
+  issuesView: IssuesViewControl;
   /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
@@ -2260,8 +2289,10 @@ export function useTasksTab(input: {
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, tasks.activeTaskId, onOpenFile]);
 
-  // Every tab closed is kept as it stood for ⇧⌘T to open again: the plan's
-  // tab never closes, and a draft's lets its draft go, so neither is kept.
+  // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
+  // which lets its draft go, and the plan's while it stands alone, which
+  // does not close. Note that a tab's place is counted among those after the
+  // plan's, which stand there whether or not the plan's tab is open.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
   // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
@@ -2276,10 +2307,12 @@ export function useTasksTab(input: {
   );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
-      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      const after = openTabs.filter((each) => each !== MAIN_TAB.PLAN);
+      const at = after.findIndex((each) => sameTab(each, tab));
+      const closes = tab === MAIN_TAB.PLAN ? openTabs.includes(tab) && after.length > 0 : at >= 0;
       const task = viewed.activeTaskId;
-      if (task !== undefined && at > 0 && !isDraftTab(tab)) {
-        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: at - 1 };
+      if (task !== undefined && closes && !isDraftTab(tab)) {
+        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: Math.max(0, at) };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closeMainTab(tab);
@@ -2576,6 +2609,10 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
         ),
+      onShow: guard((place: ChatPlace) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.CHAT, place });
+      }),
       onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
       onAnswer: (answer) =>
         stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
@@ -2630,6 +2667,16 @@ export function useTasksTab(input: {
       onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AUTOMATIONS, place });
+      }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
+    // The Issues page stands over the plan's place as the Automations page does, each giving way to the others.
+    issuesView: {
+      open: standIn?.kind === STAND_IN.ISSUES,
+      place: standIn?.kind === STAND_IN.ISSUES ? standIn.place : ISSUES_LIST,
+      onOpen: guard((place: IssuesPlace = ISSUES_LIST) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.ISSUES, place });
       }),
       onClose: guard(() => setStandIn(undefined)),
     },

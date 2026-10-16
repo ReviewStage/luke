@@ -1,19 +1,54 @@
 import {
+  ASK_STATUS,
+  type AskStatus,
   CHANNEL_KIND,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
+  type ChatAsk,
   type ChatBlock,
+  type ChatImageType,
+  type ChatReadBlock,
+  type ChatReply,
+  chatAskSchema,
   chatBlockSchema,
+  chatImageTypeSchema,
   chatReadBlockSchema,
+  chatReplySchema,
+  formValueLines,
   GENERAL_CHANNEL,
   MEMBER_KIND,
   PLANNER_HANDLE,
+  replyWords,
 } from "@luke/features/chat-wire";
-import { and, asc, desc, eq, gt, isNull, lt, max, ne, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gt,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  ne,
+  notExists,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { organization, user } from "../schemas/auth.js";
-import { chatChannel, chatMember, chatMessage, workspaceChat } from "../schemas/chat.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { member, organization, user } from "../schemas/auth.js";
+import {
+  chatAttachment,
+  chatChannel,
+  chatMember,
+  chatMessage,
+  workspaceChat,
+} from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -69,8 +104,10 @@ export const CHAT_REFUSAL = {
   AUTHOR_LEFT: "author-left",
   /** The channel is archived and takes no post. */
   CHANNEL_ARCHIVED: "channel-archived",
-  /** The post's client key already names another member's message in the channel. */
+  /** The post's client key already names another member's message in the channel, or another message than the ask. */
   KEY_TAKEN: "key-taken",
+  /** The ask's key names an ask the author posted in another channel or thread, where it stays. */
+  ASK_ELSEWHERE: "ask-elsewhere",
 } as const;
 
 export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
@@ -83,6 +120,9 @@ export type ChatMemberSubject =
 
 /** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
 const MAX_PAST = 200;
+
+/** The UTF-16 code units that open a surrogate pair, which a cut between two characters never follows. */
+const HIGH_SURROGATE = { FIRST: 0xd800, LAST: 0xdbff } as const;
 
 /** The orders a read of messages keeps: oldest change first, or newest place first. */
 const READ_ORDER = {
@@ -147,6 +187,15 @@ const ChatMessageRowSchema = Schema.Struct({
   mentions: Schema.Array(Schema.String),
   clientKey: Schema.String,
   createdAt: InstantColumnSchema,
+  touchedAt: InstantColumnSchema,
+  ask: Schema.NullOr(chatAskSchema),
+  askKey: Schema.NullOr(Schema.String),
+  askRevision: Schema.NullOr(Schema.Number),
+  askStatus: Schema.NullOr(Schema.Literals(Object.values(ASK_STATUS))),
+  answer: Schema.NullOr(chatReplySchema),
+  answerKey: Schema.NullOr(Schema.String),
+  answeredByMemberId: Schema.NullOr(Schema.String),
+  closedReason: Schema.NullOr(Schema.String),
 });
 
 /** One message as the store keeps it. */
@@ -233,6 +282,15 @@ const MESSAGE_COLUMNS = {
   mentions: chatMessage.mentions,
   clientKey: chatMessage.clientKey,
   createdAt: chatMessage.createdAt,
+  touchedAt: chatMessage.touchedAt,
+  ask: chatMessage.ask,
+  askKey: chatMessage.askKey,
+  askRevision: chatMessage.askRevision,
+  askStatus: chatMessage.askStatus,
+  answer: chatMessage.answer,
+  answerKey: chatMessage.answerKey,
+  answeredByMemberId: chatMessage.answeredByMemberId,
+  closedReason: chatMessage.closedReason,
 };
 
 const OrganizationKeySchema = Schema.Struct({ organizationId: Schema.String });
@@ -713,6 +771,7 @@ const insertMessage = SqlSchema.findOne({
     blocks: Schema.Array(chatBlockSchema),
     mentions: Schema.Array(Schema.String),
     clientKey: Schema.String,
+    ask: Schema.NullOr(Schema.Struct({ key: Schema.String, ask: chatAskSchema })),
     now: Schema.Date,
   }),
   Result: ChatMessageRowSchema,
@@ -731,15 +790,123 @@ const insertMessage = SqlSchema.findOne({
           mentions: [...row.mentions],
           clientKey: row.clientKey,
           createdAt: row.now,
+          touchedAt: row.now,
+          ...(row.ask === null
+            ? undefined
+            : {
+                ask: row.ask.ask,
+                askKey: row.ask.key,
+                askRevision: 1,
+                askStatus: ASK_STATUS.OPEN,
+              }),
         })
         .returning(MESSAGE_COLUMNS),
     ),
 });
 
-/**
- * The messages a reader may see past a place, by the column given, the
- * reader's own left out where asked, oldest first and bounded.
- */
+/** The author's message carrying the ask under the key, under its row's lock. */
+const lockAskByKey = SqlSchema.findOneOption({
+  Request: Schema.Struct({ authorMemberId: Schema.String, key: Schema.String }),
+  Result: ChatMessageRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(
+          and(eq(chatMessage.authorMemberId, key.authorMemberId), eq(chatMessage.askKey, key.key)),
+        )
+        .for("update"),
+    ),
+});
+
+/** The message at the place given carrying an ask, under its row's lock. */
+const lockAskBySeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, seq: Schema.Number }),
+  Result: ChatMessageRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            eq(chatMessage.seq, key.seq),
+            isNotNull(chatMessage.askKey),
+          ),
+        )
+        .for("update"),
+    ),
+});
+
+/** The ask written again under its key: its body, mentions, and ask replaced, its revision moved on, opened, and moved to the place given. */
+const rewriteAsk = SqlSchema.findOne({
+  Request: Schema.Struct({
+    id: Schema.String,
+    blocks: Schema.Array(chatBlockSchema),
+    mentions: Schema.Array(Schema.String),
+    ask: chatAskSchema,
+    seq: Schema.Number,
+    now: Schema.Date,
+  }),
+  Result: ChatMessageRowSchema,
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(chatMessage)
+        .set({
+          blocks: row.blocks,
+          mentions: [...row.mentions],
+          ask: row.ask,
+          askRevision: sql`${chatMessage.askRevision} + 1`,
+          askStatus: ASK_STATUS.OPEN,
+          answer: null,
+          answerKey: null,
+          answeredByMemberId: null,
+          closedReason: null,
+          touchedSeq: row.seq,
+          touchedAt: row.now,
+        })
+        .where(eq(chatMessage.id, row.id))
+        .returning(MESSAGE_COLUMNS),
+    ),
+});
+
+/** The ask moved to where it now stands: answered, opened again, or closed, at the place given. */
+const settleAsk = SqlSchema.findOne({
+  Request: Schema.Struct({
+    id: Schema.String,
+    status: Schema.Literals(Object.values(ASK_STATUS)),
+    answer: Schema.NullOr(chatReplySchema),
+    answerKey: Schema.NullOr(Schema.String),
+    answeredByMemberId: Schema.NullOr(Schema.String),
+    closedReason: Schema.NullOr(Schema.String),
+    bumpRevision: Schema.Boolean,
+    seq: Schema.Number,
+    now: Schema.Date,
+  }),
+  Result: ChatMessageRowSchema,
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(chatMessage)
+        .set({
+          askStatus: row.status,
+          answer: row.answer,
+          answerKey: row.answerKey,
+          answeredByMemberId: row.answeredByMemberId,
+          closedReason: row.closedReason,
+          ...(row.bumpRevision ? { askRevision: sql`${chatMessage.askRevision} + 1` } : undefined),
+          touchedSeq: row.seq,
+          touchedAt: row.now,
+        })
+        .where(eq(chatMessage.id, row.id))
+        .returning(MESSAGE_COLUMNS),
+    ),
+});
+
+/** The messages a reader may see that meet the conditions, in the order given, bounded. */
 function visibleMessages(
   reader: ChatMemberRow,
   conditions: readonly (SQL | undefined)[],
@@ -1283,6 +1450,162 @@ export function channelNamed(
   });
 }
 
+/** Where a post lands once its author, channel, thread, and mentions are read: what a post and an ask write. */
+interface PlacedPost {
+  readonly author: ChatMemberRow;
+  readonly channelId: string;
+  readonly parentId: string | null;
+  readonly mentions: readonly string[];
+  readonly unresolved: readonly string[];
+}
+
+/**
+ * A post read against the workspace: its author the account may act as and
+ * who has not left, its channel, the thread root where it replies, which
+ * names the channel, and its mentions resolved. Refused as `postMessage`
+ * says.
+ */
+function placePost(
+  userId: string,
+  organizationId: string,
+  post: ChatPost,
+): ChatStoreEffect<Result.Result<PlacedPost, ChatRefusal>> {
+  return Effect.gen(function* () {
+    const author = yield* readerIn(userId, organizationId, post.authorMemberId);
+    if (Option.isNone(author) || !actsAs(userId, author.value)) {
+      return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    }
+    if (author.value.leftAt !== null) return Result.fail(CHAT_REFUSAL.AUTHOR_LEFT);
+    const parent =
+      "replyTo" in post.to
+        ? yield* findMessageBySeq({ organizationId, seq: post.to.replyTo })
+        : Option.none();
+    if ("replyTo" in post.to && Option.isNone(parent)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    const channelId = Option.match(parent, {
+      onNone: () => ("channelId" in post.to ? post.to.channelId : ""),
+      onSome: (row) => row.channelId,
+    });
+    const channel = yield* findChannelInWorkspace({ organizationId, channelId });
+    if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
+    // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
+    const planId = yield* planOfContext(channel.value, author.value);
+    const named = yield* Effect.forEach(post.mentions, (handle) =>
+      Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
+        handle,
+        found,
+      })),
+    );
+    return Result.succeed({
+      author: author.value,
+      channelId,
+      parentId: Option.match(parent, {
+        onNone: () => null,
+        onSome: (row) => row.parentId ?? row.id,
+      }),
+      mentions: [
+        ...new Set(named.flatMap(({ found }) => Option.toArray(found).map((row) => row.id))),
+      ],
+      unresolved: named.filter(({ found }) => Option.isNone(found)).map(({ handle }) => handle),
+    });
+  });
+}
+
+/**
+ * The workspace's sequence row, made where it is not yet and held for the
+ * transaction. Note that every write that also locks a message takes this
+ * first, because two writers taking the two locks in turn the other way
+ * round would each wait on the other.
+ */
+function holdSequence(organizationId: string): ChatStoreEffect<void> {
+  return Effect.gen(function* () {
+    yield* ensureSequence({ organizationId });
+    yield* lockSequence({ organizationId });
+  });
+}
+
+/**
+ * The message already standing under the post's key in its channel, read
+ * under the sequence's lock, so two sends of one post racing land once:
+ * the author's own is the post repeated, another member's refuses the key.
+ */
+function standingUnder(
+  organizationId: string,
+  placed: PlacedPost,
+  clientKey: string,
+): ChatStoreEffect<Result.Result<Option.Option<ChatMessageRow>, ChatRefusal>> {
+  return Effect.gen(function* () {
+    yield* holdSequence(organizationId);
+    const standing = yield* findMessageByKey({ channelId: placed.channelId, clientKey });
+    if (Option.isSome(standing) && standing.value.authorMemberId !== placed.author.id) {
+      return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+    }
+    return Result.succeed(standing);
+  });
+}
+
+/** The next place in the workspace's chat sequence, taken under its row's lock. */
+function nextSeq(organizationId: string): ChatStoreEffect<number> {
+  return Effect.gen(function* () {
+    yield* ensureSequence({ organizationId });
+    const { next } = yield* takeSeq({ organizationId }).pipe(
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return next - 1;
+  });
+}
+
+/** A placed post written at the next place, carrying the ask given. */
+function writePlaced(
+  organizationId: string,
+  placed: PlacedPost,
+  post: ChatPost,
+  ask: { readonly key: string; readonly ask: ChatAsk } | null,
+): ChatStoreEffect<ChatMessageRow> {
+  return Effect.gen(function* () {
+    const seq = yield* nextSeq(organizationId);
+    const now = yield* DateTime.nowAsDate;
+    return yield* insertMessage({
+      organizationId,
+      channelId: placed.channelId,
+      seq,
+      parentId: placed.parentId,
+      authorMemberId: placed.author.id,
+      blocks: post.blocks,
+      mentions: placed.mentions,
+      clientKey: post.clientKey,
+      ask,
+      now,
+    }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+  });
+}
+
+/**
+ * An answer as its thread reads it: what was answered, the form's values,
+ * and the note, as Markdown, cut into as many blocks as its length takes,
+ * since a form filled to its bounds runs past one block's, each cut between
+ * two characters.
+ */
+function answerBlocks(reply: ChatReply): readonly ChatBlock[] {
+  const values = reply.values === undefined ? "" : formValueLines(reply.values);
+  const note = reply.note?.trim() ?? "";
+  const text = [replyWords(reply), values, note].filter((part) => part !== "").join("\n\n");
+  const blocks: ChatBlock[] = [];
+  let at = 0;
+  while (at < text.length && blocks.length < CHAT_BOUNDS.MAX_BLOCKS) {
+    let end = Math.min(at + CHAT_BOUNDS.MAX_MARKDOWN_CHARS, text.length);
+    // Note that a cut never falls inside a surrogate pair, because half of one is no character Postgres keeps.
+    const before = text.charCodeAt(end - 1);
+    if (end < text.length && before >= HIGH_SURROGATE.FIRST && before <= HIGH_SURROGATE.LAST) {
+      end -= 1;
+    }
+    blocks.push({ type: CHAT_BLOCK.MARKDOWN, text: text.slice(at, end) });
+    at = end;
+  }
+  return blocks;
+}
+
 /**
  * Posts a message as a member of the workspace: in the channel named, or
  * as a reply in the thread of the message named by its place, under that
@@ -1301,67 +1624,256 @@ export function postMessage(
 ): ChatStoreEffect<Result.Result<ChatPosted, ChatRefusal>> {
   return transaction(
     Effect.gen(function* () {
-      const author = yield* readerIn(userId, organizationId, post.authorMemberId);
-      if (Option.isNone(author) || !actsAs(userId, author.value)) {
-        return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      const placed = yield* placePost(userId, organizationId, post);
+      if (Result.isFailure(placed)) return Result.fail(placed.failure);
+      const standing = yield* standingUnder(organizationId, placed.success, post.clientKey);
+      if (Result.isFailure(standing)) return Result.fail(standing.failure);
+      if (Option.isSome(standing.success)) {
+        return Result.succeed({ message: standing.success.value, repeated: true, unresolved: [] });
       }
-      if (author.value.leftAt !== null) return Result.fail(CHAT_REFUSAL.AUTHOR_LEFT);
-      const parent =
-        "replyTo" in post.to
-          ? yield* findMessageBySeq({ organizationId, seq: post.to.replyTo })
-          : Option.none();
-      if ("replyTo" in post.to && Option.isNone(parent)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
-      const channelId = Option.match(parent, {
-        onNone: () => ("channelId" in post.to ? post.to.channelId : ""),
-        onSome: (row) => row.channelId,
-      });
-      const channel = yield* findChannelInWorkspace({ organizationId, channelId });
-      if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
-      if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
-      if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
-      // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-      const planId = yield* planOfContext(channel.value, author.value);
-      const named = yield* Effect.forEach(post.mentions, (handle) =>
-        Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
-          handle,
-          found,
-        })),
-      );
-      const mentions = [
-        ...new Set(named.flatMap(({ found }) => Option.toArray(found).map((row) => row.id))),
-      ];
-      // Note that the key is read under the sequence's lock, because two sends of one post racing must land once.
-      yield* ensureSequence({ organizationId });
-      yield* lockSequence({ organizationId });
-      const standing = yield* findMessageByKey({ channelId, clientKey: post.clientKey });
-      if (Option.isSome(standing)) {
-        if (standing.value.authorMemberId !== author.value.id) {
-          return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
-        }
-        return Result.succeed({ message: standing.value, repeated: true, unresolved: [] });
+      const { unresolved } = placed.success;
+      const message = yield* writePlaced(organizationId, placed.success, post, null);
+      return Result.succeed({ message, repeated: false, unresolved });
+    }),
+  );
+}
+
+/**
+ * Posts an ask under the author's key, as `postMessage` posts a message: a
+ * new message at revision one where the author has no ask under the key,
+ * else the one standing written again in place, its revision moved on,
+ * opened again whether it was answered or resolved, and moved to the next
+ * place so a reader past it reads it again. An ask stays where it was
+ * first posted, so one posted again to another channel or thread is
+ * refused, as is a client key another message holds. Answers the message
+ * and whether it was made now.
+ */
+export function postAsk(
+  userId: string,
+  organizationId: string,
+  post: ChatPost & { readonly key: string; readonly ask: ChatAsk },
+): ChatStoreEffect<Result.Result<ChatPosted & { readonly created: boolean }, ChatRefusal>> {
+  return transaction(
+    Effect.gen(function* () {
+      const placed = yield* placePost(userId, organizationId, post);
+      if (Result.isFailure(placed)) return Result.fail(placed.failure);
+      const { author, unresolved } = placed.success;
+      const standing = yield* standingUnder(organizationId, placed.success, post.clientKey);
+      if (Result.isFailure(standing)) return Result.fail(standing.failure);
+      if (Option.isSome(standing.success)) {
+        // A key a plain message or another ask holds is no repeat of this ask.
+        if (standing.success.value.askKey !== post.key) return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+        return Result.succeed({
+          message: standing.success.value,
+          repeated: true,
+          unresolved: [],
+          created: false,
+        });
       }
-      const { next } = yield* takeSeq({ organizationId }).pipe(
-        Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+      const asked = yield* lockAskByKey({ authorMemberId: author.id, key: post.key });
+      const elsewhere = Option.exists(
+        asked,
+        (row) =>
+          row.channelId !== placed.success.channelId || row.parentId !== placed.success.parentId,
       );
+      if (elsewhere) return Result.fail(CHAT_REFUSAL.ASK_ELSEWHERE);
+      if (Option.isNone(asked)) {
+        const message = yield* writePlaced(organizationId, placed.success, post, {
+          key: post.key,
+          ask: post.ask,
+        });
+        return Result.succeed({ message, repeated: false, unresolved, created: true });
+      }
+      const seq = yield* nextSeq(organizationId);
       const now = yield* DateTime.nowAsDate;
-      const message = yield* insertMessage({
-        organizationId,
-        channelId,
-        seq: next - 1,
-        parentId: Option.match(parent, {
-          onNone: () => null,
-          onSome: (row) => row.parentId ?? row.id,
-        }),
-        authorMemberId: author.value.id,
+      const message = yield* rewriteAsk({
+        id: asked.value.id,
         blocks: post.blocks,
-        mentions,
-        clientKey: post.clientKey,
+        mentions: placed.success.mentions,
+        ask: post.ask,
+        seq,
         now,
       }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
-      const unresolved = named
-        .filter(({ found }) => Option.isNone(found))
-        .map(({ handle }) => handle);
-      return Result.succeed({ message, repeated: false, unresolved });
+      return Result.succeed({ message, repeated: false, unresolved, created: false });
+    }),
+  );
+}
+
+/** What an answer came to: the ask as it then stands, the reply that carries the answer in its thread, and whether the answer was taken. */
+export interface ChatAnswered {
+  readonly ask: ChatMessageRow;
+  readonly reply: Option.Option<ChatMessageRow>;
+  readonly taken: boolean;
+}
+
+/** An answer as a member gives it: the ask by its place, the revision it answers, the answer, and the key the answer is sent under. */
+export interface ChatAnswer {
+  readonly answererMemberId: string;
+  readonly seq: number;
+  readonly revision: number;
+  readonly reply: ChatReply;
+  readonly clientKey: string;
+}
+
+/**
+ * Takes a member's answer on the ask at the place named, where it is open
+ * at the revision named: the answer is written on the ask with its key and
+ * its answerer, and posted as the answerer's reply in the ask's thread, at
+ * the place the ask moves to. An answer sent again under the key it was
+ * taken by finds it taken, and one withdrawn and sent again takes its
+ * reply again; one at a revision the author has moved past, or
+ * on an ask no longer open, is not taken, and the ask is answered as it
+ * stands. Refused where the ask or the answerer is not of the workspace,
+ * the answerer is another person, has left, or may not post in the ask's
+ * channel. The answer is held to what the ask asks by the caller's wire.
+ */
+export function answerAsk(
+  userId: string,
+  organizationId: string,
+  answer: ChatAnswer,
+): ChatStoreEffect<Result.Result<ChatAnswered, ChatRefusal>> {
+  return transaction(
+    Effect.gen(function* () {
+      yield* holdSequence(organizationId);
+      const asked = yield* lockAskBySeq({ organizationId, seq: answer.seq });
+      if (Option.isNone(asked)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      const ask = asked.value;
+      const post = {
+        authorMemberId: answer.answererMemberId,
+        to: { replyTo: ask.seq },
+        blocks: answerBlocks(answer.reply),
+        mentions: [],
+        clientKey: answer.clientKey,
+      };
+      const placed = yield* placePost(userId, organizationId, post);
+      if (Result.isFailure(placed)) return Result.fail(placed.failure);
+      const standing = yield* standingUnder(organizationId, placed.success, answer.clientKey);
+      if (Result.isFailure(standing)) return Result.fail(standing.failure);
+      if (ask.answerKey === answer.clientKey) {
+        // A key another member answered under is theirs, however it is sent again.
+        if (ask.answeredByMemberId !== answer.answererMemberId) {
+          return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+        }
+        return Result.succeed({ ask, reply: standing.success, taken: true });
+      }
+      if (ask.askRevision !== answer.revision || ask.askStatus !== ASK_STATUS.OPEN) {
+        return Result.succeed({ ask, reply: Option.none(), taken: false });
+      }
+      // A key a message outside this ask's thread holds is no answer of this ask's.
+      if (Option.exists(standing.success, (row) => row.parentId !== placed.success.parentId)) {
+        return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+      }
+      // A key's reply says one answer, so another answer sent under it is refused rather than shown as the old.
+      if (
+        Option.exists(
+          standing.success,
+          (row) => JSON.stringify(row.blocks) !== JSON.stringify(post.blocks),
+        )
+      ) {
+        return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+      }
+      // An answer withdrawn and sent again under its key takes again the reply it left in the thread.
+      const reply = Option.isSome(standing.success)
+        ? standing.success.value
+        : yield* writePlaced(organizationId, placed.success, post, null);
+      const touched = Option.isSome(standing.success) ? yield* nextSeq(organizationId) : reply.seq;
+      const now = yield* DateTime.nowAsDate;
+      const settled = yield* settleAsk({
+        id: ask.id,
+        status: ASK_STATUS.ANSWERED,
+        answer: answer.reply,
+        answerKey: answer.clientKey,
+        answeredByMemberId: answer.answererMemberId,
+        closedReason: null,
+        bumpRevision: false,
+        seq: touched,
+        now,
+      }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+      return Result.succeed({ ask: settled, reply: Option.some(reply), taken: true });
+    }),
+  );
+}
+
+/**
+ * Takes back the answer the member gave under the key on the ask at the
+ * place named, opening it again at the next place; its reply stays in the
+ * thread as what was said. Nothing where that answer no longer stands, is
+ * another member's, or the account may not act as the member.
+ */
+export function withdrawAnswer(
+  userId: string,
+  organizationId: string,
+  answererMemberId: string,
+  seq: number,
+  answerKey: string,
+): ChatStoreEffect<Option.Option<ChatMessageRow>> {
+  return transaction(
+    Effect.gen(function* () {
+      const answerer = yield* readerIn(userId, organizationId, answererMemberId);
+      if (Option.isNone(answerer) || !actsAs(userId, answerer.value)) return Option.none();
+      yield* holdSequence(organizationId);
+      const asked = yield* lockAskBySeq({ organizationId, seq });
+      const answered = Option.filter(
+        asked,
+        (row) =>
+          row.answerKey === answerKey &&
+          row.answeredByMemberId === answererMemberId &&
+          row.askStatus === ASK_STATUS.ANSWERED,
+      );
+      if (Option.isNone(answered)) return Option.none();
+      const touched = yield* nextSeq(organizationId);
+      const now = yield* DateTime.nowAsDate;
+      const reopened = yield* settleAsk({
+        id: answered.value.id,
+        status: ASK_STATUS.OPEN,
+        answer: null,
+        answerKey: null,
+        answeredByMemberId: null,
+        closedReason: null,
+        bumpRevision: false,
+        seq: touched,
+        now,
+      }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+      return Option.some(reopened);
+    }),
+  );
+}
+
+/**
+ * Resolves the author's ask under the key with why, its revision moved on
+ * and moved to the next place; nothing where the author has no ask under
+ * the key, or is not a member the account may act as.
+ */
+export function resolveAsk(
+  userId: string,
+  organizationId: string,
+  authorMemberId: string,
+  key: string,
+  reason: string,
+): ChatStoreEffect<Option.Option<ChatMessageRow>> {
+  return transaction(
+    Effect.gen(function* () {
+      const author = yield* readerIn(userId, organizationId, authorMemberId);
+      if (Option.isNone(author) || !actsAs(userId, author.value)) return Option.none();
+      // A member that left takes nothing back, as it posts nothing.
+      if (author.value.leftAt !== null) return Option.none();
+      yield* holdSequence(organizationId);
+      const asked = yield* lockAskByKey({ authorMemberId, key });
+      if (Option.isNone(asked)) return Option.none();
+      const touched = yield* nextSeq(organizationId);
+      const now = yield* DateTime.nowAsDate;
+      const closed = yield* settleAsk({
+        id: asked.value.id,
+        status: ASK_STATUS.CLOSED,
+        answer: asked.value.answer,
+        answerKey: asked.value.answerKey,
+        answeredByMemberId: asked.value.answeredByMemberId,
+        closedReason: reason,
+        bumpRevision: true,
+        seq: touched,
+        now,
+      }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+      return Option.some(closed);
     }),
   );
 }
@@ -1493,5 +2005,343 @@ export function chatPast(
     const cursor =
       messages.length === MAX_PAST ? (messages.at(-1)?.touchedSeq ?? head) : Math.max(head, after);
     return Option.some({ messages, cursor });
+  });
+}
+
+/** Whose asks a read lists: one author's, or one channel's. */
+export type ChatAskScope = { readonly authorMemberId: string } | { readonly channelId: string };
+
+/** One ask that waits on a person, with the plan of the channel it was asked in, where it was asked in a plan's channel. */
+export interface WaitingAsk {
+  readonly message: ChatMessageRow;
+  readonly planId: string | null;
+}
+
+/** Where an ask that waits stands, without what it says: what a held read compares between looks. */
+export interface WaitingStamp {
+  readonly id: string;
+  readonly revision: number;
+  readonly status: AskStatus;
+  readonly touchedSeq: number;
+}
+
+/**
+ * The order what waits is read in: the latest changed first, by the instant
+ * across workspaces and by the sequence within one where two changes share
+ * an instant.
+ */
+const WAITING_ORDER = [
+  desc(chatMessage.touchedAt),
+  desc(chatMessage.touchedSeq),
+  desc(chatMessage.id),
+] as const;
+
+/** A column a subquery compares a member's id with. */
+type MemberColumn = typeof chatMessage.authorMemberId | typeof chatChannel.dmAMemberId;
+
+/** The order every ask read keeps: the latest changed first, and by id among those changed at one place. */
+const LATEST_CHANGED = [desc(chatMessage.touchedSeq), desc(chatMessage.id)] as const;
+
+const AskScopeSchema = Schema.Struct({
+  organizationId: Schema.String,
+  authorMemberId: Schema.NullOr(Schema.String),
+  channelId: Schema.NullOr(Schema.String),
+  open: Schema.Boolean,
+  limit: Schema.NullOr(Schema.Number),
+});
+
+const findAsks = SqlSchema.findAll({
+  Request: AskScopeSchema,
+  Result: ChatMessageRowSchema,
+  execute: (scope) =>
+    Database.use((db) => {
+      const read = db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, scope.organizationId),
+            isNotNull(chatMessage.askKey),
+            scope.open
+              ? eq(chatMessage.askStatus, ASK_STATUS.OPEN)
+              : ne(chatMessage.askStatus, ASK_STATUS.OPEN),
+            scope.authorMemberId === null
+              ? undefined
+              : eq(chatMessage.authorMemberId, scope.authorMemberId),
+            scope.channelId === null ? undefined : eq(chatMessage.channelId, scope.channelId),
+          ),
+        )
+        .orderBy(...LATEST_CHANGED);
+      return scope.limit === null ? read : read.limit(scope.limit);
+    }),
+});
+
+/**
+ * The open asks that wait on the account across its workspaces: asked by
+ * someone else, in a channel neither archived nor of an archived plan, and
+ * in a DM only where the account is one of its two.
+ */
+function waitingOnAccount(userId: string): SQL | undefined {
+  const own = (memberId: MemberColumn) =>
+    queryBuilder
+      .select({ id: chatMember.id })
+      .from(chatMember)
+      .where(and(eq(chatMember.id, memberId), eq(chatMember.userId, userId)));
+  return and(
+    eq(chatMessage.askStatus, ASK_STATUS.OPEN),
+    exists(
+      queryBuilder
+        .select({ id: member.id })
+        .from(member)
+        .where(
+          and(eq(member.organizationId, chatMessage.organizationId), eq(member.userId, userId)),
+        ),
+    ),
+    notExists(own(chatMessage.authorMemberId)),
+    isNull(chatChannel.archivedAt),
+    isNull(task.archivedAt),
+    or(
+      ne(chatChannel.kind, CHANNEL_KIND.DM),
+      exists(own(chatChannel.dmAMemberId)),
+      exists(own(chatChannel.dmBMemberId)),
+    ),
+  );
+}
+
+const findWaiting = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String }),
+  Result: Schema.Struct({ ...ChatMessageRowSchema.fields, planId: Schema.NullOr(Schema.String) }),
+  execute: ({ userId }) =>
+    Database.use((db) =>
+      db
+        .select({ ...MESSAGE_COLUMNS, planId: chatChannel.planId })
+        .from(chatMessage)
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .leftJoin(task, eq(task.id, chatChannel.planId))
+        .where(waitingOnAccount(userId))
+        .orderBy(...WAITING_ORDER),
+    ),
+});
+
+const findWaitingStamps = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    revision: Schema.Number,
+    status: Schema.Literals(Object.values(ASK_STATUS)),
+    touchedSeq: Schema.Number,
+  }),
+  execute: ({ userId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: chatMessage.id,
+          revision: chatMessage.askRevision,
+          status: chatMessage.askStatus,
+          touchedSeq: chatMessage.touchedSeq,
+        })
+        .from(chatMessage)
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .leftJoin(task, eq(task.id, chatChannel.planId))
+        .where(waitingOnAccount(userId))
+        .orderBy(...WAITING_ORDER),
+    ),
+});
+
+/**
+ * The asks of an author or a channel, as a list of what is asked reads
+ * them: every one still open, then the latest settled ones up to the
+ * limit, each run the latest changed first. Note that the open asks are read apart from the
+ * limit, because one left unanswered while many others changed must still
+ * stand where it is looked for. None where the account is not in the
+ * workspace.
+ */
+export function openAsksOf(
+  userId: string,
+  organizationId: string,
+  scope: ChatAskScope,
+  settledLimit = 0,
+): ChatStoreEffect<readonly ChatMessageRow[]> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
+    const of = {
+      organizationId,
+      authorMemberId: "authorMemberId" in scope ? scope.authorMemberId : null,
+      channelId: "channelId" in scope ? scope.channelId : null,
+    };
+    const open = yield* findAsks({ ...of, open: true, limit: null });
+    if (settledLimit === 0) return open;
+    const settled = yield* findAsks({ ...of, open: false, limit: settledLimit });
+    return [...open, ...settled];
+  });
+}
+
+/** Every ask that waits on the account across its workspaces, as `waitingOnAccount` reads them, the latest changed first. */
+export function waitingOn(userId: string): ChatStoreEffect<readonly WaitingAsk[]> {
+  return Effect.map(findWaiting({ userId }), (rows) =>
+    rows.map(({ planId, ...message }) => ({ message, planId })),
+  );
+}
+
+/** Where each ask `waitingOn` reads stands, the same asks and none of their words. */
+export function waitingStamps(userId: string): ChatStoreEffect<readonly WaitingStamp[]> {
+  return findWaitingStamps({ userId });
+}
+
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+export interface ChatImage {
+  readonly contentType: ChatImageType;
+  readonly bytes: Uint8Array;
+}
+
+/** One picture handed in under the id the message's image block names. */
+export interface ChatImageWrite extends ChatImage {
+  readonly id: string;
+}
+
+const insertAttachment = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    organizationId: Schema.String,
+    messageId: Schema.String,
+    contentType: chatImageTypeSchema,
+    byteCount: Schema.Number,
+    bytes: Schema.Uint8Array,
+    now: Schema.Date,
+  }),
+  execute: ({ now, ...attachment }) =>
+    // A picture already kept under its id stays as it was kept.
+    Database.use((db) =>
+      db
+        .insert(chatAttachment)
+        .values({ ...attachment, createdAt: now })
+        .onConflictDoNothing(),
+    ),
+});
+
+/** The message's attachments no id named any longer, deleted. */
+const deleteOtherAttachments = SqlSchema.void({
+  Request: Schema.Struct({ messageId: Schema.String, kept: Schema.Array(Schema.String) }),
+  execute: ({ messageId, kept }) =>
+    Database.use((db) =>
+      db
+        .delete(chatAttachment)
+        .where(
+          kept.length === 0
+            ? eq(chatAttachment.messageId, messageId)
+            : and(
+                eq(chatAttachment.messageId, messageId),
+                notInArray(chatAttachment.id, [...kept]),
+              ),
+        ),
+    ),
+});
+
+const findAttachment = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    messageId: Schema.String,
+    attachmentId: Schema.String,
+  }),
+  Result: Schema.Struct({ contentType: chatImageTypeSchema, bytes: Schema.Uint8Array }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ contentType: chatAttachment.contentType, bytes: chatAttachment.bytes })
+        .from(chatAttachment)
+        .where(
+          and(
+            eq(chatAttachment.organizationId, key.organizationId),
+            eq(chatAttachment.messageId, key.messageId),
+            eq(chatAttachment.id, key.attachmentId),
+          ),
+        ),
+    ),
+});
+
+/** The message under its row's lock, with its author and the blocks that name its pictures. */
+const lockMessageInWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, messageId: Schema.String }),
+  Result: Schema.Struct({
+    authorMemberId: Schema.String,
+    blocks: Schema.Array(chatReadBlockSchema),
+  }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ authorMemberId: chatMessage.authorMemberId, blocks: chatMessage.blocks })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            eq(chatMessage.id, key.messageId),
+          ),
+        )
+        .for("update"),
+    ),
+});
+
+/** The attachment ids a message's image blocks name. */
+function namedPictures(blocks: readonly ChatReadBlock[]): ReadonlySet<string> {
+  return new Set(
+    blocks.flatMap((block) =>
+      block.type === CHAT_BLOCK.IMAGE && "attachmentId" in block ? [block.attachmentId] : [],
+    ),
+  );
+}
+
+/**
+ * Keeps the pictures of a message, under the ids its image blocks name,
+ * and deletes the ones it had that none of them names, so a picture an
+ * ask dropped when it was posted again is dropped from the store. The
+ * caller reads each picture's bytes from the poster's sandbox and mints
+ * the id its block names. Written under the message's lock, so two writes
+ * of one message's pictures take turns. Answers whether the message is the
+ * author's, which the account acts as, in the workspace, and names every
+ * picture handed in; nothing is written where it is not.
+ */
+export function attachMessageImages(
+  userId: string,
+  organizationId: string,
+  authorMemberId: string,
+  messageId: string,
+  images: readonly ChatImageWrite[],
+): ChatStoreEffect<boolean> {
+  return transaction(
+    Effect.gen(function* () {
+      const author = yield* readerIn(userId, organizationId, authorMemberId);
+      if (Option.isNone(author) || !actsAs(userId, author.value)) return false;
+      const message = yield* lockMessageInWorkspace({ organizationId, messageId });
+      if (Option.isNone(message) || message.value.authorMemberId !== authorMemberId) return false;
+      const named = namedPictures(message.value.blocks);
+      if (!images.every((image) => named.has(image.id))) return false;
+      const now = yield* DateTime.nowAsDate;
+      yield* deleteOtherAttachments({ messageId, kept: images.map((image) => image.id) });
+      yield* Effect.forEach(images, (image) =>
+        insertAttachment({
+          id: image.id,
+          organizationId,
+          messageId,
+          contentType: image.contentType,
+          byteCount: image.bytes.byteLength,
+          bytes: image.bytes,
+          now,
+        }),
+      );
+      return true;
+    }),
+  );
+}
+
+/** The picture, where it is the message's: its type and its bytes; nothing where the account is not in the workspace or the message carries no such picture. */
+export function readAttachment(
+  userId: string,
+  organizationId: string,
+  messageId: string,
+  attachmentId: string,
+): ChatStoreEffect<Option.Option<ChatImage>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* findAttachment({ organizationId, messageId, attachmentId });
   });
 }

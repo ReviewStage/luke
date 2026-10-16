@@ -166,6 +166,27 @@ test("a sent line is read back by a developer's row it did not know holding its 
   assert.equal(messageWords(two[2] ?? task), "Go on.");
 });
 
+test("a chat notice of the same words as a line still on its way never reads that line back; the developer's own row does", () => {
+  const plan = developer("m-plan", "Go on.");
+  const line: SentLine = {
+    id: "sent-1",
+    text: "Stop.",
+    attachments: [],
+    steers: false,
+    known: knownDeveloperRows([plan]),
+  };
+  const notice: CodingAgentMessage = {
+    ...developer("m-notice", "Stop."),
+    metadata: { author: "human", channel: "chat", chat_seq: 9, from: "maria" },
+  };
+  assert.deepEqual(unreadSentLines([line], [plan, notice]).lines, [line]);
+  const typed: CodingAgentMessage = {
+    ...developer("m-1", "Stop."),
+    metadata: { author: "developer", channel: "typed" },
+  };
+  assert.deepEqual(unreadSentLines([line], [plan, notice, typed]).lines, []);
+});
+
 test("the lines sent and not read back follow the transcript's rows, as the developer's own, in the order they went", () => {
   const task = developer("m-plan", "Go on.");
   const taken = developer("m-1", "Taken.");

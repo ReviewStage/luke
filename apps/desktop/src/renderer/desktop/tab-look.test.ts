@@ -232,6 +232,17 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
+test("the plan's own tab closes beside the agents', and the column's + offers the plan to open it again in the look its tab wears", () => {
+  const column = mount().querySelector(".main-tabs");
+  assert.ok(column, "the plan's column's strip");
+  const pill = column.querySelector('.tab[data-anchored="true"]');
+  assert.equal(pill?.getAttribute("data-closable"), "true");
+  const tabs = tabLooks(column);
+  const rows = rowLooks(column);
+  assert.ok(tabs.has(TASK.name), "the strip has the plan's tab");
+  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name));
+});
+
 test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear", () => {
   const panel = mount().querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");

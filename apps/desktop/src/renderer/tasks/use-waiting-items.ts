@@ -20,7 +20,10 @@ import type { TasksControl } from "./use-tasks-tab";
  * Main's read of the account counts only what waits on its own agents, so
  * a place that lists what waits as the window's Inbox does reads each plan
  * holding an item whole, and each agent with no plan main says something
- * waits on, through the Inbox's own reads.
+ * waits on, through the Inbox's own reads. Every open item is listed, whoever
+ * it waits on, since Factory counts what holds a teammate's task up and a
+ * person's page what waits on them; Home keeps only the reader's own
+ * (`needsReader`).
  */
 
 /** What waits, the latest changed first; whether a read is still out or did not answer; and Retry. */
@@ -67,8 +70,14 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     }),
     ...tasklessGroups(tasks.inboxTaskless, planless.items, tasks.workspace?.id),
   ];
+  // Note that no reader is named, so every open item is kept as one that waits, whoever started its agent.
   const items = listedItems(
-    inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
+    inboxList(entries, {
+      grouping: INBOX_GROUPING.NEWEST,
+      waitingOnly: true,
+      chosen: undefined,
+      readerId: undefined,
+    }),
   );
   // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
   const reading =

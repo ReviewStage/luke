@@ -39,7 +39,14 @@ import {
 } from "@luke/ui/task-list-model";
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
+import {
+  FactoryIcon,
+  HouseIcon,
+  InboxIcon,
+  ListTodoIcon,
+  MessagesSquareIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
@@ -967,6 +974,36 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Issues page's row, after the Automations page's and drawn as it is:
+ * its glyph, its name, and its chord. A press opens the window's Issues page
+ * (`issues-page.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarIssuesRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-issues"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.ISSUES)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <ListTodoIcon />
+      Issues
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The Automations page's row, after Factory's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
@@ -1104,11 +1141,12 @@ function SidebarColumn({
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, the Automations page, and Chat stand in the plan's place, so while one does no plan is the place shown.
+  // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Issues page stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inFactory = onTasks && tasks.factoryView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
+  const inIssues = onTasks && tasks.issuesView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1124,11 +1162,13 @@ function SidebarColumn({
     inFactory ||
     inAutomations ||
     inChat ||
+    inIssues ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Factory, the Automations page, and Chat are experiments: each row stands only while the account has it on.
+  // Factory, the Automations page, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1153,6 +1193,10 @@ function SidebarColumn({
   const openFactory = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.factoryView.onOpen();
+  };
+  const openIssues = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.issuesView.onOpen();
   };
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1376,6 +1420,13 @@ function SidebarColumn({
           failed={automationFailed}
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
+        />
+      ) : null}
+      {issuesOn ? (
+        <SidebarIssuesRow
+          current={inIssues}
+          disabled={!tasks.signedIn}
+          onOpen={chosen(openIssues)}
         />
       ) : null}
       <hr className="sidebar-rule" />
