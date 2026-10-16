@@ -2085,22 +2085,7 @@ button.pull-request-check:hover {
   line-height: 16px;
 }
 
-/* A preview's rows (diff-rows.tsx) on the diff colours Files changed draws
-   in: the tint of a line added or removed, and git's note on a line. */
-.pull-request-thread-lines > .code-line[data-diff="added"] {
-  background: var(--diff-added-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="removed"] {
-  background: var(--diff-removed-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* The preview stands in the box rather than filling a tab, on a File tab's ground. */
+/* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;

@@ -27,10 +27,27 @@ export interface DiffLook {
   readonly wrap: boolean;
 }
 
-/** What the view hands the bundle: one file's patch, headed as git writes one, and how to draw it. */
+/** Which side of a diff a selected line is counted on: the old side's, a removed line's, or the new side's. */
+export const DIFF_SELECTION_SIDE = {
+  DELETIONS: "deletions",
+  ADDITIONS: "additions",
+} as const;
+
+/** The lines lit in a diff, from a line on one side to a line on either, as a review thread's are. */
+export interface DiffSelection {
+  readonly start: number;
+  readonly side: (typeof DIFF_SELECTION_SIDE)[keyof typeof DIFF_SELECTION_SIDE];
+  readonly end: number;
+  readonly endSide: (typeof DIFF_SELECTION_SIDE)[keyof typeof DIFF_SELECTION_SIDE];
+}
+
+/** What the view hands the bundle: one file's patch, headed as git writes one, how to draw it, the lines lit in it, if any, and whether it is an excerpt. */
 export interface DiffViewProps {
   readonly patch: string;
   readonly look: DiffLook;
+  readonly selected?: DiffSelection | undefined;
+  /** Whether the patch is an excerpt, a few lines of a file as a review thread's, drawn with nothing said of the lines around them. */
+  readonly excerpt?: boolean | undefined;
 }
 
 /** The diff as mounted: drawn again for new props, and taken down. */
