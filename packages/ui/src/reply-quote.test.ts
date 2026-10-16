@@ -7,7 +7,6 @@ import {
   messageBlocks,
   messageText,
   replyOf,
-  wordsBesideQuotes,
 } from "./reply-quote.js";
 
 /**
@@ -66,9 +65,4 @@ test("a > line that runs into the lines beside it is words, as Markdown would no
     lines("Above", "> not apart", "Below"),
   ]);
   assert.deepEqual(messageBlocks(">no space"), [lines(">no space")]);
-});
-
-test("the developer's own words are what stands beside the quotes, nothing where there are only quotes", () => {
-  assert.equal(wordsBesideQuotes("> A or B\n\nB, please."), "B, please.");
-  assert.equal(wordsBesideQuotes("> A or B\n\n> C\n\n"), "");
 });

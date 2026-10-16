@@ -124,11 +124,3 @@ export function messageText(blocks: readonly MessageBlock[]): string {
     )
     .join(QUOTE_GAP);
 }
-
-/** The developer's own words in a message, its quotes left out, trimmed; empty where it holds nothing but quotes. */
-export function wordsBesideQuotes(text: string): string {
-  return messageBlocks(text)
-    .flatMap((block) => (block.kind === MESSAGE_BLOCK.WORDS ? [block.lines.join(NEWLINE)] : []))
-    .join(NEWLINE)
-    .trim();
-}

@@ -14,7 +14,6 @@ import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
 import { lapsedServer, namedServers, SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { wordsBesideQuotes } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -111,8 +110,10 @@ import { useKnownNames } from "./use-known-names";
  * on, and the caret goes to a fresh line under it, so the developer answers
  * there; Reply again without a word between stacks the quotes, and words
  * between them answer point by point (`reply-to-selection.tsx`). A quote
- * goes out as a Markdown blockquote set apart by a blank line, and is no
- * message of its own, so it goes only with words or files.
+ * goes out as a Markdown blockquote set apart by a blank line. Note that
+ * a quote is part of the words like any other, and sends as they do,
+ * because the words cannot tell a Reply's quote from a `>` line the
+ * developer typed or pasted, and one of those alone is a message.
  *
  * Words can be spoken into the box as well: the microphone left of the
  * round button records in place of the foot's controls until ✓ or Enter sends the clip
@@ -322,8 +323,7 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  // Note that quotes alone are no message, so they leave Send off and Stop standing.
-  const empty = !hasWordsOrFiles(wordsBesideQuotes(composer.draft), composer.attachments);
+  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(editorBundleAtom);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;

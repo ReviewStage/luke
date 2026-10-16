@@ -8,7 +8,6 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { wordsBesideQuotes } from "@luke/ui/reply-quote";
 import { useEffect, useRef, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts";
 import {
@@ -36,10 +35,7 @@ import {
  * a send whose answer was lost reaches the agent once; editing the words
  * is a new message under a new key, so Retry goes with the edit, as it
  * does with a file put on or taken off. The files go with the words and
- * come back into the box with them. The agent's words a message quotes are
- * part of its words, as blockquotes (`@luke/ui/reply-quote`), but a quote
- * is no message of its own: words with nothing but quotes send nothing
- * without files beside them. A refusal
+ * come back into the box with them. A refusal
  * that is for good holds the box, disabled, with its reason under it.
  * Another agent's tab starts from nothing of this one's.
  *
@@ -165,13 +161,7 @@ export function useAgentComposer(input: {
   ) => {
     const text = kept.draft.text.trim();
     const { attachments } = kept.draft;
-    if (
-      !hasWordsOrFiles(wordsBesideQuotes(text), attachments) ||
-      held.sending ||
-      held.closed !== undefined
-    ) {
-      return;
-    }
+    if (!hasWordsOrFiles(text, attachments) || held.sending || held.closed !== undefined) return;
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
     const line: SentLine = { id, text, attachments, known, steers: input.running === true };
     const { update } = kept;

@@ -38,9 +38,9 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer";
  * over a selection inside the agent's words and nowhere else, not over its
  * thoughts or the developer's words; each press lays a quote block in where
  * the caret stands and hands the box the caret on a line under it, the
- * message sent holds each quote as a Markdown blockquote set apart, quotes
- * alone send nothing, a message that did not go comes back with its quotes
- * as blocks, and a quote's way off takes it out; and on the agent's own
+ * message sent holds each quote as a Markdown blockquote set apart, a
+ * message that did not go comes back with its quotes as blocks, a quote's
+ * way off takes it out, and a typed `>` line alone sends; and on the agent's own
  * tab, Reply stands down while a message is out.
  */
 
@@ -217,7 +217,7 @@ test("a selection outside the agent's words, in its thought or the developer's w
   assert.equal(tab.reply() === undefined, true);
 });
 
-test("quotes alone send nothing, a message that did not go comes back with its quotes as blocks, and a quote's way off takes it out", async () => {
+test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
   const tab = await mounted(() =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
   );
@@ -225,10 +225,6 @@ test("quotes alone send nothing, a message that did not go comes back with its q
   await tab.pressReply();
   tab.select(AGENT_WORDS, "Option B", "review.");
   await tab.pressReply();
-  pressInComposer(tab.container, "Enter");
-  await settle();
-  assert.deepEqual(tab.sent, [], "a quote alone asks the agent nothing");
-
   typeInComposer(tab.container, "Ship it");
   pressInComposer(tab.container, "Enter");
   await settle();
@@ -247,9 +243,16 @@ test("quotes alone send nothing, a message that did not go comes back with its q
   assert.deepEqual(tab.blocks(), ["> Option B waits for review.", "Ship it"]);
   pressInComposer(tab.container, "Enter");
   await settle();
+
+  // A `>` line the developer typed is words, as the quote it reads back as is.
+  composerEditor(tab.container).editor?.commands.clearContent(true);
+  typeInComposer(tab.container, "> Ship today?");
+  pressInComposer(tab.container, "Enter");
+  await settle();
   assert.deepEqual(tab.sent, [
     "> Option A ships today.\n\n> Option B waits for review.\n\nShip it",
     "> Option B waits for review.\n\nShip it",
+    "> Ship today?",
   ]);
 });
 
