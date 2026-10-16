@@ -11,7 +11,7 @@ import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
@@ -237,6 +237,7 @@ function RevisionRow({
           <span className="version-row-head">
             <span className="version-row-author" data-author={author.kind}>
               {actorName(author)}
+              <LeftWords actor={author} />
             </span>
             <RelativeTime className="version-row-time" at={lastEdit.at} now={now} />
           </span>
@@ -285,6 +286,7 @@ function SectionsHead({
       <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
       <span className="version-row-author" data-author={author.kind}>
         {actorName(author)}
+        <LeftWords actor={author} />
       </span>
     </>
   );

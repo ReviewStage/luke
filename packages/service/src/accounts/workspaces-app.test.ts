@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   type MemberSeams,
@@ -13,6 +14,13 @@ import { member, organization, user } from "@luke/database/schemas/auth";
 import { plan } from "@luke/database/schemas/plan";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationScope,
+} from "@luke/features/automation-wire";
 import { INBOX_REPLY, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import {
   workspaceInvitationAnswerSchema,
@@ -1137,6 +1145,53 @@ it.effect(
           Option.isSome(yield* answerInboxItem(lin, posted.success.id, 1, done, randomUUID())),
         );
         yield* leaving(plugin, lin, acme);
+
+        const answered = yield* readMembers(seams, ada, membersAt(acme));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            ],
+            former: [{ userId: lin, name: "Lin Chen" }],
+          },
+        });
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a members read names who left having made one of the workspace's automations, and nobody whose only automation was their own",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const lin = yield* openGithubAccount("Lin Chen");
+        const kai = yield* openGithubAccount("Kai Ito");
+        const acme = yield* openTeam(api, ada, [
+          { userId: lin, role: "member" },
+          { userId: kai, role: "member" },
+        ]);
+        const making = (userId: string, scope: AutomationScope) =>
+          createAutomation(userId, {
+            planId: null,
+            organizationId: acme,
+            repositories: ["acme/relay"],
+            name: "Flaky-test sweep",
+            scope,
+            trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+            guards: AUTOMATION_DEFAULT_GUARDS,
+            nextRunAt: null,
+            webhookSecretHash: null,
+          });
+        assert.ok(Option.isSome(yield* making(lin, AUTOMATION_SCOPE.WORKSPACE)));
+        assert.ok(Option.isSome(yield* making(kai, AUTOMATION_SCOPE.PERSONAL)));
+        yield* leaving(plugin, lin, acme);
+        yield* leaving(plugin, kai, acme);
 
         const answered = yield* readMembers(seams, ada, membersAt(acme));
 
