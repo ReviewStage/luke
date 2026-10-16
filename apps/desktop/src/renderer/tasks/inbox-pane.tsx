@@ -22,6 +22,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { BackIcon, ChevronRightIcon } from "@luke/ui";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -46,7 +47,6 @@ import { BusyLabel, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   AgentActorRef,
   AgentCard,

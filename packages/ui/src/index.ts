@@ -3,6 +3,7 @@ export * from "./components/button/button.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
 export * from "./components/form-field/form-field.js";
+export * from "./components/hover-card/hover-card.js";
 export * from "./components/layout/layout.js";
 export * from "./components/segmented/segmented.js";
 export * from "./components/skeleton/skeleton.js";

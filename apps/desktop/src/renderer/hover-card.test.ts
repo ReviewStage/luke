@@ -57,15 +57,19 @@ interface HeadWords {
 
 /** The one head of the card drawn in `within`, read part by part. */
 function headOf(within: ParentNode): HeadWords {
-  const heads = within.querySelectorAll(".card > .card-head");
+  const heads = within.querySelectorAll(".luke-hover-card > .luke-hover-card-head");
   assert.equal(heads.length, 1, "the card has one head");
   const head = heads[0];
   assert.ok(head);
   return {
-    glyph: head.querySelector(":scope > .card-glyph") !== null,
-    name: head.querySelector(":scope > .card-title > .card-name")?.textContent ?? undefined,
-    sub: head.querySelector(":scope > .card-title > .card-sub")?.textContent ?? undefined,
-    corner: head.querySelector(":scope > .card-corner")?.textContent ?? undefined,
+    glyph: head.querySelector(":scope > .luke-hover-card-glyph") !== null,
+    name:
+      head.querySelector(":scope > .luke-hover-card-title > .luke-hover-card-name")?.textContent ??
+      undefined,
+    sub:
+      head.querySelector(":scope > .luke-hover-card-title > .luke-hover-card-sub")?.textContent ??
+      undefined,
+    corner: head.querySelector(":scope > .luke-hover-card-corner")?.textContent ?? undefined,
   };
 }
 
@@ -211,7 +215,10 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
     sub: undefined,
     corner: undefined,
   });
-  assert.equal(skill.querySelector(".card > .card-note")?.textContent, "Cut a release.");
+  assert.equal(
+    skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,
+    "Cut a release.",
+  );
 });
 
 test("a call's card is a turn's card: the model at the head over when it ran, how it ended at the corner, and its figures under a rule", () => {
@@ -251,7 +258,10 @@ test("a call's card is a turn's card: the model at the head over when it ran, ho
     assert.match(head.sub ?? "", /Oct 14, 2026/u, "when it ran stands under the model");
   }
   for (const card of [turn, callCard]) {
-    assert.ok(card.querySelector(".card > .card-rule + dl"), "the figures stand under a rule");
+    assert.ok(
+      card.querySelector(".luke-hover-card > .luke-hover-card-rule + dl"),
+      "the figures stand under a rule",
+    );
   }
 });
 

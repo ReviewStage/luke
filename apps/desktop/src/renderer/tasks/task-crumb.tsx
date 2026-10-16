@@ -2,14 +2,13 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ProviderMark } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, ProviderMark } from "@luke/ui";
 import { type Actor, actorName, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
-import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { useCreator, useMemberDirectory } from "../member-directory";
 import { useActorDoor } from "../person-door";
 import { RepositoryPicture } from "../repository-picture";
@@ -93,14 +92,14 @@ function creatorFirst(
 function CreatedBy({ creation }: { creation: Creation }): React.JSX.Element {
   const now = useMinute();
   return (
-    <CardNote>
+    <HoverCardNote>
       <span className="actor-line task-crumb-created">
         {"Created by "}
         <ActorMark actor={creation.creator} />
         {` ${actorName(creation.creator, { sentence: true })} · `}
         <RelativeTime at={creation.at} now={now} hint={false} ago />
       </span>
-    </CardNote>
+    </HoverCardNote>
   );
 }
 
@@ -169,16 +168,16 @@ function PeopleCard({
     : "Each can read and edit this task, join its calls, and message its agents.";
   return (
     <HoverCard data-people-card="">
-      <CardHead
+      <HoverCardHead
         glyph={<WorkspaceTile workspace={workspace} />}
         name={only ? "Only you" : `Everyone in ${workspace.name}`}
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
       {only || creation === undefined ? null : <CreatedBy creation={creation} />}
-      {only ? null : <CardNote>{note}</CardNote>}
+      {only ? null : <HoverCardNote>{note}</HoverCardNote>}
       {only || members === undefined ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <ul className="task-crumb-people-list">
             {creatorFirst(members, creation).map((member) => (
               <PersonRow
@@ -308,7 +307,7 @@ function RepositoryCard({
   const { github } = workspace;
   return (
     <HoverCard data-repository-card="">
-      <CardHead
+      <HoverCardHead
         glyph={
           <RepositoryPicture
             repository={repository}
@@ -324,12 +323,12 @@ function RepositoryCard({
         }
       />
       {branch !== undefined && branch !== null ? (
-        <CardNote>
+        <HoverCardNote>
           <span className="task-crumb-branch">
             <GitBranchIcon aria-hidden="true" />
             {`Default branch ${branch}`}
           </span>
-        </CardNote>
+        </HoverCardNote>
       ) : null}
     </HoverCard>
   );

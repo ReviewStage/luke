@@ -63,6 +63,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -90,7 +91,6 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";

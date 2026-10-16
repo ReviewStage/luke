@@ -165,8 +165,8 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

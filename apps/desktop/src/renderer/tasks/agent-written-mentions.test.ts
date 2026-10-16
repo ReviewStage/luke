@@ -143,8 +143,8 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   });
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, "Invite funnel");
-  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 2");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Invite funnel");
+  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 2");
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: PAGE, version: 2 }),

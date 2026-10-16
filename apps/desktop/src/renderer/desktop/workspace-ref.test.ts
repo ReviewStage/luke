@@ -124,8 +124,8 @@ test("a workspace's card names it with who shares it: its members counted, or Pe
   assert.deepEqual(
     [team, own].map((card) => [
       card.querySelector(".workspace-card-head > .workspace-tile")?.getAttribute("data-size"),
-      card.querySelector(".card-name")?.textContent,
-      card.querySelector(".card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-name")?.textContent,
+      card.querySelector(".luke-hover-card-sub")?.textContent,
     ]),
     [
       ["head", "Acme", "5 members"],

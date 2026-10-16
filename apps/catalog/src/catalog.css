@@ -279,7 +279,7 @@ body {
   flex: 1;
 }
 
-/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }

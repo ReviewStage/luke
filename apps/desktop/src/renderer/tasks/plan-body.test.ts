@@ -297,7 +297,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
   assert.equal(editedLines(view)[0], "Edited by Fix auth flow · now");
   assert.equal(ref?.tagName, "BUTTON");
   assert.ok(view.querySelector('.plan-edit-note .actor-mark[data-kind="agent"] .state-glyph'));
-  assert.equal(cardOf(view).querySelector(".card-name")?.textContent, "Fix auth flow");
+  assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
 

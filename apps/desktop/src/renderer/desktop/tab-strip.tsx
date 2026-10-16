@@ -1,10 +1,10 @@
 import { CloseIcon, cssCustomProperties } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   ActionMenu,
   atPointer,

@@ -258,7 +258,7 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   });
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.ok(card, "the plan's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
   // The card is the plan as the list names it, its agents among it.
   assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
@@ -277,10 +277,10 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, WORKING.title);
-  assert.ok(card.querySelector(".card-rule"));
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
+  assert.ok(card.querySelector(".luke-hover-card-rule"));
   assert.equal(
-    [...card.querySelectorAll(".card-note")].at(-1)?.textContent,
+    [...card.querySelectorAll(".luke-hover-card-note")].at(-1)?.textContent,
     "Terminal in this agent’s sandbox",
   );
 });
@@ -296,8 +296,8 @@ test("a page's tab hangs the page's card: its title and version over its newest 
   });
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, FUNNEL.title);
-  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 3");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 3");
   const frame = card.querySelector("iframe");
   assert.ok(frame, "the card previews the page");
   assert.equal(

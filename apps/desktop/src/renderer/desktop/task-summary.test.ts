@@ -167,7 +167,7 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
@@ -208,8 +208,12 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
   hover(row);
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, funnel.title);
-  assert.equal(card.querySelector(".card-sub"), null, "a page's one version is not counted");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, funnel.title);
+  assert.equal(
+    card.querySelector(".luke-hover-card-sub"),
+    null,
+    "a page's one version is not counted",
+  );
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId, pageId: funnel.id, version: 1 }),

@@ -1,7 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
@@ -68,7 +68,7 @@ export function newestFileNote(
 
 /**
  * A file's card, its tab's and every place naming it, drawn from the parts
- * every hover card is (`hover-card.tsx`): the file's type icon and its
+ * every hover card is (`@luke/ui`'s `HoverCard`): the file's type icon and its
  * whole path, its repository under the path where the place names one, and
  * under them Luke's note on its lines, where the place knows one.
  */
@@ -84,8 +84,8 @@ export function FileCard({
 }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="" data-file-card="">
-      <CardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      <HoverCardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
 }

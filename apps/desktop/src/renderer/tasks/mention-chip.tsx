@@ -16,7 +16,16 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
-import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
+import {
+  CallIcon,
+  DocumentIcon,
+  GearIcon,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  ProviderMark,
+  UserIcon,
+} from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -32,7 +41,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
@@ -364,7 +372,7 @@ function MentionCard({
   const lines = standing?.pullRequest?.lines;
   const card = (
     <HoverCard data-mention-card="">
-      <CardHead
+      <HoverCardHead
         glyph={<MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />}
         name={standing?.title ?? whole}
         sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
@@ -373,7 +381,7 @@ function MentionCard({
         <OptionalNote words={branchNote(repository)} />
       ) : null}
       {standing === undefined ? null : (
-        <CardNote>
+        <HoverCardNote>
           {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
           {lines === undefined ? null : (
             <>
@@ -381,10 +389,10 @@ function MentionCard({
               <LinesChanged additions={lines.additions} deletions={lines.deletions} />
             </>
           )}
-        </CardNote>
+        </HoverCardNote>
       )}
       <OptionalNote words={standing?.byline} />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
   // A plan, a section, a page, or an agent hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
@@ -430,7 +438,7 @@ function MentionCard({
 
 /** A card's note, where there are words for one. */
 function OptionalNote({ words }: { words: string | undefined }): ReactNode {
-  return words === undefined ? null : <CardNote>{words}</CardNote>;
+  return words === undefined ? null : <HoverCardNote>{words}</HoverCardNote>;
 }
 
 /**
@@ -597,8 +605,8 @@ function PlaceChip({
   const glyph = <PlaceGlyph kind={place.kind} />;
   const own = (
     <HoverCard data-mention-card="">
-      <CardHead glyph={glyph} name={name} />
-      {under === undefined ? null : <CardNote>{`In ${under}`}</CardNote>}
+      <HoverCardHead glyph={glyph} name={name} />
+      {under === undefined ? null : <HoverCardNote>{`In ${under}`}</HoverCardNote>}
     </HoverCard>
   );
   const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;

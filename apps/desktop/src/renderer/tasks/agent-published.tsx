@@ -5,12 +5,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CopyIcon, ProviderMark } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   checkoutCommand,
   publishedUrl,

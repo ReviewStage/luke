@@ -233,10 +233,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),
-    name: card.querySelector(".card-name")?.textContent,
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
-    corner: card.querySelector(".card-corner")?.textContent,
-    foot: card.querySelector(".card-rule + .card-note")?.textContent,
+    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
     words: card.textContent,
   };
   act(() => {

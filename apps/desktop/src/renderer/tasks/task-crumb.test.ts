@@ -327,7 +327,7 @@ test("the repository's card says the workspace's GitHub account it comes through
     repository.textContent,
     "acme-corp/relayThrough acme-corp on GitHub · AcmeDefault branch trunk",
   );
-  assert.equal(team.querySelector(".card-sub")?.textContent, "3 members");
+  assert.equal(team.querySelector(".luke-hover-card-sub")?.textContent, "3 members");
   assert.deepEqual(asked, ["read repositories"]);
 });
 

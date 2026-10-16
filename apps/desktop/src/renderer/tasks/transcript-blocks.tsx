@@ -25,6 +25,7 @@ import { cn, ProviderMark } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -95,7 +96,6 @@ import {
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";

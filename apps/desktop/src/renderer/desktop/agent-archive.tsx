@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ArchiveIcon, UnarchiveIcon } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
@@ -9,7 +10,6 @@ import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 

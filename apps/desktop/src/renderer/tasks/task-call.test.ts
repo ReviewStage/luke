@@ -305,8 +305,8 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
     assert.ok(card, "the row hangs a tab's card");
     return [
-      card.querySelector(".card-name")?.textContent,
-      card.querySelector(".card-corner")?.textContent,
+      card.querySelector(".luke-hover-card-name")?.textContent,
+      card.querySelector(".luke-hover-card-corner")?.textContent,
     ];
   };
   assert.deepEqual(cardOn(page.querySelector("button[data-subagent-row]")), [
@@ -366,8 +366,8 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
-      card?.querySelector(".card-name")?.textContent,
-      card?.querySelector(".card-note")?.textContent,
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-note")?.textContent,
     ],
     [ref.path, note],
   );

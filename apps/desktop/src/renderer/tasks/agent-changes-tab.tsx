@@ -10,14 +10,13 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon } from "@luke/ui";
+import { CopyIcon, DownloadIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { EmptyState } from "../empty-state";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -308,7 +307,7 @@ export function ChangesCard({
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
-      <CardHead
+      <HoverCardHead
         name={pullRequest.title}
         sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
@@ -318,19 +317,19 @@ export function ChangesCard({
           </>
         }
       />
-      <CardNote>
+      <HoverCardNote>
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </CardNote>
+      </HoverCardNote>
       {people?.author === undefined ? null : (
-        <CardNote oneLine>
+        <HoverCardNote oneLine>
           <OpenedBy person={people.author} writtenAs={people.writtenAs} agent={agent} />
-        </CardNote>
+        </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
-        <CardNote>
+        <HoverCardNote>
           <ReviewersLine reviewers={reviewers} agent={agent} />
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );
