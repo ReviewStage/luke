@@ -3,6 +3,7 @@ import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
+import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
@@ -45,4 +46,5 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_ROW_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
+  FORM_SECTION_EXAMPLE,
 ];
