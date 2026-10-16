@@ -1,11 +1,11 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and the toasts.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
 
 /** What docks at a column's foot: an agent's to-do list and composer, and a plan's call bar, whichever stand. */
-export const DOCKED = ".agent-todos-dock, .agent-composer, .desktop-call-bar";
+const DOCKED = ".agent-todos-dock, .agent-composer, .desktop-call-bar";
 
 /** The card that floats over the column while the sidebar is folded. */
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
@@ -16,25 +16,6 @@ function dockHeight(column: Element): number {
   let top = foot;
   for (const part of column.querySelectorAll(DOCKED)) {
     top = Math.min(top, part.getBoundingClientRect().top);
-  }
-  return Math.max(0, foot - top);
-}
-
-/**
- * From the window's foot to the top of the highest docked part standing
- * under `over`, in any column, or nothing where none does. A part drawn at
- * no height, or kept laid out but invisible (the plan's column under a side
- * panel filling the window), stands under nothing.
- */
-export function dockUnder(over: Element): number {
-  const span = over.getBoundingClientRect();
-  const foot = window.innerHeight;
-  let top = foot;
-  for (const part of document.querySelectorAll(DOCKED)) {
-    const box = part.getBoundingClientRect();
-    if (box.height === 0 || box.right <= span.left || box.left >= span.right) continue;
-    if (getComputedStyle(part).visibility === "hidden") continue;
-    top = Math.min(top, box.top);
   }
   return Math.max(0, foot - top);
 }

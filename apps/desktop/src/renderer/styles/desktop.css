@@ -7803,10 +7803,12 @@ button.automation-run:hover {
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
    its bottom-right corner, newest at the bottom. Over a dock at the
-   window's foot under it (a plan's call bar, an agent's composer) the stack
-   stands just above that dock, the window's step clear of it, as the folded
-   sidebar's call card does in the other corner; the toasts measure the dock
-   (`--toast-dock`). The window is never narrow enough for the two to meet.
+   window's foot (a plan's call bar, an agent's composer or its to-do list)
+   the stack stands just above the highest of them, the window's step clear
+   of it, as the folded sidebar's call card does in the other corner. It
+   measures nothing: each dock names itself an anchor (below), and the
+   stack's foot stands on the anchor's top, or in the corner where none
+   stands. The window is never narrow enough for the two to meet.
    Each rises in on the spring and fades first on its way out; the stack
    itself takes no pointer, so only a card with something to press stands in
    the way of what is under it, and that card is always one the developer
@@ -7815,9 +7817,34 @@ button.automation-run:hover {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: max(var(--space-16), calc(var(--toast-dock, 0px) + var(--space-8)));
+  bottom: max(
+    var(--space-16),
+    calc(anchor(--dock-call top, 0px) + var(--space-8)),
+    calc(anchor(--dock-composer top, 0px) + var(--space-8)),
+    calc(anchor(--dock-todos top, 0px) + var(--space-8))
+  );
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
+}
+
+/* What docks at a column's foot names itself, by kind, the anchor the
+   toasts stand on; a column hidden under the side panel filling the window
+   leaves its docks unnamed, since nothing of it stands under the toasts. */
+.desktop-call-bar {
+  anchor-name: --dock-call;
+}
+
+.agent-composer {
+  anchor-name: --dock-composer;
+}
+
+.agent-todos-dock {
+  anchor-name: --dock-todos;
+}
+
+:is(.desktop-plan-main[hidden], .desktop-plan > .agent-page[hidden])
+  :is(.desktop-call-bar, .agent-composer, .agent-todos-dock) {
+  anchor-name: none;
 }
 
 .toast-stack > ol {

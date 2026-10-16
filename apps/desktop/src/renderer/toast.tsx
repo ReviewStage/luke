@@ -41,9 +41,8 @@ import { MOTION_DURATION_MS } from "@luke/brand";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
-import { type RefObject, useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { DOCKED, dockUnder } from "./desktop/column-dock";
 import { rendererRuntime } from "./renderer-runtime";
 
 /** What a toast reports: the act done, the act refused, or something asked of the developer. */
@@ -415,41 +414,6 @@ function useWindowRoom(step: (step: ToastStep) => void): void {
   }, [step]);
 }
 
-/**
- * Keeps the stack clear of what docks at the window's foot under it, a
- * plan's call bar or an agent's composer, by saying that dock's height on
- * the stack as `--toast-dock`, which its `bottom` stands above. Note that it
- * follows the docks only while a toast stands, because an empty stack draws
- * nothing, and watching the whole window for docks coming and going is not
- * worth doing for nothing.
- */
-function useDockClearance(stack: RefObject<HTMLElement | null>, standing: boolean): void {
-  useLayoutEffect(() => {
-    const host = stack.current;
-    if (host === null || !standing) return;
-    const write = () => host.style.setProperty("--toast-dock", `${dockUnder(host)}px`);
-    const sized = new ResizeObserver(write);
-    const follow = () => {
-      sized.disconnect();
-      for (const part of document.querySelectorAll(DOCKED)) sized.observe(part);
-    };
-    const arrived = new MutationObserver(() => {
-      follow();
-      write();
-    });
-    arrived.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("resize", write);
-    follow();
-    write();
-    return () => {
-      sized.disconnect();
-      arrived.disconnect();
-      window.removeEventListener("resize", write);
-      host.style.removeProperty("--toast-dock");
-    };
-  }, [stack, standing]);
-}
-
 /** The glyph a toast leads with: a check for what was done, an alert for what was refused, and the Inbox's tray for an ask. */
 function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
   switch (tone) {
@@ -538,13 +502,11 @@ function ToastCard({
 export function ToastHost(): React.JSX.Element {
   const { shown } = useAtomValue(toastStackAtom);
   const step = useAtomSet(toastLifeAtom);
-  const stack = useRef<HTMLElement>(null);
   const list = useStackGlide();
   useWindowRoom(step);
-  useDockClearance(stack, shown.length > 0);
   return createPortal(
     <>
-      <section ref={stack} className="toast-stack" aria-label={STACK_LABEL}>
+      <section className="toast-stack" aria-label={STACK_LABEL}>
         <ol ref={list}>
           {shown.map((toast) => (
             <ToastCard key={toast.id} shown={toast} step={step} />
