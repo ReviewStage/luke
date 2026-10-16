@@ -101,3 +101,28 @@
   color: var(--danger-text);
   font-size: 12px;
 }
+
+/* The board stands in Factory's scroller, which keeps no room above its
+   line for the summary Factory heads it with; the board takes that room
+   back from the toolbar. */
+.issue-board {
+  margin-top: var(--space-16);
+}
+
+/* A card's title stands whole under its line, wrapping to three lines at
+   most, since a column is too narrow for the list's single line. Note that
+   it outranks Home's row, which holds a name to one line. */
+.issue-board .home-row .issue-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  margin-top: var(--space-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+/* A card's time ends its line, wherever the identifier and mark leave off. */
+.issue-board .sidebar-task-time {
+  margin-left: auto;
+}

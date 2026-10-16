@@ -56,12 +56,17 @@ function byPressing(a: Issue, b: Issue): number {
   return rank === 0 ? b.updatedAt - a.updatedAt : rank;
 }
 
+/** Every status's issues in the list's order, each sorted, an empty status among them: a board's columns. */
+export function issueColumns(issues: readonly Issue[]): readonly IssueGroup[] {
+  return ISSUE_STATUS_ORDER.map((status) => ({
+    status,
+    issues: issues.filter((issue) => issue.status === status).toSorted(byPressing),
+  }));
+}
+
 /** The issues grouped by status in the list's order, each group sorted, and no group empty. */
 export function issueGroups(issues: readonly Issue[]): readonly IssueGroup[] {
-  return ISSUE_STATUS_ORDER.flatMap((status) => {
-    const standing = issues.filter((issue) => issue.status === status).toSorted(byPressing);
-    return standing.length === 0 ? [] : [{ status, issues: standing }];
-  });
+  return issueColumns(issues).filter((group) => group.issues.length > 0);
 }
 
 /**
