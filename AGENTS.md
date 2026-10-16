@@ -42,8 +42,10 @@ the check names. A component is placed by review under the same rule.
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
-  voice window, a counted event, a trace, or a fixture. Nothing in this repository
-  scans for secrets, so this rule is the whole of the check. Two carve-outs,
+  voice window, a counted event, a trace, or a fixture. The repository check
+  (`scripts/repository-checks.sh`) refuses a tracked literal shaped like a
+  provider's credential; nothing else scans for secrets, so past that this rule
+  is the whole of the check. Two carve-outs,
   approved by Dean on 2026-10-13: the output of `run_on_mac`, a command an agent
   ran on the developer's own Mac, may reach the conversation, the model, and the
   tool's events as it printed; a trace, a counted event, and a fixture still never
