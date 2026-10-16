@@ -709,12 +709,16 @@ as a run starts and as it ends, and Sentry creates the monitor from the
 first check-in.
 
 The SDK runs with Sentry's default data collection, which `PRIVACY.md` and
-root `AGENTS.md`'s "Never" describe. `SENTRY_DSN` is the project's DSN, set
-for Production and Preview; without it the SDK starts disabled. `VERCEL_ENV`
-names the environment. `scripts/bundle-functions.ts` uploads the function
-bundles' source maps when the build holds `SENTRY_AUTH_TOKEN`, under the
-release the plugin writes into each bundle from the deployment's commit.
-Alert rules (a new issue, a regression, a spike) are set in Sentry, not here.
+root `AGENTS.md`'s "Never" describe. Sentry's Vercel integration, which maps
+this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
+`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
+names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
+disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
+uploads the function bundles' source maps when the build holds
+`SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
+the deployment's commit. Alert rules are set in Sentry, not here: a Slack
+`#alerts` message on more than ten events in five minutes, and an email to
+the issue's owners on a high-priority issue.
 
 ## Hosted voice service
 
