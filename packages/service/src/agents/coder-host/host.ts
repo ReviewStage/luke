@@ -110,10 +110,10 @@ import { CODER_TOOL } from "./tool-set.js";
  * awaiting its turn by the message route, and the relay takes that line
  * into the turn that receives it, so nothing needs binding here. The
  * agent's title is the host's one model call of its own: generated from its
- * first exchange as one of its first turns ends, written where no title
- * stands yet, and never again, so a name the developer gives is the last
- * word; each worker is named by the same call over the task its delegation
- * handed it.
+ * opening as the relay writes it, and from its first exchange as one of its
+ * first turns ends, written where no title stands yet, and never again, so
+ * a name the developer gives is the last word; each worker is named by the
+ * same call over the task its delegation handed it.
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
@@ -248,8 +248,6 @@ export interface CoderHost extends HostAdmission {
     session: SessionContext["session"],
     state: RelayStateStore,
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
-  /** The agent's title generated from its first exchange as one of its first turns ends, written where none stands; a later turn, a failed or empty answer, and a title already standing each leave the row as it is. */
-  title(admitted: AdmittedConversation): HostEffect<void>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
   delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
   /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
@@ -308,7 +306,7 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
+  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed, then, as the developer's words are received or a turn completes, asks for the agent's title where none stands and waits for it (`title.ts`); a title that fails is logged and the relay still answers. */
   relay(
     event: MessageStreamEvent,
     admitted: AdmittedConversation,
@@ -333,6 +331,11 @@ export type InboxCall =
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
+}
+
+/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too. */
+function asksTitle(event: MessageStreamEvent): boolean {
+  return event.type === "message.received" || event.type === "turn.completed";
 }
 
 /** The host over the deployment's seams. */
@@ -676,15 +679,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
       ),
 
-    title: (admitted) =>
-      Effect.gen(function* () {
-        const model = seams.titleModel(admitted.target.userId);
-        if (model === undefined) return;
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return;
-        yield* titleCodingAgent(model, admitted.target, found.success);
-      }),
-
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
         const model = seams.titleModel(admitted.target.userId);
@@ -719,9 +713,17 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           state,
         });
-        if (agent !== undefined) {
-          yield* recordContext(event, admitted.target.userId, agent, prompt);
-        }
+        if (agent === undefined) return;
+        yield* recordContext(event, admitted.target.userId, agent, prompt);
+        const titleModel = seams.titleModel(admitted.target.userId);
+        if (titleModel === undefined || !asksTitle(event)) return;
+        // Note that the title is awaited here rather than forked, because eve's step, and the
+        // function instance under it, end when the hook returns and take a detached call with them.
+        yield* titleCodingAgent(titleModel, admitted.target, agent).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`The agent's title was not written: ${failure._tag}`),
+          ),
+        );
       }),
   };
 }

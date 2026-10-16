@@ -19,14 +19,17 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
 
 /**
- * title.ts -- a coding agent's title, generated from its first exchange as a turn of its ends, and a subagent's from the task it was handed.
+ * title.ts -- a coding agent's title, generated from its opening as its words are received and from its first exchange as a turn of its ends, and a subagent's from the task it was handed.
  *
  * One small call, bounded in words and in time, asked for a sentence-case
  * title of a few words with nothing around it; what comes back is tidied
  * of the quotes and the full stop a model adds anyway, and cut to the
- * wire's bound. An agent is named from what the developer first said to
+ * wire's bound. An agent is asked for its title as the developer's words
+ * are received, so a first turn that runs long is named as it starts, from
+ * its opening alone, and again as each of its first turns ends where none
+ * stands yet. It is named from what the developer first said to
  * it, what they said last where that is another message, and what it last
- * answered, each cut to an excerpt, as a chat is
+ * answered where it has, each cut to an excerpt, as a chat is
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
  * names it, and one started on a prompt of its own is named for that prompt.
@@ -36,7 +39,7 @@ import { CURSOR_START } from "./transcript.js";
  * fired it; a run about one pull request or issue was named by it as it
  * started (`automation-runs.ts`), so no model is asked.
  * An exchange that names no task yet, a greeting or a file with no words,
- * is answered with nothing, and the next turn's end asks again, for the
+ * is answered with nothing, and the next words or turn's end ask again, for the
  * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or
  * answers nothing writes nothing, and the tab shows the automation's name
  * meanwhile, where an automation's run started the agent, and the model's
@@ -206,11 +209,12 @@ export function titleSubagent(
 
 /**
  * An agent's title generated from its first exchange and written where
- * none stands, as one of its first `CODER.TITLE_TURNS` turns ends: a title
+ * none stands, as words are received in, or as one ends, one of its first
+ * `CODER.TITLE_TURNS` turns: a title
  * already standing, the developer's own included, is never asked for
  * again, an agent past those turns is left on the model's name, and an
  * exchange with no words in it asks nothing. A call that answers nothing
- * writes nothing, so the next turn's end asks again.
+ * writes nothing, so the next words or turn's end ask again.
  */
 export function titleCodingAgent(
   model: LanguageModel,

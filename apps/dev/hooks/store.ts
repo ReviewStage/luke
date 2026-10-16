@@ -41,10 +41,11 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * relayed, because a tab reads the pull request the moment it hears the
  * agent ended and the service keeps that answer a while: an end relayed
  * first would be read against the row as it stood before the turn.
- * The agent's title is generated as one of its first turns completes, once
- * the relay has written the turn's answer it is named from, on a fiber of
- * its own so the hook is not held for it: the title fills in a moment after
- * the turn ends.
+ * The agent's title is generated within the relay, as the developer's words
+ * it is named from are written and again as one of its first turns
+ * completes, and the hook waits for it, bounded by the call's own timeout,
+ * because what a hook leaves running ends with eve's step and the function
+ * instance under it.
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
@@ -149,10 +150,6 @@ export default defineHook({
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
           yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
-          if (event.type === "turn.completed") {
-            // The title is asked for off the hook's path; the fiber outlives this hook and ends on its own.
-            yield* Effect.forkDetach(host.title(admitted.success));
-          }
         }),
       );
       const now = seams.now();
