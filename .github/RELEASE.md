@@ -59,9 +59,7 @@ nothing.
 
 3. **Tag the merged commit.** The tag must point at the squash-merged commit on `main`
    and its version must match `apps/desktop/package.json` exactly; the workflow refuses a
-   tag that does not. The workflow also refuses a commit that is not on `main` or that has
-   not passed every status check `main`'s ruleset requires, because it builds the commit
-   on the strength of those checks rather than running them again.
+   tag that does not.
 
    ```sh
    git fetch origin main
@@ -75,19 +73,11 @@ nothing.
    git push origin v0.1.0
    ```
 
-5. **Let Actions finish.** The run bootstraps the workspace, asks GitHub whether the
-   tagged commit is on `main` with every required check green
-   (`scripts/release/verify-ci.mjs`), runs `./scripts/repository-checks.sh`, imports the
-   Developer ID certificate into a throwaway keychain, builds the signed and notarized
-   artifacts, validates them, and then creates a published, non-draft release titled
-   `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is removed
-   whether the run succeeds or fails.
-
-   The run does not repeat `./scripts/check.sh`: the merge queue ran every check on this
-   exact commit before it reached `main`, and the required checks the workflow reads back
-   are the ones that let it through. Those checks run on Linux, so the suite's run on a
-   Mac is each developer's `pnpm check:affected`; dispatch a rehearsal with
-   **full_checks** to run the whole of `./scripts/check.sh` on the `macos-15` runner.
+5. **Let Actions finish.** The run bootstraps the workspace, runs `./scripts/check.sh`,
+   imports the Developer ID certificate into a throwaway keychain, builds the signed and
+   notarized artifacts, validates them, and then creates a published, non-draft release
+   titled `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is
+   removed whether the run succeeds or fails.
 
 Re-running the workflow on the same tag is safe: an existing release is reused and its
 assets are replaced with `gh release upload --clobber`. The release must stay non-draft
@@ -100,10 +90,6 @@ Run the **Release** workflow from the Actions tab with **Run workflow**. A manua
 runs the identical build, signing, notarization, and validation path but publishes
 nothing: no release is created and no assets are attached. The six artifacts are kept as a
 workflow artifact for 14 days instead.
-
-A rehearsal of a commit CI already passed on `main` skips `./scripts/check.sh` as a tag
-does. A rehearsal of any other commit, a branch's head among them, runs it before the
-build, and the **full_checks** box runs it whatever CI said.
 
 This is what to run after changing credentials, the signing or notarization setup, the
 packaging configuration, or the workflow itself — it proves the whole path works before a
