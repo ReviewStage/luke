@@ -27,6 +27,7 @@ test("a dev server on the Mac or its network opens over plain http", () => {
 
 test("any other host opens over https", () => {
   assert.equal(browserAddressOf("example.com"), "https://example.com/");
+  assert.equal(browserAddressOf("example.com."), "https://example.com./");
   assert.equal(browserAddressOf("vercel.com/docs?x=1"), "https://vercel.com/docs?x=1");
 });
 

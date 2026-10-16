@@ -26,12 +26,12 @@ const NAMED_SCHEME = /^[a-z][a-z\d+.-]*:\/\//iu;
 
 /**
  * A typed line that is a host, with a port or a path or neither: dotted
- * labels, `localhost`, or a bracketed IPv6, and no space. Note that a label
- * holds no dot, so the pattern reads a line one way only and never backtracks
- * over it.
+ * labels, a fully qualified name's trailing dot among them, `localhost`, or a
+ * bracketed IPv6, and no space. Note that a label holds no dot, so the
+ * pattern reads a line one way only and never backtracks over it.
  */
 const HOST_LIKE =
-  /^(?:localhost|\[[\da-f:]+\]|[^\s/:?#.]+(?:\.[^\s/:?#.]+)+)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
+  /^(?:localhost|\[[\da-f:]+\]|[^\s/:?#.]+(?:\.[^\s/:?#.]+)+\.?)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
 
 /** Hosts served on the Mac or its own network, which are opened over plain http, as a dev server serves them. */
 const LOCAL_HOST =
