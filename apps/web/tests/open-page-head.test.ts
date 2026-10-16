@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LINK_ORIGIN } from "@luke/features/link-home";
 import { test } from "vitest";
 
 /**
@@ -29,11 +28,11 @@ function metaOf(page: string): ReadonlyMap<string, string> {
 const open = metaOf("open.html");
 const landing = metaOf("index.html");
 
-test("a pasted Luke link unfurls under Luke's name, at the site's own address", () => {
+test("a pasted Luke link unfurls under Luke's name, and its card leads to the link itself, never the landing page", () => {
   assert.equal(open.get("og:title"), "Luke");
   assert.equal(open.get("twitter:title"), "Luke");
   assert.equal(open.get("og:site_name"), "Luke");
-  assert.equal(open.get("og:url"), `${LINK_ORIGIN}/`);
+  assert.equal(open.get("og:url"), undefined);
 });
 
 test("a pasted Luke link shows the landing page's card, large, on X as everywhere else", () => {
