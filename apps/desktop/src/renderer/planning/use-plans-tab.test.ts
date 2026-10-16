@@ -726,6 +726,27 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
+test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const link = {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.MESSAGE, planId: PLAN.id, agentId: AGENT_ID, messageId: "msg-7" },
+  } as const;
+
+  act(() => tab.control().onOpenLink(link));
+  const first = tab.control().messageReveal;
+  act(() => tab.control().onOpenLink(link));
+  act(() => tab.control().onMessageRevealed(2));
+
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.deepEqual(first, { agentId: AGENT_ID, messageId: "msg-7", ask: 1 });
+  assert.equal(tab.control().messageReveal, undefined);
+});
+
 test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   const alerts = "alerts";

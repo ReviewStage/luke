@@ -147,6 +147,24 @@
   pointer-events: none;
 }
 
+/* A message a link named, brought into view in its agent's transcript
+   (message-links.tsx): lit once, as a fresh edit of the plan is. */
+[data-message-revealed] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-message-revealed]::before {
+  position: absolute;
+  z-index: -1;
+  inset: -4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
+  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  content: "";
+  pointer-events: none;
+}
+
 @keyframes plan-caret-blink {
   50% {
     opacity: 0;
