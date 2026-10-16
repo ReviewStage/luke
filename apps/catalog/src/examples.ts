@@ -1,4 +1,5 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -17,4 +18,9 @@ export interface Example {
   readonly Render: () => React.JSX.Element;
 }
 
-export const EXAMPLES: readonly Example[] = [ARTWORK_EXAMPLE, TYPOGRAPHY_EXAMPLE, LAYOUT_EXAMPLE];
+export const EXAMPLES: readonly Example[] = [
+  ARTWORK_EXAMPLE,
+  TYPOGRAPHY_EXAMPLE,
+  LAYOUT_EXAMPLE,
+  BUTTONS_EXAMPLE,
+];

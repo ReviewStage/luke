@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { PROFILE, type SurfaceAttributes, surfaceAttributes, THEME } from "../tokens/surface.js";
 import "../tokens/tokens.css";
 import "../styles.css";
+import "./page.css";
 
 /** A component mounted for a test: the element it was drawn into. */
 export interface Mounted {
@@ -22,6 +23,13 @@ export interface Mounted {
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    /** Emulates a system that asked for reduced motion (`browser-commands.ts`). */
+    emulateReducedMotion: (reduced: boolean) => Promise<void>;
+  }
 }
 
 const roots: Root[] = [];
@@ -65,8 +73,10 @@ export async function unmountAll(): Promise<void> {
   document.body.replaceChildren();
 }
 
-/** What axe finds wrong in `within`, by rule: an empty list is a pass. */
+/** What axe finds wrong in `within`, each as its rule and the element it found it on: an empty list is a pass. */
 export async function accessibilityViolations(within: Element): Promise<readonly string[]> {
   const results = await axe.run(within, { resultTypes: ["violations"] });
-  return results.violations.map((violation) => violation.id);
+  return results.violations.flatMap((violation) =>
+    violation.nodes.map((node) => `${violation.id} ${node.target.join(" ")}`),
+  );
 }

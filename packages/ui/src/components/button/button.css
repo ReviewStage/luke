@@ -1,0 +1,167 @@
+/* button.css -- Button and IconButton: one control's box in the profile, a
+   look per variant, and the unavailable and busy faces every look shares.
+   The keyboard's ring is the app's reset's, as it is for every control. */
+
+@layer components {
+  .luke-button {
+    --luke-button-fill: transparent;
+    --luke-button-ink: var(--luke-color-text);
+    --luke-button-edge: transparent;
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    max-width: 100%;
+    height: var(--luke-control-height);
+    margin: 0;
+    padding: 0 var(--luke-control-inset);
+    border: 1px solid var(--luke-button-edge);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-button-fill);
+    color: var(--luke-button-ink);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-hover) ease,
+      color var(--duration-hover) ease,
+      filter var(--duration-hover) ease;
+  }
+
+  /* A desktop control answers a press the way a Mac's does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-button {
+    cursor: default;
+  }
+
+  .luke-button-face {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+  }
+
+  .luke-button-words {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .luke-button svg {
+    flex: none;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-button[data-icon-only="true"] {
+    --luke-button-ink: var(--luke-color-text-muted);
+    width: var(--luke-control-height);
+    padding: 0;
+  }
+
+  .luke-button[data-variant="outline"] {
+    --luke-button-edge: var(--luke-color-border-strong);
+  }
+
+  .luke-button[data-variant="primary"] {
+    --luke-button-fill: var(--luke-color-accent);
+    --luke-button-ink: var(--luke-color-on-accent);
+  }
+
+  .luke-button[data-variant="danger"] {
+    --luke-button-fill: var(--luke-color-danger-fill);
+    --luke-button-ink: var(--luke-color-on-danger);
+  }
+
+  .luke-button[data-variant="danger-outline"] {
+    --luke-button-edge: var(--luke-color-border-strong);
+    --luke-button-ink: var(--luke-color-danger-text);
+  }
+
+  /* A quiet or outlined button lights under the pointer, while its menu is
+     open, and while a toggle stands on; a filled one brightens. */
+  .luke-button:is([data-variant="quiet"], [data-variant="outline"]):where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-selected);
+    --luke-button-ink: var(--luke-color-text);
+  }
+
+  .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
+  }
+
+  .luke-button:is([data-variant="quiet"], [data-variant="outline"]):active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-pressed);
+  }
+
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]):hover:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    filter: brightness(1.1);
+  }
+
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]):active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    filter: brightness(0.92);
+  }
+
+  /* Unavailable, a button fades to 45%: a disabled one whole, one that
+     keeps the keyboard its fill and its words alone, so the app's ring
+     around it is drawn at full strength. */
+  .luke-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .luke-button[aria-disabled="true"]:not([aria-busy="true"]) {
+    --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
+    background: var(--luke-button-fill-faded);
+    color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
+    cursor: default;
+  }
+
+  /* Busy, its words keep their room under the ring, so the button neither
+     shrinks nor moves what stands beside it. */
+  .luke-button[aria-busy="true"] {
+    cursor: progress;
+  }
+
+  .luke-button[aria-busy="true"] .luke-button-face {
+    visibility: hidden;
+  }
+
+  .luke-button[aria-busy="true"]::after {
+    position: absolute;
+    inset: 0;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    margin: auto;
+    border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top-color: currentColor;
+    border-radius: var(--luke-radius-full);
+    /* An endless loop with no end to wait for, so its duration is a literal;
+       it holds still on --loop-motion with every other. */
+    animation: luke-button-turn 0.8s linear infinite;
+    animation-play-state: var(--loop-motion, running);
+    content: "";
+  }
+
+  @keyframes luke-button-turn {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+}
