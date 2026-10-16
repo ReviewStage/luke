@@ -6609,16 +6609,29 @@ button.automation-run:hover {
    editor draws its tabs: each a glyph and a label in a pill a toolbar
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
-   it. Every tab stands at its own width, up to a most past which its label
-   fades out at its end, and narrows to a floor where the strip is short of
-   room. Past holding them all, the strip scrolls along with no bar drawn, as
-   a browser's does; a tab it does not show whole is not drawn at all rather
-   than as a sliver at its edge, and the chevron after the strip lists those
-   (tab-strip.tsx), which the strip measures as it scrolls and resizes. The
-   tab the strip brings into view glides there unless motion is held still. */
+   it. It gives way as Safari's tab bar does, in the stylesheet alone, so the
+   strip measures nothing (tab-strip.tsx):
+   - every tab asks for an equal share, up to `--tab-widest`, and the strip
+     asks room for all of them at that width by their count (`--tab-count`,
+     the one thing it is told), giving way from there;
+   - the tabs other than the chosen one narrow together, and below 72px
+     each is its glyph alone (`@container tab`);
+   - the chosen tab keeps its glyph, its label, and its × at a share of its
+     own;
+   - past holding every glyph the strip scrolls along with no bar drawn, the
+     chosen tab pinned at whichever edge it would pass, and a fade where tabs
+     go on. The tab the strip brings into view glides there unless motion is
+     held still. */
 .tab-strip {
+  --tab-widest: 200px;
+  /* What the strip's fades and the pinned tab paint over the tabs passing
+     beneath them: the side panel's well, or the column's ground. */
+  --strip-ground: var(--desktop-well);
+  position: relative;
   display: flex;
   min-width: 0;
+  flex: 0 1
+    calc(var(--tab-count, 1) * (var(--tab-widest) + var(--list-gap)) + 2 * var(--focus-ring-reach));
   align-items: center;
   gap: var(--list-gap);
   overflow-x: auto;
@@ -6630,6 +6643,64 @@ button.automation-run:hover {
      at either end for the keyboard's ring on the first tab and the last. */
   margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
   padding: var(--space-8) var(--focus-ring-reach);
+}
+
+.main-tabs .tab-strip {
+  --strip-ground: var(--desktop-ground);
+}
+
+/* A fade at either end where tabs go on past it, drawn over them in the
+   strip's ground rather than as a mask, because a mask would fade the
+   chosen tab pinned there too; each comes in as the strip scrolls from that
+   end, by the strip's own scroll, so a strip that holds every tab draws
+   none. They stand at the ends, taking no room of their own. */
+.tab-strip::before,
+.tab-strip::after {
+  position: sticky;
+  z-index: 1;
+  flex: 0 0 var(--scroll-fade);
+  align-self: stretch;
+  content: "";
+  pointer-events: none;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(nearest inline);
+}
+
+.tab-strip::before {
+  left: calc(-1 * var(--focus-ring-reach));
+  margin-right: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  background: linear-gradient(to right, var(--strip-ground), transparent);
+  animation-name: strip-fade-in;
+  animation-range: 0 var(--scroll-fade);
+}
+
+.tab-strip::after {
+  right: calc(-1 * var(--focus-ring-reach));
+  margin-left: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  background: linear-gradient(to left, var(--strip-ground), transparent);
+  animation-name: strip-fade-out;
+  animation-range: calc(100% - var(--scroll-fade)) 100%;
+}
+
+@keyframes strip-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes strip-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 .tab {
@@ -6659,40 +6730,89 @@ button.automation-run:hover {
   -webkit-app-region: no-drag;
 }
 
-/* A strip short of room narrows every tab, as Chrome's does, down to a
-   floor that keeps its glyph, its label's first letters clear of their fade,
-   and the room the chosen tab keeps for its ×, before it scrolls any; the
-   chosen tab is never wider than the strip, so it is never shown without
-   its start or its ×. What a tab narrowed cuts short its hint says whole
-   (tab-strip.tsx). */
+/* Every tab asks for an equal share and narrows by it, down to a glyph's
+   width; each is a container of its own width, so it can stand as its glyph
+   alone once it is narrow (below). */
 .tab-strip .tab {
-  --tab-floor: calc(
-    var(--tab-start) +
-    var(--control-glyph) +
-    var(--tab-gap) +
-    var(--label-fade) +
-    1.5ch +
-    var(--tab-end)
-  );
-  min-width: var(--tab-floor);
-  max-width: min(200px, 100%);
-  flex: 0 1 auto;
+  min-width: calc(2 * var(--space-8) + var(--control-glyph));
+  max-width: var(--tab-widest);
+  flex: 0 1 var(--tab-widest);
+  container: tab / inline-size;
 }
 
-/* The chosen tab gives way last, and below its floor too where the strip is
-   narrower still, its label first, so its glyph and its × always show. */
+/* Narrower than 72px, a tab other than the chosen one is its
+   glyph alone, centred: its label, its detail, its end mark, and its × give
+   way, and its hint says its name. */
+@container tab (width < 72px) {
+  .tab-strip .tab:not([data-selected="true"]) :is(.tab-label, .tab-end-mark, .tab-close) {
+    display: none;
+  }
+
+  .tab-strip .tab:not([data-selected="true"]) .tab-button {
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+/* The chosen tab keeps a share of its own, its glyph, its label, and its ×
+   at every width, and stands pinned at whichever edge of the strip it would
+   scroll past, on its ground, so the tabs passing beneath it are hidden. */
 .tab-strip .tab[data-selected="true"] {
-  min-width: min(var(--tab-floor), 100%);
+  position: sticky;
+  z-index: 2;
+  right: calc(-1 * var(--focus-ring-reach));
+  left: calc(-1 * var(--focus-ring-reach));
+  min-width: 0;
+  flex-grow: 0;
   flex-shrink: 0;
+  flex-basis: clamp(96px, 60%, var(--tab-widest));
+  background: var(--strip-ground);
+  container: pinned / scroll-state;
 }
 
-/* A tab the strip does not show whole is not drawn as a sliver at its edge:
-   the chevron after the strip lists it, and it is drawn again once the strip
-   scrolls it into view. It stays focusable, so the keyboard reaches it and
-   brings it in. */
-.tab-strip .tab[data-hidden="true"] {
-  opacity: 0;
-  pointer-events: none;
+/* A chosen tab alone in its strip keeps no share for others: it takes a
+   tab's own width, as any tab does. */
+.tab-strip .tab[data-selected="true"]:only-child {
+  flex-shrink: 1;
+  flex-basis: var(--tab-widest);
+}
+
+.tab-strip .tab[data-selected="true"]:not([data-quiet="true"]) {
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--strip-ground);
+}
+
+/* A quiet chosen tab, drawn with no fill at rest, still stands on the
+   strip's ground, so no tab shows through it where it is pinned. */
+.tab-strip .tab[data-selected="true"][data-quiet="true"]:not(:hover) {
+  background: var(--strip-ground);
+}
+
+/* Pinned, it fades the tabs passing beneath its inner edge as the strip's
+   ends do. */
+@container pinned scroll-state(stuck: left) {
+  .tab-strip .tab-button::after {
+    position: absolute;
+    top: calc(-1 * var(--space-8));
+    bottom: calc(-1 * var(--space-8));
+    left: 100%;
+    width: var(--scroll-fade);
+    background: linear-gradient(to right, var(--strip-ground), transparent);
+    content: "";
+    pointer-events: none;
+  }
+}
+
+@container pinned scroll-state(stuck: right) {
+  .tab-strip .tab-button::after {
+    position: absolute;
+    top: calc(-1 * var(--space-8));
+    right: 100%;
+    bottom: calc(-1 * var(--space-8));
+    width: var(--scroll-fade);
+    background: linear-gradient(to left, var(--strip-ground), transparent);
+    content: "";
+    pointer-events: none;
+  }
 }
 
 .tab:hover {
