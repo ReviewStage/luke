@@ -91,6 +91,7 @@ export const CHANGES_WORDS = {
   NO_HUNKS: "No changes to show in this file.",
   UNREADABLE: "This file's diff could not be read.",
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
+  OUTDATED_THREADS: "Comments on lines a later push changed",
 } as const;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -293,6 +294,47 @@ export function threadPreview(
       ? undefined
       : { start: start.line, side: start.side, end: end.line, endSide: end.side };
   return { patch, selected };
+}
+
+/** A review thread drawn on its line in Files changed: the thread, its key, and the line it stands under on the side it counts on. */
+interface PlacedThread {
+  readonly thread: ReviewThread;
+  readonly key: string;
+  readonly side: DiffSelection["side"];
+  readonly line: number;
+}
+
+/** A file's review threads: those drawn on their lines, and the outdated drawn above its diff. */
+export interface FileThreads {
+  readonly placed: readonly PlacedThread[];
+  readonly above: readonly PlacedThread[];
+}
+
+/** The side of a diff each of GitHub's sides is counted on: the old side's lines on the left, the new side's on the right. */
+const SELECTION_SIDE = {
+  [DIFF_SIDE.LEFT]: DIFF_SELECTION_SIDE.DELETIONS,
+  [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
+} as const satisfies Record<DiffSide, DiffSelection["side"]>;
+
+/**
+ * A file's review threads as Files changed draws them, as GitHub's own
+ * diff does: each on the line it stands on now, under that line on the
+ * side it counts on, and those whose line a later push took away, outdated,
+ * at the top of the file's diff, in the order the pull request holds them.
+ * Each is keyed by its first comment's page, which no other thread shares;
+ * one with no comment is drawn nowhere.
+ */
+export function threadsOn(threads: readonly ReviewThread[], path: string): FileThreads {
+  const placed: PlacedThread[] = [];
+  const above: PlacedThread[] = [];
+  for (const thread of threads) {
+    const key = thread.comments[0]?.url;
+    if (thread.path !== path || key === undefined) continue;
+    const side = SELECTION_SIDE[thread.side];
+    if (thread.line === null) above.push({ thread, key, side, line: thread.originalLine ?? 0 });
+    else placed.push({ thread, key, side, line: thread.line });
+  }
+  return { placed, above };
 }
 
 /**

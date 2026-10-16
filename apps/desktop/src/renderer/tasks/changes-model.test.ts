@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DIFF_SIDE } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
-import { threadPreview } from "./changes-model";
+import { threadPreview, threadsOn } from "./changes-model";
 
 /**
  * changes-model.test.ts -- a review thread previews the end of the hunk
@@ -107,4 +107,59 @@ test("a line the hunk does not hold previews the hunk's end, where GitHub ends i
   assert.equal(previewOf({ originalLine: 99 })?.patch.split("\n").at(-2), " }");
   assert.equal(previewOf({ diffHunk: "" }), undefined);
   assert.equal(previewOf({ diffHunk: "not a diff" }), undefined);
+});
+
+/** A thread on `path` at `line` on the new side, keyed by its one comment's page. */
+function threadAt(path: string, line: number | null, url: string) {
+  return {
+    path,
+    line,
+    startLine: null,
+    originalLine: 7,
+    originalStartLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    diffHunk: HUNK,
+    resolved: false,
+    outdated: line === null,
+    comments: [
+      {
+        by: { login: "octo", bot: false },
+        html: null,
+        body: "Why?",
+        at: 1,
+        url,
+      },
+    ],
+    more: 0,
+  };
+}
+
+test("a file's threads stand under the lines they stand on now, on the side they count on, and those a push outdated above its diff", () => {
+  const onLeft = {
+    ...threadAt("src/a.ts", 4, "https://github.com/acme/relay/pull/7#r1"),
+    side: DIFF_SIDE.LEFT,
+  };
+  const { placed, above } = threadsOn(
+    [
+      onLeft,
+      threadAt("src/a.ts", 9, "https://github.com/acme/relay/pull/7#r2"),
+      threadAt("src/a.ts", null, "https://github.com/acme/relay/pull/7#r3"),
+      threadAt("src/b.ts", 2, "https://github.com/acme/relay/pull/7#r4"),
+      { ...threadAt("src/a.ts", 5, "unused"), comments: [] },
+    ],
+    "src/a.ts",
+  );
+
+  assert.deepEqual(
+    placed.map(({ key, side, line }) => [key, side, line]),
+    [
+      ["https://github.com/acme/relay/pull/7#r1", "deletions", 4],
+      ["https://github.com/acme/relay/pull/7#r2", "additions", 9],
+    ],
+  );
+  assert.deepEqual(
+    above.map(({ key }) => key),
+    ["https://github.com/acme/relay/pull/7#r3"],
+  );
 });

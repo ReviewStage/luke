@@ -7,6 +7,7 @@ import {
   type CodingAgentChangedFile,
   type CodingAgentChangesPeople,
   type CodingAgentPullRequest,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
@@ -28,7 +29,7 @@ import {
   HighlighterIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { SpinnerRegion } from "../spinner";
@@ -44,6 +45,7 @@ import {
   linesChanged,
   STATUS_LETTER,
   STATUS_WORDS,
+  threadsOn,
 } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { DiffSettingsButton } from "./diff-settings";
@@ -238,21 +240,37 @@ function ChangesMenu({
   );
 }
 
+/** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
+export interface ChangesThreads {
+  readonly list: readonly ReviewThread[];
+  readonly draw: (thread: ReviewThread) => ReactNode;
+}
+
 /** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
 function FileDiff({
   file,
   roomy,
   boxRef,
+  threads,
 }: {
   file: CodingAgentChangedFile;
   /** Whether the diff is wide enough to split. */
   roomy: boolean;
   /** Handed the box the diff is drawn in, which the view measures for a split's room. */
   boxRef: (element: HTMLDivElement | null) => void;
+  /** The pull request's review threads, and how one is drawn; none draws none. */
+  threads: ChangesThreads | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
   // A file with no notice has a patch with hunks, headed as git writes one for Pierre to read.
   const patch = fileNotice(file) === undefined ? filePatch(file) : undefined;
+  const { placed, above } = threadsOn(threads?.list ?? [], file.path);
+  const notes = placed.map((each) => ({
+    key: each.key,
+    side: each.side,
+    line: each.line,
+    content: threads?.draw(each.thread),
+  }));
   return (
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
       {file.previousPath === null ? null : (
@@ -262,10 +280,17 @@ function FileDiff({
           </p>
         </div>
       )}
+      {above.length === 0 ? null : (
+        <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.OUTDATED_THREADS}>
+          {above.map((each) => (
+            <li key={each.key}>{threads?.draw(each.thread)}</li>
+          ))}
+        </ol>
+      )}
       {patch === undefined ? (
         <p className="side-panel-empty">{fileNotice(file) ?? CHANGES_WORDS.UNREADABLE}</p>
       ) : (
-        <PierreDiff patch={patch} look={look} boxRef={boxRef} />
+        <PierreDiff patch={patch} look={look} boxRef={boxRef} notes={notes} />
       )}
     </section>
   );
@@ -344,6 +369,7 @@ export function AgentChangesTab({
   shown,
   repository,
   tree,
+  threads,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -353,6 +379,8 @@ export function AgentChangesTab({
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };
+  /** The pull request's review threads, drawn on their lines in each file's diff; none draws none. */
+  threads?: ChangesThreads | undefined;
 }): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -438,7 +466,13 @@ export function AgentChangesTab({
         </div>
       ) : null}
       <div className="file-view-body" {...room.body}>
-        <FileDiff key={shownFile.path} file={shownFile} roomy={roomy} boxRef={setDiffBox} />
+        <FileDiff
+          key={shownFile.path}
+          file={shownFile}
+          roomy={roomy}
+          boxRef={setDiffBox}
+          threads={threads}
+        />
         {room.drawn ? (
           <FileTreePane
             file={shownFile.path}
