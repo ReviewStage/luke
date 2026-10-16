@@ -1,3 +1,5 @@
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   ACTOR_KIND,
   type Actor,
@@ -14,11 +16,14 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
+import { EllipsisIcon, ListFilterIcon, MailIcon, SettingsIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
+import { useOpenSettings } from "../open-settings";
 import { lineSubject } from "../planning/agent-ref";
 import { InboxItemRow } from "../planning/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
@@ -27,7 +32,10 @@ import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { Tooltip } from "../tooltip";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { RecentRow, useWaitingItems } from "./desktop-home";
+import { useArchivedView, useTaskListView } from "./task-list-view";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.
@@ -122,6 +130,102 @@ function AgentRow({
   );
 }
 
+/** What the page's ⋯ is called, on its button and its menu alike. */
+const MORE = "More";
+
+/**
+ * The toolbar's end: their tasks in the sidebar, where the workspace is
+ * shared and so filters by who created a task; Edit profile on the reader's
+ * own page, which Settings › Profile is; and ⋯, holding Copy email for a
+ * member and the workspace's members in Settings for its owners and admins.
+ */
+function PersonActions({
+  plans,
+  person,
+  shared,
+  onShowTasks,
+}: {
+  plans: PlansControl;
+  person: Actor;
+  /** Whether the workspace is shared, which alone filters the sidebar by creator. */
+  shared: boolean;
+  onShowTasks: () => void;
+}): React.JSX.Element {
+  const openSettings = useOpenSettings();
+  const copy = useCopyToast();
+  const menu = useActionMenu(plans.shown);
+  const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
+  const you = member?.you === true;
+  const { workspace } = plans;
+  // Only a member the members read lists has a row there to manage; someone who left has none.
+  const manages =
+    member?.role !== undefined &&
+    workspace !== undefined &&
+    (workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN);
+  const email = member?.email;
+  const actions: MenuAction[][] = [
+    ...(email === undefined
+      ? []
+      : [
+          [
+            {
+              label: "Copy email",
+              icon: <MailIcon />,
+              onSelect: () => copy(email, "Email copied"),
+            },
+          ],
+        ]),
+    ...(workspace === undefined || !manages
+      ? []
+      : [
+          [
+            {
+              label: "Manage in workspace settings",
+              icon: <UsersIcon />,
+              onSelect: () =>
+                openSettings({
+                  page: SETTINGS_VIEW.WORKSPACE,
+                  workspaceId: workspace.id,
+                  section: SETTINGS_SECTION.MEMBERS,
+                }),
+            },
+          ],
+        ]),
+  ];
+  return (
+    <div className="desktop-toolbar-actions">
+      {shared ? (
+        <button type="button" className="toolbar-button bordered-button" onClick={onShowTasks}>
+          <ListFilterIcon />
+          {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
+        </button>
+      ) : null}
+      {you ? (
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={() => openSettings({ page: SETTINGS_VIEW.ACCOUNT })}
+        >
+          <SettingsIcon />
+          Edit profile
+        </button>
+      ) : null}
+      {actions.length === 0 ? null : (
+        <>
+          <Tooltip label={MORE}>
+            <button type="button" className="icon-button" aria-label={MORE} {...menu.trigger()}>
+              <EllipsisIcon className="icon-button-glyph" />
+            </button>
+          </Tooltip>
+          {menu.drawn === undefined ? null : (
+            <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** The page's head: their face, their name and You where it is the reader, and who they are here. */
 function PersonHead({ person }: { person: Actor }): React.JSX.Element {
   const line = headLine(person);
@@ -144,10 +248,12 @@ function PersonColumn({
   plans,
   userId,
   name: opened,
+  staged,
 }: {
   plans: PlansControl;
   userId: string;
   name: string | undefined;
+  staged: boolean;
 }): React.JSX.Element {
   const now = useMinute();
   const listed = plans.listed.plans;
@@ -157,6 +263,16 @@ function PersonColumn({
   const known = opened === undefined ? undefined : { userId, name: opened };
   const ref = personRef(userId, listed) ?? member ?? known;
   const person = personActor(ref, members, readerId);
+  // The sidebar's own view, so their tasks are listed there as its Created by lists them.
+  const taskView = useTaskListView(plans.workspace?.id, staged);
+  const archive = useArchivedView(plans.workspace?.id, staged);
+  const memberCount = plans.workspace?.memberCount;
+  const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
+  // Note that the list is turned back from the archived tasks, because the page lists their open ones.
+  const showTasks = () => {
+    archive.onShown(false);
+    taskView.onCreatedBy(userId);
+  };
   const page = personPage(userId, listed);
   const you = userId === plans.me;
   const read = useWaitingItems(plans);
@@ -181,6 +297,7 @@ function PersonColumn({
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">{name}</h1>
         </div>
+        <PersonActions plans={plans} person={person} shared={shared} onShowTasks={showTasks} />
       </header>
       <div className="home-scroll">
         <div className="home-column person-column">
@@ -225,6 +342,13 @@ function PersonColumn({
               ))}
             </PersonSection>
           )}
+          {page.created.length > PERSON_TASKS_SHOWN && shared ? (
+            <p className="person-section-foot">
+              <button type="button" className="toolbar-button quiet-button" onClick={showTasks}>
+                {`Show all ${page.created.length} in sidebar`}
+              </button>
+            </p>
+          ) : null}
           {page.agents.length === 0 ? null : (
             <PersonSection title="Agents" count={page.agents.length}>
               {page.agents.map((each) => (
@@ -255,16 +379,19 @@ export function PersonPage({
   plans,
   userId,
   name,
+  staged = false,
 }: {
   plans: PlansControl;
   userId: string;
   /** The name the place that opened the page knew them by: someone who left, whom only an edit names. */
   name?: string | undefined;
+  /** Whether the run is a fixture's, whose sidebar view is kept nowhere. */
+  staged?: boolean;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, plans.personView.onClose);
   return (
     <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <PersonColumn plans={plans} userId={userId} name={name} />
+      <PersonColumn plans={plans} userId={userId} name={name} staged={staged} />
     </MemberDirectory>
   );
 }

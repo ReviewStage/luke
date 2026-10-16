@@ -1,3 +1,4 @@
+import { useAtom } from "@effect/atom-react";
 import {
   DEFAULT_TASK_LIST_VIEW,
   TASK_GROUPING,
@@ -7,6 +8,7 @@ import {
   type TaskOrder,
 } from "@luke/ui/task-list-model";
 import { Schema } from "effect";
+import * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import { readKept, writeKept } from "./folded-groups";
 import type { ArchivedView } from "./sidebar-task-view";
@@ -48,13 +50,24 @@ export interface TaskListViewControl {
   readonly onCreatedBy: (createdBy: string | undefined) => void;
 }
 
+/**
+ * The views as this window has chosen them since it opened, none until its
+ * first choice, the kept ones standing until then; and a fixture run's. One
+ * for the window, so the sidebar and a person's page, which lists their
+ * tasks there, read and change the same view.
+ */
+const chosenViewsAtom = Atom.keepAlive(Atom.make<Views | undefined>(undefined));
+const stagedViewsAtom = Atom.keepAlive(Atom.make<Views>({}));
+
 /** The view of the workspace listed, kept as each choice is made, unless the run is `staged`. */
 export function useTaskListView(
   workspaceId: string | undefined,
   staged: boolean,
 ): TaskListViewControl {
-  const [kept, setKept] = useState<Views>(() => readKept(STORAGE_KEY, storedViews, {}));
-  const [stagedViews, setStagedViews] = useState<Views>({});
+  const [stored] = useState<Views>(() => readKept(STORAGE_KEY, storedViews, {}));
+  const [chosen, setKept] = useAtom(chosenViewsAtom);
+  const [stagedViews, setStagedViews] = useAtom(stagedViewsAtom);
+  const kept = chosen ?? stored;
   const views = staged ? stagedViews : kept;
   const view =
     (workspaceId === undefined ? undefined : views[workspaceId]) ?? DEFAULT_TASK_LIST_VIEW;
@@ -104,6 +117,16 @@ function writeArchivedIn(workspaceId: string | undefined): void {
 }
 
 /**
+ * The workspace the window turned the list to the archived tasks of since it
+ * opened, none until it first turned or turned back, the held one standing
+ * until then. One for the window, so a person's page that lists their tasks
+ * in the sidebar turns it back to the tasks it lists.
+ */
+const archivedInAtom = Atom.keepAlive(
+  Atom.make<{ readonly held: string | undefined } | undefined>(undefined),
+);
+
+/**
  * Whether the listed workspace's list stands turned to its archived tasks,
  * and the press that turns it. It is held in the window's session storage,
  * so Settings or a version history, which the sidebar steps aside for, find
@@ -111,10 +134,12 @@ function writeArchivedIn(workspaceId: string | undefined): void {
  * the tasks. A fixture run holds nothing.
  */
 export function useArchivedView(workspaceId: string | undefined, staged: boolean): ArchivedView {
-  const [held, setHeld] = useState(() => (staged ? undefined : readArchivedIn()));
+  const [stored] = useState(() => (staged ? undefined : readArchivedIn()));
+  const [chosen, setChosen] = useAtom(archivedInAtom);
+  const held = chosen === undefined ? stored : chosen.held;
   const hold = (next: string | undefined) => {
     if (!staged) writeArchivedIn(next);
-    setHeld(next);
+    setChosen({ held: next });
   };
   // Note that the view is let go of as the workspace changes, rather than
   // only hidden, so coming back to the workspace opens on its tasks.

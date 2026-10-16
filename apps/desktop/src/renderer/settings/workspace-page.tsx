@@ -26,6 +26,7 @@ import {
   ShieldIcon,
   UserIcon,
   UserMinusIcon,
+  UserRoundIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +39,7 @@ import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
+import { useOpenPerson } from "../person-door";
 import { dayAndTimeText } from "../planning/plan-time";
 import { SpinnerRegion } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -311,7 +313,8 @@ function useMembersRead(workspaceId: string, memberCount: number | undefined) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ what the reader may do to them (`memberActs`). Make admin
+ * then in its ⋯ their profile, where the window offers one, and what the
+ * reader may do to them (`memberActs`). Make admin
  * and Make member take hold at once, since either is undone by the other;
  * Make owner and Remove from workspace ask first. A role change refused is
  * said under the row. A row with no ⋯ in a list where others have one
@@ -354,6 +357,17 @@ function MemberRow({
       (refused: Error) => setRefusal(refused.message),
     );
   };
+  const openPerson = useOpenPerson();
+  const profileActs =
+    openPerson === undefined
+      ? []
+      : [
+          {
+            label: "Open profile",
+            icon: <UserRoundIcon />,
+            onSelect: () => openPerson(userId, member.name, workspaceId),
+          },
+        ];
   const roleActs = [
     ...(may.promote
       ? [
@@ -387,10 +401,10 @@ function MemberRow({
         },
       ]
     : [];
-  const acting = roleActs.length + removeActs.length > 0;
+  const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
     <>
-      <MenuRow label={`${member.name} actions`} actions={[roleActs, removeActs]}>
+      <MenuRow label={`${member.name} actions`} actions={[profileActs, roleActs, removeActs]}>
         <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
         <span className="settings-copy">
           {/* The person card's own wrapper, so You stands off the name as it does on the card. */}

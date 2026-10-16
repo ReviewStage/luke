@@ -35,6 +35,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { OpenPersonProvider } from "../person-door";
 import { dayAndTimeText } from "../planning/plan-time";
 import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
@@ -314,7 +315,11 @@ async function settle(): Promise<void> {
 }
 
 /** The page over `workspace` listed beside the account's first one, or as it, and how often a leave asked to fall back. */
-async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
+async function mount(
+  workspace: Workspace,
+  others: readonly Workspace[] = [],
+  openPerson?: (userId: string, name?: string, workspaceId?: string) => void,
+) {
   const pressed = { left: 0 };
   const first = workspace.id === FIRST.id ? workspace : FIRST;
   const workspaces = [first, workspace, ...others].filter(
@@ -341,7 +346,13 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
           createElement(
             Fragment,
             null,
-            createElement(WorkspacePage, { control, readerId: READER_ID }),
+            openPerson === undefined
+              ? createElement(WorkspacePage, { control, readerId: READER_ID })
+              : createElement(
+                  OpenPersonProvider,
+                  { value: openPerson },
+                  createElement(WorkspacePage, { control, readerId: READER_ID }),
+                ),
             createElement(ToastHost),
           ),
         ),
@@ -1669,4 +1680,16 @@ test("a connected workspace's Linear reads connected for everyone, its Manage di
     "Linear",
     "Not connected. Ask an owner or admin.",
   ]);
+});
+
+test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {
+  const opened: [string, string | undefined, string | undefined][] = [];
+  const { page } = await mount(ACME, [], (userId, name, workspaceId) =>
+    opened.push([userId, name, workspaceId]),
+  );
+
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Open profile"]);
+  await chooseAction(rowNamed(page, "Sam"), "Open profile");
+
+  assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
 });

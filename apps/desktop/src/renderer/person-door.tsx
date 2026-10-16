@@ -29,6 +29,11 @@ const OpenPersonContext = createContext<OpenPerson | undefined>(undefined);
 /** Hands the window's opener for a person's page to everything under it. */
 export const OpenPersonProvider = OpenPersonContext.Provider;
 
+/** The window's opener for a person's page; nothing outside the window. */
+export function useOpenPerson(): OpenPerson | undefined {
+  return useContext(OpenPersonContext);
+}
+
 /** GitHub's own address, which a GitHub account's page stands under. */
 const GITHUB_ORIGIN = "https://github.com";
 

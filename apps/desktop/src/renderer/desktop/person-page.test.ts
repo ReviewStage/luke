@@ -12,12 +12,14 @@ import {
 import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { OpenSettingsProvider } from "../open-settings";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { PersonPage } from "./person-page";
 
@@ -142,6 +144,7 @@ let inboxRefused = false;
 
 beforeEach(() => {
   inboxRefused = false;
+  window.localStorage.clear();
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -179,19 +182,25 @@ interface Opened {
   readonly plans: string[];
   readonly agents: [string, string][];
   readonly inbox: (InboxChoice | "inbox")[];
+  readonly settings: SettingsLink[];
 }
 
 /** `userId`'s page over the fixture workspace, read by Dean, opened knowing `name`, every door it opens recorded. */
-function mount(userId: string, name?: string) {
-  return mountWith({}, userId, name);
+function mount(userId: string, name?: string, memberCount = MEMBERS.length) {
+  return mountWith({}, userId, name, memberCount);
 }
 
 /** Dean's page by default, over the fixture workspace with `overrides`, every door it opens recorded. */
-function mountWith(overrides: Partial<PlansControl>, userId = DEAN.userId, name?: string) {
-  const opened: Opened = { plans: [], agents: [], inbox: [] };
+function mountWith(
+  overrides: Partial<PlansControl>,
+  userId = DEAN.userId,
+  name?: string,
+  memberCount = MEMBERS.length,
+) {
+  const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
   const plans = plansControl({
     me: DEAN.userId,
-    workspace: { ...ACME, memberCount: MEMBERS.length },
+    workspace: { ...ACME, memberCount },
     plans: PLANS,
     listed: { plans: PLANS, archived: [], ...HOLDING },
     ...HOLDING,
@@ -211,7 +220,14 @@ function mountWith(overrides: Partial<PlansControl>, userId = DEAN.userId, name?
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(AtomRegistry.make(), createElement(PersonPage, { plans, userId, name })),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.settings.push(link) },
+          createElement(PersonPage, { plans, userId, name }),
+        ),
+      ),
     ),
   );
   return { page: container, opened };
@@ -345,4 +361,71 @@ test("the reader's own page lists no question of an agent with no task, whose st
   await settle();
 
   assert.deepEqual(sections(page)["Waiting on you"], ["Ship the limiter at 10%?"]);
+});
+
+/** The sidebar's views as this Mac keeps them, by workspace. */
+function keptViews(): Record<string, { createdBy?: string }> {
+  return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
+}
+
+test("Their tasks in sidebar lists the sidebar's tasks by them", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  button(page, "Their tasks in sidebar").click();
+  assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
+});
+
+test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {
+  const { page } = mount(DEAN.userId, undefined, 1);
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
+});
+
+test("the reader's own page offers Edit profile, which opens Settings' Profile, and a teammate's does not", async () => {
+  const own = mount(DEAN.userId);
+  await settle();
+  button(own.page, "Edit profile").click();
+  assert.deepEqual(own.opened.settings, [{ page: SETTINGS_VIEW.ACCOUNT }]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const teammate = mount(CHARLES.userId);
+  await settle();
+  assert.doesNotMatch(teammate.page.textContent ?? "", /Edit profile/u);
+});
+
+test("More offers a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
+  const { page, opened } = mount(CHARLES.userId);
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Copy email", "Manage in workspace settings"],
+  );
+  act(() => items[1]?.click());
+  assert.deepEqual(opened.settings, [
+    { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
+  ]);
+});
+
+test("Their tasks in sidebar turns the sidebar back from its archived tasks to the tasks it lists", async () => {
+  window.sessionStorage.setItem("luke.sidebarArchivedIn", ACME.id);
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  button(page, "Their tasks in sidebar").click();
+
+  assert.equal(window.sessionStorage.getItem("luke.sidebarArchivedIn"), null);
+  assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
+});
+
+test("someone who left offers no More: no email to copy, and no row in Settings to manage", async () => {
+  const { page } = mount(PRIYA.userId);
+  await settle();
+
+  assert.equal(page.querySelector('button[aria-label="More"]'), null);
 });

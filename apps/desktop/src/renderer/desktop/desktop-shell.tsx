@@ -498,7 +498,12 @@ export function DesktopShell({
         ) : pagePerson !== undefined ? (
           // Keyed by the person, so another person's page holds nothing of the last, its find among it.
           <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
-            <PersonPage plans={plans} userId={pagePerson} name={plans.personView.name} />
+            <PersonPage
+              plans={plans}
+              userId={pagePerson}
+              name={plans.personView.name}
+              staged={sidebar.staged}
+            />
           </PageFind>
         ) : factoryOpen ? (
           <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
