@@ -11,6 +11,7 @@ import {
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
+  archiveCodingAgent,
   readCodingAgent,
   readCodingAgentByKey,
   takeCodingAgentMentionedServers,
@@ -595,6 +596,40 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             (yield* listed(owner, {})).status,
           ],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.BAD_REQUEST],
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list leaves an archived agent out, and lists it marked as archived where archived=include asks",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const kept = yield* startedAgentOf(owner, task.id, ask);
+        const put = yield* startedAgentOf(owner, task.id, ask);
+        yield* archiveCodingAgent(owner, put.agent.id, true);
+        const listed = (query: Readonly<Record<string, string>>) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+                (agent) => [agent.id, agent.archivedAt !== undefined],
+              ),
+          );
+        };
+
+        assert.deepEqual(yield* listed({}), [[kept.agent.id, false]]);
+        assert.deepEqual(
+          (yield* listed({ archived: "include" })).toSorted(([first], [second]) =>
+            String(first).localeCompare(String(second)),
+          ),
+          [
+            [kept.agent.id, false],
+            [put.agent.id, true],
+          ].toSorted(([first], [second]) => String(first).localeCompare(String(second))),
         );
       }),
   );

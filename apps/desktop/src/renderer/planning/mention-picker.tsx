@@ -50,10 +50,16 @@ import { AgentMark } from "./tab-look";
  *
  * On a plan's page the list offers what the plan holds beside its words
  * too: the pages agents showed on it, each by its title and its tab's
- * glyph, and its coding agents, each by its tab's name and its harness's
- * mark, the agent whose box it is left out. A mention of either names it
- * by its id (`@luke/features/mention-link`), which the agent it is sent to
- * is handed what it needs to read by (`packages/service/src/agents/mentioned-context.ts`).
+ * glyph. And wherever the words go, it offers the coding agents of the
+ * whole workspace, each by its tab's name and its harness's mark, labelled
+ * by its task: the plan's own agents first, then the workspace's others,
+ * on another task or on none, as the place reads them the first time the
+ * list opens (`MentionSource.readAgents`), the agent whose box it is left
+ * out. An archived agent takes no message, so it is offered only once a
+ * word is typed, read then, and marked archived. A mention of a page or an
+ * agent names it by its id (`@luke/features/mention-link`), which the
+ * agent it is sent to is handed what it needs to read by
+ * (`packages/service/src/agents/mentioned-context.ts`).
  *
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of
@@ -75,8 +81,16 @@ const MENTION_GROUP = {
 /** What a page's row says beside its title. */
 const PAGE_DETAIL = "Page";
 
-/** What an agent's row says beside its name. */
-const AGENT_DETAIL = "Agent";
+/** What an agent's row says beside its name: its task's, this one's, or none. */
+const AGENT_DETAIL = {
+  THIS_TASK: "This task",
+  NO_TASK: "No task",
+  OTHER_TASK: "Another task",
+  ARCHIVED: "Archived",
+} as const;
+
+/** What stands between an agent's task and its being archived in its row's detail. */
+const DETAIL_JOIN = " · ";
 
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
@@ -205,22 +219,51 @@ function pageRows(planId: string, pages: readonly MentionablePage[]): MentionRow
   }));
 }
 
-/** Each of the plan's agents' rows, by its tab's name, wearing its tile, the agent whose box it is left out; none where no plan stands. */
+/** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
+function agentDetail(agent: MentionableAgent, planId: string): string {
+  const task =
+    agent.task === undefined
+      ? AGENT_DETAIL.NO_TASK
+      : agent.task.id === planId
+        ? AGENT_DETAIL.THIS_TASK
+        : (agent.task.name ?? AGENT_DETAIL.OTHER_TASK);
+  return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
+}
+
+/**
+ * Each agent's row, by its tab's name, wearing its tile, labelled and found
+ * by its task: the plan's own agents first, then the workspace's others in
+ * the order read, each once, an archived one only once a word is typed, and
+ * the agent whose box it is left out.
+ */
 function agentRows(
   planId: string,
-  agents: readonly MentionableAgent[],
+  own: readonly MentionableAgent[],
+  workspace: readonly MentionableAgent[],
   self: string | undefined,
+  query: string,
 ): MentionRow[] {
-  if (planId === NO_PLAN) return [];
-  return agents
-    .filter((agent) => agent.id !== self)
-    .map((agent) => ({
-      mention: { kind: MENTION_KIND.AGENT, taskId: planId, agentId: agent.id },
+  const seen = new Set<string>(self === undefined ? [] : [self]);
+  const typed = query.trim() !== "";
+  const mine = planId === NO_PLAN ? [] : own.map((agent) => ({ ...agent, task: { id: planId } }));
+  const rows: MentionRow[] = [];
+  for (const agent of [...mine, ...workspace]) {
+    if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
+    seen.add(agent.id);
+    const task = agent.task;
+    const detail = agentDetail(agent, planId);
+    rows.push({
+      mention:
+        task === undefined
+          ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
+          : { kind: MENTION_KIND.AGENT, taskId: task.id, agentId: agent.id },
       name: agent.name,
-      detail: AGENT_DETAIL,
-      terms: agent.name,
+      detail,
+      terms: `${agent.name} ${detail}`,
       actor: agent.actor,
-    }));
+    });
+  }
+  return rows;
 }
 
 /** Each connected server's row, and once a word is typed each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
@@ -429,12 +472,18 @@ export interface MentionablePage {
   readonly title: string;
 }
 
-/** One of the plan's coding agents, as the list offers it: its id, its tab's name, and its tile, which its row wears. */
+/** One of the workspace's coding agents, as the list offers it: its id, its tab's name, its tile, which its row wears, its task, and whether it is archived. */
 export interface MentionableAgent {
   readonly id: string;
   readonly name: string;
   readonly actor: Actor;
+  /** The task it works on, by its id and, where the place knows it, its name; absent for an agent on none. */
+  readonly task?: { readonly id: string; readonly name?: string | undefined } | undefined;
+  readonly archived?: boolean | undefined;
 }
+
+/** Reads the workspace's coding agents, the archived ones among them where asked; settles with none where the read failed. */
+export type MentionAgentsReader = (archived: boolean) => Promise<readonly MentionableAgent[]>;
 
 /** The pages and agents of a place that offers none. */
 const NO_PAGES: readonly MentionablePage[] = [];
@@ -453,8 +502,10 @@ export interface MentionSource {
   readonly text: () => string;
   /** The pages agents showed on the plan; none where the place offers none. */
   readonly pages?: readonly MentionablePage[] | undefined;
-  /** The plan's coding agents; none where the place offers none. */
+  /** The plan's coding agents, as its page holds them now; none where the place offers none. */
   readonly agents?: readonly MentionableAgent[] | undefined;
+  /** Reads the workspace's coding agents, which the list offers after the plan's own; none where the place offers none. */
+  readonly readAgents?: MentionAgentsReader | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
@@ -557,6 +608,34 @@ export function useMentionPicker({
     if (askedAt !== undefined) askSkills?.();
   }, [askedAt, askSkills]);
 
+  // The workspace's agents are read as each `@` word opens the list, and the archived ones among
+  // them once a word is typed in it; a read is kept while the word stands and the place reads alike.
+  const readAgents = source?.readAgents;
+  const wordAt = open ? trigger.start : undefined;
+  const typed = open && trigger.query.trim() !== "";
+  const [workspaceAgents, setWorkspaceAgents] = useState<{
+    readonly reader: MentionAgentsReader;
+    readonly wordAt: number;
+    readonly archived: boolean;
+    readonly agents: readonly MentionableAgent[];
+  }>();
+  const agentsRead =
+    workspaceAgents?.reader === readAgents && workspaceAgents?.wordAt === wordAt
+      ? workspaceAgents
+      : undefined;
+  const wantsArchived = typed && agentsRead?.archived !== true;
+  const wantsAgents = agentsRead === undefined || wantsArchived;
+  useEffect(() => {
+    if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
+    let live = true;
+    readAgents(wantsArchived).then((agents) => {
+      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, archived: wantsArchived, agents });
+    });
+    return () => {
+      live = false;
+    };
+  }, [wantsAgents, wantsArchived, readAgents, wordAt]);
+
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(
     (open ? servers : NO_SERVERS).map((server) => server.connection),
@@ -565,7 +644,13 @@ export function useMentionPicker({
     ? groupsFor(trigger.query, read, {
         plan: planRows(planId, source.planName, source.text()),
         pages: pageRows(planId, source.pages ?? NO_PAGES),
-        agents: agentRows(planId, source.agents ?? NO_AGENTS, self),
+        agents: agentRows(
+          planId,
+          source.agents ?? NO_AGENTS,
+          agentsRead?.agents ?? NO_AGENTS,
+          self,
+          trigger.query,
+        ),
         skills: skillRows(skills?.known ?? []),
         servers: serverRows(servers, tools, trigger.query),
       })

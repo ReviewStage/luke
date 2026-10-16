@@ -8,6 +8,9 @@
     "repository": {
       "type": "string",
       "minLength": 1
+    },
+    "includeArchived": {
+      "type": "boolean"
     }
   },
   "required": [

@@ -453,7 +453,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** A workspace's agents, newest started first, narrowed to one repository where one is named. */
+  /** A workspace's agents, newest started first, narrowed to one repository where one is named, the archived ones among them where `includeArchived` asks. */
   listWorkspace(
     params: CodingAgentWorkspaceListParams,
   ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
@@ -462,6 +462,9 @@ export class HostedCodingAgentClient {
     });
     if (params.repository !== undefined) {
       query.set(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY, params.repository);
+    }
+    if (params.includeArchived === true) {
+      query.set(CODING_AGENT_WORKSPACE_QUERY.ARCHIVED, CODING_AGENT_LIST_ARCHIVED.INCLUDE);
     }
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}?${query}` }),

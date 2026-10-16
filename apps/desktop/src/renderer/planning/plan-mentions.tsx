@@ -1,17 +1,22 @@
 import type { MentionPlace } from "@luke/features/mention-link";
+import type { CatalogModel } from "@luke/features/models-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useAct } from "../act";
 import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
+import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
-import type { MentionableAgent, MentionablePage } from "./mention-picker";
+import type { MentionAgentsReader, MentionableAgent, MentionablePage } from "./mention-picker";
 import { useOpenPlan } from "./use-open-link";
 
 /**
@@ -28,6 +33,8 @@ import { useOpenPlan } from "./use-open-link";
  * The page of an agent no plan holds, as an automation's run starts one,
  * hands the same through `planlessMentions`: its repository's files, its
  * skills, and the servers, with no plan's sections, since there is no plan.
+ * Either hands the workspace's coding agents too, read as an `@` list
+ * opens through `useMentionAgentsReader`, each named by its task.
  *
  * The page also carries a mention made elsewhere on it into the agent's
  * message box drawn there: the box drawn now takes it in (`useMentionBox`),
@@ -49,8 +56,10 @@ export interface PlanMentionsValue {
   readonly text: () => string;
   /** The pages agents showed on the plan, which an `@` offers; none off a plan. */
   readonly pages?: readonly MentionablePage[] | undefined;
-  /** The plan's coding agents, which an `@` offers; none off a plan. */
+  /** The plan's coding agents, which an `@` offers first; none off a plan. */
   readonly agents?: readonly MentionableAgent[] | undefined;
+  /** Reads the workspace's coding agents, which an `@` offers after the plan's own. */
+  readonly readAgents?: MentionAgentsReader | undefined;
   readonly doors: MentionDoors;
 }
 
@@ -120,6 +129,7 @@ export interface PlanlessPlace {
 export function planlessMentions(
   place: PlanlessPlace,
   onOpenPlan: MentionDoors["onOpenPlan"],
+  readAgents?: MentionAgentsReader,
 ): PlanMentionsValue {
   const { workspace, workspaceId, repository } = place;
   return {
@@ -129,6 +139,7 @@ export function planlessMentions(
     workspaceId,
     repository,
     text: () => "",
+    readAgents,
     doors: {
       planId: NO_PLAN,
       place: { workspace, repository },
@@ -137,6 +148,56 @@ export function planlessMentions(
       onOpenFile: undefined,
     },
   };
+}
+
+/** The agents of no read. */
+const NO_AGENTS: readonly MentionableAgent[] = [];
+
+/**
+ * Reads the workspace's coding agents as an `@` list offers them: each by
+ * its tab's name, wearing its tile, with its task named from `tasks`, the
+ * tasks the window lists, the archived ones among them where asked; none
+ * where no workspace is known or the read failed. The reader stands for as
+ * long as what it reads by does, so a list keeps what it read.
+ */
+export function useMentionAgentsReader(
+  workspaceId: string | undefined,
+  tasks: readonly { readonly id: string; readonly name: string }[],
+  models: readonly CatalogModel[] | undefined,
+): MentionAgentsReader | undefined {
+  const { act } = useAct();
+  // Note that the names are read as each read answers, so the reader stands while the window's lists move.
+  const naming = useRef({ tasks, models });
+  naming.current = { tasks, models };
+  const read = useCallback<MentionAgentsReader>(
+    (archived) => {
+      if (workspaceId === undefined) return Promise.resolve(NO_AGENTS);
+      return act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+        workspaceId,
+        ...(archived ? { includeArchived: true } : undefined),
+      }).then(
+        (answer) => {
+          if ("failure" in answer) return NO_AGENTS;
+          const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
+          return answer.agents.map((agent): MentionableAgent => {
+            const name = agentTabLabel(agent, naming.current.models);
+            return {
+              id: agent.id,
+              name,
+              actor: agentActor(agent, name),
+              ...(agent.planId === null
+                ? undefined
+                : { task: { id: agent.planId, name: names.get(agent.planId) } }),
+              archived: agent.archivedAt !== undefined,
+            };
+          });
+        },
+        () => NO_AGENTS,
+      );
+    },
+    [act, workspaceId],
+  );
+  return workspaceId === undefined ? undefined : read;
 }
 
 /** A plan a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */

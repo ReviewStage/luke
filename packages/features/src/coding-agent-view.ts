@@ -188,6 +188,8 @@ export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  /** Lists the archived agents among the rest, each carrying its `archivedAt`. */
+  includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;

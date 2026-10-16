@@ -18,7 +18,12 @@ import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { agentTabLabel } from "../planning/coding-agent-model";
-import { PlanMentions, type PlanMentionsValue, planlessMentions } from "../planning/plan-mentions";
+import {
+  PlanMentions,
+  type PlanMentionsValue,
+  planlessMentions,
+  useMentionAgentsReader,
+} from "../planning/plan-mentions";
 import { SkillFiles } from "../planning/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -189,6 +194,8 @@ export function DesktopAgentPage({
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
+  // The workspace's agents an `@` offers, named by the tasks the window lists.
+  const readMentionAgents = useMentionAgentsReader(workspaceId, plans.plans, agents.models);
   const listed = plans.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.
@@ -263,6 +270,7 @@ export function DesktopAgentPage({
       : planlessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           plans.onShowMention,
+          readMentionAgents,
         );
   const toolbar = (
     <header className="desktop-toolbar">

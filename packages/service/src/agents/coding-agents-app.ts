@@ -448,9 +448,10 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
 
 /**
  * GET lists a workspace's agents, on a plan or with none, newest started
- * first, the archived ones left out, narrowed to one repository where the
- * query names one, as the plan list answers them; a workspace the account
- * is not in is not found, as a plan is.
+ * first, the archived ones left out unless `archived=include` asks,
+ * narrowed to one repository where the query names one, as the plan list
+ * answers them; a workspace the account is not in is not found, as a plan
+ * is.
  */
 const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -472,6 +473,7 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const agents = yield* hostedStoreOrUnavailable(
     listWorkspaceCodingAgents(userId, workspaceId, {
       ...(repository === undefined ? undefined : { repository }),
+      includeArchived: listsArchived(request),
       limit: WORKSPACE_AGENTS_LIMIT,
     }),
   );
