@@ -37,7 +37,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
-import { layComposerAt, shown } from "#testing/composer-width";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
@@ -1332,13 +1332,13 @@ test("an item's box on a card a 220px column wide leaves out its quiet line and 
       .filter(shown)
       .map((each) => each.textContent);
 
-  const narrow = layComposerAt(178);
+  const narrow = layContainersAt({ composer: 178 });
   try {
     assert.deepEqual(drawn(), ["Can't do this", "Done"]);
   } finally {
     narrow.remove();
   }
-  const wide = layComposerAt(678);
+  const wide = layContainersAt({ composer: 678 });
   try {
     assert.deepEqual(drawn(), [
       "Without a note, this won't message the agent.",
