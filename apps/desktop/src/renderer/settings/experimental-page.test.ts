@@ -169,18 +169,29 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
 
   await act(async () => chip.click());
   const options = [...document.querySelectorAll('[role="option"]')];
-  assert.deepEqual(
-    options.map((option) => option.textContent),
-    ["Default", "Atlas", "Caspian", "Cassidy", "Celia", "Cosmo", "Lyra", "Orion", "Selene"],
+  const names = options.map(
+    (option) => option.querySelector(".plan-compose-menu-name")?.textContent,
   );
-  // Each stock avatar shows its face from Keyframe's storage; the deployment's default has none to show.
+  assert.deepEqual(names, [
+    "Default",
+    "Atlas",
+    "Caspian",
+    "Cassidy",
+    "Celia",
+    "Cosmo",
+    "Lyra",
+    "Orion",
+    "Selene",
+  ]);
+  // Each stock avatar shows its face from Keyframe's storage; the deployment's default, which has none, its letter.
   const pictures = options.map((option) => option.querySelector("img")?.getAttribute("src"));
   assert.equal(pictures[0], undefined);
+  assert.equal(options[0]?.querySelector(".actor-face")?.textContent, "D");
   assert.equal(pictures.slice(1).length, 8);
   for (const picture of pictures.slice(1)) {
     assert.ok(picture?.startsWith(`${VIDEO_AVATAR_COVER_ORIGIN}/personas/`), String(picture));
   }
-  const celia = options.find((option) => option.textContent === "Celia");
+  const celia = options[names.indexOf("Celia")];
   assert.ok(celia instanceof HTMLElement);
   await act(async () => celia.click());
   assert.deepEqual(written, [["videoAvatar", VIDEO_AVATAR.CELIA]]);

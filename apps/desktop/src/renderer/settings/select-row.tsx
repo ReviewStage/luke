@@ -1,31 +1,12 @@
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
+import { ACTOR_SIZE, PictureMark } from "../actor-ref";
 import { ChangedMark } from "./marks";
 import { PickerRow } from "./picker-row";
 
 /** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
 const NO_MATCH = "Nothing matches.";
-
-/**
- * An option's picture, or an empty disc of the same size where a set whose
- * other options have pictures leaves this one without, so every label in the
- * menu starts at one edge. The picture says nothing the label does not, so it
- * is hidden from a reader, and no referrer is sent with its fetch.
- */
-function OptionPicture({ src }: { src: string | undefined }): React.JSX.Element {
-  if (src === undefined) return <span className="settings-option-picture" aria-hidden="true" />;
-  return (
-    <img
-      className="settings-option-picture"
-      src={src}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-    />
-  );
-}
 
 /**
  * A settings pop-up: its name, optional why, and one value from a small fixed
@@ -81,11 +62,32 @@ export function SelectRow<Value extends string | number>({
         describedBy={detail ? detailId : undefined}
         value={String(value)}
         valueLabel={chosen?.label ?? String(value)}
-        valueIcon={pictured ? <OptionPicture src={chosen?.picture} /> : undefined}
+        valueIcon={
+          pictured && chosen !== undefined ? (
+            <PictureMark
+              id={String(chosen.value)}
+              name={chosen.label}
+              pictureUrl={chosen.picture}
+              size={ACTOR_SIZE.INLINE}
+            />
+          ) : undefined
+        }
         rows={options.map((option) => ({
           id: String(option.value),
           label: option.label,
-          ...(pictured ? { icon: <OptionPicture src={option.picture} /> } : undefined),
+          // A set with faces draws one on every row, the window's own face, its letter where it has no picture.
+          ...(pictured
+            ? {
+                icon: (
+                  <PictureMark
+                    id={String(option.value)}
+                    name={option.label}
+                    pictureUrl={option.picture}
+                    size={ACTOR_SIZE.ROW}
+                  />
+                ),
+              }
+            : undefined),
         }))}
         noMatch={NO_MATCH}
         anchor={anchor}
