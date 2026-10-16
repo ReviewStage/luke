@@ -39,6 +39,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
+import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -209,6 +210,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     placementPath: path.join(config.stateRoot, "call-window.json"),
   });
   const callPresence = new CallWindowPresence(callWindow);
+  /** What stops a development build's renderer errors reaching the terminal; nothing until the start begins it. */
+  let stopRendererErrors = (): void => undefined;
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -506,6 +509,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
         run(pageResponse(request.url, operator.host.tasksPage)),
       );
+      // A development build writes its windows' errors where the run's own
+      // lines go, from before the first window opens, and offers their
+      // developer tools; the menu bar draws none in a packaged build.
+      if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
+      config.showMenuBar({
+        developerTools: {
+          onOpenVoiceWindow: () =>
+            voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+          onOpenCallWindow: () =>
+            callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+        },
+      });
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();
@@ -531,6 +546,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     stop: async () => {
       config.appLinks.close();
+      stopRendererErrors();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
       app.removeListener("browser-window-focus", panelFocused);
