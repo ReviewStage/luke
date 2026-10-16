@@ -1279,6 +1279,23 @@ for (const [mode, tile] of Object.entries(TILES)) {
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
+// Favicon: the dark tile without the Dock grid's margin or shadow, since a
+// browser tab draws no other app's icon beside it, and the face a little
+// larger on it, so the glyph still reads at 16 pixels. The dark set serves
+// both tab themes, as the packaged `.icns` serves both modes. The site
+// serves it as /favicon.svg, with /favicon.ico cut from it for readers that
+// take no SVG — see packages/brand/README.md.
+const FAVICON = { inset: 8, radius: 52, glyph: "translate(-8.54 -11.59) scale(1.06)" };
+{
+  const side = 240 - FAVICON.inset * 2;
+  const favicon =
+    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${TILES.dark.gradient[0]}"/><stop offset="1" stop-color="${TILES.dark.gradient[1]}"/></linearGradient></defs>` +
+    `<rect x="${FAVICON.inset}" y="${FAVICON.inset}" width="${side}" height="${side}" rx="${FAVICON.radius}" fill="url(#tile)"/>` +
+    `<g transform="${FAVICON.glyph}">${face()}</g></svg>`;
+  emit("icon/luke-favicon.svg", favicon.replaceAll("currentColor", TILES.dark.ink), "Luke");
+}
+
 // Square mark: the face's own tight fill — its bounding box padded by the
 // same 6 units, squared by its larger side — with the corners left square,
 // one per mode, tiled and transparent. The tiled pair carries
