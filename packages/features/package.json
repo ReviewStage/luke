@@ -13,6 +13,7 @@
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
+    "./issue-wire": "./src/issue-wire.js",
     "./avatar-grant": "./src/avatar-grant.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
@@ -82,6 +83,7 @@
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",
+    "./issue-list-model": "./src/issue-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
     "./terminal-store": "./src/terminal-store.js"
   },
