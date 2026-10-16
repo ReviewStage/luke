@@ -60,9 +60,17 @@ function linearApi(refuses: boolean) {
   const asked: { bearer: string; query: string }[] = [];
   const layer = fakeHttpClientLayer(async (_url, init) => {
     // SAFETY: the client sends one GraphQL request body per call.
-    const body = JSON.parse(await new Response(init.body).text()) as { query: string };
+    const body = JSON.parse(await new Response(init.body).text()) as {
+      query: string;
+      variables: { id?: string };
+    };
     asked.push({ bearer: new Headers(init.headers).get("authorization") ?? "", query: body.query });
     if (refuses) return Response.json({ errors: [{ message: "unauthorized" }] }, { status: 401 });
+    // An issue asked for by its identifier is the one issue, or Linear's null for one it holds no such issue for.
+    if (body.variables.id !== undefined) {
+      const issue = body.variables.id === LINEAR_NODE.identifier ? LINEAR_NODE : null;
+      return Response.json({ data: { issue } });
+    }
     return Response.json({ data: { issues: { nodes: [LINEAR_NODE] } } });
   });
   return { layer, asked };
@@ -117,6 +125,8 @@ const standing = (refuses = false) =>
         post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_DISCONNECT, userId, { workspaceId }),
       issues: (userId: string, workspaceId: string) =>
         post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES, userId, { workspaceId }),
+      issue: (userId: string, workspaceId: string, identifier: string) =>
+        post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES, userId, { workspaceId, identifier }),
       /** The browser back from Connect with the state the sign-in carried; where it was sent on. */
       returned: (state: string) =>
         Effect.map(
@@ -217,6 +227,44 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
         );
         assert.equal(group.linear.asked[0]?.query.includes("team"), false);
         assert.deepEqual(elsewhere.body, { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE });
+      }),
+  );
+
+  it.effect(
+    "a member reads one issue by its identifier, its state among it, through the workspace's grant, and none for an identifier Linear holds no issue for",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing();
+        const { admin, member, stranger, workspaceId } = yield* team;
+        yield* group.connect(admin, workspaceId);
+        yield* group.returned(yield* signInState(workspaceId));
+
+        const read = yield* group.issue(member, workspaceId, "ENG-1");
+        const unknown = yield* group.issue(member, workspaceId, "ENG-404");
+        const strangers = yield* group.issue(stranger, workspaceId, "ENG-1");
+        const malformed = yield* group.issue(member, workspaceId, "eng 1");
+
+        assert.deepEqual(read, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            issues: [
+              {
+                id: LINEAR_NODE.id,
+                identifier: LINEAR_NODE.identifier,
+                title: LINEAR_NODE.title,
+                url: LINEAR_NODE.url,
+                state: "Todo",
+              },
+            ],
+          },
+        });
+        assert.deepEqual(unknown, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.notEqual(strangers.status, HOSTED_HTTP_STATUS.OK);
+        assert.notEqual(malformed.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(
+          group.linear.asked.map((ask) => ask.bearer),
+          [`Bearer token_${workspaceId}`, `Bearer token_${workspaceId}`],
+        );
       }),
   );
 

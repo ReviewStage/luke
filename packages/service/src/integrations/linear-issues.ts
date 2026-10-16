@@ -106,12 +106,17 @@ const IssueOneSchema = Schema.Struct({
   }),
 });
 
+const IssueByIdentifierSchema = Schema.Struct({
+  data: Schema.Struct({ issue: Schema.NullOr(IssueNodeSchema) }),
+});
+
 const ISSUE_FIELDS = "id identifier title url state { name }";
 
 const QUERY = {
   RECENT: `query LukeRecentIssues($first: Int!) { issues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`,
   SEARCH: `query LukeSearchIssues($term: String!, $first: Int!) { searchIssues(term: $term, first: $first) { nodes { ${ISSUE_FIELDS} } } }`,
   ONE: "query LukeIssue($id: String!) { issue(id: $id) { identifier title url description } }",
+  BY_IDENTIFIER: `query LukeIssueByIdentifier($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`,
 } as const;
 
 /** HTTP statuses Linear answers a token it no longer honours with. */
@@ -227,6 +232,21 @@ export function listLinearIssues(
           (answer) => answer.data.searchIssues.nodes,
         );
   return Effect.map(nodes, (read) => read.slice(0, first).map(summaryOf));
+}
+
+/**
+ * The one issue an identifier names, `ENG-123`, as the picker lists one, its
+ * state among it, which Linear's `issue` query takes in place of an id; none
+ * where Linear answers no issue for it.
+ */
+export function linearIssueByIdentifier(
+  token: Redacted.Redacted,
+  identifier: string,
+): Effect.Effect<readonly LinearIssueSummary[], LinearReadFailure, HttpClient.HttpClient> {
+  return Effect.map(
+    graphql(token, QUERY.BY_IDENTIFIER, { id: identifier }, IssueByIdentifierSchema),
+    (answer) => (answer.data.issue === null ? [] : [summaryOf(answer.data.issue)]),
+  );
 }
 
 /** One issue by its id, as a plan keeps it: its description bounded, empty where it has none. */

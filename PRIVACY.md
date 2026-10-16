@@ -580,7 +580,11 @@ place of a member's own, so what they change in Linear shows as made by the
 person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
-deleted with the plan. Disconnecting stops every read through it at once,
+deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+to a Linear issue, the app asks our service for that issue's key, title, and
+state, which it reads through this connection as you look and keeps
+nowhere; the app shows them on the link, and they go no further.
+Disconnecting stops every read through it at once,
 removes the connection's record, and asks Vercel Connect to revoke the grant;
 what plans already copied of an issue stays with them.
 

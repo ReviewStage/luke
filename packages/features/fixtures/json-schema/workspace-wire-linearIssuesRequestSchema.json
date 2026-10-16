@@ -9,6 +9,9 @@
     "query": {
       "type": "string",
       "maxLength": 200
+    },
+    "identifier": {
+      "type": "string"
     }
   },
   "required": [

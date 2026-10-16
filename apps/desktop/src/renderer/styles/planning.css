@@ -439,6 +439,23 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   text-overflow: ellipsis;
 }
 
+/* Where a provider's page stands, its issue's state, after its name: the
+   name's muted ink behind a hairline, never cut, since the name gives way
+   first. A chip saying one is let wider, so its title is read rather than
+   cut at its first word. */
+.mention-chip:has(.mention-chip-state) {
+  max-width: min(360px, 100%);
+}
+
+.mention-chip-state {
+  flex: none;
+  align-self: baseline;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 .mention-chip[data-state="gone"] {
   background: none;
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
