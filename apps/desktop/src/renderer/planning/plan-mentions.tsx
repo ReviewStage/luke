@@ -161,14 +161,22 @@ export function planlessMentions(
 /** The agents of no read. */
 const NO_AGENTS: readonly MentionableAgent[] = [];
 
-/** The task's pull requests as an `@` list offers them: each its agents published, in the order the agents were started, an archived agent's among them, labelled by its agent's tab's name. */
+/**
+ * The task's pull requests as an `@` list offers them: each its agents
+ * published, as far as the window has read them, in the order the agents
+ * were started, an archived agent's among them, labelled by its agent's
+ * tab's name; a pull request two agents published is offered once, under
+ * the first.
+ */
 export function mentionablePullRequests(
   agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "pullRequests">,
 ): readonly MentionablePullRequest[] {
   const held = [...(agents.agents ?? []), ...(agents.archived ?? [])];
+  const offered = new Set<string>();
   return held.flatMap((agent) => {
     const pullRequest = agents.pullRequests.get(agent.id);
-    if (pullRequest === undefined) return [];
+    if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
+    offered.add(pullRequest.url);
     return [{ ...pullRequest, agent: agentTabLabel(agent, agents.models) }];
   });
 }

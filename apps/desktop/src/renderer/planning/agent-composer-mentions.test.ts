@@ -1163,7 +1163,7 @@ function pullRequest(
 const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STATE.OPEN);
 const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
 
-/** The task's page whose agents published two pull requests, one of them by an archived agent, and whose third agent published none. */
+/** The task's page whose agents published two pull requests, one of them by an archived agent and one by two agents. */
 function publishedPage(): PlanMentionsValue {
   return {
     ...taskPage(),
@@ -1171,8 +1171,10 @@ function publishedPage(): PlanMentionsValue {
       agents: [BILLING_AGENT, LEDGER],
       archived: [OLD_AGENT],
       models: undefined,
+      // The ledger's agent pushed to the same pull request as the billing one.
       pullRequests: new Map([
         [OLD_AGENT.id, SWEEP],
+        [LEDGER.id, SEATS],
         [BILLING_AGENT.id, SEATS],
       ]),
     }),
@@ -1190,7 +1192,7 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   ]);
 }
 
-test("an @ on a task's page offers the pull requests its agents published, each by its number and title, labelled by its agent", async () => {
+test("an @ on a task's page offers the pull requests its agents published, each once, by its number and title, labelled by its first agent", async () => {
   const { container } = await box(publishedPage());
 
   typeInComposer(container, "See @");
