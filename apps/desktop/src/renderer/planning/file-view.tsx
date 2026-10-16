@@ -3,7 +3,6 @@ import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/
 import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion";
 import {
   type FloatingBox,
   PANE_FLOAT,
@@ -11,6 +10,7 @@ import {
   useFloatDismiss,
   useHoverPane,
 } from "../desktop/hover-pane";
+import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion";
 import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
