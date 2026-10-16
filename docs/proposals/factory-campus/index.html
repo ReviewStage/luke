@@ -1648,13 +1648,18 @@ setInterval(() => {
 }, 3000);
 
 const params = new URLSearchParams(location.search);
-const initialTheme = params.get("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+/* A link may name a frame; each value is matched to one of the page's own, so nothing from the URL reaches the markup. */
+const themeParam = params.get("theme");
+const systemTheme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+const initialTheme = themeParam === "light" ? "light" : themeParam === "dark" ? "dark" : systemTheme;
+const openParam = WORK.find((w) => w.id === params.get("open"))?.id;
+const rotParam = ["1", "2", "3"].indexOf(params.get("rot")) + 1;
 renderSidebar();
 renderCensus();
 setTheme(initialTheme);
 fitCampus(true);
-if (params.get("open")) open(params.get("open"));
-if (params.get("rot")) { for (let i = 0; i < Number(params.get("rot")); i++) turn(); }
+if (openParam) open(openParam);
+for (let i = 0; i < rotParam; i++) turn();
 requestAnimationFrame(frame);
 </script>
 </body>
