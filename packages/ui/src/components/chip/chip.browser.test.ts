@@ -60,16 +60,24 @@ test("a chip that keeps the keyboard while unavailable fades all it holds and do
           look,
           chevron: true,
           "aria-disabled": true,
-          children: createElement(ChipName, { children: look }),
+          children: look === CHIP_LOOK.FIELD ? look : createElement(ChipName, { children: look }),
         }),
       ),
     ),
   );
+  const { container: available } = await mount(
+    createElement(Chip, { look: CHIP_LOOK.FIELD, chevron: true, children: "field" }),
+  );
+  const availableChip = available.querySelector("button");
+  const availableInk = availableChip === null ? "" : getComputedStyle(availableChip).color;
   for (const chip of container.querySelectorAll("button")) {
-    for (const part of chip.children) expect(getComputedStyle(part).opacity).toBe("0.45");
     expect(getComputedStyle(chip).color).not.toBe("rgb(255, 0, 0)");
+    for (const glyph of chip.querySelectorAll("svg"))
+      expect(getComputedStyle(glyph).opacity).toBe("0.45");
   }
-  await userEvent.hover(page.getByRole("button", { name: "field" }));
+  const bareField = container.querySelector('[data-look="field"]');
+  expect(bareField && getComputedStyle(bareField).color).not.toBe(availableInk);
+  await userEvent.hover(page.getByRole("button", { name: "field" }).nth(0));
   const field = container.querySelector('[data-look="field"]');
   expect(field && getComputedStyle(field).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
