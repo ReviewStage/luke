@@ -4402,11 +4402,6 @@ body:has(.app-stage[data-capture="true"])
   font-size: 12px;
 }
 
-/* What just shipped wears the finished mark. */
-.factory-shipped {
-  color: var(--state-complete);
-}
-
 /* Automations ---------------------------------------------------------------- */
 
 /* A window-wide place beside the sidebar, as Factory is: its toolbar, then

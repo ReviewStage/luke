@@ -154,14 +154,7 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
       ),
     );
   draw(plans);
-  /** The same page drawn again over another read of the plan list. */
-  const rerender = (next: readonly PlanSummary[]) =>
-    draw({
-      ...plans,
-      plans: next,
-      listed: { plans: next, archived: [], inbox: [], inboxPlans: [] },
-    });
-  return { page: container, opened, rerender };
+  return { page: container, opened };
 }
 
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
@@ -200,8 +193,16 @@ test("each plan stands in its station, and what waits on the developer leads the
       },
     ],
   });
-  assert.equal(page.querySelector(".factory-summary")?.textContent, "2 need you·1 agent working");
-  assert.deepEqual(rows(page, "plan"), ["Usage alerts"]);
+  assert.equal(
+    page.querySelector(".factory-summary")?.textContent,
+    "2 need you·1 agent working·0 shipped today",
+  );
+  // A draft with no agents stands nowhere; Talk holds only the task on a call.
+  assert.deepEqual(rows(page, "talk"), []);
+  assert.equal(
+    page.querySelector('section[data-step="talk"] .factory-idle')?.textContent,
+    "No task on a call",
+  );
   assert.deepEqual(rows(page, "build"), [
     `${QUESTION} · Mercury payouts (waits)`,
     "Plan index · Search across plans",
@@ -220,6 +221,7 @@ test("each plan stands in its station, and what waits on the developer leads the
 
 test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
   const { page, opened } = mount([DRAFT, SEARCH, BILLING, INVITES], {
+    callPlanId: DRAFT.id,
     inbox: [
       {
         planId: BILLING.id,
@@ -243,10 +245,10 @@ test("a question opens the Inbox on its item, an agent its page, a pull request 
   assert.deepEqual(opened.agents, [AGENT_ID]);
 });
 
-test("the plan on the call stands in Plan however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
+test("the task on the call stands in Talk however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = plan(5, "Factory tab", 10 * 24 * HOUR);
   const call = mount([old], { callPlanId: old.id });
-  assert.deepEqual(rows(call.page, "plan"), ["Factory tab · On a call with Luke"]);
+  assert.deepEqual(rows(call.page, "talk"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
   const { page } = mount([old]);
@@ -321,42 +323,53 @@ test("an agent whose turn failed waits first in Build wearing the failed mark an
   ]);
   assert.ok(row(page, "PgBouncer pool failed").querySelector(".failed-mark"));
   assert.ok(row(page, "#2507 checks failing").querySelector(".failed-mark"));
-  assert.equal(page.querySelector(".factory-summary")?.textContent, "3 need you·1 agent working");
+  assert.equal(
+    page.querySelector(".factory-summary")?.textContent,
+    "3 need you·1 agent working·0 shipped today",
+  );
   act(() => row(page, "PgBouncer pool failed").click());
   act(() => row(page, "#2507 checks failing").click());
   assert.deepEqual(opened.agents, [failedAgent]);
   assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2507"]);
 });
 
-test("more pull requests shipping at once than Ship lists are counted after its rows", () => {
-  const shipping = (state: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE]) =>
-    [1, 2, 3, 4, 5].map((n) =>
-      plan(10 + n, `Shipped ${n}`, HOUR, {
-        agents: {
-          total: 0,
-          working: 0,
-          agents: [],
-          pullRequestTotal: 1,
-          pullRequests: [
-            {
-              number: 2600 + n,
-              title: `PR ${n}`,
-              state,
-              checks: CHECK_SUMMARY.PASSING,
-              additions: 1,
-              deletions: 1,
-              url: `https://github.com/acme/relay/pull/${2600 + n}`,
-            },
-          ],
-        },
-      }),
-    );
-  const { page, rerender } = mount(shipping(PULL_REQUEST_STATE.DRAFT));
-  rerender(shipping(PULL_REQUEST_STATE.MERGED));
-  assert.equal(rows(page, "ship").length, 4);
+test("what merged in the last day stands in Ship, the latest first, counted in the summary, and more than Ship lists is counted after its rows", () => {
+  const shipped = (n: number, name: string, ago: number) =>
+    plan(10 + n, name, ago, {
+      agents: {
+        total: 0,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [
+          {
+            number: 2600 + n,
+            title: `PR ${n}`,
+            state: PULL_REQUEST_STATE.MERGED,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 1,
+            deletions: 1,
+            url: `https://github.com/acme/relay/pull/${2600 + n}`,
+          },
+        ],
+      },
+    });
+  const merged = [1, 2, 3, 4, 5].map((n) => shipped(n, `Shipped ${n}`, n * HOUR));
+  const old = shipped(9, "Last week", 7 * 24 * HOUR);
+  const { page } = mount([...merged, old]);
+  assert.deepEqual(rows(page, "ship"), [
+    "#2601 merged · Shipped 1",
+    "#2602 merged · Shipped 2",
+    "#2603 merged · Shipped 3",
+    "#2604 merged · Shipped 4",
+  ]);
   assert.equal(
     page.querySelector('section[data-step="ship"] .factory-more')?.textContent,
     "1 more",
+  );
+  assert.equal(
+    page.querySelector(".factory-summary")?.textContent,
+    "Nothing needs you·0 agents working·5 shipped today",
   );
 });
 
@@ -389,7 +402,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
         },
       },
     ],
-    { me: dean.userId },
+    { me: dean.userId, callPlanId: DRAFT.id },
   );
 
   const face = (words: string) =>

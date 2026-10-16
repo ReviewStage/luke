@@ -8,7 +8,7 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
-  /** The read-only Plan → Build → Ship board beside the Inbox. */
+  /** The read-only Talk → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
   /** Coding agents started on a schedule, listed and made on their own page. */
   AUTOMATIONS: "automations",
@@ -58,7 +58,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.FACTORY,
     name: "Factory",
     detail:
-      "Every task on one board, from Plan to Build to Ship, beside the Inbox. Read-only for now.",
+      "Every task on one board, from Talk to Build to Ship, beside the Inbox. Read-only for now.",
     owner: "Dean",
     since: "2026-10-14",
   },
