@@ -11,10 +11,9 @@ import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import {
   type CallWindowArea,
+  CallWindowPlace,
   type CallWindowPoint,
   type CallWindowSurface,
-  callWindowCard,
-  callWindowFrame,
   callWindowPosition,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
@@ -64,8 +63,9 @@ function workAreas(): readonly CallWindowArea[] {
  *
  * On a video call it grows upward by the avatar's tile while the avatar
  * stands and shrinks back once it is down (`callWindowFrame`), its card's
- * controls staying where the developer left them. The place kept between
- * launches is the card's alone, whatever the window's height when it moved.
+ * controls staying where the developer left them. The place kept, in the
+ * window's life and between launches, is the card's alone (`CallWindowPlace`),
+ * whatever the window's height when it moved.
  */
 export class CallWindow implements CallWindowSurface {
   readonly #options: CallWindowOptions;
@@ -76,6 +76,8 @@ export class CallWindow implements CallWindowSurface {
   #closedForGood = false;
   /** Whether the window holds the avatar's tile above the card, as the presence last fitted it. */
   #video = false;
+  /** Where the card is kept while the window stands, which only the developer's drag moves. */
+  #place: CallWindowPlace | undefined;
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
@@ -97,8 +99,8 @@ export class CallWindow implements CallWindowSurface {
     this.#video = video;
     const window = this.current();
     if (!window) return;
-    const card = callWindowCard(window.getBounds());
-    window.setBounds(callWindowFrame({ card, video, workAreas: workAreas() }));
+    const place = this.#place;
+    if (place !== undefined) window.setBounds(place.frame(video, workAreas()));
   }
 
   /** The panel's answer to the window's view of the avatar's video. */
@@ -108,16 +110,15 @@ export class CallWindow implements CallWindowSurface {
   }
 
   #open(): BrowserWindow {
-    const card = callWindowPosition({
-      saved: readPlacement(this.#options.placementPath),
-      workAreas: workAreas(),
-      primary: screen.getPrimaryDisplay().workArea,
-    });
-    const { x, y, width, height } = callWindowFrame({
-      card,
-      video: this.#video,
-      workAreas: workAreas(),
-    });
+    const place = new CallWindowPlace(
+      callWindowPosition({
+        saved: readPlacement(this.#options.placementPath),
+        workAreas: workAreas(),
+        primary: screen.getPrimaryDisplay().workArea,
+      }),
+    );
+    this.#place = place;
+    const { x, y, width, height } = place.frame(this.#video, workAreas());
     const window = new BrowserWindow({
       title: "Luke call",
       show: false,
@@ -172,8 +173,12 @@ export class CallWindow implements CallWindowSurface {
     window.on("move", () => {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
+    // Only the developer's own drag moves the card's kept place: a move to
+    // the frame this side just set, which macOS reports as a move too, is
+    // not one.
     window.on("moved", () => {
-      const kept = callWindowCard(window.getBounds());
+      const kept = place.moved(window.getBounds());
+      if (kept === undefined) return;
       try {
         fs.writeFileSync(this.#options.placementPath, JSON.stringify(kept));
       } catch {

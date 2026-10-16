@@ -5,6 +5,7 @@ import type { WebContents } from "electron";
 import { describe, it } from "vitest";
 import {
   CALL_WINDOW_BOUNDS,
+  CallWindowPlace,
   CallWindowPresence,
   callWindowCard,
   callWindowFrame,
@@ -116,5 +117,26 @@ describe("the floating call window's frame", () => {
       workAreas: [LAPTOP, above],
     });
     assert.equal(onTop.y, above.y);
+  });
+});
+
+describe("where the floating call window keeps its card", () => {
+  it("returns the card to its place once the tile is down, though the grown window was pushed down from the top", () => {
+    const high = { x: 600, y: LAPTOP.y + 20 };
+    const place = new CallWindowPlace(high);
+    const alone = place.frame(false, [LAPTOP]);
+    const grown = place.frame(true, [LAPTOP]);
+    assert.equal(grown.y, LAPTOP.y);
+    // macOS reports the window's own resize as a move, which keeps nothing.
+    assert.equal(place.moved(grown), undefined);
+    assert.deepEqual(place.frame(false, [LAPTOP]), alone);
+  });
+
+  it("moves the card with the developer's drag, by its controls at the frame's foot", () => {
+    const place = new CallWindowPlace({ x: 8, y: 800 });
+    place.frame(true, [LAPTOP]);
+    const dragged = { x: 300, y: 400, width: 264, height: 221 };
+    assert.deepEqual(place.moved(dragged), { x: 300, y: 400 + 221 - 92 });
+    assert.deepEqual(place.frame(false, [LAPTOP]), { x: 300, y: 529, width: 264, height: 92 });
   });
 });

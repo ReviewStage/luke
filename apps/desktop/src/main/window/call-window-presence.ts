@@ -100,6 +100,45 @@ export function callWindowCard(frame: CallWindowArea): CallWindowPoint {
 }
 
 /**
+ * Where the card is kept, apart from the frame the window stands in: set
+ * where the window opens, and moved by the developer's own drags alone. A
+ * frame this side set, a grown one pushed down from the top of its display
+ * included, is never read back as the card's place, so the card returns to
+ * where it was once the tile is down.
+ */
+export class CallWindowPlace {
+  #card: CallWindowPoint;
+  #framed: CallWindowArea | undefined;
+
+  constructor(card: CallWindowPoint) {
+    this.#card = card;
+  }
+
+  /** The frame for the card kept, with or without the tile, remembered as this side's own. */
+  frame(video: boolean, workAreas: readonly CallWindowArea[]): CallWindowArea {
+    const framed = callWindowFrame({ card: this.#card, video, workAreas });
+    this.#framed = framed;
+    return framed;
+  }
+
+  /** The window moved to `frame`: the card's new place to keep, or nothing where the move was this side's own. */
+  moved(frame: CallWindowArea): CallWindowPoint | undefined {
+    const own = this.#framed;
+    if (
+      own !== undefined &&
+      own.x === frame.x &&
+      own.y === frame.y &&
+      own.height === frame.height
+    ) {
+      return undefined;
+    }
+    this.#framed = undefined;
+    this.#card = callWindowCard(frame);
+    return this.#card;
+  }
+}
+
+/**
  * The decision, held over what moves it: the voice view the voice window
  * reports, the avatar the document holds, and which panel, if any, has the
  * keyboard. The surface is told only when an answer changes, and is fitted
