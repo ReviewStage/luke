@@ -69,6 +69,8 @@ let reads: string[] = [];
 let changes: unknown[] = [];
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
+/** Whether a change is refused. */
+let changeRefused = false;
 
 beforeEach(() => {
   installScrollIntoView();
@@ -82,6 +84,7 @@ beforeEach(() => {
   reads = [];
   changes = [];
   heldChanges = undefined;
+  changeRefused = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -119,6 +122,10 @@ beforeEach(() => {
           changes.push(request.payload);
           const { issueId, change } = request.payload;
           const was = standing.find((each) => each.id === issueId);
+          if (changeRefused) {
+            const value = { failure: ISSUE_CALL_FAILURE.UNANSWERED };
+            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+          }
           if (was === undefined) {
             const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
             return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -279,6 +286,25 @@ function pick(page: HTMLElement, label: string, option: string): void {
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
+}
+
+/** The description's field, opened by a press on the description. */
+function openDescription(page: HTMLElement): HTMLTextAreaElement {
+  const description = page.querySelector<HTMLElement>("[aria-label='Edit description']");
+  assert.ok(description, "the description stands");
+  act(() => description.click());
+  const field = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
+  assert.ok(field, "the description's field opens");
+  return field;
+}
+
+/** Types into a field as the developer would. */
+function type(field: HTMLTextAreaElement, words: string): void {
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 /** Types into the new issue's field and presses Return. */
@@ -530,4 +556,61 @@ test("two changes at once draw the newest's answer, though the older one is answ
 
   assert.equal(picked(page, "Status"), "Done");
   assert.equal(picked(page, "Priority"), "Urgent");
+});
+
+test("the description pressed opens its field, and leaving it sends what was typed and draws it as Markdown", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  const field = openDescription(page);
+  type(field, "## Plan\n\n- reproduce\n- fix");
+  act(() => field.blur());
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "## Plan\n\n- reproduce\n- fix" } },
+  ]);
+  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
+  const drawn = page.querySelector(".issue-description");
+  assert.equal(drawn?.querySelector(".markdown-heading[data-level='2']")?.textContent, "Plan");
+  assert.deepEqual(
+    [...(drawn?.querySelectorAll("li") ?? [])].map((item) => item.textContent),
+    ["reproduce", "fix"],
+  );
+});
+
+test("Escape puts back the description the field opened on and sends nothing, leaving the issue's page standing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const field = openDescription(page);
+  type(field, "Something else entirely");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.equal(page.querySelector(".issue-description")?.textContent, "Fails on CI.");
+  assert.equal(closed, 0);
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+});
+
+test("a save the service refused keeps every word typed in the field and says so", async () => {
+  standing = [issue(1)];
+  changeRefused = true;
+  const page = await openIssue(issue(1).id);
+
+  const field = openDescription(page);
+  type(field, "Steps to reproduce");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+  });
+  await settle();
+
+  const kept = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
+  assert.equal(kept?.value, "Steps to reproduce");
+  assert.match(page.textContent ?? "", /Couldn't save the description/u);
 });
