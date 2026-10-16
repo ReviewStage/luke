@@ -6656,6 +6656,12 @@ button.automation-run:hover {
   background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--strip-ground);
 }
 
+/* A quiet chosen tab, drawn with no fill at rest, still stands on the
+   strip's ground, so no tab shows through it where it is pinned. */
+.tab-strip .tab[data-selected="true"][data-quiet="true"]:not(:hover) {
+  background: var(--strip-ground);
+}
+
 /* Pinned, it fades the tabs passing beneath its inner edge as the strip's
    ends do. */
 @container pinned scroll-state(stuck: left) {
