@@ -759,18 +759,31 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
 }
 
 /**
+ * The Inbox's last choice, by the account signed in and the workspace listed
+ * as it was made, so another account on this Mac, or another workspace,
+ * never opens on it.
+ */
+interface RememberedInboxChoice {
+  readonly account: string | undefined;
+  readonly workspaceId: string | undefined;
+  readonly chosen: InboxChoice;
+}
+
+/**
  * The Inbox's choice to stand on as it opens again: the one last made, where
- * it was made in the workspace listed now, else none, where the list's first
- * stands in. Note that it comes back as a row's choice rather than an ask, so
- * an item gone since gives way to the first rather than saying it is missing.
+ * it was made by the account signed in now in the workspace listed, else none,
+ * where the list's first stands in. Note that it comes back as a row's choice
+ * rather than an ask, so an item gone since gives way to the first rather than
+ * saying it is missing.
  */
 function rememberedChoice(
-  remembered:
-    | { readonly workspaceId: string | undefined; readonly chosen: InboxChoice }
-    | undefined,
-  workspaceId: string | undefined,
+  remembered: RememberedInboxChoice | undefined,
+  now: { readonly account: string | undefined; readonly workspaceId: string | undefined },
 ): InboxChoice | undefined {
-  if (remembered === undefined || remembered.workspaceId !== workspaceId) return undefined;
+  if (remembered === undefined) return undefined;
+  if (remembered.account !== now.account || remembered.workspaceId !== now.workspaceId) {
+    return undefined;
+  }
   const { chosen } = remembered;
   return "taskId" in chosen
     ? { taskId: chosen.taskId, itemId: chosen.itemId }
@@ -871,10 +884,8 @@ export function useTasksTab(input: {
   const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
-  /** The item last chosen in the Inbox and the workspace it was chosen in, which opening the Inbox again stands on. */
-  const lastInboxChoice = useRef<
-    { readonly workspaceId: string | undefined; readonly chosen: InboxChoice } | undefined
-  >(undefined);
+  /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
+  const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -1179,9 +1190,13 @@ export function useTasksTab(input: {
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {
-      lastInboxChoice.current = { workspaceId: listedWorkspaceId, chosen: inboxChosen };
+      lastInboxChoice.current = {
+        account: input.account,
+        workspaceId: listedWorkspaceId,
+        chosen: inboxChosen,
+      };
     }
-  }, [inboxChosen, listedWorkspaceId]);
+  }, [inboxChosen, input.account, listedWorkspaceId]);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -1969,10 +1984,11 @@ export function useTasksTab(input: {
     sidePanel.onShow(planId, tab);
   };
 
-  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed.
-  const listLinked = (workspace: string) => {
+  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
+  const listLinked = (workspace: string): string | undefined => {
     const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
     if (home !== undefined && home.id !== listedWorkspace?.id) chooseListed(home.id);
+    return home?.id ?? listedWorkspace?.id;
   };
 
   // A version's Open lands where its writer wrote it: an agent's tab as a
@@ -2081,10 +2097,18 @@ export function useTasksTab(input: {
         });
         return;
       }
-      case LINK_PLACE.INBOX:
-        listLinked(workspace);
-        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
+      case LINK_PLACE.INBOX: {
+        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists.
+        const workspaceId = listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.INBOX,
+          chosen: rememberedChoice(lastInboxChoice.current, {
+            account: input.account,
+            workspaceId,
+          }),
+        });
         return;
+      }
       case LINK_PLACE.INBOX_ITEM:
         // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
         listLinked(
@@ -2406,7 +2430,13 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
             ? held
-            : { kind: STAND_IN.INBOX, chosen: rememberedChoice(remembered, listedWorkspaceId) },
+            : {
+                kind: STAND_IN.INBOX,
+                chosen: rememberedChoice(remembered, {
+                  account: input.account,
+                  workspaceId: listedWorkspaceId,
+                }),
+              },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
