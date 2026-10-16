@@ -125,26 +125,27 @@ top branch (the Step 1 command, named "Restack <stack title>") whose brief
 names the trunk (`main`, or the parent PR's branch for a branch-off stack
 whose parent has not merged), every unmerged branch bottom to top, and, after
 a merge, the PR to retarget with `gh pr edit <number> --base main`. It first
-creates a local branch for each at its remote tip (`git branch <branch>
-origin/<branch>`), since the workspace starts with only the top one, then
-adopts them with `gh stack init --base <trunk> <branch> ...` and restacks
-them in one pass: `gh stack sync` (fetch, cascading rebase, atomic push, and
-relink) when nothing conflicts. When `gh stack sync` reports a conflict, it
-restores every branch; the workspace then runs `gh stack rebase`, resolves
-each conflict and runs `gh stack rebase --continue` (or `--abort` to give
-up), and after a successful rebase runs `gh stack push`, which pushes each
-branch with `--force-with-lease`. Without the extension, the fallback is to
-note the cutoff, which is the old trunk tip (`git rev-parse origin/<trunk>`)
-or, after a merge, the merged PR's last head (`gh pr view <number> --json
-headRefOid`), then `git fetch` and run `git rebase --update-refs --onto
-origin/<trunk> <cutoff>` from the top branch, so neither a rewritten trunk's
-old commits nor a squash-merged PR's commits are replayed; on a conflict,
-resolve and stage it, then `git rebase --continue` (or `--abort`), and only
-after the rebase succeeds push every branch with `--force-with-lease`. It
-restacks each branch-off stack the same way onto its parent's new head (or
-onto `main`, past the parent's last head, once the parent has merged), asks
-you when a conflict needs a judgment call, and reports when done. Then
-archive it and tell every held worker to reset and resume.
+points a local branch at each one's remote tip, bottom to top (`git checkout
+-B <branch> origin/<branch>`, which also resets the top branch the workspace
+starts on), then adopts them with `gh stack init --base <trunk> <branch> ...`
+and restacks them in one pass: `gh stack sync` (fetch, cascading rebase,
+atomic push, and relink) when nothing conflicts. When `gh stack sync` reports
+a conflict, it restores every branch; the workspace then runs `gh stack
+rebase`, resolves each conflict and runs `gh stack rebase --continue` (or
+`--abort` to give up), and after a successful rebase runs `gh stack push`,
+which pushes each branch with `--force-with-lease`. Without the extension,
+the fallback is to note the cutoff, which is the old trunk tip (`git
+rev-parse origin/<trunk>`) or, after a merge, the merged PR's last head (`gh
+pr view <number> --json headRefOid`), then `git fetch` and run `git rebase
+--update-refs --onto origin/<trunk> <cutoff>` from the top branch, so neither
+a rewritten trunk's old commits nor a squash-merged PR's commits are
+replayed; on a conflict, resolve and stage it, then `git rebase --continue`
+(or `--abort`), and only after the rebase succeeds push every branch with
+`--force-with-lease`. It restacks each branch-off stack the same way onto its
+parent's new head (or onto `main`, past the parent's last head, once the
+parent has merged), asks you when a conflict needs a judgment call, and
+reports when done. Then archive it and tell every held worker to reset and
+resume.
 
 ## Step 4: Finish
 
