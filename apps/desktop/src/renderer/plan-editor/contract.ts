@@ -108,7 +108,7 @@ export interface EditorDiagram {
 interface ComposerMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
-  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
 }
 
@@ -144,7 +144,7 @@ export interface PlanEditorMentions {
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
   readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
-  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */
   readonly namesMention: (target: string) => boolean;

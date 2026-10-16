@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { PlanShownCode } from "@luke/features/planning-view";
+import type { TaskShownCode } from "@luke/features/tasks-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DELEGATION_TARGET,
@@ -336,7 +336,7 @@ interface Fixture {
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
   /** Every code `onCode` put on screen, in order. */
-  codes: PlanShownCode[];
+  codes: TaskShownCode[];
   /** How many times the peer was told the call is ending. */
   endings: { count: number };
   /** Every hand-off the service traced, in order. */
@@ -352,7 +352,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const sidebands: FakeSideband[] = [];
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
-    const codes: PlanShownCode[] = [];
+    const codes: TaskShownCode[] = [];
     const endings = { count: 0 };
     const traces: LiveSessionTrace[] = [];
     let ids = 0;

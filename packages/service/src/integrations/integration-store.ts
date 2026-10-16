@@ -27,7 +27,7 @@ import {
   type IntegrationProvider,
   integrationProviderSchema,
 } from "@luke/features/integration-wire";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
@@ -51,8 +51,6 @@ export interface IntegrationConnectionRow {
   readonly connectionName: string;
   /** The account's name at the provider, or the developer's own for it; nothing until either is known. */
   readonly label: string | undefined;
-  /** Whether the developer made this the provider's primary account. */
-  readonly primary: boolean;
   readonly status: IntegrationRowStatus;
   /** The sign-in under way's own state, which only it may complete under; nothing when none is. */
   readonly state: string | undefined;
@@ -78,7 +76,6 @@ const IntegrationRowSchema = Schema.Struct({
   connectSubject: Schema.String,
   connectionName: Schema.String,
   label: Schema.NullOr(Schema.String),
-  primary: Schema.Boolean,
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
@@ -93,7 +90,6 @@ const ROW_COLUMNS = {
   connectSubject: integrationConnection.connectSubject,
   connectionName: integrationConnection.connectionName,
   label: integrationConnection.label,
-  primary: integrationConnection.primary,
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
@@ -109,7 +105,6 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     connectSubject: row.connectSubject,
     connectionName: row.connectionName,
     label: row.label ?? undefined,
-    primary: row.primary,
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
@@ -193,7 +188,6 @@ const BeginSchema = Schema.Struct({
   provider: integrationProviderSchema,
   connectionName: Schema.String,
   connectSubject: Schema.String,
-  primary: Schema.Boolean,
   state: Schema.String,
   verifier: Schema.String,
   at: Schema.Date,
@@ -202,25 +196,14 @@ const BeginSchema = Schema.Struct({
 /**
  * Note that the conflicting update leaves the status alone, because an
  * account signing in again stays as connected, or as expired, as it was
- * until the new sign-in completes; it keeps its id, subject, label, and
- * primary flag for the same reason. It takes only a row under the same
- * subject, so a sign-in for another account that minted the same name
+ * until the new sign-in completes; it keeps its id, subject, and label for
+ * the same reason. It takes only a row under the same subject, so a sign-in for another account that minted the same name
  * meanwhile never puts its state on a row whose grant it would not settle.
  */
 const upsertSignIn = SqlSchema.findAll({
   Request: BeginSchema,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({
-    id,
-    userId,
-    provider,
-    connectionName,
-    connectSubject,
-    primary,
-    state,
-    verifier,
-    at,
-  }) =>
+  execute: ({ id, userId, provider, connectionName, connectSubject, state, verifier, at }) =>
     Database.use((db) =>
       db
         .insert(integrationConnection)
@@ -230,7 +213,6 @@ const upsertSignIn = SqlSchema.findAll({
           provider,
           connectSubject,
           connectionName,
-          primary,
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
@@ -250,8 +232,7 @@ const upsertSignIn = SqlSchema.findAll({
  * Records a sign-in under way for one account at a provider, under the
  * state only its callback carries back and the handle Connect answered it
  * with; answers whether it took, which it does not where the name already
- * stands for another subject's account. A first row at the provider is its
- * primary account.
+ * stands for another subject's account.
  */
 export function beginIntegrationSignIn(
   userId: string,
@@ -261,17 +242,12 @@ export function beginIntegrationSignIn(
 ): IntegrationStoreEffect<boolean> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
-    const rows = yield* readIntegrationConnections(userId);
-    const primary = !rows.some(
-      (row) => row.provider === account.provider && row.connectionName !== account.connectionName,
-    );
     const taken = yield* upsertSignIn({
       id: randomUUID(),
       userId,
       provider: account.provider,
       connectionName: account.connectionName,
       connectSubject: account.connectSubject,
-      primary,
       state,
       verifier: Redacted.value(verifier),
       at,
@@ -313,8 +289,8 @@ const updateConnected = SqlSchema.findAll({
           state: null,
           stateIssuedAt: null,
           connectVerifier: null,
-          // A label the account already carries, the developer's own among them, is kept over the grant's.
-          label: sql`coalesce(${integrationConnection.label}, ${label})`,
+          // A label the account already carries, the developer's own among them, is kept over the grant's; an empty one, which a grant that named nothing left, is not.
+          label: sql`coalesce(nullif(${integrationConnection.label}, ''), ${label})`,
           connectedAt: at,
           updatedAt: at,
         })
@@ -364,6 +340,50 @@ const updateLabel = SqlSchema.findAll({
     ),
 });
 
+const FillSchema = Schema.Struct({
+  userId: Schema.String,
+  connectionName: Schema.String,
+  connectSubject: Schema.String,
+  label: Schema.String,
+  at: Schema.Date,
+});
+
+const updateUnlabelled = SqlSchema.void({
+  Request: FillSchema,
+  execute: ({ at, label, connectSubject, ...account }) =>
+    Database.use((db) =>
+      db
+        .update(integrationConnection)
+        .set({ label, updatedAt: at })
+        .where(
+          and(
+            ofAccount(account),
+            eq(integrationConnection.connectSubject, connectSubject),
+            isNull(integrationConnection.label),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Labels one account that carries no label yet with its name at the
+ * provider as Connect's grant read it, or with an empty label where the
+ * grant named nothing, which marks it read so its grant is never asked
+ * again for a name; a label the account carries, the developer's own among
+ * them, stands. Only the account under the subject the name was read for
+ * takes it, so one disconnected and replaced under the same name meanwhile
+ * never wears its predecessor's.
+ */
+export function fillIntegrationLabel(
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "connectSubject">,
+  label: string,
+): IntegrationStoreEffect<void> {
+  const { userId, connectionName, connectSubject } = account;
+  return Effect.flatMap(DateTime.nowAsDate, (at) =>
+    updateUnlabelled({ userId, connectionName, connectSubject, label, at }),
+  );
+}
+
 /** Names one account as the developer calls it; answers whether the account held such a row. */
 export function renameIntegrationConnection(
   userId: string,
@@ -373,51 +393,6 @@ export function renameIntegrationConnection(
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
     Effect.map(updateLabel({ userId, connectionName, label, at }), (rows) => rows.length > 0),
   );
-}
-
-const PrimarySchema = Schema.Struct({
-  userId: Schema.String,
-  provider: integrationProviderSchema,
-  connectionName: Schema.String,
-  at: Schema.Date,
-});
-
-const updatePrimary = SqlSchema.void({
-  Request: PrimarySchema,
-  execute: ({ userId, provider, connectionName, at }) =>
-    Database.use((db) =>
-      db
-        .update(integrationConnection)
-        .set({
-          primary: sql`${integrationConnection.connectionName} = ${connectionName}`,
-          updatedAt: at,
-        })
-        .where(
-          and(
-            eq(integrationConnection.userId, userId),
-            eq(integrationConnection.provider, provider),
-          ),
-        ),
-    ),
-});
-
-/**
- * Makes one account its provider's primary and every other account there
- * not, in one statement, so a provider never stands with two; answers
- * whether the account held such a row, and changes nothing where it did not.
- */
-export function makeIntegrationPrimary(
-  userId: string,
-  provider: IntegrationProvider,
-  connectionName: string,
-): IntegrationStoreEffect<boolean> {
-  return Effect.gen(function* () {
-    const row = yield* readIntegrationConnection(userId, connectionName);
-    if (row?.provider !== provider) return false;
-    const at = yield* DateTime.nowAsDate;
-    yield* updatePrimary({ userId, provider, connectionName, at });
-    return true;
-  });
 }
 
 const updateExpired = SqlSchema.void({
@@ -456,6 +431,36 @@ export function deleteIntegrationConnection(
   connectionName: string,
 ): IntegrationStoreEffect<void> {
   return deleteRow({ userId, connectionName });
+}
+
+const HeldAccountSchema = Schema.Struct({
+  userId: Schema.String,
+  connectionName: Schema.String,
+  id: Schema.String,
+});
+
+const deleteHeld = SqlSchema.findAll({
+  Request: HeldAccountSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, ...account }) =>
+    Database.use((db) =>
+      db
+        .delete(integrationConnection)
+        .where(and(ofAccount(account), eq(integrationConnection.id, id)))
+        .returning({ id: integrationConnection.id }),
+    ),
+});
+
+/**
+ * Disconnects the one account read, by its row's own id, and answers
+ * whether it was still there: an account added since under the same name
+ * stands, even a provider's first, whose subject is always the user's own.
+ */
+export function deleteIntegrationAccount(
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
+): IntegrationStoreEffect<boolean> {
+  const { userId, connectionName, id } = account;
+  return Effect.map(deleteHeld({ userId, connectionName, id }), (deleted) => deleted.length > 0);
 }
 
 const deleteUnfinished = SqlSchema.void({

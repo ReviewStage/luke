@@ -15,14 +15,14 @@ const PAGE_HOST = "page";
 
 /** The page one address names. */
 export interface FramedPage {
-  readonly planId: string;
+  readonly taskId: string;
   readonly pageId: string;
   readonly version: number;
 }
 
 /** The address one version of one page is drawn from. */
 export function pageFrameUrl(page: FramedPage): string {
-  return `${PAGE_SCHEME}://${PAGE_HOST}/${page.planId}/${page.pageId}/${page.version}`;
+  return `${PAGE_SCHEME}://${PAGE_HOST}/${page.taskId}/${page.pageId}/${page.version}`;
 }
 
 /** The page an address names, where it names exactly one in the shape `pageFrameUrl` writes; nothing for any other. */
@@ -32,12 +32,12 @@ export function framedPageOf(url: string): FramedPage | undefined {
     return undefined;
   }
   if (parsed.search !== "" || parsed.hash !== "") return undefined;
-  const [planId, pageId, version, ...rest] = parsed.pathname.slice(1).split("/");
+  const [taskId, pageId, version, ...rest] = parsed.pathname.slice(1).split("/");
   const number = Number(version);
-  if (planId === undefined || pageId === undefined || rest.length > 0) return undefined;
+  if (taskId === undefined || pageId === undefined || rest.length > 0) return undefined;
   // Note that the version is read only as `pageFrameUrl` spells it, so `02` or `2e0` names nothing.
-  if (planId === "" || pageId === "" || String(number) !== version || number < 1) {
+  if (taskId === "" || pageId === "" || String(number) !== version || number < 1) {
     return undefined;
   }
-  return { planId, pageId, version: number };
+  return { taskId, pageId, version: number };
 }

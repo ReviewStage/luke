@@ -1,6 +1,6 @@
 import { applyPatch, structuredPatch } from "diff";
 import { Schema as EffectSchema } from "effect";
-import { PLAN_BOUNDS, planSchema } from "./plan-wire.js";
+import { TASK_BOUNDS, taskSchema } from "./task-wire.js";
 
 /**
  * plan-edit.ts -- the developer's own edit of a plan's text: what the window sends, what the service answers, and how the edit is taken into the text.
@@ -16,6 +16,10 @@ import { PLAN_BOUNDS, planSchema } from "./plan-wire.js";
  * and the edit survives the point. A patch that does not apply is a conflict,
  * answered with what the text holds now, and nothing is changed: the
  * developer chooses whether their text stands.
+ *
+ * Note that `plan` keep the wire's legacy spelling of a task, because a
+ * released desktop sends and reads them; they are renamed with the wire in a
+ * follow-up, with no alias.
  */
 
 /**
@@ -24,7 +28,7 @@ import { PLAN_BOUNDS, planSchema } from "./plan-wire.js";
  * is the save's to refuse as too long.
  */
 const DOCUMENT_TEXT = EffectSchema.String.check(
-  EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS),
+  EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS),
 );
 
 /** The developer's edit of the plan's whole text (POST `/api/plans/{id}/edit`): the text the editor opened on, or their own last save since, and the text they wrote. */
@@ -47,7 +51,7 @@ export const PLAN_EDIT_REFUSAL = {
 
 /** What an edit answers: the plan as saved, the text as it now stands where the edit conflicts with it, or why it was refused. */
 export const planEditAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ plan: planSchema }),
+  EffectSchema.Struct({ plan: taskSchema }),
   EffectSchema.Struct({
     conflict: EffectSchema.Struct({ current: planEditValueSchema }),
   }),

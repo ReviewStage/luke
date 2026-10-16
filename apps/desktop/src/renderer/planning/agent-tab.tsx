@@ -18,7 +18,7 @@ import { DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
 import {
@@ -55,10 +55,12 @@ import {
   AGENT_PART,
   type AgentPart,
   agentLines,
+  agentListCallIds,
   agentRows,
   agentStillWriting,
   agentTabLabel,
   agentWorkingPhase,
+  archivedByReading,
   delegates,
   dockedTodos,
   endLine,
@@ -67,9 +69,11 @@ import {
   macOwnerOf,
   messageWords,
   newestTodos,
+  placedMessages,
   settledPlanEdits,
   showsPublishedRow,
   teammateStarter,
+  turnStretches,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -83,6 +87,7 @@ import {
   useMessageReveal,
 } from "./message-links";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
+import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
@@ -536,6 +541,8 @@ function AgentPartView({
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
+    // A line that reached the turn is drawn as the developer's own message between the turn's stretches (`turnStretches`), never inside one.
+    case AGENT_PART.ARRIVED:
       return null;
   }
 }
@@ -638,10 +645,10 @@ function TaskSender({
     <ActorLine>
       {task === undefined ? null : <TaskRef task={task} onOpen={onOpen} />}
       {starter === undefined ? null : (
-        <>
+        <ActorLine>
           {task === undefined ? "Started by " : " · started by "}
           <ActorRef actor={starter} sentence />
-        </>
+        </ActorLine>
       )}
     </ActorLine>
   );
@@ -679,7 +686,8 @@ function OriginSubject({
  * where it cannot, deleted, someone else's personal one, or the Automations
  * experiment off; then the issue or pull request its GitHub event named,
  * and who asked for a run now. A webhook's body is the card's, never this
- * line's.
+ * line's. Each part after the first is a line of its own, separator and
+ * all, so a narrow line breaks between the parts (desktop.css).
  */
 function AutomationSender({
   automationId,
@@ -714,16 +722,16 @@ function AutomationSender({
         />
       )}
       {subject === undefined ? null : (
-        <>
+        <ActorLine>
           {" · "}
           <OriginSubject subject={subject} openGitHub={openGitHub} />
-        </>
+        </ActorLine>
       )}
       {run?.runBy === undefined ? null : (
-        <>
+        <ActorLine>
           {" · Run by "}
           <ActorRef actor={runner} sentence />
-        </>
+        </ActorLine>
       )}
     </ActorLine>
   );
@@ -778,11 +786,22 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
+export interface ArrivedLine {
+  readonly message: CodingAgentMessage;
+  readonly sender: Actor | undefined;
+}
+
+/** No line reached the turn while it ran. */
+const NO_ARRIVED: readonly ArrivedLine[] = [];
+
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
  * agent's own turns, with a copy of its words under it where it has any,
  * ending once it has finished on how long it worked and when it ended.
+ * A line that reached a turn while it ran is drawn inside it, as its own
+ * bubble between the work before it and the work after it.
  */
 export function AgentMessage({
   message,
@@ -795,6 +814,7 @@ export function AgentMessage({
   said = false,
   sender,
   origin,
+  arrived = NO_ARRIVED,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -812,6 +832,8 @@ export function AgentMessage({
   said?: boolean;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
+  /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
+  arrived?: readonly ArrivedLine[];
 }): ReactNode {
   const words = messageWords(message);
   if (plan) {
@@ -835,7 +857,9 @@ export function AgentMessage({
         {words === "" ? null : (
           <>
             <MessageContent>
-              <SentWords text={words} />
+              <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
+                <SentWords text={words} />
+              </SentToAgent>
             </MessageContent>
             <CopyMessageAction words={words} messageId={message.id} />
           </>
@@ -858,26 +882,52 @@ export function AgentMessage({
         models={delegation?.models}
       />
     );
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
-  return (
-    <Message from={message.role} data-message-id={message.id}>
-      {named}
-      <MessageContent>
-        <TranscriptRows
-          rows={agentRows(message, moving, {
-            newestTodos: todos.kept,
-            workers,
-            said,
-          })}
-          trailer={said ? workedFor : undefined}
-        >
-          {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
-        </TranscriptRows>
-      </MessageContent>
-      {said ? null : workedFor}
-      {words === "" || said ? null : <CopyMessageAction words={words} messageId={message.id} />}
-    </Message>
+  const stretches = turnStretches(
+    agentRows(message, moving, {
+      newestTodos: todos.kept,
+      workers,
+      said,
+      arrived: arrived.map((line) => line.message),
+    }),
   );
+  const last = stretches.findLastIndex((stretch) => stretch.line === undefined);
+  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  return stretches.map((stretch, index) => {
+    if (stretch.line !== undefined) {
+      const line = stretch.line;
+      return (
+        <AgentMessage
+          key={line.id}
+          message={line}
+          plan={false}
+          lead={lead}
+          moving={false}
+          delegation={delegation}
+          sender={arrived.find((each) => each.message.id === line.id)?.sender}
+        />
+      );
+    }
+    // Note that only the turn's first stretch carries its id and its sender, because a link to the turn brings its start into view.
+    const ends = index === last;
+    return (
+      <Message
+        key={index === 0 ? message.id : (stretch.rows[0]?.key ?? message.id)}
+        from={message.role}
+        data-message-id={index === 0 ? message.id : undefined}
+      >
+        {index === 0 ? named : null}
+        <MessageContent>
+          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
+            {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
+          </TranscriptRows>
+        </MessageContent>
+        {said || !ends ? null : workedFor}
+        {words === "" || said || !ends ? null : (
+          <CopyMessageAction words={words} messageId={message.id} />
+        )}
+      </Message>
+    );
+  });
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
@@ -951,21 +1001,25 @@ function AgentTranscriptView({
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
+    // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
+    const placed = placedMessages(messages);
     return (
       <Conversation>
-        {/* The plan's card stands off the tab row by the gap between a column's groups. */}
+        {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
         <ConversationContent
           className={
-            overComposer ? "agent-log-over-composer pt-(--section-gap)" : "pt-(--section-gap)"
+            overComposer
+              ? "scroll-fade agent-log-over-composer pt-(--section-gap)"
+              : "scroll-fade pt-(--section-gap)"
           }
         >
-          {messages.map((message, index) => (
+          {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
                 message={message}
                 plan={message === plan}
                 lead={lead}
-                moving={working && index === messages.length - 1}
+                moving={working && index === placed.length - 1}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
@@ -975,6 +1029,10 @@ function AgentTranscriptView({
                     ? briefSender
                     : lineSender(message.sentBy, readerId, members, former)
                 }
+                arrived={arrived.map((line) => ({
+                  message: line,
+                  sender: lineSender(line.sentBy, readerId, members, former),
+                }))}
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -1094,6 +1152,7 @@ function AgentTabView({
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
+  const steering = new Set(composer.sent.filter((line) => line.steers).map((line) => line.id));
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
@@ -1116,37 +1175,39 @@ function AgentTabView({
     >
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
-          <AgentTranscriptView
-            messages={lines}
-            brief={agent.brief}
-            briefSender={starter === undefined ? undefined : starterActor}
-            origin={origin}
-            readerId={readerId}
-            delegation={{
-              models,
-              own: { model: agent.model, effort: agent.effort },
-              starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-              onOpen: onOpenSubagent,
-              onOpenTarget,
-              cards,
-              standings: transcript.subagents,
-            }}
-            reading={transcript.reading}
-            failed={transcript.failed}
-            working={working}
-            sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-            startedAt={startedAt}
-            ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-            endReason={endLineReason(transcript.failure, starter)}
-            onOpenApiKeys={onOpenApiKeys}
-            onRetry={transcript.onRetry}
-            footer={
-              showsPublishedRow(agent.status, published) ? (
-                <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-              ) : null
-            }
-            overComposer
-          />
+          <MentionedServers value={{ disabled: servers.disabled, steering }}>
+            <AgentTranscriptView
+              messages={lines}
+              brief={agent.brief}
+              briefSender={starter === undefined ? undefined : starterActor}
+              origin={origin}
+              readerId={readerId}
+              delegation={{
+                models,
+                own: { model: agent.model, effort: agent.effort },
+                starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                onOpen: onOpenSubagent,
+                onOpenTarget,
+                cards,
+                standings: transcript.subagents,
+              }}
+              reading={transcript.reading}
+              failed={transcript.failed}
+              working={working}
+              sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+              startedAt={startedAt}
+              ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+              endReason={endLineReason(transcript.failure, starter)}
+              onOpenApiKeys={onOpenApiKeys}
+              onRetry={transcript.onRetry}
+              footer={
+                showsPublishedRow(agent.status, published) ? (
+                  <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+                ) : null
+              }
+              overComposer
+            />
+          </MentionedServers>
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
@@ -1155,9 +1216,15 @@ function AgentTabView({
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
             stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            archivedBy={
+              agent.archivedAt === undefined || agent.archivedBy === undefined
+                ? undefined
+                : archivedByReading(agent.archivedBy, readerId)
+            }
           />
         ) : (
           <AgentComposer
+            agentId={agent.id}
             status={agent.status}
             composer={composer}
             model={model}
@@ -1240,12 +1307,24 @@ export function AgentTab({
   useEffect(() => {
     if (settledEdits <= seenEdits.current) return;
     seenEdits.current = settledEdits;
-    tell(ACT_KIND.PLANNING_REFRESH);
+    tell(ACT_KIND.TASKS_REFRESH);
   }, [settledEdits, tell]);
+  // An agent this one started, archived, or brought back moves in the plan's agents only once
+  // they are read again, so a call that answered after the tab opened has them read; those
+  // already there were read with the plan.
+  const listCalls = useMemo(() => agentListCallIds(transcript.messages), [transcript.messages]);
+  const seenListCalls = useRef<ReadonlySet<string>>(new Set(listCalls));
+  const readAgents = control.onRetryList;
+  useEffect(() => {
+    const landed = listCalls.some((id) => !seenListCalls.current.has(id));
+    seenListCalls.current = new Set(listCalls);
+    if (landed) readAgents();
+  }, [listCalls, readAgents]);
   const composer = useAgentComposer({
     agentId: agent.id,
     planId: agent.planId,
     messages: transcript.messages,
+    running: agent.status === CODING_AGENT_STATUS.RUNNING,
     send: control.onMessage,
     onStatus: control.onStatus,
   });

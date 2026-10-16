@@ -621,7 +621,7 @@ function pasted(
   const words = fragmentText(slice.content);
   const room =
     props.maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
-  // A page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
+  // An address of Luke's own or a page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
   const mention = props.mentions?.pasted(words);
   if (
     mention !== undefined &&

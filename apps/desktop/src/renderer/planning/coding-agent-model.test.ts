@@ -11,12 +11,13 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
   AGENT_PART,
   agentLines,
+  agentListCallIds,
   agentParts,
   agentWorkingPhase,
   checkoutCommand,
@@ -144,6 +145,7 @@ test("a sent line is read back by a developer's row it did not know holding its 
     text,
     attachments: [],
     known: knownDeveloperRows(known),
+    steers: false,
   });
   // The plan already says the same words: the line is not read back by it.
   const first = sent("sent-1", "Go on.", [plan]);
@@ -168,8 +170,8 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
   const plan = developer("m-plan", "Go on.");
   const taken = developer("m-1", "Taken.");
   const lines: SentLine[] = [
-    { id: "sent-1", text: "Soon.", attachments: [], known: new Set() },
-    { id: "sent-2", text: "Later.", attachments: [], known: new Set() },
+    { id: "sent-1", text: "Soon.", attachments: [], known: new Set(), steers: false },
+    { id: "sent-2", text: "Later.", attachments: [], known: new Set(), steers: false },
   ];
   const drawn = agentLines([plan, taken], lines);
   assert.deepEqual(
@@ -397,6 +399,34 @@ test("the plan edits that have answered are counted, not the ones still out or t
   assert.equal(settledPlanEdits([]), 0);
 });
 
+test("the calls that move a task's agents are its starts, archives, and unarchives once answered, by call id, under a start's earlier name too; a call still out or of another tool names none", () => {
+  const call = (callId: string, tool: string, state: string, output?: WireRecord) => ({
+    type: `tool-${tool}`,
+    toolCallId: callId,
+    state,
+    input: { agentId: "agent-2" },
+    ...(output === undefined ? undefined : { output }),
+  });
+  const accepted = { status: "accepted", agent: { id: "agent-2" } };
+  const messages: CodingAgentMessage[] = [
+    {
+      id: "m1",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        call("c1", "start_agent", "output-available", accepted),
+        call("c2", "archive_agent", "output-available", accepted),
+        call("c3", "unarchive_agent", "input-available"),
+        call("c4", "message_agent", "output-available", accepted),
+        call("c5", "start_coding_agent", "output-available", accepted),
+        call("c6", "unarchive_agent", "output-available", accepted),
+      ],
+    },
+  ];
+
+  assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6"]);
+  assert.deepEqual(agentListCallIds([]), []);
+});
+
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const plan: CodingAgentMessage = {
     id: "m-plan",
@@ -484,7 +514,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   const onPlan = messageFailureNote(refused, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   const planless = messageFailureNote(refused, null);
 
-  assert.equal("planId" in onPlan && onPlan.planId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
+  assert.equal("taskId" in onPlan && onPlan.taskId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   assert.deepEqual(planless, {
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),

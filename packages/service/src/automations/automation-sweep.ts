@@ -13,7 +13,7 @@ import {
   awaitingLinesOfReached,
   latestTurnsOfReached,
 } from "@luke/database/models/coding-agent-store";
-import type { PlanStoreEffect } from "@luke/database/models/plan-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_RUN_REASON,
@@ -102,7 +102,7 @@ function nextAfter(trigger: AutomationTrigger, after: Date): Date | null {
 }
 
 /** Claims the schedules due at `now`, answering the runs it queued. */
-function claimDueSchedules(now: number): PlanStoreEffect<readonly ClaimedFiring[]> {
+function claimDueSchedules(now: number): TaskStoreEffect<readonly ClaimedFiring[]> {
   return claimDueAutomations({
     now: new Date(now),
     limit: AUTOMATION_SWEEP.MAX_CLAIMS,

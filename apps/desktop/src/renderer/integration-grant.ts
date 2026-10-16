@@ -1,3 +1,4 @@
+import { SIGN_IN } from "@luke/features/integration-sign-in";
 import type { IntegrationConnectView } from "@luke/features/integration-view";
 import { INTEGRATION_CALL_FAILURE } from "@luke/features/integration-view";
 import {
@@ -84,8 +85,9 @@ export function useIntegrationGrant(statuses: IntegrationStatuses): IntegrationG
       const account = integrationConnectionOf(server);
       if (account === undefined) return GRANT_OUTCOME.REFUSED;
       const { provider } = account;
-      // An added account the service no longer holds, its first sign-in having failed, is signed in afresh as a new one.
-      if (account.place > 1 && !statuses.listed(server)) return add(provider);
+      // An added account the service no longer holds, its first sign-in having ended, is signed in afresh as a new one; one still waiting is reopened under its own name.
+      const ended = statuses.signInOf(server)?.kind !== SIGN_IN.WAITING;
+      if (account.place > 1 && !statuses.listed(server) && ended) return add(provider);
       if (grantedBySignIn(provider)) {
         if (!(await connect())) return GRANT_OUTCOME.NOT_OPENED;
         signInBegun(provider);

@@ -26,7 +26,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type AgentTurnStanding, codingAgentSummary } from "./status.js";
+import { type AgentTurnStanding, codingAgentSummary, summaryAccounts } from "./status.js";
 
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
@@ -87,7 +87,7 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf([agent.conversationId]);
-  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   return codingAgentSummary(
     agent,
     standing(agent.conversationId),

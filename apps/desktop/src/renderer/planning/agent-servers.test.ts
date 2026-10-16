@@ -420,14 +420,14 @@ test("two accounts at a provider stand as two rows, each named by its label, and
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
     {
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: false,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];

@@ -2,12 +2,12 @@ import { workspaceSeams } from "@luke/database/models/workspace-seams";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { plansApp } from "@luke/service/plans/plans-app";
+import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /** One version of one page of a plan, with its HTML, by the ids and number its path carries (GET). */
 export default routeFromHttpRouter(
-  plansApp({
+  tasksApp({
     resolveUserId: resolveHostedUserId,
     workspaces: workspaceSeams(auth.api),
     eveOrigin: deploymentEveOrigin,

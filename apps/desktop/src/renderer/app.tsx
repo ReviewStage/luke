@@ -3,12 +3,12 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
-  type AppInboxPlan,
-  type AppInboxPlanHolding,
-  type AppInboxPlanlessItem,
+  type AppInboxTask,
+  type AppInboxTaskHolding,
+  type AppInboxTasklessItem,
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "@luke/host/app-state";
@@ -17,11 +17,11 @@ import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/setti
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarPlanId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { callBarTaskId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import type {
@@ -42,6 +42,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
+import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
@@ -83,12 +84,12 @@ import { useWindowZoom } from "./window-zoom";
 const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
-const NOTHING_WAITING: readonly AppInboxPlan[] = [];
+const NOTHING_WAITING: readonly AppInboxTask[] = [];
 
 /** No plan holds an inbox item, as the document reads before main has answered. */
-const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
+const NO_PLANS_HOLDING: readonly AppInboxTaskHolding[] = [];
 /** Nothing waiting from agents with no plan, as one value across renders. */
-const NOTHING_PLANLESS: readonly AppInboxPlanlessItem[] = [];
+const NOTHING_PLANLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
@@ -108,7 +109,7 @@ export function App(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
-  const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
+  const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
@@ -277,18 +278,18 @@ export function App(): React.JSX.Element {
   // planning call's words and levels are the shape's as any call's are.
   const plans = usePlansTab({
     acts: { act, tell },
-    planning: state?.planning ?? IDLE_PLANNING_VIEW,
+    planning: state?.tasks ?? IDLE_TASKS_VIEW,
     run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     account: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined,
     accountId: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined,
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
-    shown: tab === PANEL_TAB.PLANS,
+    shown: tab === PANEL_TAB.TASKS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
-    inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
-    inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
+    inboxPlans: state?.inbox.tasks ?? NO_PLANS_HOLDING,
+    inboxPlanless: state?.inbox.taskless ?? NOTHING_PLANLESS,
     failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
@@ -327,7 +328,7 @@ export function App(): React.JSX.Element {
   const openAgent = useCallback(
     ({ planId, agentId }: AgentPlace) =>
       guardLeave(() => {
-        changeTab(PANEL_TAB.PLANS);
+        changeTab(PANEL_TAB.TASKS);
         if (planId === null) showAgentPage.current(agentId);
         else showAgent.current(planId, agentId);
       })(),
@@ -346,7 +347,7 @@ export function App(): React.JSX.Element {
       toast({ words: EXPERIMENT_OFF_LINK, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     } else {
       guardLeave(() => {
-        changeTab(PANEL_TAB.PLANS);
+        changeTab(PANEL_TAB.TASKS);
         plans.onOpenLink(link);
       })();
     }
@@ -377,7 +378,7 @@ export function App(): React.JSX.Element {
     () =>
       window.luke.onShowPlan(({ planId }) =>
         guardLeave(() => {
-          changeTab(PANEL_TAB.PLANS);
+          changeTab(PANEL_TAB.TASKS);
           showPlan.current(planId);
         })(),
       ),
@@ -387,21 +388,23 @@ export function App(): React.JSX.Element {
   // on screen: another plan, the home page, Settings, or the plan itself
   // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
-  const planShown = callBarPlanId({
-    plansTab: tab === PANEL_TAB.PLANS,
-    documentPage: plans.page === PLANS_PAGE.DOCUMENT,
+  const planShown = callBarTaskId({
+    tasksTab: tab === PANEL_TAB.TASKS,
+    documentPage: plans.page === TASKS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
     inboxOpen: plans.inboxView.open,
     agentPageOpen: plans.agentView.agentId !== undefined,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
-    activePlanId: state?.planning.activePlanId,
+    activeTaskId: state?.tasks.activeTaskId,
   });
+  const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, planShown })
+    !accountGated && callCardShown({ view: voiceView, focused, taskShown: planShown })
       ? {
-          card: callCard({ view: voiceView, planning: state?.planning ?? IDLE_PLANNING_VIEW }),
+          card: callCard({ view: voiceView, tasks: state?.tasks ?? IDLE_TASKS_VIEW }),
           speakerMuted: voiceView.speakerMuted,
           controls: callControls(tell, voiceView.speakerMuted),
+          video: callVideo,
         }
       : undefined;
   // An agent's end said in the toast while the window was focused: its View
@@ -416,7 +419,7 @@ export function App(): React.JSX.Element {
   const openInbox = useCallback(
     (planId: string) =>
       guardLeave(() => {
-        changeTab(PANEL_TAB.PLANS);
+        changeTab(PANEL_TAB.TASKS);
         showInbox.current(planId);
       })(),
     [changeTab, guardLeave],
@@ -431,7 +434,7 @@ export function App(): React.JSX.Element {
       window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) =>
         guardLeave(() => {
           const doors = inboxDoors.current;
-          changeTab(PANEL_TAB.PLANS);
+          changeTab(PANEL_TAB.TASKS);
           if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
             doors.onChooseWorkspace(workspaceId);
           }
@@ -603,7 +606,7 @@ export function App(): React.JSX.Element {
     // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
     onLeft: (workspaceId: string) => {
       plans.onLeftWorkspace(workspaceId);
-      changeTab(PANEL_TAB.PLANS);
+      changeTab(PANEL_TAB.TASKS);
     },
     listFailed: plans.listFailed,
     onRetryList: plans.onRetryList,
@@ -619,7 +622,7 @@ export function App(): React.JSX.Element {
 
   // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
   const openPerson = (userId: string, name?: string, workspaceId?: string) => {
-    changeTab(PANEL_TAB.PLANS);
+    changeTab(PANEL_TAB.TASKS);
     plans.personView.onOpen(userId, name, workspaceId);
   };
 
@@ -745,7 +748,7 @@ export function App(): React.JSX.Element {
                           onViewChange: setSettingsView,
                         }}
                         readFiles={(planId) =>
-                          act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
+                          act(ACT_KIND.TASKS_TREE, { planId, path: "", recursive: true })
                         }
                       />
                     </div>

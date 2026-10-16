@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
-import { openPlanConversation } from "@luke/database/models/plan-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
@@ -10,7 +10,7 @@ import {
   joinWorkspace,
   leaveWorkspace,
   openHostedStoreTestDatabase,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Option, Redacted, Result } from "effect";
@@ -400,13 +400,13 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
   const userA = await database.createUser();
   const teammate = await database.createUser();
   const stranger = await database.createUser();
-  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startTask(userA, { name: "Teammate invitations" }));
   await database.run(joinWorkspace(started.workspaceId, teammate));
-  const plan = Option.getOrThrow(await database.run(openPlanConversation(userA, started.id)));
+  const task = Option.getOrThrow(await database.run(openTaskConversation(userA, started.id)));
   const agent = Option.getOrThrow(
     await database.run(
       createCodingAgent(userA, {
-        planId: started.id,
+        taskId: started.id,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
         effort: "high",
@@ -416,10 +416,10 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
       }),
     ),
   ).agent;
-  const planChild = await insertConversation(database.run, {
+  const taskChild = await insertConversation(database.run, {
     userId: userA,
     kind: CONVERSATION_KIND.CHILD,
-    parentConversationId: plan.conversationId,
+    parentConversationId: task.conversationId,
   });
   const agentChild = await insertConversation(database.run, {
     userId: userA,
@@ -428,20 +428,20 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
   });
   const elsewhere = await ownedConversation(userA);
 
-  for (const conversationId of [plan.conversationId, agent.conversationId, planChild, agentChild]) {
+  for (const conversationId of [task.conversationId, agent.conversationId, taskChild, agentChild]) {
     assert.equal(await database.run(conversationReachableBy(teammate, conversationId)), true);
     assert.equal(await database.run(conversationReachableBy(stranger, conversationId)), false);
   }
   assert.equal(await database.run(conversationReachableBy(teammate, elsewhere)), false);
   assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
 
-  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: plan.conversationId });
+  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: task.conversationId });
   const spoken = await database.run(
     admitConversation({ current: principal(teammate), initiator: opener }, CLAIMING),
   );
   assert.ok(Result.isSuccess(spoken));
   assert.equal(spoken.success.caller, teammate);
-  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: plan.conversationId });
+  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: task.conversationId });
   assert.deepEqual(
     await database.run(
       admitConversation({ current: principal(stranger), initiator: opener }, CLAIMING),
@@ -451,7 +451,7 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
 
   // The opener who leaves the workspace leaves its plan's conversations with it.
   await database.run(leaveWorkspace(started.workspaceId, userA));
-  for (const conversationId of [plan.conversationId, agent.conversationId, planChild]) {
+  for (const conversationId of [task.conversationId, agent.conversationId, taskChild]) {
     assert.equal(await database.run(conversationReachableBy(userA, conversationId)), false);
   }
   assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
@@ -461,9 +461,9 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
       db
         .update(conversations)
         .set({ deletedAt: new Date(0) })
-        .where(eq(conversations.id, plan.conversationId)),
+        .where(eq(conversations.id, task.conversationId)),
     ),
   );
-  assert.equal(await database.run(conversationReachableBy(teammate, planChild)), false);
+  assert.equal(await database.run(conversationReachableBy(teammate, taskChild)), false);
   assert.equal(await database.run(conversationReachableBy(teammate, agentChild)), true);
 });

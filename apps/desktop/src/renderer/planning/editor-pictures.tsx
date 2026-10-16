@@ -1,6 +1,6 @@
 import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
-import { PICTURE_KEEP_FAILURE } from "@luke/features/planning-view";
+import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
@@ -62,13 +62,10 @@ const TOOL = {
   DELETE: "Delete",
 } as const;
 
-/** What a field under a picture describes, and what its hint says. */
+/** What a field under a picture describes. */
 const DESCRIBING = {
-  ALT: {
-    label: TOOL.ALT,
-    hint: "Describe what the picture shows, for anyone who cannot see it and for the agents that read the plan as words.",
-  },
-  CAPTION: { label: TOOL.CAPTION, hint: "Words shown under the picture." },
+  ALT: { label: TOOL.ALT },
+  CAPTION: { label: TOOL.CAPTION },
 } as const;
 
 type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
@@ -201,7 +198,6 @@ function DescribeField({
           }}
         />
       </label>
-      <span className="picture-describe-hint">{describing.hint}</span>
     </span>
   );
 }
@@ -291,9 +287,9 @@ function KeptPicture({
 }): React.JSX.Element {
   const { picture, selected, doors } = drawn;
   const named = planAttachmentOf(picture.src);
-  const state = usePicture(named?.planId ?? "", named?.attachmentId ?? "", door.read);
+  const state = usePicture(named?.taskId ?? "", named?.attachmentId ?? "", door.read);
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
-  const own = named?.planId === door.planId;
+  const own = named?.taskId === door.planId;
   const tools: PictureTool[] = [
     {
       label: TOOL.ALT,
@@ -383,7 +379,7 @@ export function useEditorPictures(
       settled(taken.upload, { kind: UPLOAD.SENDING, url });
       const failed = (reason: string) =>
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
-      const kept = await act(ACT_KIND.PLANNING_PICTURE_KEEP, { planId, picture: url }).catch(
+      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId, picture: url }).catch(
         () => undefined,
       );
       if (kept === undefined || "failure" in kept) {
@@ -396,7 +392,7 @@ export function useEditorPictures(
       keepPictureRead(planId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ planId, attachmentId: kept.id }, workspace),
+        planAttachmentAddress({ taskId: planId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
@@ -421,7 +417,7 @@ export function useEditorPictures(
       const read =
         named === undefined || door === undefined
           ? undefined
-          : await door.read(named.planId, named.attachmentId).catch(() => undefined);
+          : await door.read(named.taskId, named.attachmentId).catch(() => undefined);
       if (read === undefined || "failure" in read) {
         return settled(taken.upload, {
           kind: UPLOAD.FAILED,
@@ -456,7 +452,7 @@ export function useEditorPictures(
       },
       copies: (src) => {
         const named = planAttachmentOf(src);
-        return named !== undefined && named.planId !== planId;
+        return named !== undefined && named.taskId !== planId;
       },
     };
   }

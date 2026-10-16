@@ -15,16 +15,8 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  type PlanActivityFrame,
-  type PlanCallEndingFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
-  planActivityFrameFromWire,
-  planCallEndingFrameFromWire,
-  planCodeFrameFromWire,
   planDraftFrameFromWire,
-  planWorkFrameFromWire,
   readServiceAnswer,
   type SessionActivityFrame,
   type SessionAttachFrame,
@@ -34,6 +26,14 @@ import {
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
+  type TaskActivityFrame,
+  type TaskCallEndingFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
+  taskActivityFrameFromWire,
+  taskCallEndingFrameFromWire,
+  taskCodeFrameFromWire,
+  taskWorkFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
@@ -104,7 +104,7 @@ export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
   /** The plan the call is about. */
-  planId: string;
+  taskId: string;
 }
 
 /**
@@ -164,13 +164,13 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * Tells the listener each time the service says what each part of Luke is
    * doing on a planning call, on the same terms as `onPlanDraft`.
    */
-  onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
+  onTaskActivity?(listener: (activity: TaskActivityFrame) => void): void;
   /** Tells the listener each time Luke puts code on screen on a planning call, on the same terms as `onPlanDraft`. */
-  onPlanCode?(listener: (code: PlanCodeFrame) => void): void;
+  onTaskCode?(listener: (code: TaskCodeFrame) => void): void;
   /** Tells the listener each planning turn's work as it changes on a planning call, on the same terms as `onPlanDraft`. */
-  onPlanWork?(listener: (work: PlanWorkFrame) => void): void;
+  onTaskWork?(listener: (work: TaskWorkFrame) => void): void;
   /** Tells the listener Luke is ending a planning call once his goodbye has played, on the same terms as `onPlanDraft`. */
-  onPlanCallEnding?(listener: (ending: PlanCallEndingFrame) => void): void;
+  onTaskCallEnding?(listener: (ending: TaskCallEndingFrame) => void): void;
   /**
    * Asks the service for Luke's avatar on this session, in its own
    * vocabulary, under the request id the caller minted for this ask: the
@@ -419,7 +419,7 @@ class ServiceLiveSessionSource {
         // A planning call is seeded with nothing from here: the service seeds
         // it with the plan and what was said on the plan's earlier calls.
         input: [],
-        planId: input.planId,
+        planId: input.taskId,
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -914,10 +914,10 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       // same socket as the session's events and are taken off it here, before
       // the sideband's Live grammar would read them as nothing.
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
-      const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
-      const codeListeners = new Set<(code: PlanCodeFrame) => void>();
-      const workListeners = new Set<(work: PlanWorkFrame) => void>();
-      const endingListeners = new Set<(ending: PlanCallEndingFrame) => void>();
+      const activityListeners = new Set<(activity: TaskActivityFrame) => void>();
+      const codeListeners = new Set<(code: TaskCodeFrame) => void>();
+      const workListeners = new Set<(work: TaskWorkFrame) => void>();
+      const endingListeners = new Set<(ending: TaskCallEndingFrame) => void>();
       const startedListeners = new Set<(started: AvatarStartedFrame) => void>();
       const unavailableListeners = new Set<(unavailable: AvatarUnavailableFrame) => void>();
       const sideband = this.holdSideband(
@@ -925,16 +925,16 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           onPlanDraft: (draft) => {
             for (const listener of [...draftListeners]) listener(draft);
           },
-          onPlanActivity: (activity) => {
+          onTaskActivity: (activity) => {
             for (const listener of [...activityListeners]) listener(activity);
           },
-          onPlanCode: (code) => {
+          onTaskCode: (code) => {
             for (const listener of [...codeListeners]) listener(code);
           },
-          onPlanWork: (work) => {
+          onTaskWork: (work) => {
             for (const listener of [...workListeners]) listener(work);
           },
-          onPlanCallEnding: (ending) => {
+          onTaskCallEnding: (ending) => {
             for (const listener of [...endingListeners]) listener(ending);
           },
           onAvatarStarted: (started) => {
@@ -977,16 +977,16 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanDraft: (listener) => {
           draftListeners.add(listener);
         },
-        onPlanActivity: (listener) => {
+        onTaskActivity: (listener) => {
           activityListeners.add(listener);
         },
-        onPlanCode: (listener) => {
+        onTaskCode: (listener) => {
           codeListeners.add(listener);
         },
-        onPlanWork: (listener) => {
+        onTaskWork: (listener) => {
           workListeners.add(listener);
         },
-        onPlanCallEnding: (listener) => {
+        onTaskCallEnding: (listener) => {
           endingListeners.add(listener);
         },
         // The avatar's asks ride the same socket, held through a gap like any
@@ -1022,10 +1022,10 @@ const isServiceFrame = Schema.is(
   Schema.Struct({
     type: Schema.Literals([
       VOICE_SERVICE_FRAME.PLAN_DRAFT,
-      VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
-      VOICE_SERVICE_FRAME.PLAN_CODE,
-      VOICE_SERVICE_FRAME.PLAN_WORK,
-      VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
+      VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+      VOICE_SERVICE_FRAME.TASK_CODE,
+      VOICE_SERVICE_FRAME.TASK_WORK,
+      VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
       VOICE_SERVICE_FRAME.AVATAR_STARTED,
       VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
     ]),
@@ -1067,10 +1067,10 @@ function withoutServiceFrames(
   socket: LiveSocket,
   listeners: {
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
-    readonly onPlanActivity: (activity: PlanActivityFrame) => void;
-    readonly onPlanCode: (code: PlanCodeFrame) => void;
-    readonly onPlanWork: (work: PlanWorkFrame) => void;
-    readonly onPlanCallEnding: (ending: PlanCallEndingFrame) => void;
+    readonly onTaskActivity: (activity: TaskActivityFrame) => void;
+    readonly onTaskCode: (code: TaskCodeFrame) => void;
+    readonly onTaskWork: (work: TaskWorkFrame) => void;
+    readonly onTaskCallEnding: (ending: TaskCallEndingFrame) => void;
     readonly onAvatarStarted: (started: AvatarStartedFrame) => void;
     readonly onAvatarUnavailable: (unavailable: AvatarUnavailableFrame) => void;
   },
@@ -1078,14 +1078,14 @@ function withoutServiceFrames(
   const routes = {
     [VOICE_SERVICE_FRAME.PLAN_DRAFT]: (value: UnparsedWireValue) =>
       told(planDraftFrameFromWire(value), listeners.onPlanDraft),
-    [VOICE_SERVICE_FRAME.PLAN_ACTIVITY]: (value: UnparsedWireValue) =>
-      told(planActivityFrameFromWire(value), listeners.onPlanActivity),
-    [VOICE_SERVICE_FRAME.PLAN_CODE]: (value: UnparsedWireValue) =>
-      told(planCodeFrameFromWire(value), listeners.onPlanCode),
-    [VOICE_SERVICE_FRAME.PLAN_WORK]: (value: UnparsedWireValue) =>
-      told(planWorkFrameFromWire(value), listeners.onPlanWork),
-    [VOICE_SERVICE_FRAME.PLAN_CALL_ENDING]: (value: UnparsedWireValue) =>
-      told(planCallEndingFrameFromWire(value), listeners.onPlanCallEnding),
+    [VOICE_SERVICE_FRAME.TASK_ACTIVITY]: (value: UnparsedWireValue) =>
+      told(taskActivityFrameFromWire(value), listeners.onTaskActivity),
+    [VOICE_SERVICE_FRAME.TASK_CODE]: (value: UnparsedWireValue) =>
+      told(taskCodeFrameFromWire(value), listeners.onTaskCode),
+    [VOICE_SERVICE_FRAME.TASK_WORK]: (value: UnparsedWireValue) =>
+      told(taskWorkFrameFromWire(value), listeners.onTaskWork),
+    [VOICE_SERVICE_FRAME.TASK_CALL_ENDING]: (value: UnparsedWireValue) =>
+      told(taskCallEndingFrameFromWire(value), listeners.onTaskCallEnding),
     [VOICE_SERVICE_FRAME.AVATAR_STARTED]: (value: UnparsedWireValue) =>
       told(avatarStartedFrameFromWire(value), listeners.onAvatarStarted) ||
       told(unreadableAvatarAnswer(value), listeners.onAvatarUnavailable) ||

@@ -4,9 +4,9 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "@luke/ui/planning-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
+import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -18,7 +18,9 @@ import { EmptyState } from "../empty-state";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
+import { AgentCard, agentSubject } from "../planning/agent-ref";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { agentActor, agentTabLabel } from "../planning/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../planning/inbox-list";
 import {
@@ -34,7 +36,11 @@ import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
-import { PlanMentions, type PlanMentionsValue } from "../planning/plan-mentions";
+import {
+  PlanMentions,
+  type PlanMentionsValue,
+  useMentionAgentsReader,
+} from "../planning/plan-mentions";
 import { planLinkPlace } from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { CallBar } from "../planning/planning-parts";
@@ -60,7 +66,13 @@ import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
-import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
+import {
+  SummaryButton,
+  type SummaryPin,
+  summaryHolds,
+  TaskSummary,
+  useSummaryLayout,
+} from "./plan-summary";
 import {
   COLUMN,
   changesTabOf,
@@ -330,16 +342,21 @@ function PlanDocument({
   const views = useTabViews();
   const { act } = useAct();
   const openLink = useOpenLink();
-  const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
+  const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const inbox = usePlanInbox({
     planId: inboxPlanId,
     shown: plans.shown,
-    waiting: plans.inbox.some((plan) => plan.planId === inboxPlanId),
+    waiting: plans.inbox.some((plan) => plan.taskId === inboxPlanId),
     agents: plans.agents,
   });
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
+  const summaryLayout = useSummaryLayout(
+    summary,
+    column,
+    plans.sidePanel.fullScreen,
+    summaryHolds(plans, inbox.board),
+  );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
@@ -350,7 +367,7 @@ function PlanDocument({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
+  const planId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // What waits in the plan's inbox opens its Inbox tab where an item did
   // not wait at the last read (`use-main-tabs.ts`). Note that only a read
   // that answered counts, because a plan just opened holds nothing yet, and
@@ -378,12 +395,22 @@ function PlanDocument({
   // The plan as the list names it, its owner, agents, and pull requests
   // among it, which its card and its banner read. Held above the states
   // with no document for the same reason.
-  const opened = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const opened = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   const listedOpen =
     opened === undefined
       ? undefined
       : ([...plans.plans, ...plans.archived].find((each) => each.id === opened.id) ?? opened);
   const stranded = useStrandedPlanBanner(plans, listedOpen);
+  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists, archived ones among them.
+  const mentionTasks = useMemo(
+    () => [...plans.plans, ...plans.archived],
+    [plans.plans, plans.archived],
+  );
+  const readMentionAgents = useMentionAgentsReader(
+    opened?.workspaceId,
+    mentionTasks,
+    plans.agents.models,
+  );
   const openMention = plans.onShowMention;
   const revealed = plans.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -445,7 +472,7 @@ function PlanDocument({
       </>
     );
   }
-  const { plan } = region;
+  const { task: plan } = region;
   const { mainTabs, sidePanel, agents } = plans;
   const home = plans.workspaces.find((each) => each.id === plan.workspaceId);
   // The slug the plan's links are written under, as its ⋯ menu's Copy link to plan writes it.
@@ -458,7 +485,7 @@ function PlanDocument({
   const listHome = () => {
     if (home !== undefined && plans.workspace?.id !== home.id) plans.onChooseWorkspace(home.id);
   };
-  const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
+  const unarchive = () => plans.onMarkPlan(plan.id, TASK_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;
@@ -540,6 +567,11 @@ function PlanDocument({
   });
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
+  // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
+  const agentLook = (agentId: string) => {
+    const subject = agentSubject(agents, agentId, views.held, false);
+    return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
+  };
   // What every place on the page that picks or draws a mention reads (`plan-mentions.tsx`).
   const mentions: PlanMentionsValue = {
     planId: plan.id,
@@ -547,6 +579,12 @@ function PlanDocument({
     workspace,
     repository: plan.repository,
     text: () => plan.document.body,
+    pages: plans.pages,
+    agents: (agents.agents ?? []).map((agent) => {
+      const name = agentTabLabel(agent, agents.models);
+      return { id: agent.id, name, actor: agentActor(agent, name) };
+    }),
+    readAgents: readMentionAgents,
     doors: {
       planId: plan.id,
       place: { workspace, repository: plan.repository },
@@ -555,6 +593,7 @@ function PlanDocument({
       ),
       onOpenPlan: openMention,
       onOpenFile: openMentionedFile,
+      agentOf: agentLook,
     },
   };
   return (
@@ -727,7 +766,7 @@ function PlanDocument({
                         code={{
                           repository: plan.repository,
                           readFile: (window) =>
-                            act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
+                            act(ACT_KIND.TASKS_FILE, { taskId: plan.id, ...window }),
                           onOpenFile: sidePanel.onOpenFile,
                         }}
                       />
@@ -747,7 +786,7 @@ function PlanDocument({
                       />
                     )}
                   </FindScope>
-                  <PlanSummary
+                  <TaskSummary
                     plans={plans}
                     layout={summaryLayout}
                     cardId={summaryCard}
@@ -830,7 +869,7 @@ export function DesktopPlans({
     <ConfirmDialog confirm={plans.secondCall.confirm} question={plans.secondCall.question} />
   );
   switch (plans.page) {
-    case PLANS_PAGE.DOCUMENT:
+    case TASKS_PAGE.DOCUMENT:
       return (
         <SkillFiles
           source={plans.agents.readSkills}
@@ -844,7 +883,7 @@ export function DesktopPlans({
       );
     // With no plan open the column says so and offers New plan, whose
     // dialog stands over it as it stands over a plan.
-    case PLANS_PAGE.HOME:
+    case TASKS_PAGE.HOME:
       // A launch reopening the plan last open draws the window's ground
       // alone until it opens, so the home page never flashes before it.
       if (plans.restoring) return <div className="desktop-drag-strip" />;

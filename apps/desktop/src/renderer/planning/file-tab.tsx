@@ -1,6 +1,6 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import type { PlanFileRequest } from "@luke/features/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
+import type { TaskFileRequest } from "@luke/features/task-wire";
+import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -72,7 +72,7 @@ const EDGE_READ = {
 type EdgeRead = (typeof EDGE_READ)[keyof typeof EDGE_READ];
 
 /** Reads one window of the tab's file: the answer, or a rejection where main refused the act. */
-export type ReadFileWindow = (window: PlanFileRequest) => Promise<PlanningFileAnswer>;
+export type ReadFileWindow = (window: TaskFileRequest) => Promise<TasksFileAnswer>;
 
 /**
  * The row standing above or below the drawn lines while the file goes on
@@ -140,7 +140,7 @@ export function useLinesLook(): LinesLook {
 }
 
 /** The run of lines held after a window's answer, or why there is none. */
-function afterAnswer(held: FileRead, answer: PlanningFileAnswer): FileRead {
+function afterAnswer(held: FileRead, answer: TasksFileAnswer): FileRead {
   if ("file" in answer) return { kind: FILE_READ.READY, ...withWindow(held, answer.file) };
   if ("refusal" in answer) {
     return { kind: FILE_READ.REFUSED, refusal: answer.refusal, branch: answer.branch };
@@ -190,7 +190,7 @@ function FileLinesView({
   });
 
   return (
-    <div className="code-lines file-tab-lines" ref={scroller} {...look}>
+    <div className="code-lines file-tab-lines scroll-fade-top" ref={scroller} {...look}>
       {above === undefined ? null : (
         <EdgeRow
           key={above.firstLine}
@@ -290,7 +290,7 @@ export function FileTab({
 }: {
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
-  snippet: PlanCode | undefined;
+  snippet: TaskCode | undefined;
   /** Luke's notes on the file's lines, each drawn over the first line of its range. */
   notes: FileNotes;
   readFile: ReadFileWindow;
@@ -433,7 +433,7 @@ export function FileTab({
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <div className="code-lines file-tab-lines" {...look}>
+          <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
             <CodeLineRows
               firstLine={snippet.firstLine}
               lines={snippet.lines}

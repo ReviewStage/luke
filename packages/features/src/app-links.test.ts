@@ -10,37 +10,37 @@ import { LINK_PLACE, type ReadLink } from "./luke-link.js";
  * the launch is torn down. Synthetic ids.
  */
 
-const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
-const SECTION_LINK = `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`;
-const PLAN_LINK = `tryluke://tryluke.dev/acme/plan/${PLAN_ID}`;
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const SECTION_LINK = `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`;
+const TASK_LINK = `tryluke://tryluke.dev/acme/plan/${TASK_ID}`;
 const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const SECTION: ReadLink = {
   workspace: "acme",
-  place: { kind: LINK_PLACE.SECTION, planId: PLAN_ID, anchor: "rollout" },
+  place: { kind: LINK_PLACE.SECTION, planId: TASK_ID, anchor: "rollout" },
 };
-const PLAN: ReadLink = { workspace: "acme", place: { kind: LINK_PLACE.TASK, planId: PLAN_ID } };
+const TASK: ReadLink = { workspace: "acme", place: { kind: LINK_PLACE.TASK, planId: TASK_ID } };
 
 test("a link in the app's own scheme names its place: a task, its section, an agent, an Inbox item", () => {
   assert.deepEqual(placeOfAppLink(SECTION_LINK), SECTION);
-  assert.deepEqual(placeOfAppLink(PLAN_LINK), PLAN);
+  assert.deepEqual(placeOfAppLink(TASK_LINK), TASK);
   assert.deepEqual(placeOfAppLink(`tryluke://tryluke.dev/acme/agent/${AGENT_ID}`), {
     workspace: "acme",
     place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
   });
-  assert.deepEqual(placeOfAppLink(`tryluke://tryluke.dev/acme/plan/${PLAN_ID}/inbox/${AGENT_ID}`), {
+  assert.deepEqual(placeOfAppLink(`tryluke://tryluke.dev/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`), {
     workspace: "acme",
-    place: { kind: LINK_PLACE.INBOX_ITEM, planId: PLAN_ID, itemId: AGENT_ID },
+    place: { kind: LINK_PLACE.INBOX_ITEM, planId: TASK_ID, itemId: AGENT_ID },
   });
 });
 
 test("anything but a place's link in the app's own scheme names nothing", () => {
   for (const url of [
-    `https://tryluke.dev/acme/plan/${PLAN_ID}`,
-    `luke://plan/${PLAN_ID}`,
+    `https://tryluke.dev/acme/plan/${TASK_ID}`,
+    `luke://plan/${TASK_ID}`,
     "tryluke://tryluke.dev/acme/settings/Coding%20agents",
     `https://tryluke.dev/acme/agent/${AGENT_ID}`,
-    `tryluke://evil.example/acme/plan/${PLAN_ID}`,
+    `tryluke://evil.example/acme/plan/${TASK_ID}`,
     "tryluke://github.com/acme/relay/blob/HEAD/a.ts",
     "javascript:alert(1)",
   ]) {
@@ -49,7 +49,7 @@ test("anything but a place's link in the app's own scheme names nothing", () => 
 });
 
 test("a second launch's link is the last of its arguments in the app's own scheme", () => {
-  assert.equal(appLinkInArguments(["/Applications/Luke.app", "--flag", PLAN_LINK]), PLAN_LINK);
+  assert.equal(appLinkInArguments(["/Applications/Luke.app", "--flag", TASK_LINK]), TASK_LINK);
   assert.equal(appLinkInArguments(["/Applications/Luke.app", "https://tryluke.dev"]), undefined);
 });
 
@@ -59,13 +59,13 @@ test("links that arrive before a panel can open them open once it can, in order,
 
   inbox.arrive(SECTION_LINK);
   inbox.arrive("https://example.com");
-  inbox.arrive(PLAN_LINK);
+  inbox.arrive(TASK_LINK);
   const beforeReady = opened.length;
   inbox.ready((place) => opened.push(place));
   inbox.arrive(SECTION_LINK);
 
   assert.equal(beforeReady, 0);
-  assert.deepEqual(opened, [SECTION, PLAN, SECTION]);
+  assert.deepEqual(opened, [SECTION, TASK, SECTION]);
 });
 
 test("once the launch is torn down a link opens nothing, and none is held for a later window", () => {
@@ -74,7 +74,7 @@ test("once the launch is torn down a link opens nothing, and none is held for a 
   inbox.ready((place) => opened.push(place));
 
   inbox.close();
-  inbox.arrive(PLAN_LINK);
+  inbox.arrive(TASK_LINK);
   const afterClose = opened.length;
   inbox.ready((place) => opened.push(place));
 
@@ -82,19 +82,8 @@ test("once the launch is torn down a link opens nothing, and none is held for a 
   assert.deepEqual(opened, []);
 });
 
-test("a packaged build claims the scheme as itself, a live development run on its own binary and app, a fixture run not at all", () => {
-  const launch = {
-    executable: "/repo/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-    appPath: "/repo/apps/desktop",
-  };
-
-  assert.deepEqual(appLinkClaim({ ...launch, packaged: true, live: true }), [
-    launch.executable,
-    [],
-  ]);
-  assert.deepEqual(appLinkClaim({ ...launch, packaged: false, live: true }), [
-    launch.executable,
-    [launch.appPath],
-  ]);
-  assert.equal(appLinkClaim({ ...launch, packaged: false, live: false }), undefined);
+test("a packaged build claims the scheme as itself, a live development run gives back a claim stock Electron holds rather than taking it, a fixture run leaves it alone", () => {
+  assert.equal(appLinkClaim({ packaged: true, live: true }), "claim");
+  assert.equal(appLinkClaim({ packaged: false, live: true }), "release");
+  assert.equal(appLinkClaim({ packaged: false, live: false }), "leave");
 });

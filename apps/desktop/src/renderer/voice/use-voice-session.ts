@@ -118,7 +118,8 @@ export function useVoiceSession(
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp, planId) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, planId }),
+          createSession: (sdp, planId) =>
+            act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, taskId: planId }),
           endSession: (request) => tell(ACT_KIND.VOICE_END_LIVE_SESSION, request),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
@@ -282,7 +283,7 @@ export function useVoiceSession(
   // that plan opened and heard, or its microphone toggled, as the main process
   // forwards the press.
   useEffect(
-    () => window.luke.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutPlan(planId))),
+    () => window.luke.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutTask(planId))),
     [drive, orchestrator],
   );
 

@@ -30,7 +30,11 @@
  * connection reads is (`../../integrations/integration-connection.ts`), so
  * a mention of `notion-2` reaches the caller's own second account or none.
  * A provider with more than one account handed tells the model which each
- * is, by its label, and which is primary.
+ * is by its label alone, quoted as a string the label cannot step out of,
+ * and to ask which one where the developer has not said, before it writes.
+ * A conversation whose workspace connected Linear for every member is
+ * handed Linear once, bare, because every Linear call of its turns runs on
+ * the workspace's grant.
  *
  * The read fails closed: a turn whose admission or row could not be read is
  * handed no server, so one the developer switched off never comes back on
@@ -48,10 +52,12 @@ import {
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
+  INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
-  integrationAccountLabel,
+  integrationAccountNames,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -68,6 +74,10 @@ import {
   type IntegrationConnectionRow,
   readIntegrationConnections,
 } from "../../integrations/integration-store.js";
+import {
+  readConversationWorkspace,
+  readWorkspaceIntegration,
+} from "../../integrations/workspace-integration-store.js";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
@@ -135,22 +145,32 @@ function handedRow(row: IntegrationConnectionRow): boolean {
   );
 }
 
+/** The others an account note names, as one phrase: `"Personal"`, or `"Personal" and "Side"`. */
+const OTHERS_SAID = new Intl.ListFormat("en", { type: "conjunction" });
+
 /**
  * What the model is told of one account among its provider's others: its
- * label, whether it is primary, and the others by label and connection
- * name, so a write lands in the account meant and is said to have.
+ * label and the others' labels, never their connection names, which a
+ * person never reads, and to ask which account where the developer has not
+ * said, so a write lands in the account meant and is said to have.
  */
 function accountNote(
   row: IntegrationConnectionRow,
-  primary: IntegrationConnectionRow | undefined,
   others: readonly IntegrationConnectionRow[],
 ): string {
   const name = INTEGRATION_NAME[row.provider];
+  // Note that two accounts called alike are told apart by their places, so no two notes read the same.
+  // Note that a label is cut to a label's length before two alike are told apart, so the place that tells them apart is never cut away.
+  const names = integrationAccountNames(
+    [row, ...others].map((each) => ({
+      connection: each.connectionName,
+      label: each.label?.slice(0, INTEGRATION_LABEL_MAX),
+    })),
+  );
+  // Note that a label is quoted as a string literal, because a provider names it and the model reads it.
   const label = (each: IntegrationConnectionRow) =>
-    integrationAccountLabel({ connection: each.connectionName, label: each.label });
-  const standing = row === primary ? ", their primary one: use it unless they name another" : "";
-  const elsewhere = others.map((each) => `"${label(each)}" as ${each.connectionName}`).join(", ");
-  return `This connection is the developer's "${label(row)}" ${name} account${standing}. They also connected ${elsewhere}. Say which account you read from or wrote to.`;
+    JSON.stringify(names.get(each.connectionName) ?? "");
+  return `This connection is the developer's ${label(row)} ${name} account. They also connected ${OTHERS_SAID.format(others.map(label))}. If the developer hasn't said which account, ask before writing. Say which account you read from or wrote to.`;
 }
 
 /**
@@ -169,7 +189,6 @@ function providerConnections(
     .filter((row) => row.provider === provider && handedRow(row))
     .toSorted((a, b) => placeOf(a) - placeOf(b));
   if (held.length === 0) return [{ provider, connectionName: provider, instanceKey: caller }];
-  const primary = held.find((row) => row.primary) ?? held[0];
   return held.map((row) => ({
     provider,
     connectionName: row.connectionName,
@@ -178,13 +197,28 @@ function providerConnections(
       ? {
           accountNote: accountNote(
             row,
-            primary,
             held.filter((each) => each !== row),
           ),
         }
       : undefined),
   }));
 }
+
+/**
+ * Whether the conversation's workspace connected Linear for every member,
+ * standing connected or expired, so every member's Linear runs on its grant
+ * (`../../integrations/integration-connection.ts`).
+ */
+const workspaceHoldsLinear = (conversationId: string) =>
+  Effect.gen(function* () {
+    const organizationId = yield* readConversationWorkspace(conversationId);
+    if (organizationId === undefined) return false;
+    const row = yield* readWorkspaceIntegration(organizationId, INTEGRATION_PROVIDER.LINEAR);
+    return (
+      row?.status === INTEGRATION_ROW_STATUS.CONNECTED ||
+      row?.status === INTEGRATION_ROW_STATUS.EXPIRED
+    );
+  });
 
 /**
  * The servers the turn starting is handed under the policy, among those
@@ -213,7 +247,13 @@ export function turnServers(
         : connect[provider].configured,
     );
     const rows = yield* readIntegrationConnections(caller);
-    const handed = offered.flatMap((provider) => providerConnections(provider, rows, caller));
+    // Note that a workspace's own Linear is handed once, bare, because every Linear call of the turn runs on its grant, whatever account a label would name.
+    const workspaceLinear = yield* workspaceHoldsLinear(conversationId);
+    const handed = offered.flatMap((provider) =>
+      provider === INTEGRATION_PROVIDER.LINEAR && workspaceLinear
+        ? [{ provider, connectionName: provider, instanceKey: caller }]
+        : providerConnections(provider, rows, caller),
+    );
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
       return { on: true, account: userId, connections: handed } as const;
     }

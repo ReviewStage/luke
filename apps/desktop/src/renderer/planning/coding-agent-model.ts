@@ -1,16 +1,18 @@
-import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
+  type CodingAgentArchivedBy,
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
@@ -34,19 +36,25 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
-import type { PlanEditor } from "@luke/features/plan-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
+import type { PlanEditor } from "@luke/features/task-wire";
+import {
+  ROW_PART,
+  type RowReading,
+  TURN_ROW,
+  type TurnRow,
+  turnRows,
+} from "@luke/features/turn-rows";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
   type ActorState,
-  isBotLogin,
+  githubLoginActor,
   LUKE_ACTOR,
   personActor,
   SOMEONE_REASON,
@@ -168,6 +176,41 @@ const ACTOR_STATE_OF_GLYPH = {
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
+/** Who archived an agent, and why, as its card and its archived banner say it. */
+export interface ArchivedByReading {
+  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean". */
+  readonly words: string;
+  readonly reason: string | undefined;
+}
+
+/** What names an agent that archived another whose title the service kept empty. */
+const UNNAMED_ARCHIVER = "another agent";
+
+/**
+ * Who archived an agent, as the reader reads it: the member who did, or
+ * Luke or the archiving agent and the member they acted for, "you" for the
+ * reader's own account, the member left out once their account is gone;
+ * and the reason they gave.
+ */
+export function archivedByReading(
+  by: CodingAgentArchivedBy,
+  readerId: string | undefined,
+): ArchivedByReading {
+  const member =
+    by.member === undefined ? undefined : by.member.userId === readerId ? "you" : by.member.name;
+  const forMember = member === undefined ? "" : ` for ${member}`;
+  const archiver =
+    by.by === CODING_AGENT_ARCHIVER.MEMBER
+      ? member
+      : by.by === CODING_AGENT_ARCHIVER.LUKE
+        ? `Luke${forMember}`
+        : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
+  return {
+    words: archiver === undefined ? "Archived" : `Archived by ${archiver}`,
+    reason: by.reason,
+  };
+}
+
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },
@@ -184,9 +227,11 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Luke, an automation, or the GitHub login GitHub
- * told the agent of, a person's circle or an App's bot's square by whether
- * the login is a bot's; none for the reader's own,
+ * face, a former member, Luke, an automation, another coding agent of the
+ * workspace by its name on the mark of no known harness, since the service
+ * keeps no more of it than its name, or the GitHub login GitHub
+ * told the agent of, a person's circle by their avatar or an App's bot's
+ * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
  * id, for the reason `teammateStarter` gives. A service older than the
  * sender's kind names Luke, an automation, and a former member alike by a
@@ -203,13 +248,21 @@ export function lineSender(
   if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
     return undefined;
   }
+  if (sentBy.agent === true) {
+    return {
+      kind: ACTOR_KIND.AGENT,
+      name: sentBy.name,
+      provider: undefined,
+      state: ACTOR_STATE.REST,
+    };
+  }
   switch (sentBy.kind) {
     case CODING_AGENT_SENDER.LUKE:
       return LUKE_ACTOR;
     case CODING_AGENT_SENDER.AUTOMATION:
       return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
     case CODING_AGENT_SENDER.GITHUB:
-      return { kind: ACTOR_KIND.GITHUB, login: sentBy.name, bot: isBotLogin(sentBy.name) };
+      return githubLoginActor(sentBy.name);
     case CODING_AGENT_SENDER.FORMER:
       return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
     case CODING_AGENT_SENDER.MEMBER:
@@ -307,7 +360,7 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
-  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This task is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -327,7 +380,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -415,13 +468,13 @@ function unreachedFailure(
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
         text: `This workspace isn't connected to GitHub, so Luke can't reach ${repository}.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
         text: `This workspace's GitHub connection was removed or suspended, so Luke can't reach ${repository}.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:
       return {
@@ -430,19 +483,19 @@ function unreachedFailure(
           unreached.connectedTo === undefined
             ? `${repository} isn't under the GitHub account this workspace is connected to.`
             : `${repository} isn't under ${unreached.connectedTo}, the GitHub account this workspace is connected to.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.GONE:
       return {
         reason: FAILURE_REASON.CHOOSE_REPOSITORY,
         text: `${repository} was renamed, transferred, or deleted on GitHub.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.OTHER_WORKSPACE:
       return {
-        reason: FAILURE_REASON.MOVE_PLAN,
+        reason: FAILURE_REASON.MOVE_TASK,
         text: `${repository} is connected to ${unreached.workspace.name}, not this workspace.`,
-        planId,
+        taskId: planId,
         workspace: unreached.workspace,
       };
   }
@@ -464,7 +517,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -493,7 +546,7 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -918,6 +971,8 @@ export const AGENT_PART = {
   STEP_START: "step-start",
   /** A part of a kind this build does not draw, which is skipped rather than refused. */
   OTHER: "other",
+  /** One of the developer's lines that reached the turn while it ran, drawn among the turn's parts where it arrived; never a part a message stores. */
+  ARRIVED: "arrived",
 } as const;
 
 /** How the SDK spells a tool part's type: the tool's name behind this prefix. */
@@ -940,7 +995,8 @@ export type AgentPart =
       readonly errorText: string | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
-  | { readonly kind: typeof AGENT_PART.OTHER };
+  | { readonly kind: typeof AGENT_PART.OTHER }
+  | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: CodingAgentMessage };
 
 function toolState(value: WireValue | undefined): ToolState {
   // SAFETY: membership in the set built from TOOL_STATE's values is what the union names.
@@ -994,6 +1050,41 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
     ).length;
 }
 
+/**
+ * The coding agent a call started, read off its answer, which is the agent
+ * its row opens; nothing for any other call, one still running, or a start
+ * refused, which answers no agent.
+ */
+export function startedAgentOf(part: AgentPart): string | undefined {
+  if (
+    part.kind !== AGENT_PART.TOOL ||
+    (part.tool !== AGENT_TOOL.START_AGENT && part.tool !== RETIRED_TOOL.START_CODING_AGENT)
+  ) {
+    return undefined;
+  }
+  const target = toolTarget(part);
+  return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
+}
+
+/** The calls that change which agents a task holds and which of them stand archived: a start, an archive, and an unarchive. */
+const AGENT_LIST_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.START_AGENT,
+  RETIRED_TOOL.START_CODING_AGENT,
+  AGENT_TOOL.ARCHIVE_AGENT,
+  AGENT_TOOL.UNARCHIVE_AGENT,
+]);
+
+/** The answered calls of a transcript that change the task's agents or which stand archived, by call id: what the agents are read again on as each lands. */
+export function agentListCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages
+    .flatMap(agentParts)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TOOL && AGENT_LIST_TOOLS.has(part.tool) && part.output !== undefined
+        ? [part.callId]
+        : [],
+    );
+}
+
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
@@ -1004,19 +1095,6 @@ export function isDelegation(
   part: AgentPart,
 ): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
   return part.kind === AGENT_PART.TOOL && delegates(part);
-}
-
-/**
- * The coding agent a call started, read off its answer, which is the agent
- * its row opens; nothing for any other call, one still running, or a start
- * refused, which answers no agent.
- */
-export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.START_CODING_AGENT) {
-    return undefined;
-  }
-  const target = toolTarget(part);
-  return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
@@ -1064,9 +1142,13 @@ export function dockedTodos(
 
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
-  key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
+  key: (part, index) => {
+    if (part.kind === AGENT_PART.TOOL) return part.callId;
+    return part.kind === AGENT_PART.ARRIVED ? part.line.id : String(index);
+  },
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
+    if (part.kind === AGENT_PART.ARRIVED) return ROW_PART.ARRIVED;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
@@ -1088,6 +1170,8 @@ interface AgentTurnPlace {
   readonly workers?: ReadonlyMap<string, ToolState>;
   /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
   readonly said?: boolean;
+  /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
+  readonly arrived?: readonly CodingAgentMessage[];
 }
 
 /** The `connection_execute` calls among the parts that an integration's own call ran under, by their ids. */
@@ -1155,14 +1239,32 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
  * parallel calls of one step are meant to be. Note that such a wrapper is
  * left out, because the call it ran is the same call told twice, and that
  * one with no such call, or one that failed, keeps its row, because its row
- * is where it, or its error, is read.
+ * is where it, or its error, is read. Each line that reached the turn
+ * while it ran stands ahead of the first step after the steps it arrived
+ * after, or at the end where that step has not begun.
  */
-function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
+function drawnParts(
+  message: CodingAgentMessage,
+  arrived: readonly CodingAgentMessage[] = [],
+): readonly AgentPart[] {
   const parts = agentParts(message);
   const ran = runConnectionCalls(parts);
   const drawn: AgentPart[] = [];
+  const waiting = arrived.toSorted((a, b) => afterStepOf(a) - afterStepOf(b));
+  let begun = 0;
+  const arrive = (steps: number) => {
+    while (waiting[0] !== undefined && afterStepOf(waiting[0]) <= steps) {
+      const line = waiting.shift();
+      if (line !== undefined) drawn.push({ kind: AGENT_PART.ARRIVED, line });
+    }
+  };
   for (const part of parts) {
-    if (part.kind === AGENT_PART.STEP_START || part.kind === AGENT_PART.OTHER) continue;
+    if (part.kind === AGENT_PART.STEP_START) {
+      arrive(begun);
+      begun += 1;
+      continue;
+    }
+    if (part.kind === AGENT_PART.OTHER) continue;
     if (
       part.kind === AGENT_PART.TOOL &&
       part.tool === CONNECTION_TOOL.EXECUTE &&
@@ -1183,7 +1285,13 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
       drawn.push(part);
     }
   }
+  arrive(Number.POSITIVE_INFINITY);
   return drawn;
+}
+
+/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+function afterStepOf(line: CodingAgentMessage): number {
+  return line.arrivedIn?.afterStep ?? 0;
 }
 
 /**
@@ -1196,14 +1304,16 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
  * standing is never folded away, and so does every set of pictures the
- * agent showed, which is its answer as much as its words are.
+ * agent showed, which is its answer as much as its words are. A line that
+ * reached the turn while it ran (`arrived`) stands among its parts where it
+ * arrived, splitting the fold of a finished turn around it.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
-  const parts = drawnParts(message);
+  const parts = drawnParts(message, arrived);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
@@ -1221,6 +1331,59 @@ export function agentRows(
     done: !moving,
     said,
   });
+}
+
+/** One of a transcript's rows as the tab draws it, with the developer's lines that reached it while its turn ran. */
+export interface PlacedMessage {
+  readonly message: CodingAgentMessage;
+  /** The lines its turn took in under way (`arrivedIn`), oldest first; none on any row but a turn's journal. */
+  readonly arrived: readonly CodingAgentMessage[];
+}
+
+/**
+ * A transcript's rows with each line that reached a turn under way moved
+ * into that turn's journal, which draws it where it arrived, out of the
+ * order the service keeps, where the journal closed behind it. A line whose
+ * journal is not among the rows, as when its page is still to land, stands
+ * where the order puts it, as every line does from a service older than it.
+ */
+export function placedMessages(messages: readonly CodingAgentMessage[]): readonly PlacedMessage[] {
+  const journals = new Set(
+    messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
+  );
+  const arrived = new Map<string, CodingAgentMessage[]>();
+  for (const message of messages) {
+    const journal = message.arrivedIn?.journalId;
+    if (journal === undefined || !journals.has(journal)) continue;
+    arrived.set(journal, [...(arrived.get(journal) ?? []), message]);
+  }
+  return messages.flatMap((message) => {
+    const journal = message.arrivedIn?.journalId;
+    if (journal !== undefined && journals.has(journal)) return [];
+    return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/** A stretch of a turn's rows as the tab draws it: the turn's own rows, or a line that reached it while it ran, which stands between them as the developer's own message. */
+export type TurnStretch =
+  | { readonly line: CodingAgentMessage; readonly rows?: undefined }
+  | { readonly line?: undefined; readonly rows: readonly TurnRow<AgentPart>[] };
+
+/** A turn's rows cut at every line that reached it while it ran, so the tab draws each line as a message of its own between the turn's work before and after it. */
+export function turnStretches(rows: readonly TurnRow<AgentPart>[]): readonly TurnStretch[] {
+  const stretches: TurnStretch[] = [];
+  let run: TurnRow<AgentPart>[] = [];
+  for (const row of rows) {
+    if (row.kind !== TURN_ROW.BLOCK || row.block.kind !== AGENT_PART.ARRIVED) {
+      run.push(row);
+      continue;
+    }
+    if (run.length > 0) stretches.push({ rows: run });
+    run = [];
+    stretches.push({ line: row.block.line });
+  }
+  if (run.length > 0 || stretches.length === 0) stretches.push({ rows: run });
+  return stretches;
 }
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */
@@ -1345,6 +1508,8 @@ export interface SentLine {
   readonly attachments: readonly CodingAgentAttachment[];
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
+  /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
+  readonly steers: boolean;
 }
 
 /** The developer's own rows of a transcript, which a sent line is read back as one of. */

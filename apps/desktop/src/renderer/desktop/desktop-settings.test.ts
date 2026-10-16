@@ -15,7 +15,16 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import {
+  focusByKeyboard,
+  layWindowStyles,
+  reachOf,
+  ringOf,
+  scrollRoomOf,
+} from "#testing/focus-ring";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { type CallCardInput, callControls } from "../call/call-card";
@@ -266,6 +275,19 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
 });
 
+test("Settings' page list fades over the sidebar's foot and a page fades into the drag strip above it, rather than being sliced at either", () => {
+  const page = mount(createElement(SettingsHarness));
+  const sheets = layFades();
+  try {
+    const list = page.querySelector(".sidebar-section") ?? assert.fail("the pages are listed");
+    const column = page.querySelector(".settings-page-scroll") ?? assert.fail("a page stands");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
+    assert.deepEqual(fadedEdges(column), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
+});
+
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   assert.deepEqual(
@@ -398,6 +420,46 @@ test("the Integrations page's search is cleared when another page is turned to",
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });
 
+test("the keyboard scrolls a page's row in with its ring to spare, and the plan template's words in clear of the fade at its top", async () => {
+  const styles = await layWindowStyles();
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: { kind: string }) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  for (const row of pageButtons(page)) {
+    focusByKeyboard(row);
+    const ring = ringOf(row);
+    assert.ok(ring, `${row.textContent} rings`);
+    assert.ok(
+      scrollRoomOf(row) >= reachOf(ring),
+      `${row.textContent} scrolls in with its ring's reach to spare`,
+    );
+  }
+  const scroller = page.querySelector(".template-document .plan-document-scroll");
+  assert.ok(scroller, "the template's words scroll");
+  const fade = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
+  );
+  assert.ok(fade > 0, "the scroller's top fades");
+  assert.ok(
+    Number.parseFloat(getComputedStyle(scroller).getPropertyValue("scroll-padding-top")) >= fade,
+    "what the keyboard reaches there is scrolled in past the fade",
+  );
+  styles.remove();
+});
+
 test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
   const sent: string[] = [];
   Object.defineProperty(window, "luke", {
@@ -418,7 +480,7 @@ test("the plan template's version history keeps a call's card at the foot of its
   function CallSettings(): React.JSX.Element {
     const { tell } = useAct();
     const call: CallCardInput = {
-      card: { planName: "Checkout redesign", status: undefined, microphoneMuted: false },
+      card: { taskName: "Checkout redesign", status: undefined, microphoneMuted: false },
       speakerMuted: false,
       controls: callControls(tell, false),
     };
@@ -449,7 +511,7 @@ test("the plan template's version history keeps a call's card at the foot of its
   const back = card.querySelector<HTMLButtonElement>('button[aria-label="Open Checkout redesign"]');
   assert.ok(back);
   act(() => back.click());
-  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_PLAN]);
+  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
@@ -478,4 +540,75 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
   await act(async () => item.click());
 
   assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
+});
+
+/** The page's row whose name begins `name`. */
+function rowNamed(page: HTMLElement, name: string): HTMLElement {
+  return (
+    [...page.querySelectorAll<HTMLElement>(".settings-row")].find((row) =>
+      row.querySelector(".settings-copy strong")?.textContent?.startsWith(name),
+    ) ?? assert.fail(`no ${name} row`)
+  );
+}
+
+/** How a row lays out what it holds: whether it wraps, and the least room its words keep. */
+function layout(row: HTMLElement) {
+  const words = row.querySelector(".settings-copy") ?? assert.fail("a row without words");
+  return { wraps: getComputedStyle(row).flexWrap, words: getComputedStyle(words).minWidth };
+}
+
+test("a page too narrow for a row's words beside its control drops the control under the words, which keep the row's first line, and a page wide enough keeps them side by side", () => {
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
+  const rows = () => ["Theme", "Zoom"].map((name) => layout(rowNamed(page, name)));
+
+  // The page column beside the page list at its widest, in the smallest window.
+  const narrow = layContainersAt({ settings: 270 });
+  try {
+    assert.deepEqual(rows(), [
+      { wraps: "wrap", words: "60%" },
+      { wraps: "wrap", words: "60%" },
+    ]);
+  } finally {
+    narrow.remove();
+  }
+  // The same window with the page list at its own width.
+  const wide = layContainersAt({ settings: 406 });
+  try {
+    assert.deepEqual(
+      rows().map((row) => row.wraps),
+      ["nowrap", "nowrap"],
+    );
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the plan template's title line drops its history and Reset under the title where the column is too narrow for both, rather than breaking the title inside a word", async () => {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: { kind: string }) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: true } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const line =
+    page.querySelector<HTMLElement>(".plan-page-head .plan-title-line") ??
+    assert.fail("no title line");
+  assert.ok(line.querySelector(".plan-title-actions"), "the actions stand on the title's line");
+
+  const sheets = layContainersAt({});
+  try {
+    assert.equal(getComputedStyle(line).flexWrap, "wrap");
+  } finally {
+    sheets.remove();
+  }
 });

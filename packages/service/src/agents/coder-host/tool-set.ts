@@ -19,7 +19,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
- * opens for it (`pull-request.ts`), the load of one of its
+ * opens for it (`pull-request.ts`), its reach to the other coding agents of
+ * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
  * checks or a deploy with. The worker's own rows name
@@ -54,15 +55,22 @@ export const CODER_TOOL = {
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
+  LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
+  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
+  START_AGENT: AGENT_TOOL.START_AGENT,
+  ARCHIVE_AGENT: AGENT_TOOL.ARCHIVE_AGENT,
+  UNARCHIVE_AGENT: AGENT_TOOL.UNARCHIVE_AGENT,
+  LIST_TASKS: AGENT_TOOL.LIST_TASKS,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
+  READ_PAGE: AGENT_TOOL.READ_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
 /** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
-export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
+export type TaskTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
 
 /**
  * The plan's tools an agent is offered: none for one on no plan, as an
@@ -71,8 +79,8 @@ export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE
  * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
  * the instructions leave out the same words (`instructions.ts`).
  */
-export function planToolsOf(agent: Pick<CodingAgent, "planId" | "prompt">): ReadonlySet<PlanTool> {
-  if (agent.planId === null) return new Set();
+export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
+  if (agent.taskId === null) return new Set();
   if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
 }

@@ -4,8 +4,8 @@ import {
   type PlanTemplateAnswer,
 } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ResetIcon } from "@luke/ui";
@@ -14,6 +14,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
+import { BANNER_LOOK, Banner } from "../banner";
 import type { PlanReader } from "../planning/edit-ref";
 import { PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
@@ -109,7 +110,7 @@ function written(
  * own edit here moves on, so the document takes their words in at once as
  * it takes a plan's, rather than typing them in again.
  */
-function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Plan {
+function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Task {
   return {
     id: TEMPLATE_DOCUMENT_ID,
     workspaceId: TEMPLATE_WORKSPACE_ID,
@@ -214,13 +215,13 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     };
   }, [act, signedIn, attempt, take]);
 
-  const save = (words: string): Promise<PlanningEditAnswer> => {
+  const save = (words: string): Promise<TasksEditAnswer> => {
     const writes = held.current;
     writes.failed = undefined;
     if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
       return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
     }
-    const sent = written(act, words).then((answer): PlanningEditAnswer => {
+    const sent = written(act, words).then((answer): TasksEditAnswer => {
       if (answer !== undefined) {
         if (writes.standing) take(answer, editedNow());
         return { saved: true };
@@ -235,7 +236,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
           action: { label: "Retry", onPress: () => save(words) },
         });
       }
-      return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+      return { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
     writes.flight = sent;
     return sent;
@@ -290,19 +291,19 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
  */
 function TemplateNote(): React.JSX.Element {
   return (
-    <section
-      className="document-banner template-note"
-      aria-label={PAGE_LINE.NOTE}
-      {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+    <Banner
+      look={BANNER_LOOK.CARD}
+      className="template-note"
+      anchor={searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+      glyph={
+        <span className="document-banner-glyph" aria-hidden="true">
+          <InfoIcon />
+        </span>
+      }
     >
-      <span className="document-banner-glyph" aria-hidden="true">
-        <InfoIcon />
-      </span>
-      <div className="document-banner-words">
-        <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
-        <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
-      </div>
-    </section>
+      <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
+      <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+    </Banner>
   );
 }
 
@@ -408,7 +409,7 @@ function TemplateState({
   }
   // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
   return (
-    <div className="settings-page-scroll" aria-busy="true">
+    <div className="settings-page-scroll scroll-fade-top" aria-busy="true">
       <header className="settings-page-head">
         <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
       </header>

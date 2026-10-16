@@ -11,7 +11,7 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
-import { plan } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/plan";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
@@ -1085,7 +1085,7 @@ it.effect(
         yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
         yield* Database.use((db) =>
           db
-            .insert(plan)
+            .insert(task)
             .values({ userId: grace, organizationId: acme, name: "Relay retries", document: "" }),
         );
         yield* leaving(plugin, grace, acme);
@@ -1123,7 +1123,7 @@ it.effect(
         const lin = yield* openGithubAccount("Lin Chen");
         const acme = yield* openTeam(api, ada, [{ userId: lin, role: "member" }]);
         const started = yield* createCodingAgent(ada, {
-          planId: null,
+          taskId: null,
           organizationId: acme,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -1132,7 +1132,7 @@ it.effect(
           planSnapshot: null,
           prompt: "Sweep the flaky tests.",
         });
-        const agent = { userId: ada, planId: null, agentId: Option.getOrThrow(started).agent.id };
+        const agent = { userId: ada, taskId: null, agentId: Option.getOrThrow(started).agent.id };
         const posted = yield* postInboxItem(agent, {
           key: "branch-protection",
           title: "Require a review on main",
@@ -1177,7 +1177,7 @@ it.effect(
         ]);
         const making = (userId: string, scope: AutomationScope) =>
           createAutomation(userId, {
-            planId: null,
+            taskId: null,
             organizationId: acme,
             repositories: ["acme/relay"],
             name: "Flaky-test sweep",

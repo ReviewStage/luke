@@ -29,6 +29,33 @@
   inset: 0;
 }
 
+/* A board narrower than Excalidraw's phone breakpoint draws its phone
+   toolbar, a row of tools wider than the side panel at its narrowest,
+   centred and cut off at both edges. There the row wraps within the board
+   instead, clear of the column of tools Excalidraw stands at its right, so
+   every tool is in reach. Note that these name Excalidraw's own classes,
+   which hold for the version the workspace pins. */
+.plan-board .excalidraw--mobile .App-top-bar > section {
+  width: 100%;
+  padding-right: var(--default-button-size);
+}
+
+.plan-board .excalidraw--mobile .App-top-bar > section > .Stack,
+.plan-board .excalidraw--mobile .App-toolbar-container {
+  display: flex;
+  justify-content: center;
+}
+
+.plan-board .excalidraw--mobile .App-toolbar--mobile {
+  min-width: 0;
+}
+
+.plan-board .excalidraw--mobile .App-toolbar--mobile > .Stack_horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* The document is the record: it reads as text and is selectable, so Cmd-C
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
@@ -258,7 +285,17 @@ button.plan-crumb-item:hover {
   opacity: 0.6;
 }
 
+/* The separator and the repository after it, which shrink and wrap as one. */
+.plan-crumb-step {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Who can edit keeps its words whole, so the names before it give way first. */
 .plan-crumb-people {
+  flex: none;
   margin-left: auto;
   margin-right: calc(-1 * var(--space-6));
   font-size: 12px;
@@ -350,7 +387,7 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   min-width: 0;
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
-  overflow-clip-margin: 3px;
+  overflow-clip-margin: var(--focus-ring-room);
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.4;
@@ -388,10 +425,11 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
    its name, struck through, on an outline alone. Its name sits on the
    line's baseline, and the pill stands proud of the name's own line on
    padding its margins take back, so a line holding a chip is no taller
-   than a line of words. */
+   than a line of words. A chip is never wider than its column, so a long
+   name in a narrow one is cut rather than scrolled. */
 .mention-chip {
   display: inline-flex;
-  max-width: 240px;
+  max-width: min(240px, 100%);
   align-items: center;
   gap: var(--space-4);
   margin-block: -0.075em;
@@ -438,6 +476,23 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   text-overflow: ellipsis;
 }
 
+/* Where a provider's page stands, its issue's state, after its name: the
+   name's muted ink behind a hairline, never cut, since the name gives way
+   first. A chip saying one is let wider, so its title is read rather than
+   cut at its first word. */
+.mention-chip:has(.mention-chip-state) {
+  max-width: min(360px, 100%);
+}
+
+.mention-chip-state {
+  flex: none;
+  align-self: baseline;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 .mention-chip[data-state="gone"] {
   background: none;
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
@@ -472,6 +527,13 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A narrowed list stands under its kind's crumb, as an MCP server's page
+   stands under its own; a kind typed with its colon has no back arrow, so
+   its glyph keeps the rows' inset. */
+.mention-menu-crumb:not(:has(.agent-servers-back)) {
+  padding-left: calc(var(--row-inset) + var(--menu-inset));
 }
 
 .mention-menu .mention-menu-foot {
@@ -578,11 +640,17 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   gap: var(--space-6);
 }
 
+/* The title breaks inside a word only where the word is wider than the
+   column, so a narrow column never splits "teammates" for want of a few
+   pixels. Note that it outranks `.markdown p`, which breaks anywhere. */
+.plan-title .markdown-heading {
+  overflow-wrap: break-word;
+}
+
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .plan-title-text {
   caret-color: var(--accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
-  overflow-wrap: anywhere;
 }
 
 /* The section between an editor's words and what stands under them. */
@@ -733,6 +801,27 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   flex-direction: column;
 }
 
+/* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
+   to the log's top (../ai-elements/checkpoint.tsx): the fade starts beneath
+   the checkpoint's band, so the time stands whole and what scrolls under it
+   dissolves just below it. The band is held at one height whatever it
+   holds, because a band taller than the inset would slice what passes under
+   its foot, and one shorter would fade its own foot. What the keys reach,
+   and a card a File tab's note reveals (code-pane.tsx), scrolls in past
+   both. */
+.checkpoint-log {
+  --checkpoint-height: 32px;
+  --fade-inset-top: var(--checkpoint-height);
+  scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
+}
+
+/* One line, as a teammate's heading already keeps (`.call-caller`), so a
+   time that would wrap in a narrow panel cannot outgrow the band. */
+.checkpoint-log [data-checkpoint] {
+  height: var(--checkpoint-height);
+  white-space: nowrap;
+}
+
 .code-card {
   overflow: hidden;
   border: 1px solid var(--hairline);
@@ -876,6 +965,7 @@ button.file-ref:hover .file-ref-path {
 /* The bar: history, the path, then the file's actions and the tree's
    toggle at its end, in the window's toolbar buttons. */
 .file-view-bar {
+  container: file-bar / inline-size;
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
@@ -925,12 +1015,18 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The bar's path as breadcrumbs: each crumb a press that lists where it
-   stands, the chevrons between plain. The crumbs give way from the left,
-   so the file's own name stays in sight. */
+   stands, the chevrons between plain. The path gives way in the stylesheet
+   alone (file-breadcrumbs.tsx): every crumb narrows, cut short at its end,
+   the folders first, then the repository, the file's own name last, clipped
+   past the keyboard's ring on a crumb, which stands as tall as the path; and
+   on a narrow bar the folders between the repository and the file's own
+   folder stand as one "…" crumb (below). */
 .file-breadcrumbs {
+  position: relative;
   min-width: 0;
   flex: 0 1 auto;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 .file-breadcrumbs ol {
@@ -942,15 +1038,76 @@ button.file-ref:hover .file-ref-path {
   list-style: none;
 }
 
+/* A crumb gives way, by its share, down to its first letters and the
+   ellipsis, its chevron always standing before it: the repository and the
+   folders first, and the file's own name last of all. */
 .file-breadcrumbs li {
   display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
+  min-width: calc(2.5em + 12px);
+  flex: 0 9 auto;
+  align-items: center;
 }
 
-.file-breadcrumbs li:last-child,
+.file-breadcrumbs li:is([data-crumb="0"], [data-folded-crumb="all"]) {
+  min-width: 2.5em;
+}
+
+.file-breadcrumbs li[data-crumb="0"] {
+  flex-shrink: 9;
+}
+
+/* Note that the file's share is a whole one, because shares summing to
+   less than one leave the rest of the overflow standing. */
+.file-breadcrumbs li:last-child {
+  flex-shrink: 1;
+}
+
 .file-breadcrumbs .file-breadcrumb-separator {
   flex-shrink: 0;
+}
+
+/* A "…" stands for crumbs only where the bar is narrow enough to ask for
+   it. */
+.file-breadcrumbs li[data-folded-crumb] {
+  display: none;
+  flex-shrink: 0;
+}
+
+/* A path six folders deep or deeper draws its middle folders as the one
+   "…" on a bar of any width it does not fold further, since their floors
+   alone would push the file's own name out of the bar. */
+@container file-bar (min-width: 300px) {
+  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-folded-crumb="middle"] {
+    display: flex;
+  }
+
+  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-middle="true"] {
+    display: none;
+  }
+}
+
+/* A bar narrower than 520px draws the folders between the repository and
+   the file's own folder as one "…", which names them in its pill. */
+@container file-bar (max-width: 519px) {
+  .file-breadcrumbs li[data-folded-crumb="middle"] {
+    display: flex;
+  }
+
+  .file-breadcrumbs li[data-middle="true"] {
+    display: none;
+  }
+}
+
+/* A bar narrower than 300px draws the repository and every folder as one
+   "…", the file's own name alone after it. */
+@container file-bar (max-width: 299px) {
+  .file-breadcrumbs li[data-folded-crumb="all"] {
+    display: flex;
+  }
+
+  .file-breadcrumbs li:is([data-folded-crumb="middle"], [data-folder="true"]) {
+    display: none;
+  }
 }
 
 .file-breadcrumb {
@@ -1004,6 +1161,10 @@ button.file-ref:hover .file-ref-path {
   outline: none; /* no ring: the tree's own row carries it */
 }
 
+.file-crumb-tree .file-tree-host {
+  --trees-bg-override: var(--surface-popover);
+}
+
 .file-crumb-notice {
   margin: 0;
   padding: var(--space-4) var(--space-8);
@@ -1037,6 +1198,117 @@ button.file-ref:hover .file-ref-path {
   background: var(--desktop-well);
 }
 
+/* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
+   shells, stands there while the panel holds it open or it slides out; it
+   may be drawn for its place over the tab alone, which a wide panel does
+   not show (`usePaneRoom`). Its count stands under the tab while it stands
+   nowhere beside it. Note that each rule here and under the query names
+   one selector, so each weighs only its own. */
+.file-view[data-pane-beside="false"] :is(.file-tree-pane, .terminal-shells) {
+  display: none;
+}
+
+.file-view[data-pane-beside="true"] > .file-tree-foot {
+  display: none;
+}
+
+.file-tree-toggle[data-place="over"] {
+  display: none;
+}
+
+/* A panel too narrow for a tab and its pane side by side floats the pane
+   over the tab's right edge instead (`usePaneRoom`), as the main sidebar
+   floats over the work in a narrow window: away until the pointer rests
+   on its toggle or at the tab's right edge, or the toggle is pressed, and
+   away again once a peek is left, at a press beside it, at Escape, or at a
+   choice in it. Its count stands under the tab. A peek waits a beat before
+   it slides, so a pointer passing on its way elsewhere leaves before
+   anything covers the tab. Each pane folds at its own width: a tree below
+   a 360px panel, under the panel's default width
+   (`SIDE_PANEL_WIDTH.DEFAULT`), so a File or Changes tab left as it opens
+   keeps its tree beside it, and only a panel dragged narrower folds. */
+@container side-panel (max-width: 359px) {
+  .file-view .file-tree-pane {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--space-48)));
+    background: var(--desktop-well);
+    box-shadow: var(--menu-shadow);
+  }
+
+  .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .file-view[data-pane-over="peek"] .file-tree-pane {
+    animation-delay: var(--duration-quick);
+  }
+
+  .file-view[data-pane-over="closed"] .file-tree-pane {
+    display: none;
+  }
+
+  .file-tree-pane > .file-tree-foot {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="over"] {
+    display: inline-flex;
+  }
+
+  .file-view[data-pane-beside] > .file-tree-foot {
+    display: block;
+  }
+}
+
+/* A Terminal tab's shells float the same way below a 480px panel, so the
+   screen beside them never falls under forty columns: at the panel's
+   default width the screen has the whole tab, the shells a hover away. */
+@container side-panel (max-width: 479px) {
+  .terminal-tab .terminal-shells {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--space-48)));
+    box-shadow: var(--menu-shadow);
+  }
+
+  .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .terminal-tab[data-pane-over="peek"] .terminal-shells {
+    animation-delay: var(--duration-quick);
+  }
+
+  .terminal-tab[data-pane-over="closed"] .terminal-shells {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="over"] {
+    display: inline-flex;
+  }
+}
+
+@keyframes pane-over-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
 /* A page's tab (page-pane.tsx): a File tab's bar over the page's frame,
    which takes the rest of the pane. The frame sets no background of its
    own: a page that names no colour scheme is a light document, and
@@ -1054,6 +1326,22 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* A narrow panel counts the versions without words between the steps,
+   leaving the page's title its room. */
+.page-view-version-count {
+  display: none;
+}
+
+@container side-panel (max-width: 359px) {
+  .page-view-version-words {
+    display: none;
+  }
+
+  .page-view-version-count {
+    display: inline;
+  }
 }
 
 .page-view-frame {
@@ -1127,6 +1415,15 @@ button.file-ref:hover .file-ref-path {
   font-style: italic;
 }
 
+/* A narrow panel numbers a diff's lines on the new side alone, so the
+   code keeps the room a second gutter would take; a removed line, which
+   has no new number, still reads by its tint. */
+@container side-panel (max-width: 359px) {
+  .code-line[data-diff] > .code-line-number:first-child {
+    display: none;
+  }
+}
+
 /* The tree's search field and its filter, in one row over the tree: the
    app's search well, a step shorter to sit in the panel's heading row. */
 .file-tree-search {
@@ -1169,9 +1466,12 @@ button.file-ref:hover .file-ref-path {
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list, beside a File tab and under a crumb alike. The ring
    is the window's width drawn inside the row, because the tree's scroller
-   lays its rows edge to edge with no room for one outside. */
+   lays its rows edge to edge with no room for one outside. Its ground is
+   the opaque ground it stands on, never transparent, because the tree
+   cuts a long name in its middle by painting the cut over in that ground:
+   a transparent one drew both halves of the name over one another. */
 .file-tree-host {
-  --trees-bg-override: transparent;
+  --trees-bg-override: var(--desktop-well);
   --trees-bg-muted-override: var(--raised);
   --trees-fg-override: var(--text-primary);
   --trees-fg-muted-override: var(--text-secondary);
@@ -1181,7 +1481,7 @@ button.file-ref:hover .file-ref-path {
   --trees-border-color-override: var(--hairline);
   --trees-focus-ring-color-override: var(--focus-ring);
   --trees-focus-ring-width-override: var(--focus-ring-width);
-  --trees-focus-ring-offset-override: calc(var(--focus-ring-width) * -1);
+  --trees-focus-ring-offset-override: var(--focus-ring-inset);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
   --trees-git-added-color-override: var(--state-complete);
@@ -1384,7 +1684,7 @@ button.file-ref:hover .file-ref-path {
 
 /* The edges run the lines' whole width, so their ring is drawn inside them. */
 .file-tab-edge:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -1427,6 +1727,7 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-4);
+  overflow: hidden;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -1441,7 +1742,7 @@ button.file-ref:hover .file-ref-path {
 
 /* The note's card clips what it holds, so its fold's ring is drawn inside. */
 .file-note-fold:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
 }
 
 .file-note-fold > svg:first-child {
@@ -1468,6 +1769,15 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
+/* The lines give way before the header's parts would stand on one another. */
+.file-note-lines {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Folded, the note's words stand in the header cut to one line. */
 .file-note-preview {
   min-width: 0;
@@ -1478,12 +1788,34 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-note-show {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-secondary);
   font: inherit;
+  white-space: nowrap;
+}
+
+.file-note-show > svg {
+  display: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* A narrow panel's note says its age in the link's pill, and the link
+   draws the Code tab's glyph alone, named still. */
+@container side-panel (max-width: 359px) {
+  .file-note-time,
+  .file-note-show-words {
+    display: none;
+  }
+
+  .file-note-show > svg {
+    display: block;
+  }
 }
 
 .file-note-show:hover {
@@ -1643,8 +1975,9 @@ button.file-ref:hover .file-ref-path {
 /* A transcript's table: no box, a hairline under each row, the header in
    the secondary colour at medium weight, the outer columns flush with the
    words around it. A table wider than the column scrolls sideways inside
-   its own box. A cell keeps the alignment its column's rule gave it, which
-   it carries as its own style. */
+   its own box, fading each edge it hides columns past as a Markdown table
+   does (markdown.css). A cell keeps the alignment its column's rule gave it,
+   which it carries as its own style. */
 .transcript-table {
   max-width: 100%;
   overflow-x: auto;
@@ -1721,6 +2054,19 @@ button.file-ref:hover .file-ref-path {
   font-size: 12.5px;
 }
 
+/* Note that it keeps the gap the log's `space-y-3` leaves under every block
+   but its last, which the reset above takes, so a failure's press never
+   touches the pull request's row under it. */
+[role="log"] > .agent-end-line:not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+
+/* A finished turn's line (`working-time.tsx`) breaks between how long it
+   worked and when it ended, never inside either. */
+[data-worked] > :is([data-worked-length], time) {
+  white-space: nowrap;
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */
@@ -1730,15 +2076,13 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--scroll-fade` just above it, rather than being sliced
-   short of the card: a mask, so they fade into whatever ground the panel
-   stands on in either appearance. Its foot pads past the fade, so the
+   dissolve over `--scroll-fade` just above it (`scroll-fade`), rather than
+   being sliced short of the card. Its foot pads past the fade, so the
    newest line, scrolled to or followed, stands whole above it, and a
    control focused from below is scrolled in past the fade as well. */
 .agent-log-over-composer {
   padding-bottom: calc(var(--scroll-fade) + var(--space-4));
   scroll-padding-bottom: calc(var(--scroll-fade) + var(--space-4));
-  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
 }
 
 /* The to-do list the agent is working through, docked over the composer
@@ -2052,9 +2396,33 @@ button.skill-chip:hover,
   row-gap: var(--space-8);
 }
 
+/* A box answered in words alone holds its round Send at the field's end
+   once the card is narrow, so the field keeps to one line and the thread
+   above it keeps its room. */
+.inbox-answer {
+  position: relative;
+}
+
 @container composer (max-width: 299px) {
   .inbox-answer-foot > .inbox-answer-quiet {
     display: none;
+  }
+
+  .inbox-answer:not([data-presses]) > textarea {
+    padding: var(--space-12) calc(30px + 2 * var(--space-6)) var(--space-12) var(--space-12);
+  }
+
+  .inbox-answer:not([data-presses]) > textarea::placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inbox-answer:not([data-presses]) > .inbox-answer-foot {
+    position: absolute;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    padding: 0;
   }
 
   .inbox-presses {
@@ -2464,6 +2832,24 @@ button.attached-file-face:hover img {
   font-size: 12px;
 }
 
+/* What the place opening the viewer says of the file shown, after its size
+   in the same quiet ink, a plan's picture saying who last edited it: the
+   size gives it the room the size kept before the header's buttons, and it
+   is cut before it reaches them. */
+.attachment-viewer-size:has(+ .attachment-viewer-note) {
+  margin-right: 0;
+}
+
+.attachment-viewer-note {
+  display: flex;
+  min-width: 0;
+  margin: 0 auto 0 var(--space-12);
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .attachment-viewer-walk {
   display: flex;
   align-items: center;
@@ -2532,27 +2918,33 @@ button.attached-file-face:hover img {
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
-   why on one quiet row, with Unarchive as the press that opens it again. */
-.archived-composer {
-  flex-direction: row;
-  align-items: center;
+   why on one quiet row (`banner.tsx`), with Unarchive as the press that
+   opens it again. */
+.archived-composer .banner-row > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--text-secondary);
 }
 
 .archived-composer-line {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
   color: var(--text-secondary);
   font-size: 12.5px;
 }
 
-.archived-composer-line svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
+/* Who archived an agent, and why, over the note's own line: the reason is
+   the archiver's sentence, so it wraps rather than being cut. */
+.archived-composer-words {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.archived-composer-by {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -2584,6 +2976,14 @@ button.attached-file-face:hover img {
 
 .terminal-tab-standing {
   flex: 0 0 auto;
+}
+
+/* A narrow panel leaves out the word "sandbox" the tab's name already
+   implies, so the agent's name keeps more of the bar. */
+@container side-panel (max-width: 359px) {
+  .terminal-tab-sandbox {
+    display: none;
+  }
 }
 
 /* The screen and the shells beside it; the list slides in past the body's
@@ -2807,13 +3207,16 @@ button.attached-file-face:hover img {
   font-size: 12px;
 }
 
+/* Where the words and the action do not fit one line, the action drops to
+   a line of its own at the right, so the words never give way to nothing. */
 .terminal-bar {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   min-height: 28px;
   align-items: center;
-  gap: var(--space-8);
-  padding: 0 var(--space-12) 0 var(--space-16);
+  gap: var(--space-2) var(--space-8);
+  padding: var(--space-4) var(--space-12) var(--space-4) var(--space-16);
   border-bottom: 1px solid var(--hairline);
   background: var(--raised);
   color: var(--text-secondary);
@@ -2844,6 +3247,7 @@ button.attached-file-face:hover img {
 }
 
 .terminal-bar-words {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3309,6 +3713,27 @@ button.agent-ref:hover .agent-ref-name {
   color: var(--danger);
 }
 
+/* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
+   success green, closed as done in the merged purple, and closed as not
+   planned in the muted ink. */
+.issue-mark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.issue-mark[data-issue-state="open"] {
+  color: var(--state-complete);
+}
+
+.issue-mark[data-issue-state="closed"] {
+  color: var(--state-merged);
+}
+
+.issue-mark[data-issue-state="not-planned"] {
+  color: var(--text-tertiary);
+}
+
 .agent-published-chip[data-pull-request-state] {
   border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
   background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
@@ -3332,8 +3757,12 @@ button.agent-ref:hover .agent-ref-name {
    whole of it the button that opens the pull request, drawn as the
    subagent's row is and for the same reason written here. The lines it
    adds and removes read in the success green and the danger red, in
-   tabular numerals so a count does not shift as it grows. */
+   tabular numerals so a count does not shift as it grows. The row answers
+   its own width, as the composer does, so it holds in the main column and
+   the side panel alike, and clips, so nothing it draws paints past its
+   edge. */
 .agent-published-row {
+  container: published-row / inline-size;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -3345,6 +3774,7 @@ button.agent-ref:hover .agent-ref-name {
   border-radius: 8px;
   background: none;
   color: var(--text-primary);
+  overflow: hidden;
   font-size: 12.5px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -3354,11 +3784,38 @@ button.agent-ref:hover .agent-ref-name {
   background: var(--raised);
 }
 
-.agent-published-title {
+/* The number, never cut, then the title, which gives way first. */
+.agent-published-name {
+  display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  gap: 0.3em;
   white-space: nowrap;
+}
+
+.agent-published-number {
+  flex: none;
+}
+
+.agent-published-title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Too narrow for the checks' word: the mark's red still says they failed,
+   and its label says so to a reader. */
+@container published-row (max-width: 359px) {
+  .agent-published-checks {
+    display: none;
+  }
+}
+
+/* Too narrow for the lines as well: they go, so the title keeps a few
+   words beside the number. The Changes tab and GitHub still count them. */
+@container published-row (max-width: 259px) {
+  .agent-published-lines {
+    display: none;
+  }
 }
 
 .agent-published-state {
@@ -3418,8 +3875,10 @@ svg.lucide {
    whole of it the button that opens the subagent's tab, with the same hover
    fill and the focus ring every button of ours draws. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
-   colour outside the utilities' layer. */
+   colour outside the utilities' layer. It answers its own width, so the job,
+   the one thing naming the subagent, keeps the room in a narrow column. */
 .subagent-line {
+  container: subagent-row / inline-size;
   height: 28px;
   padding: 0 4px;
   border-radius: 6px;
@@ -3438,6 +3897,34 @@ button.subagent-line:hover {
 .subagent-job {
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Too narrow for the job beside the model and effort: they go first, as
+   the subagent's card still names them, and the working mark and its
+   count stay. */
+@container subagent-row (max-width: 319px) {
+  .subagent-line > [data-subagent-pair] {
+    display: none;
+  }
+}
+
+/* A narrow panel's Call tab gives a subagent's job two lines before it
+   cuts it, so the time and marks beside it leave more than a word of it. */
+@container side-panel (max-width: 359px) {
+  .subagent-line {
+    height: auto;
+    min-height: 28px;
+    padding-block: var(--space-2);
+  }
+
+  .subagent-job {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 }
 
 /* Inbox ----------------------------------------------------------------------- */
@@ -3536,25 +4023,10 @@ button.inbox-option:hover:not(:disabled) {
   color: var(--text-secondary);
 }
 
-/* An image block on the Inbox (`inbox-pane.tsx`): the picture the
-   agent took, at the card's own reading width and no wider than itself, a
-   press on it opening the attached-file viewer. The spinner's room stands
-   in for it while its bytes are read, so the card does not jump. */
-.inbox-image {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  cursor: zoom-in;
-  overflow: clip;
-}
-
-.inbox-image img {
-  display: block;
-  max-width: 100%;
-  height: auto;
+/* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
+   words, below, whose room around it is the card's gap between blocks. */
+[data-inbox-image] > .picture-block {
+  margin: 0;
 }
 
 /* A picture in written words (`picture-block.tsx`): its own block, at its
@@ -3764,12 +4236,6 @@ button.picture-frame {
   outline: none;
 }
 
-.picture-describe-hint {
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
    and the wait said where its caption will stand with the window's own
    spinner; a failed upload says so there, as every failure does. */
@@ -3825,11 +4291,6 @@ button.picture-frame {
   cursor: zoom-in;
   font: inherit;
   text-align: left;
-}
-
-.picture-set-tile:focus-visible .picture-set-frame {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 
 .picture-set-frame {
@@ -3930,10 +4391,4 @@ button.picture-frame {
 .inbox-field-input {
   font-size: 13px;
   letter-spacing: 0;
-}
-
-.inbox-image-pending {
-  display: flex;
-  align-items: center;
-  min-height: var(--space-24);
 }

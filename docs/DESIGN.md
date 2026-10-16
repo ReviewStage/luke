@@ -147,10 +147,23 @@ disc, and its start pill, the new-plan composer's round start, and a tab's ×,
 which brightens without a fill.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
-switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
-`--focus-ring-offset` off its edge, and only once the keyboard has moved focus
-(`keyboard-modality.ts`), so a press never rings a control. One that clips what
-it holds sets the offset to less the width, so the ring is drawn inside it. A
+switch, option, and menu item, and anything else in the tab order, draws
+`--focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
+only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
+never rings a control. A control whose drawn shape is a part of it, a picture
+tile's picture over its caption, marks that part `data-focus-ring`, which
+rings in the control's place, so the ring takes the shape that is seen. An
+unavailable button that keeps the keyboard (`aria-disabled`) fades its fill
+and words rather than itself, so its ring stays at full strength. A box that clips
+what it holds keeps the ring whole one of two ways: one that clips only to hold
+in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
+`overflow-clip-margin: var(--focus-ring-room)`, which names its box because
+Chromium drops a bare `calc()` there), and a card whose clip is its own edge
+sets `--focus-ring-offset` to `--focus-ring-inset` for what it holds, so the
+ring is drawn inside, on a header rounded as the card is. Every
+control scrolls in with `--focus-ring-reach` to spare (`scroll-margin`), and a
+scroller that fades an edge scroll-pads by the fade, so the keyboard never
+leaves a row sliced at a scroller's edge or under its fade. A
 scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill

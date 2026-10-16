@@ -1,5 +1,5 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of the column under the folded sidebar's call card stands, said where the card reads it.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it.
  */
 
 import { type RefObject, useLayoutEffect } from "react";

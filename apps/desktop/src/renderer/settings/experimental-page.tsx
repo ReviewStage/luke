@@ -22,11 +22,8 @@ import { SwitchRow } from "./switch-row";
  * here never lands on nothing.
  */
 
-/** What the empty page says, under its title. */
-const NO_EXPERIMENTS_LINE = "New features show up here to try before they ship.";
-
-/** The empty page's title, over that line. */
-const NO_EXPERIMENTS_TITLE = "No experiments right now";
+/** What the empty page says. */
+const NO_EXPERIMENTS_LINE = "No experiments";
 
 /** Why a signed-out page holds no switches: experiments are an account's. */
 const SIGN_IN_NOTE = "Sign in to try experiments.";
@@ -71,11 +68,7 @@ export function ExperimentalPage({
 }): React.JSX.Element {
   if (!signedIn) return <p className="settings-note">{SIGN_IN_NOTE}</p>;
   if (entries.length === 0) {
-    return (
-      <EmptyState icon={<FlaskConicalIcon />} title={NO_EXPERIMENTS_TITLE}>
-        {NO_EXPERIMENTS_LINE}
-      </EmptyState>
-    );
+    return <EmptyState icon={<FlaskConicalIcon />}>{NO_EXPERIMENTS_LINE}</EmptyState>;
   }
   return (
     <SettingsGroup>

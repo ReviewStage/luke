@@ -17,8 +17,8 @@ import { Schema as EffectSchema } from "effect";
  * or for a new one with `add=true`, and answers the address the browser
  * opens, which the desktop opens and never draws.
  * `POST /api/account/integrations/{provider}/disconnect` ends one account's
- * connection and answers its word; `…/rename` and `…/primary` name one or
- * make it the provider's primary. The browser returns from a sign-in to the
+ * connection and answers its word; `…/rename` names one. The browser
+ * returns from a sign-in to the
  * service's own callback, which settles it and sends the browser on to the
  * landing page below with the provider and one word of its own. No answer
  * carries a token. An account's label is its name at the provider (a
@@ -286,8 +286,6 @@ export const integrationAccountSchema = EffectSchema.Struct({
   connection: integrationConnectionNameSchema,
   /** Its name at the provider, or the developer's own for it, where either is known. */
   label: EffectSchema.optionalKey(EffectSchema.String),
-  /** Whether it is the provider's primary account, which the agents use unless told otherwise. */
-  primary: EffectSchema.Boolean,
   status: integrationStatusSchema,
 });
 
@@ -305,6 +303,39 @@ export function integrationAccountLabel(account: {
   return `Account ${integrationConnectionOf(account.connection)?.place ?? 1}`;
 }
 
+/** The names more than one account would be called. */
+function sharedNames(called: readonly (readonly [string, string])[]): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const [, name] of called) (seen.has(name) ? shared : seen).add(name);
+  return shared;
+}
+
+/**
+ * What each of a provider's accounts is called among the others, by its
+ * connection name: its label, or "Account 2" by its place, and where two
+ * would be called alike, each of those with its place after ("Work (2)"),
+ * so no two accounts at a provider ever read the same. Note that the places
+ * are added until no name is shared, because a label may itself read like a
+ * name told apart ("Work (1)").
+ */
+export function integrationAccountNames(
+  accounts: readonly { readonly connection: string; readonly label?: string | undefined }[],
+): ReadonlyMap<string, string> {
+  const placeOf = (connection: string) => integrationConnectionOf(connection)?.place ?? 1;
+  let called = accounts.map(
+    (account) => [account.connection, integrationAccountLabel(account)] as const,
+  );
+  for (let shared = sharedNames(called); shared.size > 0; shared = sharedNames(called)) {
+    const alike = shared;
+    called = called.map(
+      ([connection, name]) =>
+        [connection, alike.has(name) ? `${name} (${placeOf(connection)})` : name] as const,
+    );
+  }
+  return new Map(called);
+}
+
 /** A label as the developer names an account (POST): trimmed, never blank, and bounded. */
 export const integrationRenameRequestSchema = EffectSchema.Struct({
   label: EffectSchema.Trim.check(
@@ -313,7 +344,7 @@ export const integrationRenameRequestSchema = EffectSchema.Struct({
   ),
 });
 
-/** One account as a rename or a Make primary leaves it (POST). */
+/** One account as a rename leaves it (POST). */
 export const integrationAccountAnswerSchema = EffectSchema.Struct({
   account: integrationAccountSchema,
 });

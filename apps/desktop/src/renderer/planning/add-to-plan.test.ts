@@ -46,10 +46,10 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        if (request.kind === ACT_KIND.PLANNING_PICTURE_KEEP) {
+        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
         }
-        if (request.kind === ACT_KIND.PLANNING_EDIT) {
+        if (request.kind === ACT_KIND.TASKS_EDIT) {
           const { base, value } = request.payload.edit.document;
           if (base !== held) {
             return Promise.resolve({
@@ -182,7 +182,7 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
 
   assert.deepEqual(
     sent.map((request) => request.kind),
-    [ACT_KIND.PLANNING_PICTURE_KEEP, ACT_KIND.PLANNING_EDIT],
+    [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT],
   );
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
   assert.equal(newestToastSays(), "Added to the planUndo");
@@ -204,7 +204,7 @@ test("a plan that moved on under the page is written on as it stands", async () 
   await settled(() => held.includes(LINE));
 
   assert.equal(held, `${PAGE_TEXT}\nA teammate's newer line.\n\n${LINE}\n`);
-  assert.equal(sent.filter((request) => request.kind === ACT_KIND.PLANNING_EDIT).length, 2);
+  assert.equal(sent.filter((request) => request.kind === ACT_KIND.TASKS_EDIT).length, 2);
 });
 
 test("a transcript off a plan's page offers no Add to plan", async () => {

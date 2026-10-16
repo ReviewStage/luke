@@ -5,7 +5,7 @@ import {
   SpeakerIcon,
   SpeakerOffIcon,
 } from "@luke/ui";
-import type { CallStatus } from "@luke/ui/planning-model";
+import type { CallStatus } from "@luke/ui/tasks-model";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
@@ -37,15 +37,23 @@ export const CALL_CONTROL_LABEL = {
   END_CALL: "End call",
 } as const;
 
-/** The call's two lines: the voice's word, and the backend's while it works. */
+/**
+ * The call's two lines: the voice's word, and the backend's while it works.
+ * A narrow bar drops the notetaker's part while Luke's stands, so Luke's
+ * keeps the room (desktop.css). Where `titled`, Luke's command carries its
+ * whole words as the system's own hint, for the floating window, which is
+ * too small to hold a tooltip.
+ */
 function CallStatusLines({
   status,
   muted,
+  titled,
 }: {
   status: CallStatus | undefined;
   muted: boolean;
+  titled: boolean;
 }): React.JSX.Element {
-  const planner = status?.backend.planner;
+  const planner = status?.backend.brain;
   const notes = status?.backend.notes ?? false;
   return (
     <span className="call-status">
@@ -56,7 +64,11 @@ function CallStatusLines({
         <span className="call-backend">
           <ThinkingDots />
           {planner === undefined ? null : (
-            <span className="call-backend-part">
+            <span
+              className="call-backend-part"
+              data-part="planner"
+              title={titled ? planner.action : undefined}
+            >
               {PLANNER_NAME} ·{" "}
               {planner.action === undefined ? (
                 PLANNER_THINKING
@@ -65,7 +77,11 @@ function CallStatusLines({
               )}
             </span>
           )}
-          {notes ? <span className="call-backend-part">{NOTETAKER_WRITING}</span> : null}
+          {notes ? (
+            <span className="call-backend-part" data-part="notes">
+              {NOTETAKER_WRITING}
+            </span>
+          ) : null}
           <span className="visually-hidden" role="status">
             {PLAN_WORKING_LABEL}
           </span>
@@ -118,13 +134,15 @@ function CallToggle({
  * offers no stop, a fixture's staged call or one closing, since the press
  * on each control is the one it always was. The two mutes' chords are not
  * the bar's to offer: they answer while any call is in progress, wherever the
- * panel stands (`useCallCommands`).
+ * panel stands (`useCallCommands`). A narrow bar stacks its status over its
+ * controls rather than cutting the voice's word (desktop.css).
  */
 export function CallBar({
   status,
   microphone,
   speaker,
   stop,
+  titled = false,
 }: {
   /** The call's status, absent while no call about this plan stands. */
   status: CallStatus | undefined;
@@ -132,6 +150,8 @@ export function CallBar({
   speaker: { muted: boolean; onPress: () => void };
   /** Ends the call; shown is whether the open plan's call is in progress. */
   stop: { shown: boolean; onPress: () => void };
+  /** Whether Luke's command carries its whole words as the system's hint, where no tooltip fits. */
+  titled?: boolean;
 }): React.JSX.Element {
   const inProgress = stop.shown;
   if (!inProgress && status === undefined) {
@@ -151,7 +171,7 @@ export function CallBar({
   }
   return (
     <footer className="call-bar" data-call="true">
-      <CallStatusLines status={status} muted={microphone.muted} />
+      <CallStatusLines status={status} muted={microphone.muted} titled={titled} />
       <div className="call-controls">
         <CallToggle
           on={speaker.muted}

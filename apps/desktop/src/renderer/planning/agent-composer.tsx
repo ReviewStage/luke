@@ -13,7 +13,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
-import { lapsedServer, namedServers } from "@luke/ui/agent-servers-model";
+import { lapsedServer, namedServers, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { wordsBesideQuotes } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
@@ -48,11 +48,13 @@ import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useMentionBox, usePlanMentions } from "./plan-mentions";
 import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
+import { MentionedServers } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
 import { DICTATION_PHASE, useDictation } from "./use-dictation";
+import { useKnownNames } from "./use-known-names";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -120,8 +122,9 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  *
  * An `@` at the start of a word, on a plan's page, opens the list of what
  * the message can mention, the plan's repository's files and folders, the
- * plan's sections, the repository's skills, and the account's connected MCP
- * servers and their tools
+ * plan's sections, the pages agents showed on it, its other coding agents,
+ * the repository's skills, and the account's connected MCP servers and
+ * their tools
  * (`mention-picker.tsx`), and the one chosen is written into the words as
  * its link, drawn as its chip (`mention-chip.tsx`). A server mentioned is
  * handed to the agent's next turn even where its switch is off, and to that
@@ -248,6 +251,7 @@ function ComposerMore({
 }
 
 export function AgentComposer({
+  agentId,
   status,
   composer,
   model,
@@ -265,6 +269,8 @@ export function AgentComposer({
   skills,
   replyDoor,
 }: {
+  /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
+  agentId?: string | undefined;
   status: CodingAgentStatus;
   composer: AgentComposerControl;
   /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
@@ -400,10 +406,13 @@ export function AgentComposer({
 
   // An `@` picks a mention of the plan the box stands on, where it stands on a plan's page.
   const planMentions = usePlanMentions();
+  // A Luke address pasted whole is called by the name the window holds for what it names.
+  const known = useKnownNames();
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
   const mentionPicker = useMentionPicker({
     source: planMentions,
+    self: agentId,
     // The repository's skills, a pick written as the `/name` chip the `/` list writes.
     skills:
       skills === undefined
@@ -588,10 +597,23 @@ export function AgentComposer({
               ? undefined
               : {
                   onTrigger: mentionPicker.onTrigger,
+                  // A server's chip in the box says what a send now does with it: opens a turn, or steers the one running.
                   chip: (mention) => (
-                    <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                    <MentionedServers
+                      value={{
+                        disabled: servers.disabled,
+                        handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
+                      }}
+                    >
+                      <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                    </MentionedServers>
                   ),
-                  pasted: (words) => pastedMentionNode(words, planMentions.doors.place),
+                  pasted: (words) =>
+                    pastedMentionNode(words, planMentions.doors.place, {
+                      known,
+                      planId: planMentions.planId,
+                      text: planMentions.text,
+                    }),
                 }
           }
         >

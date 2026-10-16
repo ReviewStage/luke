@@ -72,7 +72,7 @@ export const HOSTED_API_ERROR = {
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.
    */
-  PLAN_ARCHIVED: "plan-archived",
+  TASK_ARCHIVED: "plan-archived",
   /**
    * The account's role in the workspace does not allow this: a member
    * removing someone, an owner removed or leaving. Nothing was written.

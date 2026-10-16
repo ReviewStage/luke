@@ -28,9 +28,6 @@
         "label": {
           "type": "string"
         },
-        "primary": {
-          "type": "boolean"
-        },
         "status": {
           "type": "string",
           "enum": [
@@ -45,7 +42,6 @@
       "required": [
         "provider",
         "connection",
-        "primary",
         "status"
       ],
       "additionalProperties": false

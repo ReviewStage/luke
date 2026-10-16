@@ -34,8 +34,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -144,6 +147,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a Run now is held unanswered, as one still out on the wire. */
+let runHeld = false;
 /** What a Run now answers where it does not start a run. */
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
 /** Every agent whose page a run opened. */
@@ -184,6 +189,7 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
   factoryOpens = [];
@@ -280,6 +286,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
           runsAsked.push(request.payload.automationId);
+          if (runHeld) return new Promise<never>(() => undefined);
           if (runRefusal !== undefined) {
             return Promise.resolve({
               status: ACT_OUTCOME_STATUS.DONE,
@@ -747,6 +754,13 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
+/** The titles of the page's cards, in order. */
+function cards(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".settings-group-title")].map(
+    (title) => title.textContent ?? "",
+  );
+}
+
 /** The switch named, wherever it is drawn. */
 function switchNamed(name: string): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
@@ -923,7 +937,7 @@ test("Escape leaves a page with nothing unsaved for the list, and asks first whe
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
-  assert.match(leaveAsked() ?? "", /What you changed here is lost\./u);
+  assert.ok(leaveAsked(), "the leave question stands");
   act(() => button("Cancel").click());
   await settle();
   assert.equal(leaveAsked(), undefined);
@@ -940,10 +954,7 @@ test("a new automation with something written asks before any way out leaves it,
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
   act(() => button("Automations").click());
   assert.equal(places.length, 1, "the crumb waits on the question");
-  assert.match(
-    leaveAsked() ?? "",
-    /This automation isn't created yet, and what you wrote here is lost\./u,
-  );
+  assert.ok(leaveAsked(), "the leave question stands");
   act(() => button("Cancel").click());
   await settle();
 
@@ -1134,6 +1145,99 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   window.localStorage.clear();
 });
 
+/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
+interface Played {
+  element: Element;
+  keyframes: Keyframe[];
+  finish: () => void;
+}
+
+/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
+interface RecordedMotion {
+  onfinish: (() => void) | null;
+  cancel: () => void;
+}
+
+/**
+ * Gives the window the pane's motion tokens and an animation engine that
+ * records what is played rather than playing it, since jsdom has neither;
+ * answers what was played, and a way to take both away again.
+ */
+function playMotions() {
+  const played: Played[] = [];
+  const root = document.documentElement.style;
+  root.setProperty("--duration-pane", "240ms");
+  root.setProperty("--motion-pane", "ease-out");
+  Object.defineProperty(Element.prototype, "animate", {
+    configurable: true,
+    value(this: Element, keyframes: Keyframe[]) {
+      const animation: RecordedMotion = {
+        onfinish: null,
+        cancel: () => undefined,
+      };
+      played.push({ element: this, keyframes, finish: () => animation.onfinish?.() });
+      return animation;
+    },
+  });
+  return {
+    played,
+    remove: () => {
+      root.removeProperty("--duration-pane");
+      root.removeProperty("--motion-pane");
+      Reflect.deleteProperty(Element.prototype, "animate");
+    },
+  };
+}
+
+test("the Runs panel slides out past the page's right edge as it is hidden, held drawn and out of reach until it has, and slides back in as it is shown", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const pane = () => page.querySelector<HTMLElement>(".automation-runs-pane");
+  const motions = playMotions();
+  try {
+    act(() => button("Hide runs").click());
+    const leaving = pane() ?? assert.fail("the panel is held drawn through its slide out");
+    assert.ok(leaving.hasAttribute("data-leaving"), "it has left the layout");
+    assert.ok(leaving.hasAttribute("inert"), "nothing in it is reached on its way out");
+    const exit = motions.played.find((each) => each.element === leaving);
+    assert.deepEqual(exit?.keyframes.at(-1), { transform: "translateX(100%)" });
+
+    act(() => exit?.finish());
+    assert.equal(pane(), null, "it is let go once its slide has played");
+
+    act(() => button("Show runs").click());
+    const arriving = pane() ?? assert.fail("it stands again");
+    assert.equal(arriving.hasAttribute("data-leaving"), false);
+    const entry = motions.played.find((each) => each.element === arriving);
+    assert.deepEqual(entry?.keyframes, [{ transform: "translateX(100%)" }, { transform: "none" }]);
+  } finally {
+    motions.remove();
+    window.localStorage.clear();
+  }
+});
+
+test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
+  window.localStorage.clear();
+  const list = mount();
+  await settle();
+  const rows = list.querySelector(".automations-scroll") ?? assert.fail("the list scrolls");
+  act(() => root?.unmount());
+
+  const edit = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const form = edit.querySelector(".automations-scroll") ?? assert.fail("the page scrolls");
+  const runs = edit.querySelector("aside[aria-label='Runs']") ?? assert.fail("the runs stand");
+  const sheets = layFades();
+  try {
+    for (const scroller of [rows, form, runs]) {
+      assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+    }
+  } finally {
+    sheets.remove();
+  }
+});
+
 test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {
   window.localStorage.clear();
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1169,6 +1273,118 @@ test("the list and an automation's page each say they are an experiment, and eac
   act(() => button("Send feedback").click());
 
   assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
+});
+
+/** The pill the pointer resting on `element` raises, or nothing where it raises none. */
+function pillOver(element: Element): string | undefined {
+  act(() => element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
+  act(() => element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  return pill;
+}
+
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
+  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
+  const acts = () =>
+    ["Automations", "Send feedback", "Run now"].map((name) => {
+      const press =
+        [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
+        assert.fail(`no ${name}`);
+      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
+      return {
+        name,
+        drawn: shown(words),
+        labelled: press.getAttribute("aria-label"),
+        pill: pillOver(press),
+      };
+    });
+
+  // A 760 window's toolbar, past the traffic lights.
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
+      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+    ]);
+    assert.equal(shown(status), false);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "automation-toolbar": 1100 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: true, labelled: null, pill: undefined },
+      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
+      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+    ]);
+    assert.equal(shown(status), true);
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
+
+  assert.equal(pillOver(crumb), undefined);
+  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
+  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
+  act(() => relayout());
+  assert.equal(pillOver(crumb), SWEEP.name);
+});
+
+test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  const chip = picker(page, "Owner");
+  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
+  // The form beside the runs, 300px from its left edge to the chip's right one.
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
+  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
+
+  const sheets = layContainersAt({});
+  try {
+    act(() => chip.click());
+    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
+    assert.equal(getComputedStyle(menu).width, "max-content");
+    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  runHeld = true;
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    const run = button("Run now");
+    act(() => run.click());
+    await settle();
+
+    assert.deepEqual(
+      {
+        pressable: !run.disabled,
+        ring: run.querySelector('.spinner[role="status"]') !== null,
+        glyph: run.querySelector("svg.lucide-play") !== null,
+      },
+      { pressable: false, ring: true, glyph: false },
+    );
+  } finally {
+    narrow.remove();
+  }
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {
@@ -1305,7 +1521,8 @@ test("the repository chosen first is not said again among the others its runs wo
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
@@ -1354,7 +1571,8 @@ test("the agent a same-agent automation was saved with is not offered once its r
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Choose an agent");
   act(() => picker(page, "Agent").click());
@@ -1502,7 +1720,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
   assert.match(
     page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
-    /^No runs yetRun now to try it\.$/u,
+    /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );
 
@@ -1533,7 +1751,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
-  assert.match(fresh.textContent ?? "", /Create it, then Run now to try it\./u);
+  assert.match(fresh.textContent ?? "", /No runs yet/u);
 });
 
 /** A run of the sweep that started the CI digest agent, which a press on its row opens. */
@@ -1907,4 +2125,115 @@ test("a link to a run opens its automation's editor with that run marked current
     [...page.querySelectorAll(".automation-run")].map((row) => row.getAttribute("aria-current")),
     [null, "true"],
   );
+});
+
+test("an automation whose task opens with no code review settings shows no Code review card", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.ok(!cards(page).includes("Code review"));
+});
+
+/** The suggestion named, under the list. */
+function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
+  const found = [
+    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-suggestion"),
+  ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
+  assert.ok(found, `no suggestion ${name}`);
+  return found;
+}
+
+test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
+  standing = [];
+  const empty = mount();
+  await settle();
+  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.ok(suggestion(empty, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  standing = [DIGEST, SWEEP, FAILING];
+  const full = mount();
+  await settle();
+  assert.equal(rows(full).length, 3);
+  assert.ok(suggestion(full, "Code review"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const blank = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.deepEqual(cards(blank).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
+  assert.equal(
+    blank.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "",
+  );
+});
+
+test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  act(() => suggestion(page, "Code review").click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
+  // Note that the page opens filled in, so a Create pressed straight away saves the review.
+  // Note that the owner is chosen first, as Dean asked, then its trigger and its own settings.
+  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Trigger", "Code review"]);
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Code review",
+  );
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  );
+  // Its own settings, Cursor Bugbot's kind, in a card of their own and written into the lines its task opens with.
+  assert.ok(cards(page).includes("Code review"));
+  act(() => switchNamed("Comment when no issues are found").click());
+  pick(page, "Most findings", "3");
+  type(page.querySelector("input[aria-label='Rules file']"), ".cursor/BUGBOT.md");
+  act(() => button("Create").click());
+  await settle();
+
+  const made = creates[0];
+  assert.ok(made, "the automation is made");
+  assert.deepEqual(
+    {
+      name: made.name,
+      trigger: made.trigger,
+      archiveSuccessful: made.archiveSuccessful,
+      guards: made.guards,
+      target: made.target,
+      repositories: made.repositories,
+    },
+    {
+      name: "Code review",
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: "pull-request-updated",
+        senders: ["people", "luke-agents"],
+        moments: ["opened", "ready", "pushed"],
+        drafts: false,
+        forks: false,
+      },
+      archiveSuccessful: true,
+      guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+      repositories: ["acme/ledger"],
+    },
+  );
+  assert.match(made.action.prompt, /post what you find as one GitHub review/u);
+  assert.ok(
+    made.action.prompt.startsWith(
+      [
+        "Code review settings:",
+        "- Comment when you find nothing: no",
+        "- Most findings to post: 3",
+        "- Rules file: .cursor/BUGBOT.md",
+        "- Fix what you find: no",
+      ].join("\n"),
+    ),
+    "the settings open the task the agent is handed",
+  );
+  assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
 });

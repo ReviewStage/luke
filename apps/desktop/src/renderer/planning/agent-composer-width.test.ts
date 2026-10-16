@@ -15,7 +15,7 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
-import { layComposerAt, shown } from "#testing/composer-width";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -30,7 +30,7 @@ import { useAgentComposer } from "./use-agent-composer";
  * press the card had no room for, a popover it opens standing as its own
  * press would have opened it. jsdom lays nothing out, so each width is the
  * stylesheets' container queries resolved for a card that wide
- * (`#testing/composer-width`). Synthetic throughout.
+ * (`#testing/container-width`). Synthetic throughout.
  */
 
 /** The card's width under a column or a panel this wide, less the composer's inset either side. */
@@ -122,7 +122,7 @@ function Box({ status }: { status: CodingAgentStatus }): ReactNode {
 
 /** The box drawn on a card `width` pixels wide. */
 async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_STATUS.COMPLETED) {
-  layComposerAt(width);
+  layContainersAt({ composer: width });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);

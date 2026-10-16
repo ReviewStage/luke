@@ -24,6 +24,10 @@
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
+ * A message that reached a turn while it ran, a steer from whoever sent
+ * it, stands where it arrived: it ends the group before it, and it splits
+ * a finished turn's fold, the work before it folded above it and the work
+ * after it below, as Claude Code and Cursor draw a message sent mid-turn.
  */
 
 /** The kinds of call a row can be, across both tabs. */
@@ -56,8 +60,11 @@ export const CALL_KIND = {
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
   START_AGENT: "start-agent",
+  ARCHIVE_AGENT: "archive-agent",
+  UNARCHIVE_AGENT: "unarchive-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
+  READ_PAGE: "read-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
   SHOW_IMAGE: "show-image",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
@@ -96,8 +103,11 @@ export const CALL_WORDS = {
   [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
+  [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the coding agent", code: false },
+  [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
+  [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
@@ -187,6 +197,8 @@ export const ROW_PART = {
   CODING_AGENT: "coding-agent",
   /** Reasoning, which runs with the calls beside it but is never counted, and stands on its own row where no call is beside it. */
   NOTE: "note",
+  /** A message that reached the turn while it ran, from whoever sent it: it ends a run of calls, and a finished turn's fold splits around it, so it stands where it arrived. */
+  ARRIVED: "arrived",
 } as const;
 
 type RowPart = (typeof ROW_PART)[keyof typeof ROW_PART];
@@ -402,24 +414,79 @@ export function turnRows<B>(
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
+  const rest = groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said);
   if (held.calls + held.subagents + held.codingAgents === 0) {
     // Note that a lead with no call is not folded, but a block kept out still
     // stands apart from it, because grouped with the lead's reasoning it would
     // close with it.
     if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, said);
-    return [
-      ...groupedRows(lead, read, turn.moving, true, said),
-      ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said),
-    ];
+    return [...groupedRows(lead, read, turn.moving, true, said), ...rest];
   }
-  return [
-    {
+  return [...foldedLead(lead, read, turn.key, said), ...rest];
+}
+
+/**
+ * A finished turn's lead folded: each stretch of work between the messages
+ * that reached the turn while it ran is one fold, and each message stands
+ * on its own row between them; a stretch with no call keeps its rows, as a
+ * lead with none does. Note that the first fold keeps the turn's own key,
+ * so a turn no message reached folds under the key it always had.
+ */
+function foldedLead<B>(
+  lead: readonly Keyed<B>[],
+  read: RowReading<B>,
+  turnKey: string,
+  said: boolean,
+): TurnRow<B>[] {
+  const rows: TurnRow<B>[] = [];
+  let folds = 0;
+  for (const run of splitAtArrivals(lead, read)) {
+    if (run.arrived !== undefined) {
+      rows.push(run.arrived);
+      continue;
+    }
+    const [first] = run.blocks;
+    if (first === undefined) continue;
+    const held = counted(run.blocks, read);
+    if (held.calls + held.subagents + held.codingAgents === 0) {
+      rows.push(...groupedRows(run.blocks, read, false, true, said));
+      continue;
+    }
+    rows.push({
       kind: TURN_ROW.FOLDED,
-      key: `${turn.key}-folded`,
+      key: folds === 0 ? `${turnKey}-folded` : first.key,
       summary: foldedSummary(held, said),
-      rows: groupedRows(lead, read, false, false, said),
-      failed: anyFailed(lead, read),
-    },
-    ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said),
-  ];
+      rows: groupedRows(run.blocks, read, false, false, said),
+      failed: anyFailed(run.blocks, read),
+    });
+    folds += 1;
+  }
+  return rows;
+}
+
+/** A stretch of a finished turn's lead: a message that reached the turn, on its own row, or the work between two such messages. */
+type LeadRun<B> =
+  | { readonly arrived: TurnRow<B>; readonly blocks?: undefined }
+  | { readonly arrived?: undefined; readonly blocks: readonly Keyed<B>[] };
+
+/**
+ * A finished turn's lead cut at every message that reached the turn while
+ * it ran, so the work before a message folds above it and the work after
+ * it below, as Claude Code and Cursor draw a message sent mid-turn; a lead
+ * no message reached is one stretch.
+ */
+function splitAtArrivals<B>(lead: readonly Keyed<B>[], read: RowReading<B>): readonly LeadRun<B>[] {
+  const runs: LeadRun<B>[] = [];
+  let blocks: Keyed<B>[] = [];
+  for (const each of lead) {
+    if (read.part(each.block) !== ROW_PART.ARRIVED) {
+      blocks.push(each);
+      continue;
+    }
+    if (blocks.length > 0) runs.push({ blocks });
+    blocks = [];
+    runs.push({ arrived: { kind: TURN_ROW.BLOCK, key: each.key, block: each.block } });
+  }
+  if (blocks.length > 0) runs.push({ blocks });
+  return runs;
 }

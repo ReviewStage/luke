@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import {
-  PLAN_WORK_STATE,
-  type PlanWorkState,
-  type PlanWorkTurn,
-  type PlanWorkWorker,
-} from "@luke/features/planning-view";
+  TASK_WORK_STATE,
+  type TaskWorkState,
+  type TaskWorkTurn,
+  type TaskWorkWorker,
+} from "@luke/features/tasks-view";
 import { TURN_ROW, type TurnRow } from "@luke/features/turn-rows";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
@@ -62,14 +62,14 @@ function scanned(rows: readonly TurnRow<AgentPart>[]): unknown[] {
 }
 
 /** The first turn's rows as the agent tab draws Luke's message for it. */
-function rowsOf(turns: readonly PlanWorkTurn[], callLive = true): readonly TurnRow<AgentPart>[] {
+function rowsOf(turns: readonly TaskWorkTurn[], callLive = true): readonly TurnRow<AgentPart>[] {
   const [row] = workRowsOf(conversationOf(turns), callLive);
   assert.ok(row);
   return agentRows(row.message, row.moving);
 }
 
 /** The turn's calls, as the agent tab reads its parts. */
-function callsOf(turns: readonly PlanWorkTurn[], callLive = true) {
+function callsOf(turns: readonly TaskWorkTurn[], callLive = true) {
   const [row] = workRowsOf(conversationOf(turns), callLive);
   assert.ok(row);
   return agentParts(row.message).flatMap((part) => (part.kind === AGENT_PART.TOOL ? [part] : []));
@@ -77,7 +77,7 @@ function callsOf(turns: readonly PlanWorkTurn[], callLive = true) {
 
 test("calls next to one another fold under one line once the model moves on, and the latest group stays open while the turn moves", () => {
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.RUNNING, [
+    workTurn(TASK_WORK_STATE.RUNNING, [
       command("a", "ls", "src"),
       command("b", "cat a.ts", "export {}"),
       words("Invites live in one file."),
@@ -94,7 +94,7 @@ test("calls next to one another fold under one line once the model moves on, and
 
 test("a finished turn folds everything ahead of its last words into one line saying what it holds", () => {
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.DONE, [
+    workTurn(TASK_WORK_STATE.DONE, [
       command("a", "ls", "src"),
       words("Looking at the invites."),
       toolCall(AGENT_TOOL.SEARCH_WEB, "b", { query: "invite expiry" }, { output: {} }),
@@ -125,10 +125,10 @@ test("a finished turn folds everything ahead of its last words into one line say
 
 test("a finished turn's calls ahead of its words are folded once, under the lead's line, never a group inside it, whether they ran in one step or across several", () => {
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.DONE, [
-      toolCall(AGENT_TOOL.LIST_CODING_AGENTS, "a", {}, { output: [] }),
-      toolCall(AGENT_TOOL.READ_CODING_AGENT, "b", { agentId: "agent-1" }, { output: {} }),
-      toolCall(AGENT_TOOL.READ_CODING_AGENT, "c", { agentId: "agent-2" }, { output: {} }),
+    workTurn(TASK_WORK_STATE.DONE, [
+      toolCall(AGENT_TOOL.LIST_AGENTS, "a", {}, { output: [] }),
+      toolCall(AGENT_TOOL.READ_AGENT, "b", { agentId: "agent-1" }, { output: {} }),
+      toolCall(AGENT_TOOL.READ_AGENT, "c", { agentId: "agent-2" }, { output: {} }),
       words("Both agents are done."),
     ]),
   ]);
@@ -148,18 +148,18 @@ test("a finished turn's calls ahead of its words are folded once, under the lead
 });
 
 test("a finished turn's fold names its subagents apart from its other calls, in the singular for one, and a subagent still running reads no differently", () => {
-  const summaryOf = (turn: PlanWorkTurn) => {
+  const summaryOf = (turn: TaskWorkTurn) => {
     const [fold] = rowsOf([turn]);
     assert.ok(fold?.kind === TURN_ROW.FOLDED);
     return fold.summary;
   };
   const compare = worker("w1", "Compare the queues.");
-  const find = worker("w2", "Find the admin check.", { state: PLAN_WORK_STATE.RUNNING });
+  const find = worker("w2", "Find the admin check.", { state: TASK_WORK_STATE.RUNNING });
 
   assert.equal(
     summaryOf(
       workTurn(
-        PLAN_WORK_STATE.DONE,
+        TASK_WORK_STATE.DONE,
         [
           command("a", "ls", "src"),
           workerCall(compare),
@@ -177,7 +177,7 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
   assert.equal(
     summaryOf(
       workTurn(
-        PLAN_WORK_STATE.DONE,
+        TASK_WORK_STATE.DONE,
         [command("a", "ls", "src"), workerCall(compare), words("Queue A is the one to use.")],
         { workers: [compare] },
       ),
@@ -186,7 +186,7 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
   );
   assert.equal(
     summaryOf(
-      workTurn(PLAN_WORK_STATE.DONE, [workerCall(compare), words("Queue A is the one to use.")], {
+      workTurn(TASK_WORK_STATE.DONE, [workerCall(compare), words("Queue A is the one to use.")], {
         workers: [compare],
       }),
     ),
@@ -195,20 +195,21 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
 });
 
 test("a finished turn's fold names the coding agents it started apart from its tool calls and its subagents, and a start refused is a tool call", () => {
-  const summaryOf = (turn: PlanWorkTurn) => {
+  const summaryOf = (turn: TaskWorkTurn) => {
     const [fold] = rowsOf([turn]);
     assert.ok(fold?.kind === TURN_ROW.FOLDED);
     return fold.summary;
   };
   const started = (id: string, agent: string) =>
     toolCall(
-      AGENT_TOOL.START_CODING_AGENT,
+      AGENT_TOOL.START_AGENT,
       id,
       { task: "Investigate a Tailwind migration." },
       { output: { status: "accepted", agent: { id: agent, modelName: "Opus 5.5" } } },
     );
+  // A start journaled under the tool's earlier name reads as one.
   const refused = toolCall(
-    AGENT_TOOL.START_CODING_AGENT,
+    RETIRED_TOOL.START_CODING_AGENT,
     "r",
     { task: "Fix the invite emails." },
     { output: { status: "rejected", reason: "The plan has no repository." } },
@@ -218,7 +219,7 @@ test("a finished turn's fold names the coding agents it started apart from its t
   assert.equal(
     summaryOf(
       workTurn(
-        PLAN_WORK_STATE.DONE,
+        TASK_WORK_STATE.DONE,
         [
           command("a", "ls", "src"),
           workerCall(styling),
@@ -233,7 +234,7 @@ test("a finished turn's fold names the coding agents it started apart from its t
   );
   assert.equal(
     summaryOf(
-      workTurn(PLAN_WORK_STATE.DONE, [
+      workTurn(TASK_WORK_STATE.DONE, [
         started("s1", "agent-1"),
         started("s2", "agent-2"),
         words("Started two agents."),
@@ -242,14 +243,14 @@ test("a finished turn's fold names the coding agents it started apart from its t
     "2 coding agents",
   );
   assert.equal(
-    summaryOf(workTurn(PLAN_WORK_STATE.DONE, [refused, words("That did not start.")])),
+    summaryOf(workTurn(TASK_WORK_STATE.DONE, [refused, words("That did not start.")])),
     "1 tool call",
   );
 });
 
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.DONE, [
+    workTurn(TASK_WORK_STATE.DONE, [
       thought("They said hello."),
       words("Hello."),
       thought("Nothing to look up."),
@@ -267,7 +268,7 @@ test("a finished turn with no call ahead of its last words folds nothing: its th
 
 test("a finished turn's thought between its calls folds with them under the lead's line", () => {
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.DONE, [
+    workTurn(TASK_WORK_STATE.DONE, [
       thought("Find the invites."),
       command("a", "ls", "src"),
       thought("Read the one file."),
@@ -294,10 +295,10 @@ test("a finished turn's thought between its calls folds with them under the lead
 test("the worker stands on its own row, the one call still turning while its turn waits on it", () => {
   const comparing = worker("w", "Compare the queues.", {
     taskId: "worker-1",
-    state: PLAN_WORK_STATE.RUNNING,
+    state: TASK_WORK_STATE.RUNNING,
   });
   const rows = rowsOf([
-    workTurn(PLAN_WORK_STATE.RUNNING, [workerCall(comparing), words("The worker is on it.")], {
+    workTurn(TASK_WORK_STATE.RUNNING, [workerCall(comparing), words("The worker is on it.")], {
       workers: [comparing],
     }),
   ]);
@@ -308,10 +309,10 @@ test("the worker stands on its own row, the one call still turning while its tur
 });
 
 test("a turn its call left running is drawn as stopped, with nothing on it still turning", () => {
-  const left = [workTurn(PLAN_WORK_STATE.RUNNING, [command("a", "ls")])];
+  const left = [workTurn(TASK_WORK_STATE.RUNNING, [command("a", "ls")])];
   const [row] = workRowsOf(conversationOf(left), false);
   assert.ok(row);
-  assert.equal(row.state, PLAN_WORK_STATE.FAILED);
+  assert.equal(row.state, TASK_WORK_STATE.FAILED);
   assert.equal(row.moving, false);
   const [call] = callsOf(left, false);
   assert.equal(call?.state, TOOL_STATE.OUTPUT_AVAILABLE);
@@ -332,7 +333,7 @@ test("a worker's session is read into parts the way a turn is, each call on its 
   });
   const rows = workRowsOf(
     conversationOf([
-      workTurn(PLAN_WORK_STATE.DONE, [workerCall(comparing), words("Queue A is the one to use.")], {
+      workTurn(TASK_WORK_STATE.DONE, [workerCall(comparing), words("Queue A is the one to use.")], {
         workers: [comparing],
       }),
     ]),
@@ -344,7 +345,7 @@ test("a worker's session is read into parts the way a turn is, each call on its 
 });
 
 /** A worker the turn delegated to in the background, as a service that sends its own session sends it. */
-function delegated(state: PlanWorkState, journal: PlanWorkWorker["journal"]): PlanWorkWorker {
+function delegated(state: TaskWorkState, journal: TaskWorkWorker["journal"]): TaskWorkWorker {
   return {
     callId: "call-1",
     taskId: "delegate-7k2m9q",
@@ -360,10 +361,10 @@ function delegated(state: PlanWorkState, journal: PlanWorkWorker["journal"]): Pl
 
 /** A turn as a service that sends its own journal sends it: the parts as the AI SDK stored them, and its workers beside them. */
 function journaled(
-  state: PlanWorkState,
-  journal: PlanWorkTurn["journal"],
-  workers: readonly PlanWorkWorker[] = [],
-): PlanWorkTurn {
+  state: TaskWorkState,
+  journal: TaskWorkTurn["journal"],
+  workers: readonly TaskWorkWorker[] = [],
+): TaskWorkTurn {
   return workTurn(state, journal, { workers });
 }
 
@@ -387,12 +388,12 @@ test("a worker delegated in the background reads as running while its own sessio
   ];
   const turns = [
     journaled(
-      PLAN_WORK_STATE.DONE,
+      TASK_WORK_STATE.DONE,
       [
         DELEGATE_CALL,
         { type: "text", text: "I've asked a worker to compare them.", state: "done" },
       ],
-      [delegated(PLAN_WORK_STATE.RUNNING, session)],
+      [delegated(TASK_WORK_STATE.RUNNING, session)],
     ),
   ];
 
@@ -407,11 +408,11 @@ test("a worker delegated in the background reads as running while its own sessio
 });
 
 test("a worker delegated in the background names the pair its session ran on, and reads as failed where its session failed", () => {
-  const turns = (state: PlanWorkState) => [
-    journaled(PLAN_WORK_STATE.DONE, [DELEGATE_CALL], [delegated(state, [])]),
+  const turns = (state: TaskWorkState) => [
+    journaled(TASK_WORK_STATE.DONE, [DELEGATE_CALL], [delegated(state, [])]),
   ];
 
-  const [done] = callsOf(turns(PLAN_WORK_STATE.DONE));
+  const [done] = callsOf(turns(TASK_WORK_STATE.DONE));
   assert.ok(done !== undefined);
   assert.equal(done.state, TOOL_STATE.OUTPUT_AVAILABLE);
   assert.deepEqual(delegationView(done, undefined).choice, {
@@ -419,13 +420,13 @@ test("a worker delegated in the background names the pair its session ran on, an
     effort: "low",
   });
 
-  const [failed] = callsOf(turns(PLAN_WORK_STATE.FAILED));
+  const [failed] = callsOf(turns(TASK_WORK_STATE.FAILED));
   assert.equal(failed?.state, TOOL_STATE.OUTPUT_ERROR);
 });
 
 test("a call a turn's journal holds unanswered reads as running while the turn moves, and as having run once the call it ran on ended, never as failed", () => {
   const turns = [
-    journaled(PLAN_WORK_STATE.RUNNING, [
+    journaled(TASK_WORK_STATE.RUNNING, [
       {
         type: "tool-run_in_repository",
         toolCallId: "a",
@@ -447,13 +448,13 @@ test("a call a turn's journal holds unanswered reads as running while the turn m
 
 test("a turn whose older steps the service left out says so, and a worker whose own session failed reads as failed rather than stopped", () => {
   const failing = worker("w", "Read the styling setup.", {
-    state: PLAN_WORK_STATE.FAILED,
+    state: TASK_WORK_STATE.FAILED,
     model: "openai/gpt-5.5",
     effort: "low",
   });
   const [row] = workRowsOf(
     conversationOf([
-      workTurn(PLAN_WORK_STATE.DONE, [workerCall(failing), words("It failed.")], {
+      workTurn(TASK_WORK_STATE.DONE, [workerCall(failing), words("It failed.")], {
         earlierOmitted: true,
         workers: [failing],
       }),

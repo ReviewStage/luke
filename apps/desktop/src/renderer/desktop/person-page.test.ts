@@ -17,7 +17,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -30,6 +30,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { OpenSettingsProvider } from "../open-settings";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { PersonPage } from "./person-page";
@@ -81,7 +82,7 @@ const AUTOMATIONS = [
   automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
 ];
 
-const PRIYA_PICTURE = "https://avatars.githubusercontent.com/u/11";
+const PRIYA_PICTURE = "https://lh3.googleusercontent.com/a/photo-11";
 /** Someone who left having only revised a task, whom no task or agent names. */
 const OLA = { userId: "user-ola", name: "Ola Berg" };
 const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }, OLA];
@@ -95,9 +96,9 @@ function agent(
   n: number,
   title: string,
   startedBy: typeof CHARLES,
-  status: PlanAgentLine["status"],
+  status: TaskAgentLine["status"],
   ago: number,
-): PlanAgentLine {
+): TaskAgentLine {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title,
@@ -114,9 +115,9 @@ function task(
   name: string,
   createdBy: typeof CHARLES,
   ago: number,
-  agents: readonly PlanAgentLine[] = [],
-): PlanSummary {
-  const plan: PlanSummary = {
+  agents: readonly TaskAgentLine[] = [],
+): TaskSummary {
+  const plan: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: ACME.id,
     name,
@@ -181,8 +182,8 @@ const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const SWEEP_ITEM: InboxItem = { ...item(9, "Quarantine the flaky test?", SWEEP_AGENT, MINUTE) };
 
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
-  inbox: [{ planId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
-  inboxPlans: [{ planId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
+  inbox: [{ taskId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
+  inboxPlans: [{ taskId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
 };
 
 let root: Root | undefined;
@@ -233,7 +234,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
           const value: CodingAgentInboxAnswerView = {
-            items: INBOXES.get(request.payload.planId) ?? [],
+            items: INBOXES.get(request.payload.taskId) ?? [],
             cursor: "1",
           };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -345,6 +346,18 @@ test("a teammate's page names them as the members read does and lists their work
     Created: ["Relay retries on 502", "Retry budget dashboard"],
     Agents: ["Tenant cache keys"],
   });
+});
+
+test("a teammate's page fades into the window's drag strip as it scrolls up under it, as Home does", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("the reader's own page says You and what waits on them", async () => {

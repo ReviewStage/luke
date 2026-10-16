@@ -1,5 +1,5 @@
 import { isLinkHome, LINK_HOME } from "./link-home.js";
-import { encodeMention, MENTION_KIND } from "./mention-link.js";
+import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
 
 /**
  * plan-attachment-link.ts -- a plan's picture as its address on tryluke.dev: written, read back, and found in a plan's text.
@@ -55,7 +55,7 @@ const MAX_ADDRESS_CHARS = 512;
 
 /** One picture of one plan. */
 export interface PlanAttachmentRef {
-  readonly planId: string;
+  readonly taskId: string;
   readonly attachmentId: string;
 }
 
@@ -70,11 +70,11 @@ function parsedUrl(address: string): URL | undefined {
 
 /** The picture's address, under the workspace the plan's own address names. */
 export function planAttachmentAddress(ref: PlanAttachmentRef, workspace: string): string {
-  const plan = encodeMention(
-    { kind: MENTION_KIND.PLAN, planId: ref.planId },
+  const task = encodeMention(
+    { kind: MENTION_KIND.TASK, taskId: ref.taskId },
     { workspace, repository: null },
   );
-  return `${plan}/${FILES_STEP}/${ref.attachmentId}`;
+  return `${task}/${FILES_STEP}/${ref.attachmentId}`;
 }
 
 /** The picture an address names, by either scheme; nothing for any other address, a plan's or a section's among them. */
@@ -82,7 +82,7 @@ export function planAttachmentOf(address: string): PlanAttachmentRef | undefined
   const url = address.length > MAX_ADDRESS_CHARS ? undefined : parsedUrl(address);
   if (url === undefined || !isLinkHome(url)) return undefined;
   if (url.search !== "" || url.hash !== "") return undefined;
-  const [first, workspace, step, planId, files, attachmentId, ...rest] = url.pathname.split("/");
+  const [first, workspace, step, taskId, files, attachmentId, ...rest] = url.pathname.split("/");
   const shaped =
     first === "" &&
     workspace !== undefined &&
@@ -90,16 +90,16 @@ export function planAttachmentOf(address: string): PlanAttachmentRef | undefined
     step === "plan" &&
     files === FILES_STEP &&
     rest.length === 0;
-  if (!shaped || planId === undefined || attachmentId === undefined) return undefined;
-  if (!UUID.test(planId) || !UUID.test(attachmentId)) return undefined;
-  return { planId, attachmentId };
+  if (!shaped || taskId === undefined || attachmentId === undefined) return undefined;
+  if (!UUID.test(taskId) || !UUID.test(attachmentId)) return undefined;
+  return { taskId, attachmentId };
 }
 
 /** The ids of the plan's own pictures its text names, in the order first named, each once. */
-export function planAttachmentIdsIn(text: string, planId: string): readonly string[] {
+export function planAttachmentIdsIn(text: string, taskId: string): readonly string[] {
   const named = new Set<string>();
-  for (const [, plan, attachment] of text.matchAll(ADDRESS_IN_TEXT)) {
-    if (plan === planId && attachment !== undefined && UUID.test(attachment)) named.add(attachment);
+  for (const [, task, attachment] of text.matchAll(ADDRESS_IN_TEXT)) {
+    if (task === taskId && attachment !== undefined && UUID.test(attachment)) named.add(attachment);
   }
   return [...named];
 }
@@ -115,7 +115,7 @@ function oneLine(words: string): string {
  * brackets escaped, and the caption's backslashes and quotes, so neither
  * closes its part of the line early.
  */
-export function planPictureMarkdown(
+export function taskPictureMarkdown(
   address: string,
   alt: string,
   caption?: string | undefined,
@@ -128,10 +128,12 @@ export function planPictureMarkdown(
 /**
  * The address of every picture a text draws, `![alt](<address>`, of any
  * plan, in order, each copy apart; an address standing as a link or as
- * bare words draws no picture and is not among them.
+ * bare words, or a picture's line standing in code, a fenced or indented
+ * block or a code span, draws no picture and is not among them.
  */
-export function planPicturesIn(text: string): readonly string[] {
-  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap(([, address]) =>
-    address === undefined ? [] : [address],
-  );
+export function taskPicturesIn(text: string): readonly string[] {
+  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap((match) => {
+    const address = match[1];
+    return address === undefined || insideCode(text, match.index) ? [] : [address];
+  });
 }

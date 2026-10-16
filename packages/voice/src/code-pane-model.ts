@@ -1,5 +1,5 @@
-import type { CodeRef, PlanEditor } from "@luke/features/plan-wire";
-import type { PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
+import type { CodeRef, PlanEditor } from "@luke/features/task-wire";
+import type { TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
 import {
   type CallRecord,
   callEndedLine,
@@ -28,7 +28,7 @@ export interface CodeFeedCall {
   readonly key: string;
   readonly startedAt: number;
   readonly live: boolean;
-  readonly showings: readonly PlanCodeShowing[];
+  readonly showings: readonly TaskCodeShowing[];
   readonly ended: string | undefined;
   readonly record: CallRecord | undefined;
   /** The teammate whose call it was, named over its run as the Call tab names it; none for the reader's own or a turn's run. */
@@ -67,7 +67,7 @@ export function isPointed(ref: CodeRef, line: number): boolean {
 }
 
 /** What a card's copy carries: the lines pointed at as plain text, or every line the card draws for a whole file. */
-export function copiedLines(code: PlanCode): string {
+export function copiedLines(code: TaskCode): string {
   const kept = code.lines.filter(
     (_line, at) => code.ref.startLine === undefined || isPointed(code.ref, code.firstLine + at),
   );
@@ -83,7 +83,7 @@ export function copiedLines(code: PlanCode): string {
  * before the call ended.
  */
 function callOf(
-  showing: PlanCodeShowing,
+  showing: TaskCodeShowing,
   calls: readonly CodeFeedCallSource[],
 ): CodeFeedCallSource | undefined {
   let found: CodeFeedCallSource | undefined;
@@ -103,12 +103,12 @@ function callOf(
  * began.
  */
 export function codeFeedCalls(
-  shown: readonly PlanCodeShowing[],
+  shown: readonly TaskCodeShowing[],
   calls: readonly CodeFeedCallSource[],
 ): readonly CodeFeedCall[] {
   const runs = new Map<
     string,
-    { call: Omit<CodeFeedCall, "showings">; showings: PlanCodeShowing[] }
+    { call: Omit<CodeFeedCall, "showings">; showings: TaskCodeShowing[] }
   >();
   for (const showing of shown) {
     const call = callOf(showing, calls);
@@ -138,7 +138,7 @@ export type ShownFile = CodeRef & { readonly commit?: string | undefined };
  * the newest reference to it and the commit it was read at: what the "+"
  * offers to open, and what a file's tab is held to.
  */
-export function shownFiles(shown: readonly PlanCodeShowing[]): readonly ShownFile[] {
+export function shownFiles(shown: readonly TaskCodeShowing[]): readonly ShownFile[] {
   const newest = new Map<string, ShownFile>();
   for (const { code } of shown) newest.set(code.ref.path, { ...code.ref, commit: code.commit });
   return [...newest.values()];

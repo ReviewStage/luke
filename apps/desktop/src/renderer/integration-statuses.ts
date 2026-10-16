@@ -349,7 +349,6 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       {
         provider: added.provider,
         connection: server,
-        primary: false,
         status: statusOf(server) ?? INTEGRATION_STATUS.PENDING,
       },
     ];

@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { listRepositoryPins, setRepositoryPin } from "@luke/database/models/repository-pin-store";
-import { repositoryPinRequestSchema } from "@luke/features/plan-wire";
+import { repositoryPinRequestSchema } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";

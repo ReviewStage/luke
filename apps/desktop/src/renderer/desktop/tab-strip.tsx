@@ -1,5 +1,5 @@
-import { CloseIcon } from "@luke/ui";
-import { useLayoutEffect, useRef, useState } from "react";
+import { CloseIcon, cssCustomProperties } from "@luke/ui";
+import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -45,16 +45,21 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * the pointer is or under the tab (`MenuTab`), and closing that menu hands
  * focus back to the tab.
  *
- * Every tab stands whole, its glyph and its label, a long label cut short
- * and said whole in its hint, or in the card a tab with more to say hangs
- * in its hint's place. A label measured cut short wears
- * `data-overflow`, which desktop.css fades out at its end, as Chrome's and
- * Arc's tabs do, rather than ending it in an ellipsis. Past holding them all,
- * the strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
- * sideways, and the tab chosen, or the one the keyboard reaches, is brought
- * into the room it shows, and kept there as the strip is narrowed. An edge
- * the strip hides tabs beyond wears `data-overflow-start` or
- * `data-overflow-end`, which desktop.css fades.
+ * Every tab asks for an equal share of the strip, up to 200px, and gives
+ * way by the same share as the strip narrows, as Safari's and Chrome's do; a
+ * label cut short wears `data-overflow`, which desktop.css fades out at its
+ * end, and is said whole in the tab's hint, or in the card a tab with more to
+ * say hangs in its hint's place. Narrower than 72px, a tab other than the
+ * chosen one stands as its glyph alone, so the others turn to glyphs
+ * together, as Safari collapses its tab titles into icons; the chosen tab
+ * keeps its glyph, its label, and its × at every width. Past holding every
+ * glyph, the strip scrolls along with no bar drawn, a wheel turned up and
+ * down running it sideways, with the chosen tab pinned at whichever edge it
+ * would pass and a fade where tabs go on. All of that is the stylesheet's
+ * (desktop.css): the strip measures nothing, and asks only for its tabs'
+ * count, as `--tab-count`, so it may ask for room for every tab at its
+ * widest. A tab chosen, or reached by the keyboard, is scrolled into its own
+ * place, the strip's scroll alone and never the window's.
  *
  * Its words are text, which the session recording masks with the rest.
  */
@@ -74,19 +79,13 @@ const WHEEL_DELTA = {
 /** The CSS pixels a wheel's line stands for, the tabs' own line of text. */
 const WHEEL_LINE = 16;
 
-/**
- * How far, in CSS pixels, the strip hides its tabs past an edge before that
- * edge fades: more than the sub-pixel the tabs' fractional widths can leave
- * over a strip that, to the eye, holds them all.
- */
-const OVERFLOW_SLACK = 1;
-
 /** What an unread tab says in its hint and to a reader beyond its label. */
 const UNREAD_TAB_NOTE = "New result";
 
 /** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
 function tabHint(input: {
   label: string;
+  /** Whether the label may not be read whole: cut short, or a tab other than the chosen one, which a narrow strip draws as its glyph alone. */
   clipped: boolean;
   tooltip: string | undefined;
   unread: boolean;
@@ -132,33 +131,27 @@ function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
 }
 
 /**
- * Scrolls the strip, and nothing around it, the least that shows the whole
- * of `tab`'s pill clear of the faded edges. Note that the strip's own scroll
- * padding is that clearance, and its scroll behaviour whether it glides, so
- * the stylesheet holds both, and a pane sliding in is never scrolled with it.
- * A strip just drawn is put there at once, as a page opens already scrolled.
+ * Scrolls the strip, and nothing around it, the least that shows `tab`'s
+ * pill in its own place. Note that the place is read off the tab before it,
+ * because the chosen tab is pinned at the strip's edges (desktop.css) and
+ * reads where it is stuck rather than where it stands; the strip's scroll
+ * behaviour, whether it glides, is the stylesheet's, and a pane sliding in
+ * is never scrolled with it. A strip just drawn is put there at once, as a
+ * page opens already scrolled.
  */
 function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
-  const pill = tab.closest(".tab") ?? tab;
-  const shown = strip.getBoundingClientRect();
-  const own = pill.getBoundingClientRect();
+  const pill = tab.closest<HTMLElement>(".tab") ?? tab;
+  const before = pill.previousElementSibling;
   const style = getComputedStyle(strip);
-  const before = shown.left + (Number.parseFloat(style.scrollPaddingLeft) || 0) - own.left;
-  const after = own.right - shown.right + (Number.parseFloat(style.scrollPaddingRight) || 0);
-  if (before > 0) scrollStrip(strip, -before, glide);
-  else if (after > 0) scrollStrip(strip, after, glide);
-}
-
-/**
- * Marks each edge the strip hides tabs beyond, for its fade. Note that it is
- * measured rather than left to a scroll timeline, because a timeline is
- * active over any overflow at all, the sub-pixel one included, and a fade
- * must stand on exactly the edges that hide a tab, at every width.
- */
-function markOverflow(strip: HTMLElement): void {
-  const hidden = strip.scrollWidth - strip.clientWidth;
-  strip.setAttribute("data-overflow-start", String(strip.scrollLeft > OVERFLOW_SLACK));
-  strip.setAttribute("data-overflow-end", String(hidden - strip.scrollLeft > OVERFLOW_SLACK));
+  const start =
+    before instanceof HTMLElement
+      ? before.offsetLeft + before.offsetWidth + (Number.parseFloat(style.columnGap) || 0)
+      : Number.parseFloat(style.paddingLeft) || 0;
+  const end = start + pill.offsetWidth;
+  if (start < strip.scrollLeft) scrollStrip(strip, start - strip.scrollLeft, glide);
+  else if (end > strip.scrollLeft + strip.clientWidth) {
+    scrollStrip(strip, end - strip.scrollLeft - strip.clientWidth, glide);
+  }
 }
 
 /** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
@@ -213,6 +206,8 @@ export function TabStrip({
   children: React.ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
+  // How many tabs the strip draws, which it asks room for at their widest (desktop.css).
+  const count = Children.toArray(children).filter(isValidElement).length;
   // Whether one of the strip's tabs has focus, the one the move chords move.
   const [focused, setFocused] = useState(false);
   const [movedSaid, setMovedSaid] = useState("");
@@ -226,8 +221,8 @@ export function TabStrip({
     if (at === undefined || strip.current === null) return;
     closedAt.current = undefined;
     const tabs = [...strip.current.querySelectorAll<HTMLElement>(TAB)];
-    const beside = strip.current.nextElementSibling;
-    const after = beside?.matches("button") ? beside : beside?.querySelector("button");
+    const following = strip.current.nextElementSibling;
+    const after = following?.matches("button") ? following : following?.querySelector("button");
     const next = tabs[Math.min(at, tabs.length - 1)];
     if (next === undefined && after instanceof HTMLElement) after.focus();
     else focusTab(strip.current, next);
@@ -240,27 +235,6 @@ export function TabStrip({
     revealed.current = chosen;
     reveal(strip.current, chosen, drawn);
   });
-  // A strip narrowed, its panel dragged or the window resized, keeps the
-  // chosen tab in view as an editor keeps its active tab, at once rather
-  // than gliding behind the edge being dragged, and fades the edges it now
-  // hides tabs beyond.
-  useLayoutEffect(() => {
-    const node = strip.current;
-    if (node === null) return;
-    const observer = new ResizeObserver(() => {
-      const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
-      if (chosen !== null) reveal(node, chosen, false);
-      markOverflow(node);
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  // A tab opened, closed, or renamed moves the edges the strip hides tabs
-  // beyond, and need not resize the strip, which may already be at its least.
-  useLayoutEffect(() => {
-    if (strip.current !== null) markOverflow(strip.current);
-  });
-
   // Note that a move's places count the tabs that move alone, as the drag
   // does, so a tab anchored at the start is no place of theirs.
   const move =
@@ -334,10 +308,10 @@ export function TabStrip({
         role="tablist"
         aria-label={label}
         className={className ? `tab-strip ${className}` : "tab-strip"}
+        style={cssCustomProperties({ "--tab-count": count })}
         onKeyDown={keyDown}
         onPointerDown={onPointerDown}
         onWheel={wheel}
-        onScroll={(event) => markOverflow(event.currentTarget)}
         onFocus={(event) => {
           if (within(event.currentTarget, event.target)) setFocused(true);
         }}
@@ -402,7 +376,7 @@ export function Tab({
   card?: React.ReactNode;
   keyshortcuts?: string | undefined;
   editor?: React.ReactNode;
-  tabRef?: React.Ref<HTMLButtonElement> | undefined;
+  tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   quiet?: boolean;
   anchored?: boolean;
   onSelect: () => void;
@@ -412,11 +386,16 @@ export function Tab({
   // Whether the label is cut short: a label renamed, or the plan's one tab
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
-  const hint = tabHint({ label, clipped, tooltip, unread });
+  // Note that a tab other than the chosen one is named in its hint whether or
+  // not its label shows, because a narrow strip draws it as its glyph alone
+  // (desktop.css), which the label's own measure cannot see.
+  const hint = tabHint({ label, clipped: clipped || !selected, tooltip, unread });
+  const own = useRef<HTMLButtonElement | null>(null);
+  const button = tabRef ?? own;
   const glyph = <span className="tab-icon">{icon}</span>;
   const tab = (
     <button
-      ref={tabRef}
+      ref={button}
       type="button"
       role="tab"
       className="tab-button"

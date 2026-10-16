@@ -1,12 +1,12 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { moreText, PLAN_ROW_MARK, planRowMark } from "@luke/features/plan-agents-model";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
+import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
-import { repositoryPageUrl } from "@luke/ui/planning-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
@@ -64,7 +64,7 @@ export function PlanStatusMark({
   plan,
   stranded,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** The workspace the plan's repository belongs to, where the reader may move it there. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
@@ -76,13 +76,13 @@ export function PlanStatusMark({
       </span>
     );
   }
-  const mark = planRowMark(plan.agents);
+  const mark = taskRowMark(plan.agents);
   switch (mark.kind) {
-    case PLAN_ROW_MARK.WORKING:
+    case TASK_ROW_MARK.WORKING:
       return <StateGlyph state={GLYPH_STATE.WORKING} />;
-    case PLAN_ROW_MARK.PULL_REQUEST:
+    case TASK_ROW_MARK.PULL_REQUEST:
       return <PullRequestMark pullRequest={mark.pullRequest} className="plan-mark-glyph" />;
-    case PLAN_ROW_MARK.NONE:
+    case TASK_ROW_MARK.NONE:
       return null;
   }
 }
@@ -174,7 +174,7 @@ function CreatorDetail({
   readerId,
   now,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   readerId: string | undefined;
   now: number;
 }): React.JSX.Element {
@@ -207,7 +207,7 @@ function AgentLine({
   models,
   onShow,
 }: {
-  agent: PlanAgentLine;
+  agent: TaskAgentLine;
   models: readonly CatalogModel[];
   onShow: () => void;
 }): React.JSX.Element {
@@ -233,7 +233,7 @@ export function PullRequestLine({
   pullRequest,
   onOpenGitHub,
 }: {
-  pullRequest: PlanPullRequestLine;
+  pullRequest: TaskPullRequestLine;
   onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
   const { url } = pullRequest;
@@ -283,7 +283,7 @@ export function PlanCard({
   shared,
   readerId,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   /**
    * Whether others share the plan's workspace, where the card says who
    * created it; unknown, it is whether the members read around the card
@@ -370,7 +370,7 @@ export function PlanCard({
 /** Whether others share a plan's workspace, as the service counts its members; unknown from a service that counts none. */
 function sharedWorkspace(
   plans: Pick<PlansControl, "workspaces">,
-  plan: Pick<PlanSummary, "workspaceId">,
+  plan: Pick<TaskSummary, "workspaceId">,
 ): boolean | undefined {
   const count = plans.workspaces.find((each) => each.id === plan.workspaceId)?.memberCount;
   return count === undefined ? undefined : count > 1;
@@ -383,7 +383,7 @@ function sharedWorkspace(
  */
 export function planCardOf(
   plans: Pick<PlansControl, "agents" | "repositories" | "onShowAgent" | "me" | "workspaces">,
-  plan: PlanSummary,
+  plan: TaskSummary,
   now: number,
 ): React.JSX.Element {
   return (
@@ -416,7 +416,7 @@ export function PlanRef({
   className,
   children,
 }: {
-  plan: Pick<PlanSummary, "name">;
+  plan: Pick<TaskSummary, "name">;
   /** The plan's card (`planCardOf`). */
   card: React.ReactNode;
   onOpen: () => void;

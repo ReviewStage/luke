@@ -109,7 +109,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       host: operator.host,
       openExternal: config.openExternal,
       serviceBaseUrl: config.hostedServiceBaseUrl,
-      activePlanId: () => state.snapshot().planning.activePlanId,
+      activePlanId: () => state.snapshot().tasks.activeTaskId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
       },
@@ -155,7 +155,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    ...avatarReports({ state, panel: panels, voiceOwns: (sender) => voiceWindow.owns(sender) }),
+    ...avatarReports({
+      state,
+      panel: panels,
+      callWindow,
+      voiceOwns: (sender) => voiceWindow.owns(sender),
+    }),
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
     recordAgentTrace: (_context, trace) => {

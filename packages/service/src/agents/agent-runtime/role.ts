@@ -10,8 +10,8 @@
 
 /** The agents, by the role each plays. */
 export const AGENT_ROLE = {
-  PLANNER: "planner",
-  PLANNER_WORKER: "planner-worker",
+  BRAIN: "brain",
+  BRAIN_WORKER: "brain-worker",
   CODER: "coder",
   CODER_WORKER: "coder-worker",
 } as const;
@@ -61,13 +61,13 @@ export interface RoleProfile {
 }
 
 export const ROLE_PROFILE = {
-  [AGENT_ROLE.PLANNER]: {
+  [AGENT_ROLE.BRAIN]: {
     delegated: false,
     connections: CONNECTION_POLICY.ALWAYS_ON,
     skills: true,
     sandbox: SANDBOX_POLICY.READ_SHALLOW_LAZY,
   },
-  [AGENT_ROLE.PLANNER_WORKER]: {
+  [AGENT_ROLE.BRAIN_WORKER]: {
     delegated: true,
     connections: CONNECTION_POLICY.ALWAYS_ON,
     skills: false,

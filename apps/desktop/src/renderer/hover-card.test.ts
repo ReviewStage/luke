@@ -7,7 +7,7 @@ import {
   PULL_REQUEST_STATE,
   TURN_ENDING,
 } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON } from "@luke/live";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
@@ -91,7 +91,7 @@ function hung(view: HTMLElement, selector: string): HTMLElement {
   return card;
 }
 
-const SUMMARY: PlanSummary = {
+const SUMMARY: TaskSummary = {
   id: PLAN,
   workspaceId: "workspace",
   name: "Teammate invitations",
@@ -256,7 +256,7 @@ test("a call's card is a turn's card: the model at the head over when it ran, ho
 });
 
 test("a plan's card says in its corner when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
-  const worked: PlanSummary = {
+  const worked: TaskSummary = {
     ...SUMMARY,
     agents: {
       total: 1,

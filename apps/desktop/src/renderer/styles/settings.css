@@ -1,9 +1,7 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
 /* Scrolls on the same terms as the session list: contained, never chaining out
-   to the root, with the tab bar left outside the scrolling box, and dissolving
-   at its foot through the same shared fade — a page taller than the panel must
-   melt into the surface above Luke's caption, not be sliced off against it. */
+   to the root, with the tab bar left outside the scrolling box. */
 .settings {
   /* Named because the pinned header's dissolve band below must span exactly
      this: the two drifting apart is what would leave a passing row sliced
@@ -17,8 +15,10 @@
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
-  animation: scroll-edge-fade linear both;
-  animation-timeline: scroll(self block);
+  /* Its rows answer the page's width (`@container settings` below), which
+     every card spans, rather than the window's: the column beside the page
+     list is as narrow at a wide nav as a small window makes it. */
+  container: settings / inline-size;
 }
 
 /* A page's own name, at the head of its column: the page list says where
@@ -164,6 +164,18 @@
   min-width: 0;
   flex-direction: column;
   gap: var(--space-2);
+  /* Note that a word longer than the room, a commit or an address, breaks
+     rather than running under the control beside it. */
+  overflow-wrap: break-word;
+}
+
+/* Words a row holds to one line, an address or a name with no room to
+   wrap well, ending in an ellipsis where they are cut short, the pointer
+   resting on them reading them whole (`one-line.tsx`). */
+.settings-one-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A row's words take what the row leaves once its mark and controls stand,
@@ -334,7 +346,9 @@
    look the side panel's tabs have: the chosen segment filled, the rest quiet until
    hovered. The row it stands in wraps, so a narrow page drops the control
    under its label rather than clipping it or running it under the chip
-   column. */
+   column; still too wide for the row, it gives way to the row's width and
+   its segments wrap onto a second line inside the trough, so the last of
+   them never stands past the card's edge. */
 .settings-row-wrapping {
   flex-wrap: wrap;
 }
@@ -346,7 +360,8 @@
 .segmented {
   display: inline-flex;
   min-inline-size: 0;
-  flex: 0 0 auto;
+  max-width: 100%;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 2px;
   padding: var(--space-2);
@@ -357,7 +372,7 @@
 .segment {
   /* Note that a segment draws the ring inside itself, because its trough
      leaves it no room for one outside. */
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
   height: calc(var(--control-height) - 2 * var(--space-2));
   padding: 0 var(--space-12);
   border-radius: calc(var(--control-radius) - var(--space-2));
@@ -403,11 +418,14 @@
 }
 
 /* The provider the account signed in with, its mark beside its name as the
-   sign-in button drew them, at the size of the line's own words. */
+   sign-in button drew them, at the size of the line's own words, each part
+   kept whole, so a narrow row wraps the line between them, never inside. */
 .account-provider {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
+  white-space: nowrap;
 }
 
 .account-provider .provider-mark {
@@ -676,6 +694,23 @@
   height: 20px;
 }
 
+/* A row that belongs to the row above it, as a workspace's GitHub accounts
+   belong to GitHub's: inset to the words of its parent, past the parent's
+   mark and gap, so its hairline starts there too and the card reads as one
+   provider with its accounts under it. Its own mark is a tile a step
+   smaller than a provider's. */
+.settings-card > .settings-row.settings-row-nested {
+  min-height: 44px;
+  margin-left: calc(var(--space-16) + 20px + var(--space-12));
+  padding-left: 0;
+}
+
+.settings-row-nested > .settings-row-mark > .workspace-tile {
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
 /* Where a row's subject stands, under its name: connected with the dot a
    finished session wears, and what needs a hand in the attention tint. */
 .settings-state {
@@ -709,6 +744,13 @@
    which scrolls, and the page of the one it holds beside them, which
    scrolls apart; where the page is too narrow for both, the column stands
    above the page, which still scrolls within its own bound. */
+/* A connected row's line, its state and its count, wraps between them,
+   never inside either, on a row too narrow for both. */
+.integration-tools-line {
+  flex-wrap: wrap;
+  white-space: nowrap;
+}
+
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
@@ -738,7 +780,7 @@
 
 .settings-card > .integration-tools-panel {
   border-top: 1px solid var(--hairline);
-  container-type: inline-size;
+  container: integration-tools / inline-size;
 }
 
 .integration-tools-split {
@@ -769,7 +811,7 @@
   padding-top: var(--space-2);
 }
 
-@container (max-width: 480px) {
+@container integration-tools (max-width: 480px) {
   .integration-tools-split {
     height: 560px;
     grid-template-columns: minmax(0, 1fr);
@@ -779,5 +821,50 @@
   .integration-tools-list {
     border-right: 0;
     border-bottom: 1px solid var(--hairline);
+  }
+
+  /* The page under the column has the column's whole width and no room
+     beside the title, so its head wraps: the title on its own line, two
+     lines where it needs them, and the tool's name in the code face under
+     it, rather than the name lost to the title's shrink. */
+  .integration-tools-panel .integration-tool-detail-head {
+    height: auto;
+    min-height: 40px;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    padding-block: var(--space-8);
+  }
+
+  .integration-tools-panel .integration-tool-detail-title {
+    white-space: normal;
+  }
+
+  .integration-tools-panel .integration-tool-detail-name {
+    flex: 1 1 100%;
+  }
+}
+
+/* A page too narrow for a row's words and its controls side by side
+   stacks them, as System Settings does in a narrow window: the words, and
+   the mark or face leading them, keep the row's first line, and whatever
+   does not fit beside them drops under them to the row's end, rather than
+   squeezing the words into a column a word wide. The words claim three
+   fifths of the row, so a switch or a ⋯ still stands beside them while a
+   picker, a button, or a member's role drops. A form's field takes the
+   first line whole, its chip and its press under it. */
+@container settings (max-width: 379px) {
+  .settings-row:has(> .settings-copy),
+  .settings-card > :is(.workspace-invite, .api-key-form) {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: var(--space-8);
+  }
+
+  .settings-row > .settings-copy {
+    min-width: 60%;
+  }
+
+  :is(.workspace-invite, .api-key-form) .settings-input {
+    flex-basis: 100%;
   }
 }

@@ -20,7 +20,7 @@ import { isToolUIPart } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";

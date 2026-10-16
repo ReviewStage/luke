@@ -4,6 +4,7 @@ import { describe, it } from "vitest";
 import {
   INTEGRATION_PROVIDER,
   integrationAccountLabel,
+  integrationAccountNames,
   integrationConnectionNameSchema,
   integrationConnectionOf,
   mintIntegrationConnectionName,
@@ -52,5 +53,39 @@ describe("an integration account's connection name", () => {
     );
     assert.equal(integrationAccountLabel({ connection: "notion-3" }), "Account 3");
     assert.equal(integrationAccountLabel({ connection: "notion", label: "  " }), "Account 1");
+  });
+
+  it("is told apart by its place where two of a provider's accounts would be called alike", () => {
+    assert.deepEqual(
+      [
+        ...integrationAccountNames([
+          { connection: "notion", label: "Work" },
+          { connection: "notion-2", label: "Work" },
+          { connection: "notion-3", label: "Personal" },
+        ]),
+      ],
+      [
+        ["notion", "Work (1)"],
+        ["notion-2", "Work (2)"],
+        ["notion-3", "Personal"],
+      ],
+    );
+  });
+
+  it("is never called what another is, where a label already reads like a name told apart", () => {
+    assert.deepEqual(
+      [
+        ...integrationAccountNames([
+          { connection: "notion", label: "Work" },
+          { connection: "notion-2", label: "Work" },
+          { connection: "notion-3", label: "Work (1)" },
+        ]),
+      ],
+      [
+        ["notion", "Work (1) (1)"],
+        ["notion-2", "Work (2)"],
+        ["notion-3", "Work (1) (3)"],
+      ],
+    );
   });
 });

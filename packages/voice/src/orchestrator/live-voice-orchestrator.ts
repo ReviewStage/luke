@@ -66,7 +66,7 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   /** The developer's own rows while they are still being said, under the captions preference alone. */
   developerCaptions: readonly string[] | undefined;
   /** The plan the standing call is about; none while no call stands. */
-  callPlanId: string | undefined;
+  callTaskId: string | undefined;
   /** What was said on the standing call so far; none while no call stands or before its first line. */
   callTranscript: LiveCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
@@ -144,7 +144,7 @@ function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
 }
 
 const MICROPHONE_REFUSED_NOTE =
-  "The talk key needs the microphone. Allow it in System Settings, under Privacy & Security, Microphone.";
+  "The talk key needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.";
 
 function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
   return (
@@ -154,7 +154,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
-    left.callPlanId === right.callPlanId &&
+    left.callTaskId === right.callTaskId &&
     left.callTranscript === right.callTranscript &&
     left.lukeEndedCall === right.lukeEndedCall &&
     left.speakerMuted === right.speakerMuted &&
@@ -212,7 +212,7 @@ export class LiveVoiceOrchestrator {
   /** Whether the developer silenced Luke's voice on this device for the call standing, which its end lets go of. */
   #speakerMuted = false;
   /** The plan the call standing or opening is about. */
-  #callPlan: string | undefined;
+  #callTask: string | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
   /** The standing call's whole life, in the scope it was acquired into; interrupting this is what `stop` releases it with. */
@@ -277,9 +277,9 @@ export class LiveVoiceOrchestrator {
    * made while the window has a plan open opens the call about that plan,
    * and a press naming no plan does nothing: there is no call about no plan.
    */
-  beginTalk(planId?: string): Effect.Effect<void> {
+  beginTalk(taskId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      if (planId === undefined && this.#call === undefined) return;
+      if (taskId === undefined && this.#call === undefined) return;
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
@@ -289,10 +289,10 @@ export class LiveVoiceOrchestrator {
       // A press over a call the host is closing waits it out. A key let go of
       // meanwhile opens nothing, and nor does a press naming no plan, which
       // spoke into the call that has now gone.
-      if ((yield* this.#outlastClosing()) && (!this.#keyDown || planId === undefined)) return;
-      const plan = this.#call === undefined ? planId : this.#callPlan;
-      if (plan === undefined) return;
-      yield* this.#talk(plan);
+      if ((yield* this.#outlastClosing()) && (!this.#keyDown || taskId === undefined)) return;
+      const task = this.#call === undefined ? taskId : this.#callTask;
+      if (task === undefined) return;
+      yield* this.#talk(task);
     });
   }
 
@@ -306,7 +306,7 @@ export class LiveVoiceOrchestrator {
    * since only one plan is ever the spoken conversation and no other call
    * may carry the plan's words or hear its answers.
    */
-  talkAboutPlan(planId: string): Effect.Effect<void> {
+  talkAboutTask(taskId: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
@@ -314,16 +314,16 @@ export class LiveVoiceOrchestrator {
         return;
       }
       const call = this.#call;
-      if (call !== undefined && this.#callPlan === planId && this.#pressHeld) {
+      if (call !== undefined && this.#callTask === taskId && this.#pressHeld) {
         // A press while the call is still opening leaves it to open muted.
         this.#pressHeld = false;
         if (!this.#opening && call.standing) yield* call.mute();
         this.#touch();
         return;
       }
-      if (call !== undefined && this.#callPlan !== planId) yield* this.#hangUp();
+      if (call !== undefined && this.#callTask !== taskId) yield* this.#hangUp();
       yield* this.#outlastClosing();
-      yield* this.#talk(planId);
+      yield* this.#talk(taskId);
     });
   }
 
@@ -335,9 +335,9 @@ export class LiveVoiceOrchestrator {
    */
   toggleMicrophone(): Effect.Effect<void> {
     return Effect.suspend(() => {
-      const plan =
-        this.#call === undefined || this.#closing !== undefined ? undefined : this.#callPlan;
-      return plan === undefined ? Effect.void : this.talkAboutPlan(plan);
+      const task =
+        this.#call === undefined || this.#closing !== undefined ? undefined : this.#callTask;
+      return task === undefined ? Effect.void : this.talkAboutTask(task);
     });
   }
 
@@ -346,7 +346,7 @@ export class LiveVoiceOrchestrator {
    * the microphone asked for where it is not granted, the session opened if
    * none stands, and the developer heard for as long as the press stands.
    */
-  #talk(planId: string): Effect.Effect<void> {
+  #talk(taskId: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       this.#pressHeld = true;
       if (!this.#surroundings.microphoneGranted) {
@@ -357,7 +357,7 @@ export class LiveVoiceOrchestrator {
         }
         if (!this.#pressHeld) return;
       }
-      const call = yield* this.#ensureSession(planId);
+      const call = yield* this.#ensureSession(taskId);
       // A key let go of during the opening leaves the session muted, and the
       // mute is still sent: the press's device rode the offer, and only the
       // release takes it back.
@@ -672,7 +672,7 @@ export class LiveVoiceOrchestrator {
    * closing is no session to speak into: the ask waits until it is let go
    * of, then opens the next.
    */
-  #ensureSession(planId: string): Effect.Effect<LiveVoiceCall | undefined> {
+  #ensureSession(taskId: string): Effect.Effect<LiveVoiceCall | undefined> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#outlastClosing();
       // A stop frees a press waiting on a closing call, and a stopped orchestrator opens nothing.
@@ -682,7 +682,7 @@ export class LiveVoiceOrchestrator {
       if (negotiating) return yield* Deferred.await(negotiating);
       const opened = Deferred.makeUnsafe<LiveVoiceCall | undefined>();
       this.#opening = opened;
-      this.#callPlan = planId;
+      this.#callTask = taskId;
       this.#strip.clear();
       const call = this.#createCall({
         onStatus: (status, speakers) => this.#onStatus(call, status, speakers),
@@ -699,7 +699,7 @@ export class LiveVoiceOrchestrator {
       // status it reports — a task behind the view this verb has already
       // touched.
       this.#lifecycle = yield* Effect.forkDetach(
-        Effect.scoped(this.#lifecycleEffect(call, planId, opened)),
+        Effect.scoped(this.#lifecycleEffect(call, taskId, opened)),
         { startImmediately: true },
       );
       return yield* Deferred.await(opened);
@@ -717,11 +717,11 @@ export class LiveVoiceOrchestrator {
    */
   #lifecycleEffect(
     call: LiveVoiceCall,
-    planId: string,
+    taskId: string,
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
   ): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
-      const standing = yield* Effect.acquireRelease(call.open({ planId }), () => call.close());
+      const standing = yield* Effect.acquireRelease(call.open({ taskId }), () => call.close());
       if (this.#opening === opened) this.#opening = undefined;
       if (!standing) {
         this.#talkOpening = false;
@@ -810,7 +810,7 @@ export class LiveVoiceOrchestrator {
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
-      callPlanId: this.#call === undefined ? undefined : this.#callPlan,
+      callTaskId: this.#call === undefined ? undefined : this.#callTask,
       callTranscript: this.#call === undefined ? undefined : this.#callTranscript,
       lukeEndedCall: this.#lukeEndedCall,
       speakerMuted: this.#speakerMuted,

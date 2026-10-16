@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type {
-  PlanActivityFrame,
-  PlanCallEndingFrame,
-  PlanCodeFrame,
-  PlanWorkFrame,
+  TaskActivityFrame,
+  TaskCallEndingFrame,
+  TaskCodeFrame,
+  TaskWorkFrame,
 } from "@luke/features";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@luke/live";
@@ -24,7 +24,7 @@ import { LiveSessionHolder } from "./live-session-holder.js";
  * to read.
  */
 
-const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 class FakeSideband implements LiveSideband {
   readonly sent: LiveClientEvent[] = [];
@@ -92,26 +92,26 @@ interface Fixture {
   holder: LiveSessionHolder;
   sidebands: FakeSideband[];
   /** The plan each session was created about, in order. */
-  plans: string[];
+  tasks: string[];
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
   reports: boolean[];
   /** How many times the source's stop door was asked. */
   stops: number;
   /** Every activity frame the holder told its caller, in order. */
-  activity: PlanActivityFrame[];
+  activity: TaskActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
-  tellActivity(activity: PlanActivityFrame): void;
+  tellActivity(activity: TaskActivityFrame): void;
   /** Every code frame the holder told its caller, in order. */
-  code: PlanCodeFrame[];
+  code: TaskCodeFrame[];
   /** The service's code frame, as the source's door would deliver it. */
-  tellCode(code: PlanCodeFrame): void;
+  tellCode(code: TaskCodeFrame): void;
   /** Every work frame the holder told its caller, in order. */
-  work: PlanWorkFrame[];
+  work: TaskWorkFrame[];
   /** The service's work frame, as the source's door would deliver it. */
-  tellWork(work: PlanWorkFrame): void;
+  tellWork(work: TaskWorkFrame): void;
   /** The service's word that Luke is ending the call, as the source's door would deliver it. */
-  tellEnding(ending: PlanCallEndingFrame): void;
+  tellEnding(ending: TaskCallEndingFrame): void;
   /** Every plan whose call the holder told its caller ended, in order. */
   callsEnded: string[];
   created: number;
@@ -120,22 +120,22 @@ interface Fixture {
   reportsActivity: boolean;
   /** Where a creation waits before the source answers, so a test can hold one in flight. */
   createGate: Effect.Effect<void>;
-  open(planId?: string): Effect.Effect<FakeSideband>;
+  open(taskId?: string): Effect.Effect<FakeSideband>;
 }
 
 function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const sidebands: FakeSideband[] = [];
-    const plans: string[] = [];
+    const tasks: string[] = [];
     const changes: VoiceLiveSessionChanged[] = [];
     const reports: boolean[] = [];
-    const activity: PlanActivityFrame[] = [];
-    let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
-    const code: PlanCodeFrame[] = [];
-    let codeListener: ((code: PlanCodeFrame) => void) | undefined;
-    const work: PlanWorkFrame[] = [];
-    let workListener: ((work: PlanWorkFrame) => void) | undefined;
-    let endingListener: ((ending: PlanCallEndingFrame) => void) | undefined;
+    const activity: TaskActivityFrame[] = [];
+    let activityListener: ((activity: TaskActivityFrame) => void) | undefined;
+    const code: TaskCodeFrame[] = [];
+    let codeListener: ((code: TaskCodeFrame) => void) | undefined;
+    const work: TaskWorkFrame[] = [];
+    let workListener: ((work: TaskWorkFrame) => void) | undefined;
+    let endingListener: ((ending: TaskCallEndingFrame) => void) | undefined;
     const callsEnded: string[] = [];
     const state = {
       sourceAvailable: true,
@@ -147,7 +147,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const source: LiveSessionSource = {
       create: (input) =>
         Effect.map(state.createGate, () => {
-          plans.push(input.planId);
+          tasks.push(input.taskId);
           const sideband = new FakeSideband();
           sidebands.push(sideband);
           const opened: LiveSessionOpened = {
@@ -165,16 +165,16 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   stopSpeaking: () => {
                     state.stops += 1;
                   },
-                  onPlanActivity: (listener: (activity: PlanActivityFrame) => void) => {
+                  onTaskActivity: (listener: (activity: TaskActivityFrame) => void) => {
                     activityListener = listener;
                   },
-                  onPlanCode: (listener: (code: PlanCodeFrame) => void) => {
+                  onTaskCode: (listener: (code: TaskCodeFrame) => void) => {
                     codeListener = listener;
                   },
-                  onPlanWork: (listener: (work: PlanWorkFrame) => void) => {
+                  onTaskWork: (listener: (work: TaskWorkFrame) => void) => {
                     workListener = listener;
                   },
-                  onPlanCallEnding: (listener: (ending: PlanCallEndingFrame) => void) => {
+                  onTaskCallEnding: (listener: (ending: TaskCallEndingFrame) => void) => {
                     endingListener = listener;
                   },
                 }
@@ -191,17 +191,17 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       source: () => (state.sourceAvailable ? source : undefined),
       createId: () => "request",
       emit: (change) => changes.push(change),
-      onPlanActivity: (word) => {
+      onTaskActivity: (word) => {
         activity.push(word);
       },
-      onPlanCode: (frame) => {
+      onTaskCode: (frame) => {
         code.push(frame);
       },
-      onPlanWork: (frame) => {
+      onTaskWork: (frame) => {
         work.push(frame);
       },
-      onPlanCallEnded: (planId) => {
-        callsEnded.push(planId);
+      onTaskCallEnded: (taskId) => {
+        callsEnded.push(taskId);
       },
       onSessionCreated: () => {
         state.created += 1;
@@ -210,7 +210,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     return {
       holder,
       sidebands,
-      plans,
+      tasks,
       changes,
       reports,
       get created() {
@@ -253,9 +253,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       set createGate(value: Effect.Effect<void>) {
         state.createGate = value;
       },
-      open: (planId = INVITES_PLAN) =>
+      open: (taskId = INVITES_TASK) =>
         Effect.gen(function* () {
-          const created = yield* holder.createSession("offer", planId);
+          const created = yield* holder.createSession("offer", taskId);
           assert.ok(created);
           const sideband = sidebands[sidebands.length - 1];
           assert.ok(sideband);
@@ -276,14 +276,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      const created = yield* f.holder.createSession("offer", INVITES_TASK);
       assert.deepEqual(created, {
         sessionId: "sess-1",
         sdpAnswer: "answer-for-offer",
       });
       assert.equal(f.created, 1);
       assert.equal(f.holder.sessionStands(), true);
-      assert.deepEqual(f.plans, [INVITES_PLAN]);
+      assert.deepEqual(f.tasks, [INVITES_TASK]);
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED]);
       f.sidebands[0]?.started("sess-1");
       yield* settle();

@@ -1,5 +1,5 @@
 /**
- * panel-avatar.ts -- the call's avatar grant and voice feed, relayed to the panel window's page and no other.
+ * panel-avatar.ts -- the call's avatar grant and voice feed, relayed to the panel window's page and no other, and the call window's view of its video.
  *
  * Keyframe's session token can view the avatar and send it audio, so it
  * reaches one renderer: the panel's, which runs the session and draws its
@@ -11,6 +11,7 @@
 
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { AvatarFeed } from "@luke/voice/avatar";
+import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { channels } from "#shared/bridge";
 
@@ -44,6 +45,16 @@ export class PanelAvatarRelay {
   feedAvatar(feed: AvatarFeed): void {
     // SAFETY: the feed is the structured-clone value `avatarFeedFromWire` admitted.
     this.#page()?.send(channels.onAvatarFeed, feed as UnparsedWireValue);
+  }
+
+  /**
+   * The call window's offer or close for its view of the avatar's video,
+   * which the panel answers with the track it plays. Not held: a view a page
+   * never heard of is offered again by the window that wants it.
+   */
+  signalView(signal: AvatarViewSignal): void {
+    // SAFETY: the signal is the structured-clone value `avatarViewSignalFromWire` admitted.
+    this.#page()?.send(channels.onAvatarViewSignal, signal as UnparsedWireValue);
   }
 
   /** A fresh page has drawn: it is handed the grant standing, if one does. */

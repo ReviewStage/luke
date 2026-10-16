@@ -23,6 +23,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * automation did or did not act. The shapes here are what the store keeps
  * as JSON (`packages/database/src/schemas/automation.ts`) and what the
  * routes answer, declared once.
+ *
+ * Note that `planId` and `planName` keep the wire's legacy spelling of a task, because a
+ * released desktop sends and reads them; they are renamed with the wire in a
+ * follow-up, with no alias.
  */
 
 export const AUTOMATION_BOUNDS = {
@@ -325,7 +329,7 @@ export const AUTOMATION_RUN_REASON = {
   /** It had already started as many runs as its daily cap allows. */
   DAILY_CAP: "daily-cap",
   /** The plan is gone, or no longer reachable by the account. */
-  PLAN_UNREACHABLE: "plan-unreachable",
+  TASK_UNREACHABLE: "plan-unreachable",
   /** Its creator is no longer a member of its workspace, and a run starts as its creator. */
   CREATOR_LEFT: "creator-left",
   /** The plan names no repository. */
@@ -359,7 +363,7 @@ export const automationRunReasonSchema = EffectSchema.Literals(
 );
 
 /** The query an automation list may narrow by: one plan's automations alone. */
-export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
+export const AUTOMATION_LIST_QUERY = { TASK_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
 
 /**
  * One run as the history shows it: what fired it, where it stands, why

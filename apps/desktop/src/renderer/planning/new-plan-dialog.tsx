@@ -1,6 +1,6 @@
-import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { workspaceReaches } from "@luke/ui/planning-model";
+import { workspaceReaches } from "@luke/ui/tasks-model";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { WorkspaceTile } from "../desktop/workspace-tile";
@@ -8,6 +8,9 @@ import { ModalShell } from "../modal-shell";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
+import { Switch } from "../switch";
+import { Tooltip } from "../tooltip";
+import { useNewTaskPlanning } from "./new-task-planning";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
 
@@ -38,11 +41,20 @@ import type { PlansControl } from "./use-plans-tab";
  * the plan starts with none, to be given one later. A
  * refusal keeps the card with the reason under the field, and Create task
  * can be pressed again; a plan started closes the card and opens as the
- * host's open plan, its call with it.
+ * host's open plan, its call with it. The Plan switch at the title's end starts
+ * the task without its planning phase where it is turned off: an empty plan
+ * rather than the template, and no call. The switch is kept as it was left
+ * for the next New task (`new-task-planning.ts`).
  */
 
 /** Create task's chord: Return alone, from the name field. */
 const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
+
+/** What the Plan switch's description says the start will do, by its state. */
+const PLANNING_NOTE = {
+  ON: "Starts from your plan template and opens a call with Luke.",
+  OFF: "Starts with an empty plan and no call.",
+} as const;
 
 /** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
 const NO_WORKSPACE_MATCH = "No workspaces match";
@@ -107,10 +119,14 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
     if (scope !== undefined) setChosen(undefined);
     setScope(repositories.scope);
   }
+  const [planning, setPlanning] = useNewTaskPlanning();
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const field = useRef<HTMLInputElement>(null);
   const titleId = useId();
+  const planningId = useId();
+  const planningNoteId = useId();
+  const planningNote = planning ? PLANNING_NOTE.ON : PLANNING_NOTE.OFF;
   // Note that a press's repository the workspace's GitHub does not reach is
   // not started on, because the service would refuse it.
   const pick =
@@ -125,7 +141,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
     setStarting(true);
     setNote(undefined);
     newPlan
-      .start(name.trim(), repository, startsIn)
+      .start(name.trim(), repository, startsIn, planning)
       .then(setNote)
       .finally(() => setStarting(false));
   };
@@ -149,16 +165,35 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
       initialFocus={field}
       onDismiss={close}
     >
-      <div className="new-plan-title">
-        <h2 id={titleId} className="confirm-dialog-title">
-          {startsIn === undefined ? "New task" : "New task in"}
-        </h2>
-        <WorkspaceChip
-          workspaces={newPlan.workspaces}
-          chosen={startsIn}
-          disabled={starting}
-          onChoose={setWorkspaceId}
-        />
+      <div className="new-plan-head">
+        <div className="new-plan-title">
+          <h2 id={titleId} className="confirm-dialog-title">
+            {startsIn === undefined ? "New task" : "New task in"}
+          </h2>
+          <WorkspaceChip
+            workspaces={newPlan.workspaces}
+            chosen={startsIn}
+            disabled={starting}
+            onChoose={setWorkspaceId}
+          />
+        </div>
+        {/* Note that the word labels the switch, so a press on it turns the switch too. */}
+        <Tooltip label={planningNote}>
+          <span className="new-plan-planning">
+            <label htmlFor={planningId}>Plan</label>
+            <Switch
+              id={planningId}
+              checked={planning}
+              label="Plan with Luke"
+              describedBy={planningNoteId}
+              disabled={starting}
+              onChange={setPlanning}
+            />
+            <span id={planningNoteId} hidden>
+              {planningNote}
+            </span>
+          </span>
+        </Tooltip>
       </div>
       <input
         ref={field}
@@ -167,7 +202,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
         aria-label="Task name"
         aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
         placeholder="Task name (optional)"
-        maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
+        maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
         spellCheck
         value={name}
         disabled={starting}

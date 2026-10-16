@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACTOR_KIND, ACTOR_STATE, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createElement } from "react";

@@ -9,7 +9,9 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * (`link-home.ts`), and the desktop is handed the same address in its own
  * scheme, as a plan's and a section's already are (`mention-link.ts`, which
  * still writes and reads those two, so a plan's link is spelled in one
- * place). Each step after the workspace says what kind of thing comes next,
+ * place, and writes a page's and an agent's under a plan as this module
+ * does, since a mention names them by these links too). Each step after the
+ * workspace says what kind of thing comes next,
  * and a list is plural where a thing is singular, as GitHub's `/pulls` and
  * `/pull/1` are:
  *
@@ -335,12 +337,12 @@ function taskLink(workspace: string, planId: string, hash: string): LinkPlace | 
   const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(planId)}${hash}`;
   const mention = decodeMention(written, null);
   // Note that the place is read again as every place is, so a task's id is held to the ids the service mints, as any other's is, where a mention takes any.
-  if (mention?.kind === MENTION_KIND.PLAN) {
-    return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: mention.planId }));
+  if (mention?.kind === MENTION_KIND.TASK) {
+    return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: mention.taskId }));
   }
   if (mention?.kind === MENTION_KIND.SECTION) {
     return Option.getOrUndefined(
-      readPlace({ kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor }),
+      readPlace({ kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor }),
     );
   }
   return undefined;
@@ -406,11 +408,11 @@ function agentPath(planId: string | undefined, agentId: string): readonly string
 export function linkOf(place: LinkPlace, workspace: string): string {
   const where = { workspace, repository: null };
   if (place.kind === LINK_PLACE.TASK) {
-    return encodeMention({ kind: MENTION_KIND.PLAN, planId: place.planId }, where);
+    return encodeMention({ kind: MENTION_KIND.TASK, taskId: place.planId }, where);
   }
   if (place.kind === LINK_PLACE.SECTION) {
     return encodeMention(
-      { kind: MENTION_KIND.SECTION, planId: place.planId, anchor: place.anchor },
+      { kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor },
       where,
     );
   }

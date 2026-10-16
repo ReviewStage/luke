@@ -1,6 +1,7 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -8,24 +9,35 @@ import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { CodeRef, Plan } from "@luke/features/plan-wire";
+import type { CodeRef, Task } from "@luke/features/task-wire";
 import {
-  PLAN_CALL_FAILURE,
-  PLANNING_READ,
-  type PlanningEditAnswer,
-  type PlanningView,
-} from "@luke/features/planning-view";
+  TASK_CALL_FAILURE,
+  TASKS_READ,
+  type TasksEditAnswer,
+  type TasksView,
+} from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxPlan, AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
 import {
+  isAgentTab,
+  isChangesTab,
+  isDraftTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  isTerminalTab,
+  type StripTab,
+  sameTab,
+} from "@luke/ui/tab-strip-model";
+import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
-  archivedPlansNote,
-  archivePlansFailedNote,
+  archivedTasksNote,
+  archiveTasksFailedNote,
   type CallStatus,
   callStatus,
   DOCUMENT_REGION,
@@ -41,38 +53,27 @@ import {
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
-  PLAN_MARK,
-  PLANS_PAGE,
-  type PlanMark,
-  type PlansPage,
   pendingMark,
   pinnedRepositories,
-  planNameOfIssue,
-  plansPage,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
-  sidebarPlans,
+  sidebarTasks,
   startFailureNote,
+  TASK_MARK,
+  TASKS_PAGE,
+  type TaskMark,
+  type TasksPage,
+  taskNameOfIssue,
+  tasksPage,
   unsettledAgentPins,
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
   workspaceReaches,
-} from "@luke/ui/planning-model";
-import {
-  isAgentTab,
-  isChangesTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  type StripTab,
-  sameTab,
-} from "@luke/ui/tab-strip-model";
+} from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -138,7 +139,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -272,7 +273,11 @@ export const AUTOMATIONS_PAGE = {
 
 export type AutomationsPlace =
   | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
-  | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.NEW;
+      /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
+      readonly preset?: AutomationPresetName;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.EDIT;
       readonly automationId: string;
@@ -295,7 +300,7 @@ interface AutomationsViewControl {
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
-  page: PlansPage;
+  page: TasksPage;
   /** Whether a launch is still opening the plan last open, while the home page waits rather than flash before it (`use-last-plan.ts`). */
   restoring: boolean;
   /** Whether the tab is on screen: the panel open, on this tab. */
@@ -305,24 +310,24 @@ export interface PlansControl {
   /** The signed-in account's id, whose own edits a plan names "you"; none while signed out, for a fixture, or an identity stored without one. */
   me: string | undefined;
   /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a plan in. */
-  plans: PlanningView["plans"];
+  plans: TasksView["tasks"];
   /** Every archived plan of every workspace, newest archived first. */
-  archived: PlanningView["plans"];
+  archived: TasksView["tasks"];
   /**
    * The chosen workspace's share of `plans` and `archived`, which alone the
    * sidebar lists, and of `inbox` and `inboxPlans`, which alone the Inbox,
    * its count, and Home list; everything while no workspace is chosen.
    */
   listed: {
-    plans: PlanningView["plans"];
-    archived: PlanningView["plans"];
-    inbox: readonly AppInboxPlan[];
-    inboxPlans: readonly AppInboxPlanHolding[];
+    plans: TasksView["tasks"];
+    archived: TasksView["tasks"];
+    inbox: readonly AppInboxTask[];
+    inboxPlans: readonly AppInboxTaskHolding[];
   };
   /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
   listedAgents: {
-    readonly standing: readonly PlanlessAgent[];
-    readonly archived: readonly PlanlessAgent[];
+    readonly standing: readonly TasklessAgent[];
+    readonly archived: readonly TasklessAgent[];
   };
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
@@ -356,7 +361,7 @@ export interface PlansControl {
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
   /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
-  edit: (planId: string, request: PlanEditRequest) => Promise<PlanningEditAnswer>;
+  edit: (planId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
   /** Silences Luke's voice on this Mac for the open plan's call, or plays it again; offered with the stop. */
   speaker: { muted: boolean; onPress: () => void };
@@ -375,9 +380,9 @@ export interface PlansControl {
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
   /** Every code Luke showed on the open plan, oldest first: what the service keeps, and each a call shows as it shows it. */
-  shownCode: PlanningView["shownCode"];
+  shownCode: TasksView["shownCode"];
   /** The pages agents wrote for the open plan, each by its newest version; absent with none. */
-  pages: PlanningView["pages"];
+  pages: TasksView["pages"];
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: {
     region: TranscriptRegion;
@@ -392,7 +397,7 @@ export interface PlansControl {
    */
   work: {
     /** The open plan's planning conversation as an agent's transcript is read; none before the first read lands. */
-    conversation: PlanningView["conversation"];
+    conversation: TasksView["conversation"];
     callLive: boolean;
     onLoadEarlier: () => Promise<void>;
     /** Reads a planning worker's session past a cursor, as an agent's worker's tab reads its own, the plan standing in the agent's place. */
@@ -435,13 +440,13 @@ export interface PlansControl {
   /** Opens a plan on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (planId: string) => void;
   /** What waits on the developer across the account's plans, as main's read last answered: each plan with an open inbox item, and its items. */
-  inbox: readonly AppInboxPlan[];
+  inbox: readonly AppInboxTask[];
   /** The plan whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
   inboxShown: string | null;
   /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
-  inboxPlans: readonly AppInboxPlanHolding[];
+  inboxPlans: readonly AppInboxTaskHolding[];
   /** What waits on the developer from agents with no plan, as main's read last answered: what the window's Inbox lists beside the plans' and counts with them. */
-  inboxPlanless: readonly AppInboxPlanlessItem[];
+  inboxPlanless: readonly AppInboxTasklessItem[];
   /** The newest run of each of the account's own automations that failed to start lately, every workspace's, which marks the sidebar's Automations of the run's workspace until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
@@ -455,7 +460,7 @@ export interface PlansControl {
   /** The window's Automations page: whether it stands in the plan's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
   /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
-  callPlanId: string | undefined;
+  callTaskId: string | undefined;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -504,11 +509,12 @@ export interface PlansControl {
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the plan starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
+      planning: boolean,
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
@@ -547,7 +553,7 @@ export interface PlansControl {
    * put back with a note if the service refuses. Archiving the open plan
    * leaves it for the home page, as deleting it does.
    */
-  onMarkPlan: (planId: string, mark: PlanMark) => void;
+  onMarkPlan: (planId: string, mark: TaskMark) => void;
   /**
    * Archives several plans at once, as a repository's Archive plans asks:
    * each drawn archived at once, and one toast for them all once the
@@ -679,7 +685,7 @@ const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
 
 /** A plan with no page, the same array every render, so the arrivals read no change in it. */
-const NO_PAGES: NonNullable<PlanningView["pages"]> = [];
+const NO_PAGES: NonNullable<TasksView["pages"]> = [];
 
 /** What an agent's page holds of the plan's panel kinds: nothing, its tabs being the agent's own. */
 const NO_HOLDS: PlanHolds = {};
@@ -688,7 +694,7 @@ const NO_HOLDS: PlanHolds = {};
 const NO_IDS: readonly string[] = [];
 
 /** No agent with no plan, before the list carries any. */
-const NO_PLANLESS_AGENTS: readonly PlanlessAgent[] = [];
+const NO_PLANLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
@@ -729,16 +735,16 @@ const DELETE_REFUSED: ActionResult = {
  */
 
 /** The entries of the plans in `workspaceId`, or every entry while no workspace is listed. */
-function inWorkspace<Entry extends { readonly planId: string }>(
+function inWorkspace<Entry extends { readonly taskId: string }>(
   entries: readonly Entry[],
-  plans: readonly Pick<Plan, "id" | "workspaceId">[],
+  plans: readonly Pick<Task, "id" | "workspaceId">[],
   workspaceId: string | undefined,
 ): readonly Entry[] {
   if (workspaceId === undefined) return entries;
   const listed = new Set(
     plans.filter((plan) => plan.workspaceId === workspaceId).map((plan) => plan.id),
   );
-  return entries.filter((entry) => listed.has(entry.planId));
+  return entries.filter((entry) => listed.has(entry.taskId));
 }
 
 /** What the second call's question says: the call it ends, and what the act does. */
@@ -754,7 +760,7 @@ function secondCallQuestion(planName: string): DialogQuestion {
 
 /** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
-  view: Pick<PlanningView, "board" | "shownCode" | "conversation">,
+  view: Pick<TasksView, "board" | "shownCode" | "conversation">,
   transcript: TranscriptRegion,
 ): PlanHolds {
   const { board, shownCode, conversation } = view;
@@ -778,7 +784,7 @@ function planHolds(
 export function usePlansTab(input: {
   acts: Pick<ActHandle, "act" | "tell">;
   /** The plans main holds, the account's; a fixture run's own stand in for them. */
-  planning: PlanningView;
+  planning: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
   signedIn: boolean;
   /** The signed-in account's email, which the plan last open is kept under; none while signed out. */
@@ -792,11 +798,11 @@ export function usePlansTab(input: {
   /** The agents main says ended while no one was looking, each until its tab is shown. */
   unseenAgents: readonly string[];
   /** What main says waits on the developer across the account's plans. */
-  inboxWaiting: readonly AppInboxPlan[];
+  inboxWaiting: readonly AppInboxTask[];
   /** Every plan main says holds an inbox item, waiting or settled. */
-  inboxPlans: readonly AppInboxPlanHolding[];
+  inboxPlans: readonly AppInboxTaskHolding[];
   /** What main says waits on the developer from agents with no plan. */
-  inboxPlanless: readonly AppInboxPlanlessItem[];
+  inboxPlanless: readonly AppInboxTasklessItem[];
   /** The newest run of each of the account's own automations main says failed to start lately. */
   failedRuns: readonly AccountFailedRun[];
   voice: {
@@ -894,7 +900,7 @@ export function usePlansTab(input: {
     () =>
       setAgentPins((held) =>
         accountSignedIn
-          ? unsettledAgentPins(held, viewed.planlessAgents ?? NO_PLANLESS_AGENTS)
+          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_PLANLESS_AGENTS)
           : NO_PENDING_AGENT_PINS,
       ),
     [viewed, accountSignedIn],
@@ -924,16 +930,16 @@ export function usePlansTab(input: {
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
     setStandIn(undefined);
   }
-  const sidebar = sidebarPlans(planning.plans);
-  const listedSidebar = sidebarPlans(
+  const sidebar = sidebarTasks(planning.tasks);
+  const listedSidebar = sidebarTasks(
     listedWorkspace === undefined
-      ? planning.plans
-      : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
+      ? planning.tasks
+      : planning.tasks.filter((plan) => plan.workspaceId === listedWorkspace.id),
   );
   const listedWorkspaceId = listedWorkspace?.id;
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each pinned as given here until main's view carries it.
-  const { planlessAgents } = planning;
+  const { tasklessAgents: planlessAgents } = planning;
   const listedAgents = useMemo(() => {
     const listed = agentsPinned(planlessAgents ?? NO_PLANLESS_AGENTS, agentPins).filter(
       (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
@@ -946,41 +952,41 @@ export function usePlansTab(input: {
   const { inboxWaiting, inboxPlans } = input;
   const listedInbox = useMemo(
     () => ({
-      inbox: inWorkspace(inboxWaiting, planning.plans, listedWorkspaceId),
-      inboxPlans: inWorkspace(inboxPlans, planning.plans, listedWorkspaceId),
+      inbox: inWorkspace(inboxWaiting, planning.tasks, listedWorkspaceId),
+      inboxPlans: inWorkspace(inboxPlans, planning.tasks, listedWorkspaceId),
     }),
-    [inboxWaiting, inboxPlans, planning.plans, listedWorkspaceId],
+    [inboxWaiting, inboxPlans, planning.tasks, listedWorkspaceId],
   );
   const signedIn = fixture !== undefined || input.signedIn;
-  const page = plansPage(planning);
+  const page = tasksPage(planning);
   const region = documentRegion(planning);
   // A started agent's tab opens selected; the column's tabs are built after
   // the agents they draw, so the opening reaches them through this late binding.
   const mainRef = useRef<MainTabsControl | undefined>(undefined);
-  const openDocument = viewed.document.plan;
+  const openDocument = viewed.document.task;
   // The open plan's own words, which a dictation into one of its agents' boxes listens for.
   const dictationWords = useMemo(
     () =>
-      openDocument === undefined || openDocument.id !== viewed.activePlanId
+      openDocument === undefined || openDocument.id !== viewed.activeTaskId
         ? []
         : dictationKeywords({
             repository: openDocument.repository,
             title: openDocument.name,
             body: openDocument.document.body,
           }),
-    [openDocument, viewed.activePlanId],
+    [openDocument, viewed.activeTaskId],
   );
   // A fixture's plans have no agents, as they are read from nowhere.
   const agents = useCodingAgents({
     acts: input.acts,
-    planId: fixture === undefined ? viewed.activePlanId : undefined,
+    planId: fixture === undefined ? viewed.activeTaskId : undefined,
     repository:
-      openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+      openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
     // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
-    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
+    archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
     onUnarchive: () => {
       if (region.kind === DOCUMENT_REGION.READY)
-        markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
+        markNow.current(region.task.id, TASK_MARK.UNARCHIVE);
     },
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
@@ -997,12 +1003,12 @@ export function usePlansTab(input: {
     setHeard((held) =>
       heardCalls({
         held,
-        voice: { callPlanId: reported.callPlanId, callTranscript: reported.callTranscript },
-        planId: viewed.activePlanId,
+        voice: { callTaskId: reported.callTaskId, callTranscript: reported.callTranscript },
+        taskId: viewed.activeTaskId,
         now: Date.now(),
       }),
     );
-  }, [reported.callPlanId, reported.callTranscript, viewed.activePlanId]);
+  }, [reported.callTaskId, reported.callTranscript, viewed.activeTaskId]);
   const transcript = transcriptRegion({
     transcript: viewed.transcript,
     heard,
@@ -1014,14 +1020,12 @@ export function usePlansTab(input: {
     () => workerCallIds(workRowsOf(viewed.conversation, false)),
     [viewed.conversation],
   );
-  // An agent Luke started in the call is in the work before it is in the
-  // list, so the list is read again as its start answers, and the tab
-  // appears as it does after a Start; a start already in the work when the
-  // plan opens is read with the plan.
-  const startedByLuke = useMemo(
-    () => startedAgentCallIds(viewed.conversation),
-    [viewed.conversation],
-  );
+  // An agent Luke started, archived, or brought back in the call moves in
+  // the work before it moves in the list, so the list is read again as the
+  // call answers, and the tab appears or leaves as it does after a Start or
+  // an Archive; a call already in the work when the plan opens is read with
+  // the plan.
+  const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
   const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
     planId: undefined,
     ids: new Set(),
@@ -1029,11 +1033,11 @@ export function usePlansTab(input: {
   const readAgents = agents.onRetryList;
   useEffect(() => {
     const seen = startsSeen.current;
-    const planId = viewed.activePlanId;
+    const planId = viewed.activeTaskId;
     const landed = seen.planId === planId && startedByLuke.some((callId) => !seen.ids.has(callId));
     startsSeen.current = { planId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
-  }, [startedByLuke, viewed.activePlanId, readAgents]);
+  }, [startedByLuke, viewed.activeTaskId, readAgents]);
   // A file's tab is held to the files Luke showed on the plan the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
@@ -1041,10 +1045,10 @@ export function usePlansTab(input: {
   );
   const mainTabs = useMainTabs(
     fixture !== undefined,
-    viewed.activePlanId,
+    viewed.activeTaskId,
     agents.agentIds,
     agents.draft?.id,
-    input.inboxWaiting.some((plan) => plan.planId === viewed.activePlanId),
+    input.inboxWaiting.some((plan) => plan.taskId === viewed.activeTaskId),
     agents.heldIds,
   );
   mainRef.current = mainTabs;
@@ -1060,7 +1064,7 @@ export function usePlansTab(input: {
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
     pageAgents === undefined
-      ? { id: viewed.activePlanId, holds: planHolds(viewed, transcript) }
+      ? { id: viewed.activeTaskId, holds: planHolds(viewed, transcript) }
       : { id: pageAgent, holds: NO_HOLDS },
     pageAgents ?? mainTabs.openAgents,
     pageAgents === undefined ? workers : NO_IDS,
@@ -1080,8 +1084,8 @@ export function usePlansTab(input: {
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {
-    if (viewed.activePlanId !== undefined) onRenamePins(viewed.activePlanId, pinLabels);
-  }, [viewed.activePlanId, pinLabels, onRenamePins]);
+    if (viewed.activeTaskId !== undefined) onRenamePins(viewed.activeTaskId, pinLabels);
+  }, [viewed.activeTaskId, pinLabels, onRenamePins]);
   // Main hears which agent's tab, or which plan's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the plan's
   // place, the side panel fills the window over the column, or the column
@@ -1106,7 +1110,7 @@ export function usePlansTab(input: {
   const inboxChosen =
     inboxAsked !== undefined &&
     (!("planId" in inboxAsked) ||
-      inWorkspace([inboxAsked], planning.plans, listedWorkspaceId).length > 0)
+      inWorkspace([{ taskId: inboxAsked.planId }], planning.tasks, listedWorkspaceId).length > 0)
       ? inboxAsked
       : undefined;
   const shownInbox =
@@ -1115,7 +1119,7 @@ export function usePlansTab(input: {
         ? inboxChosen.planId
         : null
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
-        ? (viewed.activePlanId ?? null)
+        ? (viewed.activeTaskId ?? null)
         : null;
   const reportedTab = useRef<{ agentId: string | null; inboxPlanId: string | null } | undefined>(
     undefined,
@@ -1124,7 +1128,7 @@ export function usePlansTab(input: {
     const was = reportedTab.current;
     if (was?.agentId === shownAgent && was.inboxPlanId === shownInbox) return;
     reportedTab.current = { agentId: shownAgent, inboxPlanId: shownInbox };
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent, inboxPlanId: shownInbox });
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent, inboxTaskId: shownInbox });
   }, [shownAgent, shownInbox, tell]);
 
   // The tab showing is what asks the host to read the plans again; the open
@@ -1135,13 +1139,13 @@ export function usePlansTab(input: {
   useEffect(() => {
     if (reading === wasReading.current) return;
     wasReading.current = reading;
-    if (reading) tell(ACT_KIND.PLANNING_REFRESH);
+    if (reading) tell(ACT_KIND.TASKS_REFRESH);
   }, [reading, tell]);
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the plan takes its ask
   // back. A fixture's plans are opened nowhere, so nothing is asked of them.
-  const openPlanId = planning.activePlanId;
+  const openPlanId = planning.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
   // The version history is the plan's, so another plan, or none, leaves it.
   if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
@@ -1164,7 +1168,7 @@ export function usePlansTab(input: {
   // An answer clears the ask it answers, never one made since.
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   const listedId = listedWorkspace?.id;
-  const plansNow = planning.plans;
+  const plansNow = planning.tasks;
   const workspacesNow = viewed.workspaces;
   // The plan last open in each workspace, which a switch to it opens again.
   const lastOpenIn = useRef(new Map<string, string>());
@@ -1187,7 +1191,7 @@ export function usePlansTab(input: {
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
-      act(ACT_KIND.PLANNING_SELECT, { planId }).then((opened) => {
+      act(ACT_KIND.TASKS_SELECT, { taskId: planId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
@@ -1203,7 +1207,7 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return;
     const ask = { planId: undefined, over: openPlanId };
     setAsked(ask);
-    act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
+    act(ACT_KIND.TASKS_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
   }, [act, fixture, openPlanId]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
@@ -1297,7 +1301,7 @@ export function usePlansTab(input: {
   shownNow.current = shown;
   const deletePlan = async (planId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await act(ACT_KIND.PLANNING_DELETE, { planId }).catch(() => false);
+    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId: planId }).catch(() => false);
     if (deleted) {
       toast({ words: PLAN_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -1312,7 +1316,7 @@ export function usePlansTab(input: {
   const renamePlan = async (planId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
     setRenames((held) => new Map(held).set(planId, name));
-    const renamed = await act(ACT_KIND.PLANNING_RENAME, { planId, name }).catch(() => false);
+    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId: planId, name }).catch(() => false);
     if (!renamed) {
       setRenames((held) =>
         held.get(planId) === name
@@ -1336,14 +1340,14 @@ export function usePlansTab(input: {
   // nothing of its own unless it is refused. Note that the open plan is left
   // only once its archive is answered, because leaving ends its call, which a
   // refusal could not give back, nor can an Undo.
-  const markPlan = (planId: string, mark: PlanMark, undoing?: { reopen: boolean }) => {
+  const markPlan = (planId: string, mark: TaskMark, undoing?: { reopen: boolean }) => {
     if (fixture !== undefined) return;
     const next = { ...marks.get(planId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(planId, next));
-    const pinning = mark === PLAN_MARK.PIN || mark === PLAN_MARK.UNPIN;
+    const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
     const asked = pinning
-      ? act(ACT_KIND.PLANNING_PIN, { planId, pinned: mark === PLAN_MARK.PIN })
-      : act(ACT_KIND.PLANNING_ARCHIVE, { planId, archived: mark === PLAN_MARK.ARCHIVE });
+      ? act(ACT_KIND.TASKS_PIN, { taskId: planId, pinned: mark === TASK_MARK.PIN })
+      : act(ACT_KIND.TASKS_ARCHIVE, { taskId: planId, archived: mark === TASK_MARK.ARCHIVE });
     asked
       .catch(() => false)
       .then((changed) => {
@@ -1360,7 +1364,7 @@ export function usePlansTab(input: {
           });
           return;
         }
-        const left = mark === PLAN_MARK.ARCHIVE && openNow.current === planId;
+        const left = mark === TASK_MARK.ARCHIVE && openNow.current === planId;
         if (left) leavePlan();
         if (undoing?.reopen) selectNow.current(planId);
         if (pinning || undoing !== undefined) return;
@@ -1383,7 +1387,7 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return;
     const next: PendingRepositoryPin = { pinned, at: Date.now() };
     setRepositoryPins((held) => new Map(held).set(repository, next));
-    act(ACT_KIND.PLANNING_PIN_REPOSITORY, { repository, pinned })
+    act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })
       .catch(() => false)
       .then((changed) => {
         if (changed) return;
@@ -1459,13 +1463,13 @@ export function usePlansTab(input: {
     const at = Date.now();
     const asked = planIds.map((planId) => ({
       planId,
-      next: { ...marks.get(planId), ...pendingMark(PLAN_MARK.ARCHIVE, at) },
+      next: { ...marks.get(planId), ...pendingMark(TASK_MARK.ARCHIVE, at) },
     }));
     setMarks(
       (held) => new Map([...held, ...asked.map(({ planId, next }) => [planId, next] as const)]),
     );
     const answers = asked.map(({ planId }) =>
-      act(ACT_KIND.PLANNING_ARCHIVE, { planId, archived: true }).catch(() => false),
+      act(ACT_KIND.TASKS_ARCHIVE, { taskId: planId, archived: true }).catch(() => false),
     );
     Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
@@ -1480,7 +1484,7 @@ export function usePlansTab(input: {
       );
       if (landed.length === 0) {
         toast({
-          words: archivePlansFailedNote(refused.length),
+          words: archiveTasksFailedNote(refused.length),
           tone: TOAST_TONE.FAILED,
           hold: TOAST_HOLD.FAILED,
         });
@@ -1489,13 +1493,13 @@ export function usePlansTab(input: {
       const left = landed.find((planId) => planId === openNow.current);
       if (left !== undefined) leavePlan();
       toast({
-        words: archivedPlansNote(landed.length, refused.length),
+        words: archivedTasksNote(landed.length, refused.length),
         tone: TOAST_TONE.DONE,
         action: {
           label: UNDO_LABEL,
           onPress: () => {
             for (const planId of landed) {
-              markNow.current(planId, PLAN_MARK.UNARCHIVE, { reopen: planId === left });
+              markNow.current(planId, TASK_MARK.UNARCHIVE, { reopen: planId === left });
             }
           },
         },
@@ -1509,7 +1513,7 @@ export function usePlansTab(input: {
   const restoring = useLastPlan({
     staged: fixture !== undefined,
     account: input.account,
-    plans: planning.plans,
+    plans: planning.tasks,
     listStatus: planning.listStatus,
     openPlanId,
     boundFor,
@@ -1522,19 +1526,19 @@ export function usePlansTab(input: {
   // it asks the model nothing and reads no flag.
   const pressCopy = () => {
     if (region.kind !== DOCUMENT_REGION.READY) return;
-    copyWithToast(planMarkdown(region.plan), PLAN_COPIED_NOTE);
+    copyWithToast(planMarkdown(region.task), PLAN_COPIED_NOTE);
   };
 
   const microphone = microphoneButton({
     voiceAvailable: input.voiceAvailable,
     microphoneStatus: input.microphoneStatus,
-    activePlanId: planning.activePlanId,
-    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
+    activeTaskId: planning.activeTaskId,
+    archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
     listening: voice.listening,
-    callPlanId: voice.view.callPlanId,
+    callTaskId: voice.view.callTaskId,
     voiceStatus: voice.view.voiceStatus,
   });
-  const live = callInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
+  const live = callInProgress(voice.view) && voice.view.callTaskId === planning.activeTaskId;
   // A press that would open a call here while one stands about another plan
   // ends that call, so it asks first; the answer is the same Talk press, and
   // Cancel leaves the call standing as it was. The talk key never asks: it
@@ -1543,13 +1547,13 @@ export function usePlansTab(input: {
   // press would talk about whichever plan the host has open), and its surface
   // is the plan's page, which a version history covers.
   const callElsewhere =
-    callInProgress(voice.view) && voice.view.callPlanId !== planning.activePlanId;
+    callInProgress(voice.view) && voice.view.callTaskId !== planning.activeTaskId;
   const [askedFor, setAskedFor] = useState<string>();
   const secondCallFor = callElsewhere && askedFor !== undefined ? askedFor : undefined;
   const secondCall = useConfirmDialog(
-    { subject: secondCallFor === planning.activePlanId, surfaceOpen: shown && !historyOpen },
+    { subject: secondCallFor === planning.activeTaskId, surfaceOpen: shown && !historyOpen },
     () =>
-      act(ACT_KIND.PLANNING_TALK).then(
+      act(ACT_KIND.TASKS_TALK).then(
         (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
         (refused: Error): ActionResult => ({
           status: ACTION_RESULT_STATUS.REJECTED,
@@ -1562,7 +1566,7 @@ export function usePlansTab(input: {
   const askOnOpen = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (askOnOpen.current === undefined || askOnOpen.current !== secondCallFor) return;
-    if (secondCallFor !== planning.activePlanId) return;
+    if (secondCallFor !== planning.activeTaskId) return;
     askOnOpen.current = undefined;
     secondCall.ask();
   });
@@ -1575,9 +1579,9 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.OPEN_SETTINGS)
       tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (microphone.press === MICROPHONE_PRESS.TALK) {
-      if (!callElsewhere) tell(ACT_KIND.PLANNING_TALK);
+      if (!callElsewhere) tell(ACT_KIND.TASKS_TALK);
       else {
-        setAskedFor(planning.activePlanId);
+        setAskedFor(planning.activeTaskId);
         secondCall.ask();
       }
     }
@@ -1587,7 +1591,7 @@ export function usePlansTab(input: {
   // only on a call, since what a plan opens with it already held.
   const arrivedTabs = usePanelArrivals({
     // Note that nothing arrives while an agent's page holds the panel, so the plan's visit ends, and what it gained meanwhile counts as seen.
-    planId: fixture === undefined && pageAgent === undefined ? planning.activePlanId : undefined,
+    planId: fixture === undefined && pageAgent === undefined ? planning.activeTaskId : undefined,
     board: planning.board,
     code: live ? (planning.shownCode ?? []) : undefined,
     pages: live ? (planning.pages ?? NO_PAGES) : undefined,
@@ -1604,7 +1608,7 @@ export function usePlansTab(input: {
   // chip lists the repositories of the workspace its plan is in: the open
   // plan's, else the one New plan starts in.
   const repositoriesOf =
-    region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : listedWorkspace?.id;
+    region.kind === DOCUMENT_REGION.READY ? region.task.workspaceId : listedWorkspace?.id;
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
   /**
    * The repository chip's list for one workspace: the repositories its plans
@@ -1621,8 +1625,8 @@ export function usePlansTab(input: {
     const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
     const own =
       workspaceId === undefined
-        ? planning.plans
-        : planning.plans.filter((plan) => plan.workspaceId === workspaceId);
+        ? planning.tasks
+        : planning.tasks.filter((plan) => plan.workspaceId === workspaceId);
     // Note that the plans are filtered before the recent ones are counted,
     // because a few newer stranded plans would otherwise crowd out an older
     // repository the workspace does reach.
@@ -1638,9 +1642,9 @@ export function usePlansTab(input: {
         fixture !== undefined
           ? Promise.resolve(fixtureRepositories(workspaceId))
           : act(
-              ACT_KIND.PLANNING_REPOSITORIES,
+              ACT_KIND.TASKS_REPOSITORIES,
               workspaceId === undefined ? {} : { workspaceId },
-            ).catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED })),
+            ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
       openGitHub,
       pictures: fixture === undefined,
       scope: workspaceId,
@@ -1686,7 +1690,7 @@ export function usePlansTab(input: {
     repository: string | null,
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.PLANNING_SET_REPOSITORY, { planId, repository }).then(
+    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId: planId, repository }).then(
       (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
@@ -1704,8 +1708,8 @@ export function usePlansTab(input: {
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
-      .catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }) as const)
+    return act(ACT_KIND.TASKS_MOVE, { taskId: planId, workspaceId })
+      .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
           // A first workspace read landing meanwhile lists one too, but nobody chose it.
@@ -1722,43 +1726,43 @@ export function usePlansTab(input: {
   };
 
   // A fixture's plans are read from nowhere, so an edit of one is never saved.
-  const edit = (planId: string, request: PlanEditRequest): Promise<PlanningEditAnswer> => {
-    if (fixture !== undefined) return Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.PLANNING_EDIT, { planId, edit: request });
+  const edit = (planId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    if (fixture !== undefined) return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+    return act(ACT_KIND.TASKS_EDIT, { taskId: planId, edit: request });
   };
 
   // The chip's menu stands on the open plan's toolbar, so another plan's is
   // opened first; the ask is counted so each press opens it again.
   const changeRepository = (planId: string) => {
-    if (planId !== planning.activePlanId) select(planId);
+    if (planId !== planning.activeTaskId) select(planId);
     setRepositoryMenu((held) => ({ planId, request: (held?.request ?? 0) + 1 }));
   };
 
   const repositoryOf = (planId: string): string | null =>
-    planning.plans.find((plan) => plan.id === planId)?.repository ??
-    (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
-      ? region.plan.repository
+    planning.tasks.find((plan) => plan.id === planId)?.repository ??
+    (region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+      ? region.task.repository
       : null);
 
   // A fixture's plan has no history, as it is read from nowhere.
   const historySource = useMemo(
     (): PlanHistorySource => ({
       readPage: (planId, before) =>
-        act(ACT_KIND.PLANNING_REVISIONS, {
-          planId,
+        act(ACT_KIND.TASKS_REVISIONS, {
+          taskId: planId,
           ...(before === undefined ? undefined : { before }),
         }),
-      readRevision: (planId, seq) => act(ACT_KIND.PLANNING_REVISION, { planId, seq }),
-      restore: (planId, seq) => act(ACT_KIND.PLANNING_RESTORE, { planId, seq }),
+      readRevision: (planId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId: planId, seq }),
+      restore: (planId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId: planId, seq }),
     }),
     [act],
   );
   const history = usePlanHistory({
     source: historySource,
     planId:
-      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
-    editedAt: region.kind === DOCUMENT_REGION.READY ? region.plan.lastEdit?.at : undefined,
-    name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
+      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
+    editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
+    name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
     shown: shown && historyOpen,
     seek: historyFor?.save,
     returnTo: historyFor?.spot,
@@ -1772,25 +1776,30 @@ export function usePlansTab(input: {
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
-  // which main leaves for this question to end or keep.
+  // which main leaves for this question to end or keep. A start without
+  // planning opens no call, so it asks nothing about the one standing; it
+  // names its planning only where it is off, so a request with planning is
+  // the one every service has read.
   const startPlan = (
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
+    planning: boolean,
     linearIssueId?: string,
   ): Promise<string | undefined> =>
-    act(ACT_KIND.PLANNING_START, {
+    act(ACT_KIND.TASKS_START, {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(linearIssueId === undefined ? undefined : { linearIssueId }),
+      ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
         if ("failure" in answer) return startFailureNote(answer.failure);
         setNewPlanAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (callingNow.current) {
+        if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
         }
@@ -1811,9 +1820,10 @@ export function usePlansTab(input: {
           issues: () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: listedLinear.id }),
           start: (issue) =>
             startPlan(
-              planNameOfIssue(issue),
+              taskNameOfIssue(issue),
               repositoriesIn(listedLinear.id).recent[0] ?? null,
               listedLinear.id,
+              true,
               issue.id,
             ),
         };
@@ -1839,7 +1849,7 @@ export function usePlansTab(input: {
   // version history over it gives way, and so does a side panel filling the
   // window over it.
   const showColumnTab = (planId: string, tab: MainTab) => {
-    if (planId !== planning.activePlanId) select(planId);
+    if (planId !== planning.activeTaskId) select(planId);
     setStandIn(undefined);
     setHistoryFor(undefined);
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
@@ -1848,7 +1858,7 @@ export function usePlansTab(input: {
 
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
   const showPanelTab = (planId: string, tab: SidePanelTab) => {
-    if (planId !== planning.activePlanId) select(planId);
+    if (planId !== planning.activeTaskId) select(planId);
     setStandIn(undefined);
     setHistoryFor(undefined);
     sidePanel.onShow(planId, tab);
@@ -1874,10 +1884,10 @@ export function usePlansTab(input: {
 
   // Each ask is its own, so the same section asked twice scrolls twice.
   const showMention = (mention: PlanMention) => {
-    showColumnTab(mention.planId, MAIN_TAB.PLAN);
+    showColumnTab(mention.taskId, MAIN_TAB.PLAN);
     const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
     sectionAsks.current += 1;
-    setSectionReveal({ planId: mention.planId, reveal: { anchor, ask: sectionAsks.current } });
+    setSectionReveal({ planId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
 
   // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
@@ -1897,10 +1907,10 @@ export function usePlansTab(input: {
   const openLink = ({ workspace, place }: ReadLink) => {
     switch (place.kind) {
       case LINK_PLACE.TASK:
-        showMention({ kind: MENTION_KIND.PLAN, planId: place.planId });
+        showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
         return;
       case LINK_PLACE.SECTION:
-        showMention({ kind: MENTION_KIND.SECTION, planId: place.planId, anchor: place.anchor });
+        showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.VERSION:
         openHistory({
@@ -1974,7 +1984,7 @@ export function usePlansTab(input: {
         // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
         listLinked(
           ("planId" in place
-            ? viewed.plans.find((plan) => plan.id === place.planId)?.workspaceId
+            ? viewed.tasks.find((plan) => plan.id === place.planId)?.workspaceId
             : undefined) ?? workspace,
         );
         standInFor({
@@ -2021,7 +2031,7 @@ export function usePlansTab(input: {
   const showFile = (planId: string, ref: CodeRef, commit: string) => {
     setStandIn(undefined);
     setHistoryFor(undefined);
-    if (planId === planning.activePlanId) {
+    if (planId === planning.activeTaskId) {
       sidePanel.onOpenFile(ref, commit);
       return;
     }
@@ -2033,10 +2043,10 @@ export function usePlansTab(input: {
   if (fileFor !== undefined && fileFor.planId !== boundFor) setFileFor(undefined);
   const { onOpenFile } = sidePanel;
   useEffect(() => {
-    if (fileFor === undefined || fileFor.planId !== planning.activePlanId) return;
+    if (fileFor === undefined || fileFor.planId !== planning.activeTaskId) return;
     setFileFor(undefined);
     onOpenFile(fileFor.ref, fileFor.commit);
-  }, [fileFor, planning.activePlanId, onOpenFile]);
+  }, [fileFor, planning.activeTaskId, onOpenFile]);
 
   // Every tab closed is kept as it stood for ⇧⌘T to open again: the plan's
   // tab never closes, and a draft's lets its draft go, so neither is kept.
@@ -2045,8 +2055,8 @@ export function usePlansTab(input: {
   // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
   const readWorker = useCallback<TranscriptReader>(
     ({ agentId, after, callId }) =>
-      act(ACT_KIND.PLANNING_MESSAGES, {
-        planId: agentId,
+      act(ACT_KIND.TASKS_MESSAGES, {
+        taskId: agentId,
         after,
         ...(callId === undefined ? undefined : { callId }),
       }),
@@ -2055,20 +2065,20 @@ export function usePlansTab(input: {
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
-      const plan = viewed.activePlanId;
+      const plan = viewed.activeTaskId;
       if (plan !== undefined && at > 0 && !isDraftTab(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, plan, tab, at: at - 1 };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closeMainTab(tab);
     },
-    [openTabs, closeMainTab, viewed.activePlanId, setClosedTabs, latestClosedTabs],
+    [openTabs, closeMainTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
-      const plan = viewed.activePlanId;
+      const plan = viewed.activeTaskId;
       if (plan !== undefined && at >= 0) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, plan, tab, at, file };
@@ -2076,7 +2086,7 @@ export function usePlansTab(input: {
       }
       closePanelTab(tab);
     },
-    [panelStrip, panelFiles, closePanelTab, viewed.activePlanId, setClosedTabs, latestClosedTabs],
+    [panelStrip, panelFiles, closePanelTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
   );
   // Whether the open plan's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, the Inbox while the plan holds an
@@ -2090,7 +2100,7 @@ export function usePlansTab(input: {
       if (isAgentTab(tab)) return agentIds === undefined || agentIds.includes(tab.agent);
       if (tab !== MAIN_TAB.INBOX) return true;
       const held = agents.heldIds;
-      const waiting = input.inboxWaiting.some((plan) => plan.planId === closed.plan);
+      const waiting = input.inboxWaiting.some((plan) => plan.taskId === closed.plan);
       return held === undefined || held.length > 0 || waiting;
     }
     if (isSubagentTab(tab))
@@ -2100,7 +2110,7 @@ export function usePlansTab(input: {
     if (isTerminalTab(tab)) return drawsTerminal(tab, { planAgents: agentIds });
     return true;
   };
-  const reopenable = withUndrawnPassed(closedTabs, planning.activePlanId, drawsAgain);
+  const reopenable = withUndrawnPassed(closedTabs, planning.activeTaskId, drawsAgain);
   // A closed tab opens again where it stood, in its strip at its place and
   // showing what it showed, so a version history or the window's Inbox over
   // the plan gives way, and a side panel filling the window over its column.
@@ -2123,12 +2133,12 @@ export function usePlansTab(input: {
   // the waiting one go; it waits its turn on the stack instead.
   const reopenClosedTab = () => {
     const waiting = latestReopenFor();
-    const open = waiting.length === 0 ? planning.activePlanId : undefined;
+    const open = waiting.length === 0 ? planning.activeTaskId : undefined;
     const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain);
     const closed = stack.at(-1);
     if (closed === undefined || (waiting.length > 0 && waiting[0]?.plan !== closed.plan)) return;
     setClosedTabs(stack.slice(0, -1));
-    if (waiting.length === 0 && closed.plan === planning.activePlanId) {
+    if (waiting.length === 0 && closed.plan === planning.activeTaskId) {
       reopenHere(closed);
       return;
     }
@@ -2146,15 +2156,15 @@ export function usePlansTab(input: {
   const reopenNow = useRef(reopenHere);
   reopenNow.current = reopenHere;
   useEffect(() => {
-    if (reopenFor.length === 0 || reopenFor[0]?.plan !== planning.activePlanId) return;
+    if (reopenFor.length === 0 || reopenFor[0]?.plan !== planning.activeTaskId) return;
     setReopenFor(NO_CLOSED_TABS);
     for (const closed of reopenFor) reopenNow.current(closed);
-  }, [reopenFor, planning.activePlanId, setReopenFor]);
+  }, [reopenFor, planning.activeTaskId, setReopenFor]);
 
   // The home page is where the tab rests, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
-    if (page !== PLANS_PAGE.DOCUMENT) return false;
+    if (page !== TASKS_PAGE.DOCUMENT) return false;
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     else leavePlan();
     return true;
@@ -2200,10 +2210,10 @@ export function usePlansTab(input: {
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
     onDisconnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_DISCONNECT),
-    activePlanId: planning.activePlanId,
+    activePlanId: planning.activeTaskId,
     boundFor,
-    listFailed: planning.listStatus === PLANNING_READ.FAILED,
-    listRead: planning.listStatus === PLANNING_READ.READY,
+    listFailed: planning.listStatus === TASKS_READ.FAILED,
+    listRead: planning.listStatus === TASKS_READ.READY,
     region,
     copy: { onPress: pressCopy },
     edit,
@@ -2241,7 +2251,7 @@ export function usePlansTab(input: {
     pages: planning.pages,
     transcript: {
       region: transcript,
-      onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
+      onRetry: () => tell(ACT_KIND.TASKS_REFRESH),
       reveal:
         revealing?.kind === REVISION_SOURCE.CALL
           ? { call: revealing.callId, onRevealed: revealed }
@@ -2250,8 +2260,8 @@ export function usePlansTab(input: {
     // A fixture's open plan is drawn mid-call, as its status and transcript are.
     work: {
       conversation: planning.conversation,
-      callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
-      onLoadEarlier: () => act(ACT_KIND.PLANNING_CONVERSATION_EARLIER),
+      callLive: fixture === undefined ? live : reported.callTaskId === planning.activeTaskId,
+      onLoadEarlier: () => act(ACT_KIND.TASKS_CONVERSATION_EARLIER),
       readWorker,
       reveal:
         revealing?.kind === REVISION_SOURCE.WORK
@@ -2350,7 +2360,7 @@ export function usePlansTab(input: {
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    callPlanId: callInProgress(reported) ? reported.callPlanId : undefined,
+    callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the side panel's Call tab, asked to
@@ -2359,7 +2369,7 @@ export function usePlansTab(input: {
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callCard({ view: voice.view, planning }).planName),
+      question: secondCallQuestion(callCard({ view: voice.view, tasks: planning }).taskName),
     },
     onShowPlan: guard((planId: string) => showColumnTab(planId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
@@ -2377,7 +2387,7 @@ export function usePlansTab(input: {
     onOpenPinnedTab: guard((pin: PinnedTab) => {
       const { tab } = pin;
       setChosen({ pin, over: openPlanId });
-      if (pin.plan !== planning.activePlanId) select(pin.plan);
+      if (pin.plan !== planning.activeTaskId) select(pin.plan);
       setStandIn(undefined);
       setHistoryFor(undefined);
       if (!inColumn(tab)) {
@@ -2397,9 +2407,9 @@ export function usePlansTab(input: {
     onOpenWorkspaceGitHub: (planId) => {
       // The open document names its workspace where the list read did not land.
       const workspaceId =
-        planning.plans.find((plan) => plan.id === planId)?.workspaceId ??
-        (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
-          ? region.plan.workspaceId
+        planning.tasks.find((plan) => plan.id === planId)?.workspaceId ??
+        (region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+          ? region.task.workspaceId
           : undefined);
       input.onOpenSettings({
         page: SETTINGS_VIEW.WORKSPACE,
@@ -2411,9 +2421,9 @@ export function usePlansTab(input: {
       const repository = repositoryOf(planId);
       if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
-    onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
+    onRetryList: () => tell(ACT_KIND.TASKS_REFRESH),
     onRetryDocument: () => {
-      if (planning.activePlanId !== undefined) select(planning.activePlanId);
+      if (planning.activeTaskId !== undefined) select(planning.activeTaskId);
     },
     onNewPlan: () => newPlanWith(undefined),
     onNewPlanIn: (repository) => newPlanWith({ repository }),

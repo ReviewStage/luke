@@ -8,6 +8,7 @@ import {
   DRAFT_FIELD,
   draftNextRuns,
   draftProblems,
+  presetDraft,
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
@@ -211,9 +212,9 @@ test("a save changes only what moved, the task keeping its model, and a draft th
     ),
     { repositories: ["acme/web"], scope: AUTOMATION_SCOPE.PERSONAL },
   );
-  const onPlan = { ...SAVED, planId: "9b1d2c3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e" };
+  const onTask = { ...SAVED, planId: "9b1d2c3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e" };
   assert.equal(
-    changeOf({ ...automationDraft(onPlan, DEFAULTS), repository: "acme/web" }, onPlan, DEFAULTS),
+    changeOf({ ...automationDraft(onTask, DEFAULTS), repository: "acme/web" }, onTask, DEFAULTS),
     undefined,
     "a plan's automation works in its plan's repository",
   );
@@ -518,4 +519,25 @@ test("a move to another GitHub event lets go of the filters the event before was
       ...SAID_SETTINGS,
     },
   });
+});
+
+test("a preset's guards are the draft's and are what it is made with, a saved automation opens on its own, and a draft that set none is the same as the automation made from it", () => {
+  const fresh = automationDraft(undefined, DEFAULTS);
+  const preset = {
+    name: "Code review",
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+    prompt: "Review this pull request.",
+    guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+    archiveSuccessful: true,
+    description: "Reviews pull requests.",
+  } as const;
+  const taken = presetDraft(fresh, preset);
+
+  assert.ok(!sameDraft({ ...taken, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }, taken));
+  assert.ok(sameDraft(fresh, { ...fresh, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }));
+  assert.deepEqual(createRequestOf(taken, "workspace-1").guards, preset.guards);
+  assert.deepEqual(
+    automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
+    preset.guards,
+  );
 });

@@ -128,6 +128,8 @@ export function useAgentComposer(input: {
   planId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];
+  /** Whether a turn runs now, which a line sent now steers rather than opening one; none where none does. */
+  running?: boolean | undefined;
   send: MessageSender;
   /** The service said where the agent stands now, which is newer than the list. */
   onStatus: (agentId: string, run: AgentRun) => void;
@@ -171,7 +173,7 @@ export function useAgentComposer(input: {
       return;
     }
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
-    const line: SentLine = { id, text, attachments, known };
+    const line: SentLine = { id, text, attachments, known, steers: input.running === true };
     const { update } = kept;
     update(() => EMPTY_DRAFT);
     setHeld((was) => ({

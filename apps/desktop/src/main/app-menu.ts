@@ -6,9 +6,10 @@
  * where it can run, so the menu holds no state to keep in step with the
  * window. The chord beside each item is the shortcut table's, so the menu
  * says the key the window answers; the window's keymap is what answers it.
- * What it does hold is the drawer's: the update item and the account's
- * experiments, each told on its own clock, since a gated feature's items
- * stand only while its experiment is on.
+ * What it does hold is the drawer's: the update item, the account's
+ * experiments, and a development build's developer tools, each told on its
+ * own clock, since a gated feature's items stand only while its experiment
+ * is on.
  */
 
 import { type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
@@ -22,11 +23,23 @@ import {
   type KeyedCommand,
   MENU_COMMAND_LABELS,
   type MenuCommand,
+  SHORTCUT_KEY,
+  type ShortcutChord,
   shortcutAccelerator,
   shortcutShown,
 } from "#shared/shortcuts";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
+
+/**
+ * The developer tools' chord, ⌥⌘J, which opens Chrome's DevTools on its
+ * console. Note that it is not ⌥⌘I, Chrome's other chord for them, because
+ * Insert image holds ⌥⌘I, and a key reaching the menu runs the first item
+ * that names it, which would be Edit's. It is no entry of the shortcut
+ * table, since no window command answers it and the Keyboard shortcuts page
+ * lists what every build offers.
+ */
+const DEVELOPER_TOOLS_CHORD: ShortcutChord = { key: SHORTCUT_KEY.J, option: true };
 
 /** The update item's one act in each state, as the Updates row words it. */
 export const UPDATE_MENU_ACT = {
@@ -63,6 +76,16 @@ export interface UpdateMenu {
   onCheck: () => void;
   onInstall: () => void;
   onOpenLatest: () => void;
+}
+
+/**
+ * What a development build's Developer menu reaches beyond the window chosen
+ * over: the hidden voice window, which can never be chosen, and the call
+ * window, too small to hold the tools docked.
+ */
+export interface DeveloperToolsMenu {
+  onOpenVoiceWindow: () => void;
+  onOpenCallWindow: () => void;
 }
 
 /** The short words a title leaves lower case after its first. */
@@ -195,6 +218,27 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
 }
 
 /**
+ * View's Developer submenu: the window chosen over's own tools, toggled by
+ * the system's role, docked as Chrome docks them, and the two windows it
+ * cannot reach, whose tools open in a window of their own.
+ */
+function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
+  return {
+    label: "Developer",
+    submenu: [
+      {
+        role: "toggleDevTools",
+        label: "Developer Tools",
+        accelerator: shortcutAccelerator(DEVELOPER_TOOLS_CHORD),
+      },
+      SEPARATOR,
+      { label: "Voice Window Developer Tools", click: () => tools.onOpenVoiceWindow() },
+      { label: "Call Window Developer Tools", click: () => tools.onOpenCallWindow() },
+    ],
+  };
+}
+
+/**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it, under the update item while there is one; the plan's commands are File's, with New Tab,
  * Close Tab, and Close Window as Chrome's File keeps them, and Reopen Closed
@@ -206,14 +250,16 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
  * Call's, back and forward are Go's as Finder and Safari keep them, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
- * while `shown` says its command does (`shortcutShown`).
+ * while `shown` says its command does (`shortcutShown`), and View's
+ * Developer submenu only where `developerTools` is given.
  */
 export function appMenuTemplate(
   appName: string,
   update?: UpdateMenu,
   shown: (command: KeyedCommand) => boolean = () => true,
+  developerTools?: DeveloperToolsMenu,
 ): MenuItemConstructorOptions[] {
-  return gated(fullMenuTemplate(appName, update), shown);
+  return gated(fullMenuTemplate(appName, update, developerTools), shown);
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -251,47 +297,66 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, and the experiments the account has on. */
+/** What the menu bar is drawn from: the update item, the experiments the account has on, and the developer tools. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
+  readonly developerTools: DeveloperToolsMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), or the account's experiments. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments, or the windows' developer tools. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
-  | { readonly experiments: ExperimentChoices };
+  | { readonly experiments: ExperimentChoices }
+  | { readonly developerTools: DeveloperToolsMenu };
 
 /**
  * The menu bar's one drawer: it draws the menus from what it was last told,
  * and draws again only when a change moves them, since the updater and the
  * account's experiments each tell it on their own clocks and neither knows
  * the other's state. Called with nothing, it draws what it holds.
+ *
+ * Note that a packaged build never draws the developer tools, whoever tells
+ * it of them: a build someone installed offers no way into a window's
+ * insides, and the gate stands here, at the one drawer, so no caller has to
+ * remember it.
  */
 export function menuBarDrawer(
-  appName: string,
+  build: { readonly appName: string; readonly packaged: boolean },
   draw: (template: MenuItemConstructorOptions[]) => void,
 ): (change?: MenuBarChange) => void {
-  let state: MenuBarState = { update: undefined, experiments: NO_EXPERIMENTS };
+  let state: MenuBarState = {
+    update: undefined,
+    experiments: NO_EXPERIMENTS,
+    developerTools: undefined,
+  };
   let drawn = false;
   return (change) => {
     const next = change === undefined ? state : { ...state, ...change };
     const moved =
       next.update !== state.update ||
+      next.developerTools !== state.developerTools ||
       JSON.stringify(next.experiments) !== JSON.stringify(state.experiments);
     if (drawn && !moved) return;
     state = next;
     drawn = true;
     draw(
-      appMenuTemplate(appName, state.update, (command) =>
-        shortcutShown(command, state.experiments),
+      appMenuTemplate(
+        build.appName,
+        state.update,
+        (command) => shortcutShown(command, state.experiments),
+        build.packaged ? undefined : state.developerTools,
       ),
     );
   };
 }
 
 /** Every menu and item, before the gate takes a gated feature's out. */
-function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstructorOptions[] {
+function fullMenuTemplate(
+  appName: string,
+  update?: UpdateMenu,
+  developerTools?: DeveloperToolsMenu,
+): MenuItemConstructorOptions[] {
   return [
     {
       label: appName,
@@ -378,6 +443,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         SEPARATOR,
         commandItem(APP_COMMAND.PREVIOUS_PLAN),
         commandItem(APP_COMMAND.NEXT_PLAN),
+        ...(developerTools ? [SEPARATOR, developerItem(developerTools)] : []),
       ],
     },
     {
@@ -392,7 +458,6 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
       submenu: [
         commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
-        commandItem(APP_COMMAND.FACTORY),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

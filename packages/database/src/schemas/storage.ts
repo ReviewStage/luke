@@ -145,13 +145,22 @@ export const messages = pgTable(
     /** The member who sent the line, where a member did; set null with their account, which then reads as a former member's. */
     senderUserId: text("sender_user_id").references(() => user.id, { onDelete: "set null" }),
     /**
-     * The automation whose run sent the line, by its name as it stood then,
-     * or the GitHub login of who caused what a line GitHub sent tells of;
-     * null on every other row. Note that the name is kept rather than a
-     * reference, because an automation is deleted outright and a reference
-     * would have every delete look through every message for its lines.
+     * The automation whose run sent the line, or the coding agent that sent
+     * it, by its name as it stood then, or the GitHub login of who caused
+     * what a line GitHub sent tells of; null on every other row. Note that
+     * the name is kept rather than a reference, because an automation is
+     * deleted outright and a reference would have every delete look through
+     * every message for its lines.
      */
     senderName: text("sender_name"),
+    /**
+     * The steps of its turn begun before the turn took the line in, on a
+     * developer's line a coding agent's turn under way took after its first
+     * step, so a reader draws the line among the turn's work where it
+     * arrived; null on every other row, and on a line taken before this was
+     * kept.
+     */
+    takenAfterStep: integer("taken_after_step"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { openPlanConversation } from "@luke/database/models/plan-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
@@ -20,7 +20,7 @@ import {
 } from "../agents/brain-host/bounds.js";
 import { type BrainHost, brainHost } from "../agents/brain-host/host.js";
 import { GitHubApp } from "../github/github-app.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   GITHUB_APP_SETTINGS,
   openGithubUser,
@@ -119,7 +119,7 @@ function connectLayer(grants: Map<string, FakeGrant>) {
 }
 
 /** The planning host over the test's store; nothing a token read reaches is a seam of its. */
-const planningHost = Effect.gen(function* () {
+const taskBrainHost = Effect.gen(function* () {
   const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
   return brainHost({
     writer: () => Effect.succeed(writer),
@@ -170,8 +170,8 @@ const plannedSession = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* startPlan(userId, { name: "Teammate invitations" });
-    const opened = yield* openPlanConversation(userId, plan.id);
+    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const opened = yield* openTaskConversation(userId, task.id);
     assert.ok(Option.isSome(opened));
     const conversationId = opened.value.conversationId;
     const auth = seat(userId, conversationId);
@@ -179,7 +179,7 @@ const plannedSession = (
     const starting = yield* host.admitStarting(auth, sessionId);
     assert.ok(Result.isSuccess(starting));
     assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
-    return { userId, conversationId, auth, sessionId, workspaceId: plan.workspaceId };
+    return { userId, conversationId, auth, sessionId, workspaceId: task.workspaceId };
   });
 
 /** The account connected, as a completed sign-in leaves it. */
@@ -208,7 +208,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "the planning root reads the token of the account the session was admitted for, and never another connected account's",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const mine = yield* plannedSession(host, typedSeat);
         const theirs = yield* plannedSession(host, typedSeat);
         yield* connected(mine.userId);
@@ -234,7 +234,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a second account at a provider reads its own grant, under its own subject, and the first reads the first's",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const session = yield* plannedSession(host, typedSeat);
         const subject = `subject-${session.userId}`;
         yield* connected(session.userId);
@@ -272,7 +272,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a connection handed for one account never reaches another added later under the same name",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const session = yield* plannedSession(host, typedSeat);
         const second = (subject: string) =>
           Effect.gen(function* () {
@@ -310,7 +310,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a member speaking in a plan conversation a teammate opened reads the member's own token, never the opener's",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const opened = yield* plannedSession(host, typedSeat);
         const member = yield* openGithubUser();
         yield* joinWorkspace(opened.workspaceId, member);
@@ -336,7 +336,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "in a plan of a workspace with Linear connected, the Linear token is the workspace's for every member, and the account's own once the workspace disconnects",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const state = `workspace-state-${session.workspaceId}`;
@@ -369,10 +369,10 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
   );
 
   it.effect(
-    "in a plan of a workspace with Linear connected, a member's second Linear account reads the workspace's token too",
+    "in a plan of a workspace with Linear connected, a turn is handed Linear once, on the workspace's grant, and a second account handed before keeps its own",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const session = yield* plannedSession(host, typedSeat);
         const subject = `subject-${session.userId}`;
         yield* connected(session.userId);
@@ -402,12 +402,29 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           [session.workspaceId, {}],
         ]);
 
-        const read = yield* integrationAccessToken(
-          { provider: LINEAR, connectionName: "linear-2" },
-          host.admit(session.auth, session.sessionId),
-        ).pipe(Effect.provide(connectLayer(grants)));
-        assert.ok(Result.isSuccess(read));
-        assert.equal(read.success.token, tokenOf(session.workspaceId));
+        const admission = host.admit(session.auth, session.sessionId);
+        const standing = yield* turnServers(admission, CONNECTION_POLICY.ALWAYS_ON).pipe(
+          Effect.provide(integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" })),
+        );
+        const tokenOfAccount = (connectionName: string) =>
+          Effect.map(
+            integrationAccessToken({ provider: LINEAR, connectionName }, admission).pipe(
+              Effect.provide(connectLayer(grants)),
+            ),
+            (answer) => (Result.isSuccess(answer) ? answer.success.token : answer.failure),
+          );
+
+        assert.ok(standing.on);
+        assert.deepEqual(
+          standing.connections
+            .filter(({ provider }) => provider === LINEAR)
+            .map(({ connectionName, accountNote }) => ({ connectionName, accountNote })),
+          [{ connectionName: LINEAR, accountNote: undefined }],
+        );
+        assert.deepEqual(
+          [yield* tokenOfAccount(LINEAR), yield* tokenOfAccount("linear-2")],
+          [tokenOf(session.workspaceId), tokenOf(subject)],
+        );
       }),
   );
 
@@ -415,7 +432,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "a member speaking in a plan conversation a teammate opened is handed the providers offered to the member, by the member's own allowlist",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const opened = yield* plannedSession(host, typedSeat);
         const member = yield* openGithubUser();
         yield* joinWorkspace(opened.workspaceId, member);
@@ -444,7 +461,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "Connect unreachable or unconfigured fails the read with a fixed sentence, and nothing it said reaches the log",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const secret = "lin_oauth_leaked_bearer_1234567890abcdef";
@@ -493,7 +510,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
     "GitHub's token is the account's own GitHub sign-in token, asked of no connector, and an account that never signed in with GitHub is told to sign in with GitHub",
     () =>
       Effect.gen(function* () {
-        const host = yield* planningHost;
+        const host = yield* taskBrainHost;
         const signedIn = yield* plannedSession(host, typedSeat);
         const googleOnly = yield* plannedSession(host, typedSeat);
         const db = yield* Database;

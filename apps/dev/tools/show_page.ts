@@ -1,5 +1,5 @@
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
+import { SHOW_PAGE_TOOL } from "@luke/service/tasks/page-tool";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";

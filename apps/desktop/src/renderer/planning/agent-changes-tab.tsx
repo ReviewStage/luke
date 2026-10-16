@@ -40,7 +40,7 @@ import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model"
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
-import { FileViewBar, useTreeSlide } from "./file-view";
+import { FileViewBar, usePaneRoom } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewComments, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
@@ -237,7 +237,7 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
       {hunks === undefined ? (
         <p className="side-panel-empty">{notice ?? CHANGES_WORDS.UNREADABLE}</p>
       ) : (
-        <div className="code-lines file-tab-lines" {...look}>
+        <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
           {hunks.map((hunk, index) => (
             // oxlint-disable-next-line react/no-array-index-key -- a file's hunks are drawn once per patch, in order.
             <Fragment key={index}>
@@ -351,7 +351,7 @@ export function AgentChangesTab({
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useChangesRead(agentId, shown, ended, control.readChanges);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
-  const slide = useTreeSlide(tree.open);
+  const room = usePaneRoom(tree);
   const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
   // Note that the lists are kept while the answer is the same one, because
   // fresh ones would have the tree draw itself anew.
@@ -360,7 +360,15 @@ export function AgentChangesTab({
     const paths = files.map((file) => file.path);
     return { paths, marks: changeMarks(files), folders: changedFolders(paths) };
   }, [pullRequest]);
-  const choose = useCallback((path: string) => setChosen(path), []);
+  const { closeOver } = room;
+  // A file chosen in the tree floating over the diff takes the tree down, to show the file.
+  const choose = useCallback(
+    (path: string) => {
+      closeOver();
+      setChosen(path);
+    },
+    [closeOver],
+  );
   const shownFile =
     pullRequest?.files.find((file) => file.path === chosen) ?? pullRequest?.files[0];
   // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
@@ -401,7 +409,7 @@ export function AgentChangesTab({
     </>
   );
   return (
-    <div className="file-view ph-no-capture">
+    <div className="file-view ph-no-capture" {...room.root}>
       <FileViewBar
         path={{
           path: shownFile.path,
@@ -413,7 +421,7 @@ export function AgentChangesTab({
         beside={<ChangeBeside file={shownFile} />}
         onGitHub={() => tell(ACT_KIND.GITHUB_OPEN, { url: `${pullRequest.url}/files` })}
         menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} />}
-        tree={tree}
+        tree={room.toggles}
       />
       <PullRequestPeople people={pullRequest} agent={named} />
       <ReviewComments comments={pullRequest.comments} agent={named} />
@@ -422,9 +430,9 @@ export function AgentChangesTab({
           <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>
         </div>
       ) : null}
-      <div className="file-view-body">
+      <div className="file-view-body" {...room.body}>
         <FileDiff key={shownFile.path} file={shownFile} />
-        {slide.drawn ? (
+        {room.drawn ? (
           <FileTreePane
             file={shownFile.path}
             only={changed.paths}
@@ -433,13 +441,15 @@ export function AgentChangesTab({
             foot={counted}
             listFolder={changed.folders}
             onOpen={choose}
-            pane={slide.pane}
-            leaving={slide.leaving}
+            pane={room.beside.pane}
+            float={room.pane}
+            leaving={room.beside.leaving}
           />
         ) : null}
       </div>
-      {/* The count stands under the tree, and under the diff while the tree is hidden. */}
-      {slide.drawn ? null : <p className="file-tree-foot">{counted}</p>}
+      {/* The count stands under the tree, and under the diff while the tree
+          stands nowhere beside it, which the stylesheet says (planning.css). */}
+      <p className="file-tree-foot">{counted}</p>
     </div>
   );
 }

@@ -4,7 +4,9 @@
  * Every read runs on an installation token the App minted for the agent's
  * one repository on its workspace's installation (`github-app.ts`'s
  * `repositoryPullRequestToken`), the same reach that admits the agent's
- * checkout: the installation's own permissions bound it. The requests
+ * checkout: the installation's own permissions bound it. A link to a pull
+ * request reads it by number on the same mint, for a repository its
+ * workspace's installation reaches (`github-repositories-app.ts`). The requests
  * compose over the App module's own kit (`githubRead`, `send`, `readBody`)
  * so a token leaves this module no more than it leaves that one. The checks are read as one word for a dot: GitHub's
  * check runs and its older commit statuses together, since a workflow
@@ -20,7 +22,7 @@
  * reviews that said something, each the first page GitHub answers.
  */
 
-import { githubAvatarUrl } from "@luke/features/account-picture";
+import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -259,7 +261,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
 }
 
 /** One pull request of the repository by number, whole; none where the repository has no such one. */
-function pullRequestByNumber(
+export function pullRequestByNumber(
   token: Redacted.Redacted,
   fullName: string,
   number: number,
@@ -507,12 +509,12 @@ function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
       .trimEnd()
       .split(/\n[ \t]*\n/u)
       .at(-1) ?? "";
-  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => ({
-    id: Number(id),
-    login,
-    bot: login.endsWith(BOT_LOGIN_SUFFIX),
-    avatarUrl: undefined,
-  }));
+  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
+    const bot = login.endsWith(BOT_LOGIN_SUFFIX);
+    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author keeps its robot.
+    const avatarUrl = bot ? undefined : githubUserAvatarUrl({ id: Number(id) });
+    return { id: Number(id), login, bot, avatarUrl };
+  });
 }
 
 /** Each account once, the first time it stands, up to the bound. */

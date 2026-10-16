@@ -1,10 +1,12 @@
 import { ChevronDownIcon, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
+import { CodeXmlIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
+import { Tooltip } from "../tooltip";
 import type { FileNote } from "./file-tab-model";
 import { useMentionLink } from "./plan-mentions";
-import { useMinute } from "./plan-time";
+import { agoText, useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 import { useOpenLink } from "./use-open-link";
 
@@ -16,7 +18,10 @@ import { useOpenLink } from "./use-open-link";
  * File tab opened on that file draws the same note over the range's
  * first line, one card a range, so lit lines say why they are lit: Luke's
  * mark and name, the lines, how long ago, his words as Markdown, and a
- * link to the card the Code tab holds under the call it was shown on. A
+ * link to the card the Code tab holds under the call it was shown on. In
+ * a narrow panel (`@container side-panel`) the age goes into the link's
+ * pill and the link draws the Code tab's glyph alone, so the header's
+ * parts never stand on one another. A
  * card folds to its header with its words cut to a line, and the tab
  * keeps which it folded (`use-side-panel.ts`). The words are text in the
  * tab's own lines, so a find over the tab finds them and the recording's
@@ -81,9 +86,17 @@ function FileNoteCard({
           )}
         </button>
         <RelativeTime className="file-note-time" at={note.shownAt} now={now} />
-        <button type="button" className="file-note-show" onClick={onShow}>
-          {SHOW_IN_CODE_LABEL}
-        </button>
+        <Tooltip label={`${SHOW_IN_CODE_LABEL} · ${agoText(note.shownAt, now)}`}>
+          <button
+            type="button"
+            className="file-note-show"
+            aria-label={SHOW_IN_CODE_LABEL}
+            onClick={onShow}
+          >
+            <CodeXmlIcon aria-hidden="true" />
+            <span className="file-note-show-words">{SHOW_IN_CODE_LABEL}</span>
+          </button>
+        </Tooltip>
       </header>
       {folded ? null : (
         <MarkdownMessage

@@ -189,12 +189,16 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
       ),
     ),
   );
-  // A press is named by its words; the mark before them carries a title of its own.
+  // A press is named by its words, or by the name it gives them (a Retry
+  // keeps its words in a span of their own); the mark before them carries a
+  // title of its own.
   const button = (words: string) =>
-    [...container.querySelectorAll("button")].find((each) =>
-      [...each.childNodes].some(
-        (node) => node.nodeType === Node.TEXT_NODE && node.textContent === words,
-      ),
+    [...container.querySelectorAll("button")].find(
+      (each) =>
+        each.getAttribute("aria-label") === words ||
+        [...each.childNodes].some(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent === words,
+        ),
     );
   return {
     starts,

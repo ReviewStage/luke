@@ -63,13 +63,13 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
 
 /** One plan the account's read lists as holding inbox items: the plan, how many it holds, open and settled alike, and when the latest of them changed. */
-export const accountInboxPlanSchema = EffectSchema.Struct({
+export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
   updatedAt: countedNumber,
 });
 
-export type AccountInboxPlan = typeof accountInboxPlanSchema.Type;
+export type AccountInboxTask = typeof accountInboxTaskSchema.Type;
 
 /**
  * One open item of an agent with no plan, as the account's read carries it:
@@ -81,7 +81,7 @@ export type AccountInboxPlan = typeof accountInboxPlanSchema.Type;
  * member beside another's personal automation, whose runs every member
  * reads.
  */
-export const accountPlanlessEntrySchema = EffectSchema.Struct({
+export const accountTasklessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   agentId: wireUuidSchema,
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
@@ -99,7 +99,7 @@ export const accountPlanlessEntrySchema = EffectSchema.Struct({
   updatedAt: countedNumber,
 });
 
-export type AccountPlanlessEntry = typeof accountPlanlessEntrySchema.Type;
+export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;
 
 /** One automation the account's read lists as holding items of its runs' agents with no plan, as a plan is listed for its own: how many, open and settled alike, and when the latest changed; null groups the agents no standing automation the reader may read names. */
 export const accountInboxAutomationSchema = EffectSchema.Struct({
@@ -139,8 +139,8 @@ export type AccountFailedRun = typeof accountFailedRunSchema.Type;
  */
 export const accountInboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(accountInboxEntrySchema),
-  plans: EffectSchema.Array(accountInboxPlanSchema),
-  planless: EffectSchema.optionalKey(EffectSchema.Array(accountPlanlessEntrySchema)),
+  plans: EffectSchema.Array(accountInboxTaskSchema),
+  planless: EffectSchema.optionalKey(EffectSchema.Array(accountTasklessEntrySchema)),
   automations: EffectSchema.optionalKey(EffectSchema.Array(accountInboxAutomationSchema)),
   failedRuns: EffectSchema.optionalKey(EffectSchema.Array(accountFailedRunSchema)),
   cursor: EffectSchema.String,

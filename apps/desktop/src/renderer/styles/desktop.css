@@ -266,8 +266,10 @@ body,
    than `hidden`, because `hidden` makes it a scroll container: a panel sliding
    in from past the right edge, or the column's bars drawn on past both sides,
    are room that focus or scrollIntoView would scroll the whole window
-   sideways into and leave it there. */
-.desktop-shell[data-sidebar-collapsed] {
+   sideways into and leave it there. Every shell clips, Settings' and a
+   version history's too, whose toolbars draw their hairline past both
+   sides as the plans' column's do. */
+.desktop-shell {
   overflow: clip;
 }
 
@@ -1289,6 +1291,20 @@ ul.actor-stack {
   gap: var(--space-8);
 }
 
+/* A row's words wrap within the card, a long login anywhere, and a bot's
+   badge rides the line its name ends on. Note that the badge is an inline
+   box, not an inline-block, because a line may break before an
+   inline-block whatever no-break space precedes it. */
+.actor-more-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actor-more-words .actor-bot {
+  display: inline;
+  white-space: nowrap;
+}
+
 .actor-stack-more {
   display: inline-grid;
   height: 18px;
@@ -1333,7 +1349,12 @@ ul.actor-stack {
   white-space: pre;
 }
 
-.actor-you {
+/* The reader's own badge, and an App's bot's after its name, as GitHub's
+   own pages mark one: quiet and neutral, never cut, so a long name gives
+   way before the badge does. */
+.actor-you,
+.actor-bot {
+  flex-shrink: 0;
   padding: 0 5px; /* off-scale */
   border-radius: 4px;
   background: var(--raised-strong);
@@ -1878,6 +1899,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  container: sidebar-foot / inline-size;
 }
 
 /* The account: photo and name, one press target the height of a plan row so
@@ -1942,6 +1964,21 @@ ul.actor-stack {
 .sidebar-update svg {
   width: 13px;
   height: 13px;
+}
+
+/* A sidebar too narrow for the pill's word beside a name that reads draws
+   the pill as its glyph alone in a round as tall as the pill, so the name
+   keeps the room. The button's label and its hint still say what it does. */
+@container sidebar-foot (width < 220px) {
+  .sidebar-update {
+    aspect-ratio: 1;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-update-word {
+    display: none;
+  }
 }
 
 /* Work column ------------------------------------------------------------- */
@@ -2026,6 +2063,37 @@ ul.actor-stack {
   padding-left: var(--column-inset);
 }
 
+/* The plan's toolbar answers its own width, so its controls give way before
+   its tabs do: Start draws its glyph alone, named still, and where the
+   column is narrowest it leaves its model menu to the new agent's own
+   composer, which chooses a model as well, and the agents' Retry draws its
+   glyph alone. */
+.desktop-plan-main .desktop-toolbar {
+  container: plan-toolbar / inline-size;
+}
+
+@container plan-toolbar (max-width: 480px) {
+  .start-agent .start-agent-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    width: var(--control-height);
+    padding: 0;
+  }
+}
+
+@container plan-toolbar (max-width: 320px) {
+  .start-agent .start-agent-chevron,
+  .main-tabs .retry-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    border-radius: calc(var(--control-radius) - 1px);
+  }
+}
+
 .desktop-toolbar-actions {
   position: relative;
   display: flex;
@@ -2069,6 +2137,9 @@ ul.actor-stack {
 .primary-button,
 .danger-button {
   --button-ground: transparent;
+  /* The fill a button wears at rest, named so an unavailable one can fade it
+     rather than itself. */
+  --button-fill: transparent;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -2077,7 +2148,7 @@ ul.actor-stack {
   height: var(--control-height);
   padding: 0 var(--space-12);
   border-radius: var(--control-radius);
-  background: none;
+  background: var(--button-fill);
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -2123,12 +2194,12 @@ ul.actor-stack {
 }
 
 .primary-button {
-  background: var(--message-sent);
+  --button-fill: var(--message-sent);
   color: var(--on-accent);
 }
 
 .danger-button {
-  background: var(--danger-fill);
+  --button-fill: var(--danger-fill);
   color: var(--on-accent);
 }
 
@@ -2140,11 +2211,35 @@ ul.actor-stack {
   filter: brightness(0.92);
 }
 
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(
-  :disabled,
-  [aria-disabled="true"]
-) {
+/* Unavailable, a button fades to 45%. A disabled one is out of the tab order
+   and fades whole. One that says so with `aria-disabled` stays in it, so its
+   hover can say why, and fades its fill, its words, and its glyphs rather
+   than itself, because an opacity on the button would fade the keyboard's
+   ring (base.css) with it, and the ring is where the keyboard is. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(:disabled) {
   opacity: 0.45;
+}
+
+/* Its words and glyphs fade toward the window's ground, as they did when the
+   whole button faded over it, a filled button's included: faded over its
+   faded fill instead, they would fade twice. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--button-fill) 45%, transparent);
+  -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
+}
+
+/* What it holds draws in that faded ink however it draws, words, a glyph's
+   stroke, or a wait's spinning arc, each in `currentColor`. Set on what the
+   button holds directly, so whatever is nested deeper inherits it and fades
+   once. */
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"])
+> * {
+  color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
+  -webkit-text-fill-color: currentColor;
+}
+
+:is(.toolbar-button, .icon-button):where([aria-disabled="true"]) svg {
+  color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* A small act beside a line of words, a failure's retry
@@ -2342,7 +2437,7 @@ ul.actor-stack {
 
 /* base.css draws the ring; it stands inside the target, close round the disc. */
 .corner-dismiss:focus-visible {
-  outline-offset: calc(-1 * var(--focus-ring-width));
+  outline-offset: var(--focus-ring-inset);
 }
 
 .corner-dismiss svg {
@@ -2643,7 +2738,7 @@ ul.actor-stack {
 .plan-menu-note {
   margin: 0;
   overflow: clip;
-  overflow-clip-margin: 3px;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 .account-menu-name,
@@ -2766,17 +2861,73 @@ ul.actor-stack {
   height: 12px;
 }
 
+/* A notice about a plan (`banner.tsx`): a glyph, its words, and the presses
+   that answer it on one row, in any of its three looks. Each strip is a
+   container of its own, so it answers its own width rather than the
+   window's: the same strip stands in a 280px column beside a wide side panel
+   and across a whole window. */
+.banner {
+  --banner-gap: var(--space-8);
+  container: banner / inline-size;
+}
+
+.banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--banner-gap);
+}
+
+.banner-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.banner-words p {
+  margin: 0;
+}
+
+.banner-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* Narrow, the presses leave the words' line for one of their own beneath
+   it, each as wide as the line allows, and the words wrap at their own
+   width rather than being squeezed past it or cut short. */
+@container banner (max-width: 479px) {
+  .banner-row {
+    flex-wrap: wrap;
+  }
+
+  .banner-actions {
+    flex: 1 0 100%;
+  }
+
+  .banner .banner-actions > * {
+    max-width: none;
+    flex: 1 1 0%;
+  }
+
+  .banner .plan-banner-words {
+    white-space: normal;
+  }
+}
+
 /* A notice about the whole plan (`plan-banner.tsx`): one slim line across
    the plan's column under its toolbar, or under the side panel's bar while
    the panel fills the window, on a faint attention tint with a hairline of
-   it beneath. Its words are cut short rather than wrapped, so the line keeps
-   its height at any width, and its one press stands at its end, a quiet
-   bordered button as a devtool's notice draws one. */
+   it beneath. Its words are cut short rather than wrapped while the line is
+   wide enough to read them, so the line keeps its height, and its one press
+   stands at its end, a quiet bordered button as a devtool's notice draws
+   one. */
 .plan-banner {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-8);
   min-height: 32px; /* off-scale: a 22px press and its inset */
   padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
   border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
@@ -2785,10 +2936,11 @@ ul.actor-stack {
   font-size: 12.5px;
 }
 
+.plan-banner .banner-row {
+  min-height: 24px; /* off-scale: the line's height less its inset */
+}
+
 .plan-banner-words {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2800,12 +2952,12 @@ ul.actor-stack {
   font-weight: 560;
 }
 
-/* The press gives way too, its words cut short at the end rather than the
-   press pushed out of a narrow column, and never takes more than half the
-   line; the whole of them stays its text, which a reader hears. */
+/* The press gives way too while it shares the line, its words cut short at
+   the end rather than the press pushed out of the column, and never takes
+   more than half the line, which its presses' box holds it to; the whole of
+   them stays its text, which a reader hears. */
 .plan-banner-action {
   min-width: 0;
-  max-width: 50%;
   flex: 0 1 auto;
   height: 22px;
   overflow: hidden;
@@ -2821,8 +2973,18 @@ ul.actor-stack {
   transition: background-color var(--duration-hover) ease;
 }
 
+.plan-banner .banner-actions {
+  max-width: 50%;
+}
+
 .plan-banner-action:hover {
   background: var(--raised);
+}
+
+@container banner (max-width: 479px) {
+  .plan-banner .banner-actions {
+    max-width: none;
+  }
 }
 
 /* The document ------------------------------------------------------------- */
@@ -2830,13 +2992,11 @@ ul.actor-stack {
 /* A banner over a document: a card on the document's own reading width, so
    what it says is the first thing read. An archived plan's says so with the
    one action the plan takes, the way Notion marks a page in the trash, and
-   the plan template's says what the template is for, with its reset. */
+   the plan template's says what the template is for. */
 .document-banner {
-  display: flex;
+  --banner-gap: var(--space-12);
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
-  align-items: center;
-  gap: var(--space-12);
   margin: var(--space-16) auto 0;
   padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
   border: 1px solid var(--hairline-strong);
@@ -2860,18 +3020,6 @@ ul.actor-stack {
   height: 16px;
 }
 
-.document-banner-words {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.document-banner-words p {
-  margin: 0;
-}
-
 .document-banner-title {
   color: var(--text-primary);
   font-size: 13px;
@@ -2883,7 +3031,10 @@ ul.actor-stack {
   font-size: 12.5px;
 }
 
+/* The document's column answers its own width (`@container plan-document`
+   below), the room the summary's rail leaves it included. */
 .desktop-document {
+  container: plan-document / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -2945,6 +3096,14 @@ ul.actor-stack {
   max-width: 100%;
 }
 
+/* Who sent it can name an automation, an issue, and a runner: too narrow
+   for all three on one line, it breaks between them rather than cutting
+   each name to its first letters. */
+.agent-origin > .message-sender > .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
 /* A task named as the sender of its plan: its document glyph standing in a
    16px mark's place, in the line's own quiet ink. */
 .agent-origin-glyph {
@@ -2999,6 +3158,14 @@ ul.actor-stack {
   color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+/* The "Edited by" line, over the document and in the plan's menu, wraps
+   between its words and names rather than cutting a name short, so no name
+   is ever cut to nothing beside the words around it. */
+.plan-edit-note,
+.plan-menu-note {
+  flex-wrap: wrap;
 }
 
 /* A line over a version: what it is compared with, or why it is not drawn. */
@@ -3080,9 +3247,29 @@ ul.actor-stack {
   font-size: 1.05em;
 }
 
+/* In a column under 480px the crumb wraps rather than cutting its names to a
+   letter: the workspace, then the repository with its separator, then who
+   can edit, each on a line of its own where they do not fit together. */
+@container plan-document (width < 480px) {
+  .plan-crumb {
+    flex-wrap: wrap;
+  }
+}
+
+/* In a column under 400px the title steps down to a section's size and a
+   half, so it no longer fills the first screen a few words a line. */
+@container plan-document (width < 400px) {
+  .desktop-document .plan-title .markdown-heading[data-level="1"] {
+    font-size: 1.5em;
+  }
+}
+
 /* The call bar ------------------------------------------------------------- */
 
+/* It answers the column's width, so a narrow column gives the call bar and
+   the captions above it the room the summary's rail reserves. */
 .desktop-call-bar {
+  container: plan-call-bar / inline-size;
   position: relative;
   flex: 0 0 auto;
   padding: var(--space-12) calc(var(--page-inset) + var(--summary-room)) var(--space-12)
@@ -3107,6 +3294,25 @@ ul.actor-stack {
   width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
 }
 
+/* Too narrow a column to keep the rail's room: the bar, which stands under
+   the rail rather than beside it, runs to the page's inset at its right,
+   and the captions span the column to its insets, centred on it, their
+   volume hint wrapping rather than cut. */
+@container plan-call-bar (max-width: 359px) {
+  .desktop-call-bar > .call-bar {
+    margin-right: calc(-1 * var(--summary-room));
+  }
+
+  .desktop-call-bar .voice-caption {
+    left: 50%;
+    width: calc(100% - 2 * var(--column-inset));
+  }
+
+  .desktop-call-bar .volume-hint-text {
+    white-space: normal;
+  }
+}
+
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
@@ -3118,14 +3324,19 @@ ul.actor-stack {
 /* The call bar's own row, laid out as a voice composer's controls are: at
    rest one start pill in its middle; in a call the call's two lines at its
    left and its controls at its right. Its height holds whichever it draws,
-   so the document above never moves when a call begins or ends. */
+   so the document above never moves when a call begins or ends, but where
+   it is too narrow for the call on one row (below). It answers its own
+   width, as the plan's page, the sidebar's card, the floating card, and the
+   floating window draw it, each at a width of its own. */
 .call-bar {
+  container: call-bar / inline-size;
   display: flex;
   max-width: var(--reading-width);
   min-height: var(--call-row-height);
+  flex-wrap: wrap;
   align-items: center;
   margin: 0 auto;
-  gap: var(--space-12);
+  gap: var(--space-8) var(--space-12);
 }
 
 .call-bar[data-call="false"] {
@@ -3178,6 +3389,12 @@ ul.actor-stack {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Luke's part is the one that gives way to a long command; the notetaker's
+   says the same few words whole, or goes (below). */
+.call-backend-part[data-part="notes"] {
+  flex: none;
 }
 
 .call-backend-action {
@@ -3238,6 +3455,42 @@ ul.actor-stack {
   opacity: 0.7;
 }
 
+/* Too narrow for both of the backend's parts: the notetaker's goes while
+   Luke's stands, so what Luke is doing keeps the line. */
+@container call-bar (max-width: 479px) {
+  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+    display: none;
+  }
+}
+
+/* Narrower, the controls close up, their discs touching edge to edge, and
+   the working dots go, the line's own words saying Luke works, so Luke's
+   command keeps their room. */
+@container call-bar (max-width: 279px) {
+  .call-backend > .thinking-dots {
+    display: none;
+  }
+
+  .call-controls {
+    gap: 0;
+  }
+
+  .call-end {
+    margin-left: 0;
+  }
+}
+
+/* Too narrow for the status beside the controls (the sidebar's card at its
+   narrowest, the plan's bar in a 280px column): the status takes a row of
+   its own, the voice's word whole, and the controls stand under it at the
+   right. The floating window's bar is wider than this and must stay so,
+   since its window's height is fixed (call.css). */
+@container call-bar (max-width: 209px) {
+  .call-status {
+    flex-basis: 100%;
+  }
+}
+
 /* The repository chip ------------------------------------------------------ */
 
 .repository-chip {
@@ -3269,6 +3522,18 @@ ul.actor-stack {
 .repository-chip[data-place="field"][data-align="start"] .searchable-menu {
   right: auto;
   left: 0;
+}
+
+/* Wherever it stands, the menu is placed as a Settings picker's is
+   (`usePickerPlacement`): above the chip where the window leaves more room
+   there, its list capped to the room on the side it took. */
+.repository-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--space-4));
+}
+
+.repository-chip .plan-compose-menu-list {
+  max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
 /* A harness's or a provider's mark keeps its box in a row however tight the
@@ -3607,7 +3872,7 @@ body:has(.app-stage[data-capture="true"])
   text-align: left;
 }
 
-.integration-tool-head:hover,
+button.integration-tool-head:hover,
 .integration-tool[data-current="true"] > .integration-tool-head {
   background: var(--raised-strong);
 }
@@ -4099,21 +4364,21 @@ body:has(.app-stage[data-capture="true"])
    an option laid edge to edge in them. */
 .inbox-indent {
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
+  overflow-clip-margin: var(--focus-ring-room);
   padding-left: 21px;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron. The path clips what runs
-   past it, though not the keyboard's ring on a crumb, and a crumb under the
+   by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs {
-  overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
-}
-
 .inbox-crumbs ol {
   gap: var(--list-gap);
+}
+
+/* Note that the agent's crumb gives way as the task's does, because the
+   breadcrumbs keep their last crumb whole, and the path's clip would cut it. */
+.inbox-crumbs li.inbox-crumb {
+  flex-shrink: 1;
 }
 
 .inbox-crumb:active {
@@ -4199,6 +4464,70 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  container: inbox-item / inline-size;
+}
+
+/* An item standing alone narrower than its bar's crumbs, the way back, and
+   the pager, drops the task's crumb, and the agent's keeps enough of its
+   name to read; its hover card names it whole. Narrower still the way back
+   draws its glyph alone, named still, beside the pager, and the crumbs take
+   a line of their own under them, where both fit again, sharing it. */
+@container inbox-item (width < 560px) {
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: none;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      8ch +
+      var(--tab-end)
+    );
+  }
+}
+
+@container inbox-item (width < 360px) {
+  .inbox-view-items > .desktop-toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-4);
+  }
+
+  .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .inbox-back {
+    width: var(--control-height);
+    padding: 0;
+  }
+
+  .inbox-back-word {
+    display: none;
+  }
+
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: flex;
+  }
+
+  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
+  .inbox-crumbs li.inbox-crumb:first-child {
+    flex-shrink: 4;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      3.5ch +
+      var(--tab-end)
+    );
+  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -4253,8 +4582,10 @@ body:has(.app-stage[data-capture="true"])
    by a hairline. The stations stretch to one height and fill the room, so
    the line reads as one piece, and the arrows between them carry the flow
    in the tertiary ink, past 3:1 against the ground in both appearances.
-   With too little room for three side by side the stations stack, and the
-   arrows turn down. */
+   A station with nothing in it keeps to its words, so the busy ones share
+   the room. Where three busy cards could not each hold a readable row,
+   about 300px apiece, the stations stack, the arrows turn down, and an idle
+   station is one line. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4268,7 +4599,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--content-inset) var(--space-32);
-  container-type: inline-size;
+  container: factory / inline-size;
 }
 
 .factory-summary {
@@ -4295,15 +4626,15 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .factory-line-up {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
   align-items: stretch;
-  column-gap: var(--space-8);
+  gap: var(--space-8);
 }
 
 .factory-step {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   padding: var(--space-8) var(--space-4) var(--space-6);
   border: 1px solid var(--hairline-strong);
@@ -4314,8 +4645,13 @@ body:has(.app-stage[data-capture="true"])
 /* An arrow stands level with the stations' heads, where the eye reads the
    line, rather than halfway down the longest list, which may stand below the
    window's foot. */
+.factory-step[data-idle] {
+  flex: none;
+}
+
 .factory-arrow {
   display: flex;
+  flex: none;
   align-self: start;
   margin-top: var(--space-12);
   color: var(--text-tertiary);
@@ -4403,14 +4739,27 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-tertiary);
 }
 
-@container (width < 720px) {
+@container factory (width < 960px) {
   .factory-line-up {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--space-6);
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .factory-step {
+    flex: none;
+  }
+
+  .factory-step[data-idle] {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .factory-step[data-idle] .factory-idle {
+    padding: 0 var(--row-inset);
   }
 
   .factory-arrow {
-    justify-self: center;
+    align-self: center;
     margin-top: 0;
     transform: rotate(90deg);
   }
@@ -4443,6 +4792,49 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-group + .automation-group {
   margin-top: var(--space-24);
+}
+
+/* The suggested automations, at the list's measure, a group's gap below it. */
+.automation-suggestions {
+  width: 100%;
+  max-width: var(--reading-width);
+  margin-inline: auto;
+}
+
+.automation-group + .automation-suggestions {
+  margin-top: var(--space-24);
+}
+
+/* An empty list stands its empty state with the suggestions under it, the
+   two together a little above the room's middle, shared two to three as an
+   empty state alone stands. */
+.automations-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+.automations-empty::before,
+.automations-empty::after {
+  content: "";
+}
+
+.automations-empty::before {
+  flex: 2 1 0;
+}
+
+.automations-empty::after {
+  flex: 3 1 0;
+}
+
+.automations-empty > .empty-state {
+  flex: none;
+  overflow: visible;
+}
+
+.automations-empty > .automation-suggestions {
+  margin-top: var(--space-16);
 }
 
 /* One automation's row: its clock wearing its newest run's state, its name
@@ -4574,13 +4966,103 @@ body:has(.app-stage[data-capture="true"])
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
+/* The suggested automations, each a card of its own in a grid that wraps
+   as more are suggested: the glyph of what fires it on a tile, a plus at
+   its corner, its name, and what it does, read whole. The whole card is one
+   press, lifting to the raised fill under the pointer. */
+.automation-suggestion-cards {
+  display: grid;
+  gap: var(--space-12);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
+}
+
+.automation-suggestion {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-6);
+  padding: var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  color: inherit;
+  text-align: left;
+}
+
+.automation-suggestion:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.automation-suggestion:focus-visible {
+  outline: none;
+}
+
+:root[data-keyboard="true"] .automation-suggestion:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
+.automation-suggestion:disabled {
+  opacity: 0.5;
+}
+
+.automation-suggestion-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.automation-suggestion-glyph {
+  display: grid;
+  width: 32px; /* off-scale */
+  height: 32px; /* off-scale */
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.automation-suggestion-glyph svg,
+.automation-suggestion-add {
+  width: 16px;
+  height: 16px;
+}
+
+.automation-suggestion-add {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.automation-suggestion:hover:not(:disabled) .automation-suggestion-add {
+  color: var(--text-primary);
+}
+
+.automation-suggestion-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.automation-suggestion-detail {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* An automation's page: crumbs back to the list naming its owner, then its
-   name, the line saying who sees it, and its form at a Settings measure. */
+   name, the line saying who sees it, and its form at a Settings measure.
+   The crumbs clip what runs past them, though not the keyboard's ring on a
+   crumb, so the way back never draws over the tag after them. */
 .automation-crumbs {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--space-4);
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-reach);
   color: var(--text-secondary);
 }
 
@@ -4606,6 +5088,34 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-editor-status[data-dirty="true"] {
   color: var(--text-secondary);
+}
+
+/* The editor's toolbar holds its crumbs and its acts in a box of their own,
+   whose width a container query reads: the toolbar's own padding leaves the
+   traffic lights their room or not as the sidebar folds, so the window's
+   width says nothing of the room the crumbs have. Too narrow for every
+   act's words beside a readable name, the acts fold to their glyphs, each
+   named by its pill (`folding-button.tsx`), and the draft's state goes,
+   since Save, pressable or not, says it already; the crumb back folds to
+   its glyph alike, so the name it leads to keeps the room. */
+.automation-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--control-gap);
+  container: automation-toolbar / inline-size;
+}
+
+@container automation-toolbar (max-width: 879px) {
+  .automation-toolbar :is(.toolbar-button-words, .automation-editor-status) {
+    display: none;
+  }
+
+  .automation-toolbar .toolbar-button:has(> .toolbar-button-words) {
+    width: var(--control-height);
+    padding: 0;
+  }
 }
 
 .automation-editor {
@@ -4654,7 +5164,8 @@ body:has(.app-stage[data-capture="true"])
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
 .automation-row-controls > .settings-input,
-.settings-row > .automation-cron {
+.settings-row > .automation-cron,
+.settings-row > .automation-rules-file {
   height: var(--control-height);
   padding-block: 0;
   border-radius: var(--control-radius);
@@ -4711,7 +5222,8 @@ body:has(.app-stage[data-capture="true"])
   max-width: 100%;
 }
 
-.automation-cron {
+.automation-cron,
+.automation-rules-file {
   width: 200px;
   font-family: var(--font-mono, ui-monospace, monospace);
 }
@@ -4741,6 +5253,7 @@ body:has(.app-stage[data-capture="true"])
    in the room between the sidebar and its runs, then its runs in a panel of
    their own on the right, each scrolling by itself. */
 .automation-editor-layout {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -4760,6 +5273,16 @@ body:has(.app-stage[data-capture="true"])
   min-height: 0;
   max-width: max(280px, calc(100% - 480px)); /* off-scale: the form's reserve, FORM_RESERVE */
   flex: none;
+}
+
+/* The Runs panel on its way out has left the layout, the form already
+   standing in its room, and slides out over the form's edge on its own
+   ground (`usePaneSlide`). */
+.automation-runs-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  background: var(--desktop-ground);
 }
 
 .automation-runs {
@@ -4917,9 +5440,40 @@ button.automation-run:hover {
 /* Find in a tab --------------------------------------------------------- */
 
 /* The tab a find searches holds its bar at its top right, over what it
-   shows, as a browser's find bar stands over the page. */
+   shows, as a browser's find bar stands over the page. It answers its own
+   width, so a column too narrow for the bar's own width spans the bar
+   across it, inset alike at both sides, and the field takes what the
+   buttons leave it. A scope that names a container of its own lists
+   `find-scope` among its names, as `.side-panel-content` does. */
 .find-scope {
   position: relative;
+  container: find-scope / inline-size;
+}
+
+@container find-scope (max-width: 400px) {
+  .find-scope > .find-bar {
+    left: var(--column-inset);
+  }
+
+  .find-scope > .find-bar > .find-bar-well {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+/* Narrower still, the tally gives the field its room and is said rather
+   than drawn, as `.visually-hidden` says words; the matches stay marked in
+   the tab. */
+@container find-scope (max-width: 300px) {
+  .find-scope > .find-bar .find-bar-tally {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    clip-path: inset(50%);
+  }
 }
 
 /* A page standing in the plan's place finds as one scope (`PageFind`): it
@@ -5054,13 +5608,9 @@ button.automation-run:hover {
 
 /* The plan template laid out as every Settings page is (`PlanBody`'s
    `page`): at their measure, its name at a page title's place and size, the
-   Edited line and the note under it. Its words dissolve at the scroller's
-   top edge, through the shared top fade, once the page has left its top. */
+   Edited line and the note under it. */
 .template-document .plan-document-scroll {
   padding-top: 0;
-  animation: scroll-top-fade linear both;
-  animation-timeline: scroll(self block);
-  animation-range: 0 var(--scroll-fade);
 }
 
 .template-document :is(.plan-body, .plan-edit-note) {
@@ -5071,7 +5621,11 @@ button.automation-run:hover {
   padding-top: var(--space-32);
 }
 
+/* A column too narrow for the name and the page's actions on one line
+   drops the actions under the name, as a Settings page's head drops its
+   Reset, rather than breaking the name inside a word. */
 .plan-page-head .plan-title-line {
+  flex-wrap: wrap;
   align-items: center;
 }
 
@@ -5104,18 +5658,16 @@ button.automation-run:hover {
 
 /* A Settings page has no top bar: the page names itself at the head of its
    column, so the title-bar row above it is only the window's drag strip, and
-   the column scrolls beneath it. The page's top margin is wider than the
-   fade, so nothing at rest is faded; a row scrolled up dissolves into the
-   strip rather than being sliced off at its edge. */
+   the column scrolls beneath it, its top edge fading (`scroll-fade-top`) so
+   a row scrolled up dissolves into the strip rather than being sliced off. */
 .settings-page-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--page-inset) var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
-     column's own top margin above it. */
+     column's own top margin above it, which is wider than the fade. */
   scroll-padding-top: var(--page-inset);
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
   /* A bar that takes room takes it on every page, so the column never slides. */
   scrollbar-gutter: stable;
 }
@@ -5151,7 +5703,6 @@ button.automation-run:hover {
   gap: var(--space-32);
   margin: 0 auto;
   overflow: visible;
-  animation: none;
 }
 
 /* Version history ------------------------------------------------------------ */
@@ -5231,12 +5782,16 @@ button.automation-run:hover {
   text-align: right;
 }
 
+/* What a version did runs to two lines before it is cut short, so a
+   restore's row says which version it brought back in a column the folded
+   sidebar's width. */
 .version-row-summary {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A row's ⋯ stands in its time's place, which is always as wide as it, while
@@ -5582,7 +6137,8 @@ button.automation-run:hover {
 }
 
 /* Expanded where it cannot be pinned, the whole summary stands in a card
-   over the rail's own footprint, its top and right edges the rail's, drawn
+   over the rail's own footprint, its top and right edges the rail's, or the
+   column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
    as a menu is, and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
@@ -5649,6 +6205,20 @@ button.automation-run:hover {
   right: calc(var(--column-inset) - var(--card-edge));
 }
 
+/* While the chevron is drawn, the summary's fade keeps the chevron's own
+   spot whole, a second mask layer over the fade's, because a mask fades
+   every box inside the scroller and the chevron stands at its faded top. */
+.plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) {
+  mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
+  mask-position:
+    0 0,
+    right var(--column-inset) top var(--focus-ring-reach);
+  mask-size:
+    100% 100%,
+    var(--control-height) var(--control-height);
+  mask-repeat: no-repeat;
+}
+
 .plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .plan-summary-chevron,
 .plan-summary-card:hover .plan-summary-collapse,
 .plan-summary-collapse:focus-visible {
@@ -5663,25 +6233,12 @@ button.automation-run:hover {
   margin-bottom: 0;
 }
 
-.plan-summary[data-mode="column"] > .plan-summary-empty,
-.plan-summary-card > .plan-summary-empty {
-  padding-top: var(--space-8);
-  padding-right: var(--control-height);
-}
-
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
 @keyframes summary-card-grow {
   from {
     transform: scale(0.97);
   }
-}
-
-.plan-summary-empty {
-  margin: 0;
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 12.5px;
 }
 
 .plan-summary-rows {
@@ -5947,14 +6504,15 @@ button.automation-run:hover {
 }
 
 /* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens; either fades where it
-   is cut. A row with no folder gives its name the whole width. */
-.tab-add-menu .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
+   a deep path never hides which file the row opens, and a repository's row
+   its name rather than its owner (`repository-chip.tsx`); either fades where
+   it is cut. A row with no folder gives its name the whole width. */
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
 }
 
-.tab-add-menu .plan-compose-menu-detail {
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
@@ -5985,6 +6543,10 @@ button.automation-run:hover {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
+  /* The container every tab answers its width from (`@container
+     side-panel`, planning.css), so one width lays out every tab narrow; it
+     is the tab's find scope too, so it keeps that name (`.find-scope`). */
+  container: side-panel find-scope / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -6058,62 +6620,98 @@ button.automation-run:hover {
    editor draws its tabs: each a glyph and a label in a pill a toolbar
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
-   it. Every tab stands whole at its own width, up to a most past which its
-   label fades out at its end; past holding them all, the strip scrolls along
-   with no bar drawn, as a browser's does, and the end it has hidden tabs
-   beyond dissolves over `--scroll-fade`. The strip measures which edges
-   those are (tab-strip.tsx) as it scrolls and resizes, rather than riding a
-   scroll timeline, because a timeline is active over any overflow at all and
-   left a fade on a strip that holds every tab. The tab the strip brings into
-   view stops clear of the fade, at its scroll padding, and glides there
-   unless motion is held still. */
+   it. It gives way as Safari's tab bar does, in the stylesheet alone, so the
+   strip measures nothing (tab-strip.tsx):
+   - every tab asks for an equal share, up to `--tab-widest`, and the strip
+     asks room for all of them at that width by their count (`--tab-count`,
+     the one thing it is told), giving way from there;
+   - the tabs other than the chosen one narrow together, and below 72px
+     each is its glyph alone (`@container tab`);
+   - the chosen tab keeps its glyph, its label, and its × at a share of its
+     own;
+   - past holding every glyph the strip scrolls along with no bar drawn, the
+     chosen tab pinned at whichever edge it would pass, and a fade where tabs
+     go on. The tab the strip brings into view glides there unless motion is
+     held still. */
 .tab-strip {
+  --tab-widest: 200px;
+  /* What the strip's fades and the pinned tab paint over the tabs passing
+     beneath them: the side panel's well, or the column's ground. */
+  --strip-ground: var(--desktop-well);
+  position: relative;
   display: flex;
   min-width: 0;
+  flex: 0 1
+    calc(var(--tab-count, 1) * (var(--tab-widest) + var(--list-gap)) + 2 * var(--focus-ring-reach));
   align-items: center;
   gap: var(--list-gap);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: var(--scroll-glide);
-  scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
   margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
   padding: var(--space-8) var(--focus-ring-reach);
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--tab-strip-fade-start),
-    #000 calc(100% - var(--tab-strip-fade-end)),
-    transparent
-  );
-  transition:
-    --tab-strip-fade-start var(--duration-hover) ease,
-    --tab-strip-fade-end var(--duration-hover) ease;
 }
 
-.tab-strip[data-overflow-start="true"] {
-  --tab-strip-fade-start: var(--scroll-fade);
+.main-tabs .tab-strip {
+  --strip-ground: var(--desktop-ground);
 }
 
-.tab-strip[data-overflow-end="true"] {
-  --tab-strip-fade-end: var(--scroll-fade);
+/* A fade at either end where tabs go on past it, drawn over them in the
+   strip's ground rather than as a mask, because a mask would fade the
+   chosen tab pinned there too; each comes in as the strip scrolls from that
+   end, by the strip's own scroll, so a strip that holds every tab draws
+   none. They stand at the ends, taking no room of their own. */
+.tab-strip::before,
+.tab-strip::after {
+  position: sticky;
+  z-index: 1;
+  flex: 0 0 var(--scroll-fade);
+  align-self: stretch;
+  content: "";
+  pointer-events: none;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(nearest inline);
 }
 
-/* Registered so a fade comes and goes as a length eased, and stands at none
-   on an edge that hides nothing. */
-@property --tab-strip-fade-start {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
+.tab-strip::before {
+  left: calc(-1 * var(--focus-ring-reach));
+  margin-right: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  background: linear-gradient(to right, var(--strip-ground), transparent);
+  animation-name: strip-fade-in;
+  animation-range: 0 var(--scroll-fade);
 }
 
-@property --tab-strip-fade-end {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
+.tab-strip::after {
+  right: calc(-1 * var(--focus-ring-reach));
+  margin-left: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  background: linear-gradient(to left, var(--strip-ground), transparent);
+  animation-name: strip-fade-out;
+  animation-range: calc(100% - var(--scroll-fade)) 100%;
+}
+
+@keyframes strip-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes strip-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 .tab {
@@ -6138,8 +6736,94 @@ button.automation-run:hover {
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease,
     transform var(--duration-fast) var(--spring-fast);
   -webkit-app-region: no-drag;
+}
+
+/* Every tab asks for an equal share and narrows by it, down to a glyph's
+   width; each is a container of its own width, so it can stand as its glyph
+   alone once it is narrow (below). */
+.tab-strip .tab {
+  min-width: calc(2 * var(--space-8) + var(--control-glyph));
+  max-width: var(--tab-widest);
+  flex: 0 1 var(--tab-widest);
+  container: tab / inline-size;
+}
+
+/* Narrower than 72px, a tab other than the chosen one is its
+   glyph alone, centred: its label, its detail, its end mark, and its × give
+   way, and its hint says its name. */
+@container tab (width < 72px) {
+  .tab-strip .tab:not([data-selected="true"]) :is(.tab-label, .tab-end-mark, .tab-close) {
+    display: none;
+  }
+
+  .tab-strip .tab:not([data-selected="true"]) .tab-button {
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+/* The chosen tab keeps a share of its own, its glyph, its label, and its ×
+   at every width, and stands pinned at whichever edge of the strip it would
+   scroll past, on its ground, so the tabs passing beneath it are hidden. */
+.tab-strip .tab[data-selected="true"] {
+  position: sticky;
+  z-index: 2;
+  right: calc(-1 * var(--focus-ring-reach));
+  left: calc(-1 * var(--focus-ring-reach));
+  min-width: 0;
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: clamp(96px, 60%, var(--tab-widest));
+  background: var(--strip-ground);
+  container: pinned / scroll-state;
+}
+
+/* A chosen tab alone in its strip keeps no share for others: it takes a
+   tab's own width, as any tab does. */
+.tab-strip .tab[data-selected="true"]:only-child {
+  flex-shrink: 1;
+  flex-basis: var(--tab-widest);
+}
+
+.tab-strip .tab[data-selected="true"]:not([data-quiet="true"]) {
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--strip-ground);
+}
+
+/* A quiet chosen tab, drawn with no fill at rest, still stands on the
+   strip's ground, so no tab shows through it where it is pinned. */
+.tab-strip .tab[data-selected="true"][data-quiet="true"]:not(:hover) {
+  background: var(--strip-ground);
+}
+
+/* Pinned, it fades the tabs passing beneath its inner edge as the strip's
+   ends do. */
+@container pinned scroll-state(stuck: left) {
+  .tab-strip .tab-button::after {
+    position: absolute;
+    top: calc(-1 * var(--space-8));
+    bottom: calc(-1 * var(--space-8));
+    left: 100%;
+    width: var(--scroll-fade);
+    background: linear-gradient(to right, var(--strip-ground), transparent);
+    content: "";
+    pointer-events: none;
+  }
+}
+
+@container pinned scroll-state(stuck: right) {
+  .tab-strip .tab-button::after {
+    position: absolute;
+    top: calc(-1 * var(--space-8));
+    right: 100%;
+    bottom: calc(-1 * var(--space-8));
+    width: var(--scroll-fade);
+    background: linear-gradient(to left, var(--strip-ground), transparent);
+    content: "";
+    pointer-events: none;
+  }
 }
 
 .tab:hover {
@@ -6399,6 +7083,12 @@ button.automation-run:hover {
   background: var(--hairline);
 }
 
+/* A server's card lists its tools as the MCP popover's page does
+   (`planning/server-card.tsx`), each row's words on the card's own column. */
+.card .integration-tool-list {
+  margin-inline: calc(-1 * var(--row-inset));
+}
+
 /* A card's name that opens its subject, where the control hanging the card
    opens nothing of its own: the name as drawn, washed on hover as a named
    actor is. */
@@ -6535,11 +7225,9 @@ button.automation-run:hover {
 }
 
 /* The plan's tab alone in its column takes the room the heading has rather
-   than a most of its own, and gives way to the toolbar's buttons by
-   truncating its label, down to a few of its characters, rather than by
-   scrolling. Beside an agent's it is a tab like any other. The Inbox pane's
-   crumbs give way alike, within a tab's most. */
-.desktop-toolbar-heading .tab[data-quiet="true"],
+   than a most of its own, giving way to the toolbar's buttons as any tab
+   gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
+   other. The Inbox pane's crumbs give way alike, within a tab's most. */
 .inbox-crumbs .tab {
   min-width: calc(
     var(--tab-start) +
@@ -6552,7 +7240,7 @@ button.automation-run:hover {
 }
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
-  max-width: none;
+  max-width: 100%;
 }
 
 /* While the plan is read, one block in its tab's place: a tab's height and
@@ -6571,7 +7259,11 @@ button.automation-run:hover {
 /* An irreversible act asks the way every desktop app asks: the window dims
    behind a centred card. Over the menu and the window's drag strip alike, so
    it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. */
+   tokens, which reduced motion and a capture run already hold still. The
+   card is never taller than the window less its margins: its body (the
+   question, a list of choices, a note being written) is the part that gives
+   way and scrolls, so its title and its answers stay on screen however short
+   the window is. */
 .confirm-dialog-backdrop {
   position: fixed;
   z-index: var(--z-dialog);
@@ -6587,6 +7279,7 @@ button.automation-run:hover {
 .confirm-dialog {
   display: flex;
   width: min(400px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-20);
@@ -6612,7 +7305,9 @@ button.automation-run:hover {
 }
 
 .confirm-dialog-body {
+  min-height: 0;
   margin: 0;
+  overflow-y: auto;
   color: var(--text-secondary);
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -6783,6 +7478,14 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
+/* A name with a detail after it keeps its whole width, up to most of the
+   row, and the detail is what gives way: an action's name is short and says
+   what the row does, where its detail (the task it acts on) can run long. */
+.command-palette-name:has(+ .command-palette-detail) {
+  max-width: 70%;
+  flex: none;
+}
+
 /* A plan's repository follows its name, as the sidebar's row says it. */
 .command-palette-detail {
   min-width: 0;
@@ -6907,12 +7610,14 @@ button.automation-run:hover {
 }
 
 /* The note grows with its words, up to where scrolling it is kinder than a
-   card the height of the window. No resize handle: the box is already sized
-   by what it holds. */
+   card the height of the window, and is the card's body: in a window too
+   short for the card it gives way, down to its least height, so the
+   screenshots, the signature, and the answers stay on screen. No resize
+   handle: the box is already sized by what it holds. */
 .feedback-dialog-message {
   width: 100%;
   min-height: 112px;
-  max-height: min(320px, 50vh);
+  max-height: 320px;
   padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
@@ -7087,9 +7792,12 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
+/* What the row is about keeps a floor beside a long title, so the title is
+   what gives way and the context is never cut to a letter or a sliver. Past
+   the floor it takes what the title leaves. */
 .home-row-context {
   overflow: hidden;
-  min-width: 0;
+  min-width: min(16ch, 35%);
   flex: 1;
   color: var(--text-tertiary);
   font-size: 12.5px;
@@ -7104,11 +7812,14 @@ button.automation-run:hover {
   visibility: visible;
 }
 
+/* The time ends the row whether a context fills up to it or not, so the
+   times stand in one column down a station or a section. */
 .home-row .sidebar-plan-time {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-6);
+  margin-left: auto;
 }
 
 .home-row-picture {
@@ -7231,6 +7942,18 @@ button.automation-run:hover {
   gap: var(--space-6);
 }
 
+/* A picker's menu here is as wide as its widest value, within a bound,
+   since the chip it hangs from grew to name its whole value: an owner's
+   long workspace name reads whole in the menu, not faded at its check.
+   The bound is also the room the scroller leaves from the chip's edge the
+   menu hangs from (`picker-row.tsx`), so a menu beside the runs never runs
+   past the form's edge and loses the start of its rows. */
+.automation-form .settings-picker .settings-picker-menu {
+  width: max-content;
+  min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
+  max-width: min(400px, var(--settings-picker-width-max, 400px));
+}
+
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing
    alone at the head of their lines, not in a column, so each is as wide as
    its value and gives way, ellipsized, to a long one. */
@@ -7265,9 +7988,33 @@ button.automation-run:hover {
   margin-right: auto;
 }
 
+/* New task's head: the title and its workspace chip, then the Plan switch
+   at the row's end. */
+.new-plan-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+/* New task's Plan switch stands at the title's end with its word, the word
+   part of its label so a press on either turns it, leaving the foot's room
+   to the repository chip. */
+.new-plan-planning {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
 /* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
    a tile and two lines each, the chosen one ringed and one that cannot take
-   the plan dimmed, then what the move does in a well under them. */
+   the plan dimmed, then what the move does in a well under them. The rows
+   are the card's body, which scrolls where the window is too short for all
+   of them, padded by the ring's reach so a row's ring is never cut off. */
 .move-dialog {
   width: min(440px, 100%);
   gap: var(--space-12);
@@ -7275,7 +8022,13 @@ button.automation-run:hover {
 
 .move-list {
   display: grid;
+  min-height: 0;
   gap: var(--space-2);
+  margin: calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .move-row {
@@ -7324,20 +8077,49 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom, in the corner itself
-   whatever stands at the window's foot: a call bar, the side panel, or the
-   summary. The folded sidebar's call card keeps the other corner, and the
-   window is never narrow enough for the two to meet. Each rises in on the
-   spring and fades first on its way out; the stack itself takes no pointer,
-   so only a card with something to press stands in the way of what is under
-   it, and that card is always one the developer can dismiss. */
+   its bottom-right corner, newest at the bottom. Over a dock at the
+   window's foot (a plan's call bar, an agent's composer or its to-do list)
+   the stack stands just above the highest of them, the window's step clear
+   of it, as the folded sidebar's call card does in the other corner. It
+   measures nothing: each dock names itself an anchor (below), and the
+   stack's foot stands on the anchor's top, or in the corner where none
+   stands. The window is never narrow enough for the two to meet.
+   Each rises in on the spring and fades first on its way out; the stack
+   itself takes no pointer, so only a card with something to press stands in
+   the way of what is under it, and that card is always one the developer
+   can dismiss. */
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: var(--space-16);
+  bottom: max(
+    var(--space-16),
+    calc(anchor(--dock-call top, 0px) + var(--space-8)),
+    calc(anchor(--dock-composer top, 0px) + var(--space-8)),
+    calc(anchor(--dock-todos top, 0px) + var(--space-8))
+  );
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
+}
+
+/* What docks at a column's foot names itself, by kind, the anchor the
+   toasts stand on; a column hidden under the side panel filling the window
+   leaves its docks unnamed, since nothing of it stands under the toasts. */
+.desktop-call-bar {
+  anchor-name: --dock-call;
+}
+
+.agent-composer {
+  anchor-name: --dock-composer;
+}
+
+.agent-todos-dock {
+  anchor-name: --dock-todos;
+}
+
+:is(.desktop-plan-main[hidden], .desktop-plan > .agent-page[hidden])
+  :is(.desktop-call-bar, .agent-composer, .agent-todos-dock) {
+  anchor-name: none;
 }
 
 .toast-stack > ol {

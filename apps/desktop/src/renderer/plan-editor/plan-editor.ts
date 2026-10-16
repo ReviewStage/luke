@@ -1,4 +1,5 @@
 import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -139,6 +140,7 @@ export function markdownExtensions(
   pictures?: PlanEditorPictures | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
+    blockquote: { HTMLAttributes: { class: QUOTE_CLASS } },
     heading: false,
     paragraph: false,
     underline: false,
@@ -244,7 +246,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
-      // Note that image files pasted are laid in as pictures, and a page of an integration's pasted whole as its mention, as the box lays it in.
+      // Note that image files pasted are laid in as pictures, and an address of Luke's own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
         return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);

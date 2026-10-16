@@ -1,3 +1,4 @@
+import { githubAvatarAt } from "@luke/features/account-picture";
 import {
   AUTOMATION_RUN_STANDING,
   type AutomationRunStanding,
@@ -43,7 +44,11 @@ import { Tooltip } from "./tooltip";
  * colour is never the only sign; someone the service names nobody for
  * stands on a quiet outline. Someone GitHub names
  * who is no member stands by their GitHub avatar, a person on a circle and
- * an App's bot on a square, its robot until the avatar loads. Luke's square holds
+ * an App's bot on a square, its robot until the avatar loads, and its name
+ * wears a quiet "bot" badge wherever it is said, as GitHub's own pages mark
+ * one. A picture on GitHub's avatar host is asked for at twice the size it
+ * is drawn, so a Retina screen draws it sharp and nothing larger is
+ * fetched. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its clock,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
@@ -72,6 +77,20 @@ export const ACTOR_SIZE = {
 
 type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
+/** How many CSS pixels across each size draws its disc, which `desktop.css`'s `--actor-size` says for the same size. */
+export const ACTOR_PIXELS = {
+  [ACTOR_SIZE.MARK]: 14,
+  [ACTOR_SIZE.INLINE]: 16,
+  [ACTOR_SIZE.STACK]: 18,
+  [ACTOR_SIZE.ROW]: 20,
+  [ACTOR_SIZE.ACCOUNT]: 26,
+  [ACTOR_SIZE.CARD]: 32,
+  [ACTOR_SIZE.PAGE]: 48,
+} as const satisfies Record<ActorSize, number>;
+
+/** How many device pixels a picture is asked for per CSS pixel it is drawn at: a Retina screen's. */
+const PICTURE_DENSITY = 2;
+
 /** The glyph state an actor's work wears, which is a tab's own. */
 const GLYPH_OF_STATE = {
   [ACTOR_STATE.WORKING]: GLYPH_STATE.WORKING,
@@ -82,20 +101,27 @@ const GLYPH_OF_STATE = {
 /**
  * A picture once it loads, and `stand` until then and where it fails: a
  * person's letter on the hue read off `id`, or a bot's own glyph on its
- * tile, which never holds a letter.
+ * tile, which never holds a letter. A picture GitHub serves is asked for at
+ * the size the disc draws it (`githubAvatarAt`).
  */
 function PictureFace({
   id,
   pictureUrl,
+  size,
   stand,
 }: {
   id: string;
   pictureUrl: string | undefined;
+  size: ActorSize;
   stand: { readonly letter: string } | { readonly glyph: ReactNode };
 }): React.JSX.Element {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
-  const url = pictureUrl !== failedUrl ? pictureUrl : undefined;
+  const sized =
+    pictureUrl === undefined
+      ? undefined
+      : githubAvatarAt(pictureUrl, ACTOR_PIXELS[size] * PICTURE_DENSITY);
+  const url = sized !== failedUrl ? sized : undefined;
   const shown = url !== undefined && url === loadedUrl;
   const lettered = "letter" in stand;
   // Note that the stand-in stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows nothing through.
@@ -119,32 +145,34 @@ function PictureFace({
 }
 
 /** A person's picture once it loads, their letter on its hue until then and where it fails. */
-function PersonFace({ actor }: { actor: PersonActor }): React.JSX.Element {
+function PersonFace({ actor, size }: { actor: PersonActor; size: ActorSize }): React.JSX.Element {
   return (
     <PictureFace
       id={actor.userId}
       pictureUrl={actor.pictureUrl}
+      size={size}
       stand={{ letter: identityLetter(actor.name) }}
     />
   );
 }
 
 /** Someone on GitHub: their avatar once it loads, a person's letter or a bot's glyph until then. */
-function GitHubFace({ actor }: { actor: GitHubActor }): React.JSX.Element {
+function GitHubFace({ actor, size }: { actor: GitHubActor; size: ActorSize }): React.JSX.Element {
   return (
     <PictureFace
       id={actor.login}
       pictureUrl={actor.avatarUrl}
+      size={size}
       stand={actor.bot ? { glyph: <BotIcon /> } : { letter: identityLetter(actor.login) }}
     />
   );
 }
 
-/** What stands on an actor's circle or square. */
-function Face({ actor }: { actor: Actor }): React.JSX.Element {
+/** What stands on an actor's circle or square, at its size. */
+function Face({ actor, size }: { actor: Actor; size: ActorSize }): React.JSX.Element {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
-      return <PersonFace actor={actor} />;
+      return <PersonFace actor={actor} size={size} />;
     case ACTOR_KIND.LUKE:
       return (
         <span className="actor-face">
@@ -167,7 +195,7 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
         </span>
       );
     case ACTOR_KIND.GITHUB:
-      return <GitHubFace actor={actor} />;
+      return <GitHubFace actor={actor} size={size} />;
     case ACTOR_KIND.SOMEONE:
       // A member who left keeps their own face, grayed by the mark, where the service still names them.
       if (actor.reason === SOMEONE_REASON.FORMER && actor.name !== undefined) {
@@ -175,6 +203,7 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
           <PictureFace
             id={actor.userId ?? actor.name}
             pictureUrl={actor.pictureUrl}
+            size={size}
             stand={{ letter: identityLetter(actor.name) }}
           />
         );
@@ -231,7 +260,7 @@ export function ActorMark({
       data-tiled={tiled ? "true" : undefined}
       aria-hidden="true"
     >
-      <Face actor={actor} />
+      <Face actor={actor} size={size} />
     </span>
   );
 }
@@ -250,6 +279,16 @@ export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
   return <span className="actor-you">You</span>;
+}
+
+/** Whether the actor is an App's bot on GitHub, whose name wears its badge. */
+function githubBot(actor: Actor): boolean {
+  return actor.kind === ACTOR_KIND.GITHUB && actor.bot;
+}
+
+/** The quiet badge an App's bot on GitHub wears after its name, as GitHub's own pages mark one; nothing for anyone else. */
+function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
+  return githubBot(actor) ? <span className="actor-bot">bot</span> : null;
 }
 
 /** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, the line under it, and its corner. */
@@ -343,9 +382,9 @@ export function LukeCard({
 
 /** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
-  [SOMEONE_REASON.FORMER]: "No longer in this workspace. Their edits stay in the plan's history.",
+  [SOMEONE_REASON.FORMER]: "No longer in this workspace.",
   [SOMEONE_REASON.UNNAMED]: "Luke can't say who made this change.",
-  [SOMEONE_REASON.EARLIER]: "The plan as it stood before its history began.",
+  [SOMEONE_REASON.EARLIER]: "The plan before its history began.",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
@@ -355,13 +394,15 @@ function SomeoneCard({
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
+  // Note that a named former member's head already says "Former member".
+  const note = former && actor.name !== undefined ? undefined : SOMEONE_NOTES[actor.reason];
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
-      <CardNote>{SOMEONE_NOTES[actor.reason]}</CardNote>
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }
@@ -373,14 +414,23 @@ const GITHUB_WORDS = {
   OUTSIDE: "Not in this workspace",
 } as const;
 
-/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. A press on their name opens their page on GitHub. */
+/** Someone on GitHub's card: their face, a person's login or an App's bot's name and badge, whether they are a person or an App's bot, and that a person is no member here. A press on their name opens their page on GitHub. */
 function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
         <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
         <CardHead
-          name={`@${actor.login}`}
+          name={
+            actor.bot ? (
+              <span className="actor-card-name">
+                {actorName(actor)}
+                <BotBadge actor={actor} />
+              </span>
+            ) : (
+              `@${actor.login}`
+            )
+          }
           sub={actor.bot ? GITHUB_WORDS.APP : GITHUB_WORDS.USER}
           corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
         />
@@ -491,6 +541,7 @@ export function ActorRef({
     <>
       <ActorMark actor={actor} />
       <span className="actor-ref-name">{name}</span>
+      <BotBadge actor={actor} />
       <LeftWords actor={actor} />
     </>
   );
@@ -559,6 +610,19 @@ function CardedFace({
   );
 }
 
+/** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say, wrapping within the card. */
+function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
+  return (
+    <span className="actor-more-words">
+      {faceName(actor, {})}
+      {/* Note that a no-break space holds the badge to its name's line however the row wraps. */}
+      {githubBot(actor) ? "\u00a0" : null}
+      <BotBadge actor={actor} />
+      {face.says === undefined ? null : ` · ${face.says}`}
+    </span>
+  );
+}
+
 /**
  * The count past a pile's last face, which hangs a card naming each actor
  * it counts by their mark and what their face would say, so nobody the pile
@@ -581,7 +645,7 @@ function MoreFaces({
           // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
           <li key={index} className="actor-more-row">
             <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-            <span>{names[index]}</span>
+            <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
           </li>
         ))}
       </ul>

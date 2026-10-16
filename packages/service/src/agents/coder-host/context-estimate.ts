@@ -3,8 +3,17 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
-import { SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
-import { LOOK_AT_PICTURE_TOOL } from "../../plans/picture-look.js";
+import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
+import {
+  ARCHIVE_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  LIST_TASKS_TOOL,
+  MESSAGE_AGENT_TOOL,
+  READ_PAGE_TOOL,
+  START_AGENT_TOOL,
+  UNARCHIVE_AGENT_TOOL,
+} from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
@@ -100,10 +109,38 @@ const AUTHORED_TOOLS = {
     description: OPEN_PULL_REQUEST_TOOL.description,
     inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
   },
+  [CODER_TOOL.LIST_AGENTS]: {
+    description: LIST_AGENTS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_AGENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.MESSAGE_AGENT]: {
+    description: MESSAGE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.START_AGENT]: {
+    description: START_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.ARCHIVE_AGENT]: {
+    description: ARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UNARCHIVE_AGENT]: {
+    description: UNARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_TASKS]: {
+    description: LIST_TASKS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_PAGE]: {
+    description: READ_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(READ_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.RUN_ON_MAC]: {
     description: RUN_ON_MAC_TOOL.description,

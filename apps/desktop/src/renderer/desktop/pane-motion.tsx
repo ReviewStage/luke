@@ -11,14 +11,18 @@
  * slides in from the window's right, and a panel that grew over the
  * document is uncovered from its old edge to its new one. A pane leaving holds itself drawn
  * through its own exit (side-panel.tsx), so only arrivals and displacement
- * are played here.
+ * are played here. A smaller pane docked at the right of what it stands
+ * beside, a File tab's tree, a Terminal tab's shells, or an automation's
+ * Runs, slides in and out on the same tokens (`usePaneSlide`), and an
+ * automation's form glides as its Runs come and go, as the document does
+ * beside the side panel.
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
  * frame with nothing easing behind it.
  */
 
-import { Component, type RefObject } from "react";
+import { Component, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
 const GLIDERS = [
@@ -28,6 +32,7 @@ const GLIDERS = [
   ".desktop-agent > *",
   ".desktop-call-bar .call-bar",
   ".desktop-empty > *",
+  ".automation-editor",
 ].join(", ");
 
 /** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */
@@ -36,20 +41,18 @@ const PANE = ".side-panel";
 /** The pane that arrives and grows; one leaving runs its own exit and is left to it. */
 const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 
-/** The plan's summary, which is always drawn while the plan is, so it only ever moves, or arrives with the plan. */
+/** The plan's summary, drawn while the plan is wherever its column spares a rail, so it only ever moves, or arrives with the plan or the room. */
 const SUMMARY = ".plan-summary";
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
 const STILL = 0.5;
 
-/** Which panes the window draws, and how; a change to any of them is what plays. */
-interface PaneLayout {
-  sidebarCollapsed: boolean;
-  panelOpen: boolean;
-  panelFullScreen: boolean;
-  /** Whether the plan's summary stands pinned, as the column's room and the developer's pin decide together. */
-  summaryPinned: boolean;
-}
+/**
+ * Which panes are drawn under the root, and how, each by a name of its
+ * owner's: the window's sidebar, side panel, and the plan's pinned summary,
+ * or an automation's Runs. A change to any of them is what plays.
+ */
+type PaneLayout = Readonly<Record<string, boolean>>;
 
 /** Where an element was drawn, and how much of it its clip showed. */
 interface Drawn {
@@ -91,12 +94,8 @@ export function paneTiming(element: Element): KeyframeAnimationOptions | undefin
 }
 
 function sameLayout(a: PaneLayout, b: PaneLayout): boolean {
-  return (
-    a.sidebarCollapsed === b.sidebarCollapsed &&
-    a.panelOpen === b.panelOpen &&
-    a.panelFullScreen === b.panelFullScreen &&
-    a.summaryPinned === b.summaryPinned
-  );
+  const names = Object.keys(a);
+  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
 }
 
 /** Where each glider and the pane are drawn now, motion under way included. */
@@ -107,6 +106,11 @@ function measure(root: HTMLElement): Snapshot {
     drawn.set(element, { rect: element.getBoundingClientRect(), clip });
   }
   return drawn;
+}
+
+/** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */
+function running(element: Element): Animation[] {
+  return "getAnimations" in element ? element.getAnimations() : [];
 }
 
 /** Plays a translation from `dx` back to where the element stands. */
@@ -154,7 +158,7 @@ function play(root: HTMLElement, before: Snapshot): void {
   // measured, so each element is read where the new layout stands it, and
   // read all at once, so the layout is worked out once rather than per element.
   for (const element of moved) {
-    for (const running of element.getAnimations()) running.cancel();
+    for (const motion of running(element)) motion.cancel();
   }
   const after = moved.map((element) => ({ element, now: element.getBoundingClientRect() }));
   for (const { element, now } of after) {
@@ -169,7 +173,8 @@ function play(root: HTMLElement, before: Snapshot): void {
 }
 
 /**
- * Plays the window's pane changes over the shell at `root`. Note that this is
+ * Plays the pane changes over the box at `root`: the window's shell, or an
+ * automation's page beside its Runs. Note that this is
  * a class, because `getSnapshotBeforeUpdate` is the one moment React gives to
  * read the layout a commit is about to change, and the glide starts from
  * there; it draws nothing of its own.
@@ -193,4 +198,62 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   override render(): null {
     return null;
   }
+}
+
+/** A pane that slides as its owner shows and hides it: whether it is drawn, whether on its way out, and its box. */
+export interface PaneSlide {
+  drawn: boolean;
+  leaving: boolean;
+  pane: RefObject<HTMLElement | null>;
+}
+
+/**
+ * A pane docked at the right of what it stands beside, shown and hidden as
+ * the window's panes are (docs/DESIGN.md): it lands in the layout or leaves
+ * it at once, so what stands beside it takes or gives its room on the frame
+ * the toggle is pressed, and the pane slides in from the right edge, or out
+ * past it over what it uncovers, on the pane's own motion tokens. Each
+ * slide starts from wherever one under way had brought it. A closed pane is
+ * held drawn through its slide out, marked leaving so the stylesheet takes
+ * it out of the layout, and let go once it has played; with no motion to
+ * play, under reduced motion or a capture run, it is let go before the
+ * frame is drawn. A pane its owner opens with stands at once, since nothing
+ * was toggled.
+ */
+export function usePaneSlide(open: boolean): PaneSlide {
+  const pane = useRef<HTMLElement>(null);
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  if (shown !== open) {
+    setShown(open);
+    setLeaving(!open);
+  }
+  const last = useRef(open);
+  useLayoutEffect(() => {
+    const element = pane.current;
+    if (last.current === open || element === null) return;
+    last.current = open;
+    const timing = paneTiming(element);
+    // Note that the slide under way is read before it is stopped, because
+    // the next one starts from where it had brought the pane, and that it is
+    // stopped even with no motion to play, because an exit's fill would
+    // otherwise hold a pane shown again past the edge.
+    const from = getComputedStyle(element).transform;
+    for (const motion of running(element)) motion.cancel();
+    if (timing === undefined) {
+      if (!open) setLeaving(false);
+      return;
+    }
+    if (open) {
+      const start = from === "" || from === "none" ? "translateX(100%)" : from;
+      element.animate([{ transform: start }, { transform: "none" }], timing);
+      return;
+    }
+    const exit = element.animate(
+      [{ transform: from === "" ? "none" : from }, { transform: "translateX(100%)" }],
+      { ...timing, fill: "forwards" },
+    );
+    exit.onfinish = () => setLeaving(false);
+  }, [open]);
+  return { drawn: open || leaving, leaving, pane };
 }

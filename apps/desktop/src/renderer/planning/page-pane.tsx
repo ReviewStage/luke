@@ -1,6 +1,6 @@
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
-import type { CodeLines, PlanningPageSourceAnswer } from "@luke/features/planning-view";
+import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -14,6 +14,7 @@ import { FindScope } from "../find-in-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
@@ -65,7 +66,7 @@ type SourceRead =
   | { readonly kind: typeof SOURCE_READ.FAILED };
 
 /** Reads one version's source: the answer, or a rejection where main refused the act. */
-export type ReadPageSource = (version: number) => Promise<PlanningPageSourceAnswer>;
+export type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
 
 /** The source's lines as the page's text. */
 function sourceText(lines: CodeLines): string {
@@ -165,7 +166,7 @@ function PageSource({
   }
   return (
     <section className="file-tab" aria-label={`${title} source`}>
-      <div className="code-lines file-tab-lines" {...look}>
+      <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
         <CodeLineRows firstLine={1} lines={read.lines} pointed={{ path: title }} />
       </div>
     </section>
@@ -227,6 +228,7 @@ export function PagePane({
     if (showingSource && source === undefined) ask(version);
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
+  const [titleBox, titleClipped] = useClipped();
   return (
     <FindScope
       className="page-view-find"
@@ -235,7 +237,11 @@ export function PagePane({
     >
       <div className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
-          <span className="page-view-title">{page.title}</span>
+          <Tooltip label={titleClipped ? page.title : undefined}>
+            <span ref={titleBox} className="page-view-title">
+              {page.title}
+            </span>
+          </Tooltip>
           <div className="file-view-actions">
             {page.version > 1 ? (
               <>
@@ -245,8 +251,14 @@ export function PagePane({
                   icon={<ChevronLeftIcon aria-hidden="true" />}
                   onStep={step}
                 />
+                {/* In a narrow panel the count stands alone (planning.css). */}
                 <span className="page-view-version">
-                  Version {version} of {page.version}
+                  <span className="page-view-version-words">
+                    Version {version} of {page.version}
+                  </span>
+                  <span className="page-view-version-count">
+                    {version}/{page.version}
+                  </span>
                 </span>
                 <VersionStep
                   label="Later version"
@@ -294,7 +306,7 @@ export function PagePane({
             key={reloads}
             className="page-view-frame"
             title={page.title}
-            src={pageFrameUrl({ planId, pageId: page.id, version })}
+            src={pageFrameUrl({ taskId: planId, pageId: page.id, version })}
             sandbox={PAGE_SANDBOX}
             allow=""
             referrerPolicy="no-referrer"

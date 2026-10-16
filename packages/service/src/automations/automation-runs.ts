@@ -28,6 +28,7 @@ import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { readCodeReviewSettings } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
@@ -140,13 +141,19 @@ const SUBJECT_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
  * The fixed name of a run about one pull request or issue, its number and
  * title, `#2905 View commands`, which stays the same across pushes and is
  * what the subject is searched by; none for any other run, which the title
- * model names from the automation's prompt (`coder-host/title.ts`).
+ * model names from the automation's prompt (`coder-host/title.ts`). A code
+ * review's run, whose prompt opens with its settings, is `Review #2905 View
+ * commands`, so it stands apart from the agents working on that pull request.
  */
-function subjectTitle(firing: AutomationFiring): string | undefined {
+function subjectTitle(automation: Automation, firing: AutomationFiring): string | undefined {
   if (firing.kind !== AUTOMATION_FIRING.GITHUB || firing.number === undefined) return undefined;
   if (!SUBJECT_EVENTS.has(firing.event)) return undefined;
-  const named =
+  const numbered =
     firing.title === undefined ? `#${firing.number}` : `#${firing.number} ${firing.title}`;
+  const named =
+    readCodeReviewSettings(automation.action.prompt) === undefined
+      ? numbered
+      : `Review ${numbered}`;
   return named.slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS).trim();
 }
 
@@ -308,8 +315,8 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
   if ("_tag" in refusal) return AUTOMATION_RUN_REASON.MODEL;
   switch (refusal.error) {
     case HOSTED_API_ERROR.NOT_FOUND:
-    case HOSTED_API_ERROR.PLAN_ARCHIVED:
-      return AUTOMATION_RUN_REASON.PLAN_UNREACHABLE;
+    case HOSTED_API_ERROR.TASK_ARCHIVED:
+      return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.NO_REPOSITORY:
       return AUTOMATION_RUN_REASON.NO_REPOSITORY;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
@@ -330,8 +337,8 @@ function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
     case HOSTED_API_ERROR.NOT_FOUND:
     case HOSTED_API_ERROR.AGENT_RETIRED:
       return AUTOMATION_RUN_REASON.AGENT_GONE;
-    case HOSTED_API_ERROR.PLAN_ARCHIVED:
-      return AUTOMATION_RUN_REASON.PLAN_UNREACHABLE;
+    case HOSTED_API_ERROR.TASK_ARCHIVED:
+      return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
     default:
@@ -551,7 +558,7 @@ const startClaimed = Effect.fnUntraced(function* (
   if (organizationId === null || repository === undefined) {
     const reason =
       organizationId === null
-        ? AUTOMATION_RUN_REASON.PLAN_UNREACHABLE
+        ? AUTOMATION_RUN_REASON.TASK_UNREACHABLE
         : AUTOMATION_RUN_REASON.NO_REPOSITORY;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
@@ -560,7 +567,7 @@ const startClaimed = Effect.fnUntraced(function* (
   const handed = automationStart(automation, run);
   const start = yield* Effect.result(
     startCodingAgent(eveFor(automation.userId), automation.userId, {
-      planId: null,
+      taskId: null,
       organizationId,
       repository,
       idempotencyKey: run.id,
@@ -571,7 +578,7 @@ const startClaimed = Effect.fnUntraced(function* (
       rememberChoice: false,
       automationId: automation.id,
       automationOrigin: handed.origin,
-      title: subjectTitle(run.firing),
+      title: subjectTitle(automation, run.firing),
     }),
   );
   if (Result.isSuccess(start)) {

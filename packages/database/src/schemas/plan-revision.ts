@@ -1,9 +1,9 @@
-import type { PlanActor } from "@luke/features/plan-wire";
+import type { PlanActor } from "@luke/features/task-wire";
 import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * plan-revision.ts -- a plan's history, one revision per row.
@@ -23,9 +23,9 @@ import { plan } from "./plan.js";
 export const planRevision = pgTable(
   "plan_revision",
   {
-    planId: uuid("plan_id")
+    taskId: uuid("plan_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => task.id, { onDelete: "cascade" }),
     /** The revision's number within its plan, from one. */
     seq: integer("seq").notNull(),
     actor: text("actor").$type<PlanActor>().notNull(),
@@ -51,5 +51,5 @@ export const planRevision = pgTable(
     /** The revision of the same plan the developer restored, where this revision is that restore; null for any other. */
     restoredFrom: integer("restored_from"),
   },
-  (table) => [primaryKey({ columns: [table.planId, table.seq] })],
+  (table) => [primaryKey({ columns: [table.taskId, table.seq] })],
 );

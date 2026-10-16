@@ -1,4 +1,4 @@
-import type { PlanCallResult } from "./plan-client.js";
+import type { TaskCallResult } from "./task-client.js";
 
 /**
  * workspace-call.ts -- why a workspace call did not happen, and the result a call answers.
@@ -26,4 +26,4 @@ export type WorkspaceCallFailure =
   (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];
 
 /** One workspace call's answer, or why there is none. */
-export type WorkspaceCallResult<Answer> = PlanCallResult<Answer, WorkspaceCallFailure>;
+export type WorkspaceCallResult<Answer> = TaskCallResult<Answer, WorkspaceCallFailure>;

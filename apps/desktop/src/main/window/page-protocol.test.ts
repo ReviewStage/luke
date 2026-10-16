@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageVersion } from "@luke/features/page-wire";
-import { PLAN_CALL_FAILURE, type PlanningPageParams } from "@luke/features/planning-view";
+import { TASK_CALL_FAILURE, type TasksPageParams } from "@luke/features/tasks-view";
 import { Effect } from "effect";
 import { pageResponse } from "./page-protocol";
 
@@ -24,11 +24,11 @@ const CHART: PageVersion = {
 };
 
 /** The service as the host reads it for a frame: the one version above, of the one plan. */
-const readPage = (page: PlanningPageParams) =>
+const readPage = (page: TasksPageParams) =>
   Effect.succeed(
-    page.planId === PLAN_ID && page.pageId === CHART.id && page.version === CHART.version
+    page.taskId === PLAN_ID && page.pageId === CHART.id && page.version === CHART.version
       ? { page: CHART }
-      : { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      : { failure: TASK_CALL_FAILURE.UNANSWERED },
   );
 
 /** The policy's directives by name, each with its sources. */
@@ -47,7 +47,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* pageResponse(
-        pageFrameUrl({ planId: PLAN_ID, pageId: CHART.id, version: 2 }),
+        pageFrameUrl({ taskId: PLAN_ID, pageId: CHART.id, version: 2 }),
         readPage,
       );
       const policy = directivesOf(response);

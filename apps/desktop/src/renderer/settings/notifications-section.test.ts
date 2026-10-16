@@ -125,7 +125,7 @@ test("Send test notification posts one, and the row says when Luke notifies at a
   assert.equal(tests, 1);
   assert.match(
     container.textContent ?? "",
-    /Luke notifies when its window is in the background; in the window you'll see a toast instead\./,
+    /Luke notifies only when its window is in the background\./,
   );
 });
 

@@ -1,7 +1,7 @@
 /**
  * integrations-app.ts -- the integrations group: an account's connections read, begun, ended, and settled.
  *
- * Seven endpoints the signed-in desktop calls with its bearer, and one
+ * Six endpoints the signed-in desktop calls with its bearer, and one
  * browser navigation that carries none. A Luke account may hold more than
  * one account at a provider, each its own row and grant under its own
  * connection name; every route about one account reads it from the
@@ -30,9 +30,7 @@
  *   sign-in settles, and its label is its name at the provider where
  *   Connect's grant carries one.
  * - `POST /api/account/integrations/{provider}/rename` names one account
- *   as the developer calls it, and `…/primary` makes one the provider's
- *   primary, which only what the agents are told of it reads; each answers
- *   the account as it then stands.
+ *   as the developer calls it, and answers the account as it then stands.
  * - `POST /api/account/integrations/{provider}/cancel` ends the sign-in
  *   under way, if one still is, and nothing else: a first sign-in's row
  *   goes, any other row keeps its status, and no grant is revoked, so a
@@ -161,8 +159,6 @@ const INTEGRATIONS_PATH = {
   TOOLS: "/api/account/integrations/tools",
   /** POST names one account; the rewrite moves the path's provider into the `provider` query. */
   RENAME: "/api/account/integrations/rename",
-  /** POST makes one account its provider's primary; the rewrite moves the path's provider into the `provider` query. */
-  PRIMARY: "/api/account/integrations/primary",
   /** GET is Connect's return from any provider's sign-in. */
   CONNECTED: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
 } as const;
@@ -220,28 +216,13 @@ function providerRows(
     .toSorted((a, b) => placeOf(a) - placeOf(b));
 }
 
-/**
- * The provider's primary account among its rows: the one the developer
- * made primary, or the first in place where none stands so, which a
- * provider whose primary was disconnected falls back to.
- */
-function primaryOf(
-  rows: readonly IntegrationConnectionRow[],
-): IntegrationConnectionRow | undefined {
-  return rows.find((row) => row.primary) ?? rows[0];
-}
-
 /** One account as the wire answers it, standing as given. */
-function accountOf(
-  row: IntegrationConnectionRow,
-  status: IntegrationStatus,
-  primary: boolean,
-): IntegrationAccount {
+function accountOf(row: IntegrationConnectionRow, status: IntegrationStatus): IntegrationAccount {
   return {
     provider: row.provider,
     connection: row.connectionName,
-    ...(row.label !== undefined ? { label: row.label } : undefined),
-    primary,
+    // An empty label marks an account whose grant named nothing, which is called by its place.
+    ...(row.label !== undefined && row.label !== "" ? { label: row.label } : undefined),
     status,
   };
 }
@@ -282,18 +263,16 @@ export interface IntegrationsAppSeams {
     connectionName: string,
     state: string,
   ) => IntegrationStoreEffect<void>;
-  deleteConnection: (userId: string, connectionName: string) => IntegrationStoreEffect<void>;
+  deleteAccount: (
+    account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
+  ) => IntegrationStoreEffect<boolean>;
+  /** Labels an account that carries no label yet, once, with what its grant named or an empty label for nothing; only the account under that grant's subject. */
+  fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
   /** Names one account; answers whether the account held it. */
   renameConnection: (
     userId: string,
     connectionName: string,
     label: string,
-  ) => IntegrationStoreEffect<boolean>;
-  /** Makes one account its provider's primary; answers whether the account held it. */
-  makePrimary: (
-    userId: string,
-    provider: IntegrationProvider,
-    connectionName: string,
   ) => IntegrationStoreEffect<boolean>;
   /** A fresh subject for another account's grant at Connect; random in production, fixed in a test. */
   mintSubject: () => string;
@@ -393,7 +372,11 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   connector: ConnectorService,
   row: IntegrationConnectionRow,
   state: string,
-): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<
+  { readonly completed: boolean; readonly accountName?: string },
+  HostedRefusal,
+  DatabaseServices
+> {
   const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: true }));
   if (Result.isFailure(issued)) {
     if (issued.failure.reason !== INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
@@ -402,11 +385,13 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
         issued.failure.message,
       );
     }
-    return false;
+    return { completed: false };
   }
-  return yield* hostedStoreOrUnavailable(
-    seams.completeSignIn(row.userId, row.connectionName, state, issued.success.accountName),
+  const { accountName } = issued.success;
+  const completed = yield* hostedStoreOrUnavailable(
+    seams.completeSignIn(row.userId, row.connectionName, state, accountName),
   );
+  return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
 
 /** Why a sign-in ended without a grant, as the statuses read answers it: the provider aside. */
@@ -446,6 +431,8 @@ const connectSignInFailure = /* @__PURE__ */ Effect.fnUntraced(function* (
 interface Standing {
   readonly status: IntegrationStatus;
   readonly failure?: SignInFailure;
+  /** The account's name at the provider a sign-in this read settled was granted with, where its grant named one. */
+  readonly accountName?: string;
 }
 
 /** Where a row stands once its sign-in is over without a grant: expired where it was, else disconnected. */
@@ -474,13 +461,43 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   // A first sign-in that ran out of time never connected anything.
   if (underWay === undefined) return { status: standingWithoutSignIn(row) };
   // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
-  if (yield* settledSignIn(seams, connector, row, underWay)) {
-    return { status: INTEGRATION_STATUS.CONNECTED };
+  const settled = yield* settledSignIn(seams, connector, row, underWay);
+  if (settled.completed) {
+    return {
+      status: INTEGRATION_STATUS.CONNECTED,
+      ...(settled.accountName !== undefined ? { accountName: settled.accountName } : undefined),
+    };
   }
   const failure = yield* connectSignInFailure(connector, row);
   if (failure === undefined) return { status: INTEGRATION_STATUS.PENDING };
   yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, underWay));
   return { status: standingWithoutSignIn(row), failure };
+});
+
+/**
+ * A connected account as the statuses read answers it, labelled once from
+ * its grant where it carries no label: an account connected before labels
+ * were kept, or one whose sign-in's grant named nothing then. Its name at
+ * the provider is read from Connect's grant fields, the same ones a
+ * sign-in's are, and stored; a grant that names nothing is stored as an
+ * empty label, so it is asked once and the account is called by its place;
+ * a grant that could not be read, or an account whose reconnect is under
+ * way, is left for the next read.
+ */
+const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  connector: ConnectorService,
+  row: IntegrationConnectionRow,
+  status: IntegrationStatus,
+): Effect.fn.Return<IntegrationConnectionRow, HostedRefusal, DatabaseServices> {
+  if (row.label !== undefined || status !== INTEGRATION_STATUS.CONNECTED) return row;
+  // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
+  if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
+  if (Result.isFailure(issued)) return row;
+  const label = issued.success.accountName ?? "";
+  yield* hostedStoreOrUnavailable(seams.fillLabel(row, label));
+  return { ...row, label };
 });
 
 /** Where one provider stands for the statuses read: its first account's word, its accounts, and why each sign-in this read ended failed. */
@@ -503,16 +520,23 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   rows: readonly IntegrationConnectionRow[],
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices> {
   const held = providerRows(rows, provider);
-  const primary = primaryOf(held);
   const settled = yield* Effect.forEach(held, (row) =>
-    Effect.map(standingStatus(seams, connector, row), (standing) => ({ row, standing })),
+    Effect.gen(function* () {
+      const standing = yield* standingStatus(seams, connector, row);
+      // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
+      const settled =
+        standing.accountName !== undefined && (row.label === undefined || row.label === "")
+          ? { ...row, label: standing.accountName }
+          : row;
+      return { row: yield* labelledRow(seams, connector, settled, standing.status), standing };
+    }),
   );
   const first = settled.find(({ row }) => row.connectionName === provider);
   return {
     status: first?.standing.status ?? INTEGRATION_STATUS.DISCONNECTED,
     accounts: settled
       .filter(({ standing }) => standing.status !== INTEGRATION_STATUS.DISCONNECTED)
-      .map(({ row, standing }) => accountOf(row, standing.status, row === primary)),
+      .map(({ row, standing }) => accountOf(row, standing.status)),
     failures: settled.flatMap(({ row, standing }) =>
       standing.failure === undefined
         ? []
@@ -928,18 +952,26 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     }
     const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
     const row = rows.find((each) => each.connectionName === connectionName);
-    if (row !== undefined) {
-      yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, row.connectionName));
-      yield* revokeIntegrationGrant(row);
+    if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
+      if (row !== undefined) yield* revokeIntegrationGrant(row);
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+        status: INTEGRATION_STATUS.DISCONNECTED,
+      });
     }
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });
+    // Note that only the row read is deleted and revoked, so an account added since under the same name stands, and is answered as it stands.
+    const standing = (yield* hostedStoreOrUnavailable(seams.readConnections(userId))).find(
+      (each) => each.connectionName === connectionName,
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      status: standing === undefined ? INTEGRATION_STATUS.DISCONNECTED : rowStatus(standing),
+    });
   },
 );
 
 /** The most a rename's body may carry, in bytes: one label, well past its own bound. */
 const MAXIMUM_RENAME_BYTES = 2048;
 
-/** The account as it stands after a rename or a Make primary, read again so the answer is what is stored. */
+/** The account as it stands after a rename, read again so the answer is what is stored. */
 const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   userId: string,
@@ -953,7 +985,7 @@ const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = held.find((each) => each.connectionName === connectionName);
   if (row === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    account: accountOf(row, rowStatus(row), row === primaryOf(held)),
+    account: accountOf(row, rowStatus(row)),
   });
 });
 
@@ -979,22 +1011,6 @@ const renameEndpoint = /* @__PURE__ */ Effect.fn("web/integrationRenameEndpoint"
     seams.renameConnection(userId, connectionName, asked.success.label),
   );
   if (!renamed) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return yield* accountAnswer(seams, userId, provider, connectionName);
-});
-
-/** POST: makes one account its provider's primary, and every other there not; one the account does not hold is not found. */
-const primaryEndpoint = /* @__PURE__ */ Effect.fn("web/integrationPrimaryEndpoint")(function* (
-  seams: IntegrationsAppSeams,
-): Effect.fn.Return<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices
-> {
-  yield* hostedMethod(HTTP_METHOD.POST);
-  const { provider, connectionName } = yield* requestedAccount();
-  const userId = yield* resolvedUserId(seams);
-  const made = yield* hostedStoreOrUnavailable(seams.makePrimary(userId, provider, connectionName));
-  if (!made) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return yield* accountAnswer(seams, userId, provider, connectionName);
 });
 
@@ -1079,7 +1095,7 @@ function refusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** The group: the eight paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the seven paths, one of them the browser's, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
 ): WebRoutes<DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient> {
@@ -1091,7 +1107,6 @@ export function integrationsApp(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CANCEL, refusing(cancelEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.RENAME, refusing(renameEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.PRIMARY, refusing(primaryEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECTED, connectedEndpoint(seams)),
     hostedNotFoundRoute,
   );

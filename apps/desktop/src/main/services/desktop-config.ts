@@ -26,6 +26,13 @@ interface DesktopLaunch {
 export interface DesktopConfig {
   /** Luke's own application-state root: the directory Electron's userData was moved to. */
   readonly stateRoot: string;
+  /**
+   * The named development instance this run is (`run.sh --instance`), absent
+   * for the plain one and always for a packaged build. A named instance runs
+   * beside the plain one, so it leaves to it what only one Luke may hold: the
+   * system-wide talk and stop keys.
+   */
+  readonly instance?: string;
   readonly runMode: RunMode;
   readonly appVersion: string;
   /** The commit the bundle was built from, absent where the build could not tell. */

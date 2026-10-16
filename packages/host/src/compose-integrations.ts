@@ -7,7 +7,6 @@ import {
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
-  integrationAccountParamsSchema,
   integrationProviderParamsSchema,
   integrationRenameParamsSchema,
 } from "@luke/features/integration-view";
@@ -22,7 +21,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or cancelled, a connection ended, an account named or made primary.
+ * compose-integrations.ts -- the account's integrations, asked of the service on the window's behalf: where each stands, a sign-in begun or cancelled, a connection ended, an account named.
  *
  * Nothing is held here. A Connect asks the service to begin a sign-in to
  * one provider and opens the address it answered in the browser through the
@@ -37,7 +36,7 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the integrations, as this concern asks it. */
 export type IntegrationsClient = Pick<
   HostedIntegrationsClient,
-  "statuses" | "connect" | "cancel" | "disconnect" | "tools" | "rename" | "primary"
+  "statuses" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
 >;
 
 export interface IntegrationsDependencies {
@@ -129,13 +128,6 @@ function composed(dependencies: IntegrationsDependencies): IntegrationsComposer 
         return carried<IntegrationAccountView>(
           yield* asked(client.rename(provider, connection, label)),
         );
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_PRIMARY]: (params) =>
-      Effect.gen(function* () {
-        const read = readEither(integrationAccountParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("the ask names an account");
-        const { provider, connection } = read.success;
-        return carried<IntegrationAccountView>(yield* asked(client.primary(provider, connection)));
       }),
   };
 

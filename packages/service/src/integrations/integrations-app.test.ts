@@ -40,10 +40,11 @@ import { CONNECT_SIGN_IN_RESULT, type ConnectSignInResult } from "./integration-
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
+  deleteIntegrationAccount,
   deleteIntegrationConnection,
   endIntegrationSignIn,
   expireIntegrationConnection,
-  makeIntegrationPrimary,
+  fillIntegrationLabel,
   readIntegrationConnections,
   readIntegrationSignIn,
   renameIntegrationConnection,
@@ -131,7 +132,12 @@ const standing = (
   variables: Readonly<Record<string, string>>,
   githubApp: Layer.Layer<GitHubApp> = GitHubApp.layer(undefined),
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
-  connect: { readonly declines?: boolean; readonly ends?: ConnectSignInResult } = {},
+  connect: {
+    readonly declines?: boolean;
+    readonly ends?: ConnectSignInResult;
+    readonly names?: (subject: string) => string | undefined;
+    readonly grantsOnce?: boolean;
+  } = {},
   seams: Partial<IntegrationsAppSeams> = {},
 ) =>
   Effect.gen(function* () {
@@ -158,9 +164,9 @@ const standing = (
         beginSignIn: beginIntegrationSignIn,
         completeSignIn: completeIntegrationSignIn,
         endSignIn: endIntegrationSignIn,
-        deleteConnection: deleteIntegrationConnection,
+        deleteAccount: deleteIntegrationAccount,
+        fillLabel: fillIntegrationLabel,
         renameConnection: renameIntegrationConnection,
-        makePrimary: makeIntegrationPrimary,
         mintState: mintIntegrationState,
         mintSubject: () => {
           subjects += 1;
@@ -545,7 +551,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       }),
   );
   it.effect(
-    "a second account at a provider signs in beside the first, and is named, made primary, and disconnected on its own",
+    "a second account at a provider signs in beside the first, and is named and disconnected on its own",
     () =>
       Effect.gen(function* () {
         const group = yield* standing(NOTION_CONNECTOR);
@@ -565,18 +571,8 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         // The read settles both sign-ins: a Connect that grants every subject holds a grant for each.
         const settled = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.deepEqual(accountsIn(settled.body), [
-          {
-            provider: NOTION,
-            connection: NOTION,
-            primary: true,
-            status: INTEGRATION_STATUS.CONNECTED,
-          },
-          {
-            provider: NOTION,
-            connection: "notion-2",
-            primary: false,
-            status: INTEGRATION_STATUS.CONNECTED,
-          },
+          { provider: NOTION, connection: NOTION, status: INTEGRATION_STATUS.CONNECTED },
+          { provider: NOTION, connection: "notion-2", status: INTEGRATION_STATUS.CONNECTED },
         ]);
         assert.ok(addableIn(settled.body).includes(NOTION));
         assert.equal(statusIn(settled.body, NOTION), INTEGRATION_STATUS.CONNECTED);
@@ -591,32 +587,18 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
             provider: NOTION,
             connection: "notion-2",
             label: "Personal",
-            primary: false,
             status: INTEGRATION_STATUS.CONNECTED,
           },
         });
-        yield* group.ask(notion(`primary?provider=${NOTION}&connection=notion-2`), {
-          method: "POST",
-          userId,
-        });
-        const swapped = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-        assert.deepEqual(
-          accountsIn(swapped.body).map((account) => [account.connection, account.primary]),
-          [
-            [NOTION, false],
-            ["notion-2", true],
-          ],
-        );
-
         yield* group.ask(notion(`disconnect?provider=${NOTION}&connection=notion-2`), {
           method: "POST",
           userId,
         });
         const after = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-        // The first account stands, and falls back to primary with no other left.
+        // The first account stands alone.
         assert.deepEqual(
-          accountsIn(after.body).map((account) => [account.connection, account.primary]),
-          [[NOTION, true]],
+          accountsIn(after.body).map((account) => account.connection),
+          [NOTION],
         );
       }),
   );
@@ -781,6 +763,47 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
+    "a disconnect that read an account replaced since under the same name, even the first under the same subject, leaves the replacement standing and says so",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dee@replaced.example");
+        const first = (state: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              userId,
+              firstIntegrationAccount(userId, NOTION),
+              state,
+              Redacted.make("connect-verifier"),
+            ),
+            completeIntegrationSignIn(userId, NOTION, state),
+          );
+        yield* first(`state-read-${userId}`);
+        const read = yield* readIntegrationConnections(userId);
+        // Another window disconnects it and connects Notion again, under the same name and subject, after this disconnect read it.
+        yield* deleteIntegrationConnection(userId, NOTION);
+        yield* first(`state-replacing-${userId}`);
+        const replacing = yield* readIntegrationConnections(userId);
+        let reads = 0;
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, undefined, {
+          readConnections: () => {
+            reads += 1;
+            return Effect.succeed(reads === 1 ? read : replacing);
+          },
+        });
+
+        const answer = yield* group.ask(`/api/account/integrations/disconnect?provider=${NOTION}`, {
+          method: "POST",
+          userId,
+        });
+        assert.deepEqual(answer.body, { status: INTEGRATION_STATUS.CONNECTED });
+        assert.deepEqual(
+          (yield* readIntegrationConnections(userId)).map((row) => row.id),
+          replacing.map((row) => row.id),
+        );
+      }),
+  );
+
+  it.effect(
     "a read that ends the sign-ins holding a provider's places offers the provider again in that same read",
     () =>
       Effect.gen(function* () {
@@ -800,6 +823,119 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
 
         assert.equal(accountsIn(read.body).length, 0);
         assert.ok(addableIn(read.body).includes(NOTION));
+      }),
+  );
+
+  it.effect(
+    "an account connected before labels were kept takes its name at the provider from its grant at the next read, once",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dean@before-labels.example");
+        // The account's one Notion, connected as the upgrade's migration left it: under its user id, with no label.
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, NOTION),
+          `state-before-labels-${userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(userId, NOTION, `state-before-labels-${userId}`);
+        const labelsOf = (group: { ask: typeof upgraded.ask }) =>
+          Effect.map(group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }), ({ body }) =>
+            accountsIn(body).map((account) => account.label),
+          );
+        const upgraded = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+          names: (subject) => (subject === userId ? "Acme" : undefined),
+        });
+
+        assert.deepEqual(yield* labelsOf(upgraded), ["Acme"]);
+        // The name is kept: a Connect that no longer names the workspace still answers it.
+        const silent = yield* standing(NOTION_CONNECTOR);
+        assert.deepEqual(yield* labelsOf(silent), ["Acme"]);
+      }),
+  );
+
+  it.effect(
+    "a read while an unlabelled account reconnects leaves its name to the grant the reconnect ends with",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("rei@reconnects.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, NOTION),
+          `state-reconnect-${userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(userId, NOTION, `state-reconnect-${userId}`);
+        let named = "Acme";
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+          names: () => named,
+        });
+        const labels = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
+          ({ body }) => accountsIn(body).map((account) => account.label),
+        );
+        yield* group.ask(`/api/account/integrations/connect?provider=${NOTION}`, {
+          method: "POST",
+          userId,
+        });
+
+        // The read lands while the browser is still at the provider, choosing another workspace.
+        assert.deepEqual(yield* labels, [undefined]);
+        const [reconnecting] = yield* readIntegrationConnections(userId);
+        named = "Personal";
+        yield* completeIntegrationSignIn(userId, NOTION, reconnecting?.state ?? "", named);
+        assert.deepEqual(yield* labels, ["Personal"]);
+      }),
+  );
+
+  it.effect(
+    "an account whose grant names nothing is read for a name once, and is called by its place after",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("pat@unnamed.example");
+        yield* beginIntegrationSignIn(
+          userId,
+          firstIntegrationAccount(userId, NOTION),
+          `state-unnamed-${userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(userId, NOTION, `state-unnamed-${userId}`);
+        const unnamed = yield* standing(NOTION_CONNECTOR);
+        const read = yield* unnamed.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(read.body).map((account) => account.label),
+          [undefined],
+        );
+        // Asked once: a grant that names the workspace later is not asked again for it.
+        const naming = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+          names: () => "Acme",
+        });
+        const after = yield* naming.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(after.body).map((account) => account.label),
+          [undefined],
+        );
+      }),
+  );
+
+  it.effect(
+    "a sign-in a read settles answers its grant's name at once, though Connect refuses every read after",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+          names: () => "Acme",
+          grantsOnce: true,
+        });
+        const userId = yield* openAccount("ana@settles-once.example");
+        yield* group.ask(`/api/account/integrations/connect?provider=${NOTION}`, {
+          method: "POST",
+          userId,
+        });
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(read.body).map((account) => [account.status, account.label]),
+          [[INTEGRATION_STATUS.CONNECTED, "Acme"]],
+        );
       }),
   );
 });

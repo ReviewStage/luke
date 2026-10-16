@@ -1,4 +1,4 @@
-import type { ShownCode } from "./plan-wire.js";
+import type { ShownCode } from "./task-wire.js";
 
 /**
  * A turn's events: what the voice hears of a turn it asked while the turn

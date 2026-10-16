@@ -1,14 +1,14 @@
 import {
-  PLAN_FILE_BOUNDS,
-  PLAN_FILE_REFUSAL,
-  type PlanFileRefusal,
-} from "@luke/features/plan-wire";
+  TASK_FILE_BOUNDS,
+  TASK_FILE_REFUSAL,
+  type TaskFileRefusal,
+} from "@luke/features/task-wire";
 import type {
-  PlanCode,
-  PlanCodeShowing,
-  PlanFileShown,
-  PlanningFileAnswer,
-} from "@luke/features/planning-view";
+  TaskCode,
+  TaskCodeShowing,
+  TaskFileShown,
+  TasksFileAnswer,
+} from "@luke/features/tasks-view";
 import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 
@@ -33,7 +33,7 @@ export interface FileLines {
   readonly commit: string | undefined;
   readonly lineCount: number;
   readonly firstLine: number;
-  readonly lines: PlanCode["lines"];
+  readonly lines: TaskCode["lines"];
 }
 
 export type FileRead =
@@ -41,7 +41,7 @@ export type FileRead =
   | ({ readonly kind: typeof FILE_READ.READY } & FileLines)
   | {
       readonly kind: typeof FILE_READ.REFUSED;
-      readonly refusal: PlanFileRefusal;
+      readonly refusal: TaskFileRefusal;
       /** The branch GitHub found nothing at the path on, where the service named it. */
       readonly branch: string | undefined;
     }
@@ -55,14 +55,14 @@ export interface FileWindow {
 
 /** What a File tab says in its file's place, for each reason the file is not shown. */
 const FILE_REFUSAL_LINE = {
-  [PLAN_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
-  [PLAN_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
-  [PLAN_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
-  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
-  [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
+  [TASK_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
+  [TASK_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
+  [TASK_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
+  [TASK_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
+  [TASK_FILE_REFUSAL.NOT_REACHABLE]:
     "The Luke GitHub App no longer reaches this task's repository.",
-  [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
-} as const satisfies Record<PlanFileRefusal, string>;
+  [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
+} as const satisfies Record<TaskFileRefusal, string>;
 
 /** The characters of a commit's SHA a line names it by, as GitHub abbreviates one. */
 const SHORT_COMMIT_CHARS = 7;
@@ -79,21 +79,21 @@ export function shortCommit(sha: string): string {
  * the commit it was read at, which an agent may not have pushed.
  */
 export function refusalLine(
-  refusal: PlanFileRefusal,
+  refusal: TaskFileRefusal,
   branch: string | undefined,
   commit?: string,
 ): string {
-  if (refusal === PLAN_FILE_REFUSAL.MISSING && commit !== undefined) {
+  if (refusal === TASK_FILE_REFUSAL.MISSING && commit !== undefined) {
     return `This file is not at commit ${shortCommit(commit)} on GitHub, or the commit was never pushed.`;
   }
-  if (refusal === PLAN_FILE_REFUSAL.MISSING && branch !== undefined) {
+  if (refusal === TASK_FILE_REFUSAL.MISSING && branch !== undefined) {
     return `This file is not on ${branch}, the branch Luke reads from GitHub.`;
   }
   return FILE_REFUSAL_LINE[refusal];
 }
 
 /** Whether lines Luke showed are the lines a tab reads: any of his showings for a read of the default branch, and one read at the same commit for a read pinned to one. */
-export function shownWhereRead(code: PlanCode, commit: string | undefined): boolean {
+export function shownWhereRead(code: TaskCode, commit: string | undefined): boolean {
   return commit === undefined || code.commit === commit;
 }
 
@@ -104,9 +104,9 @@ export function shownWhereRead(code: PlanCode, commit: string | undefined): bool
  * the tab reads.
  */
 export function snippetOf(
-  shown: readonly PlanCodeShowing[] | undefined,
+  shown: readonly TaskCodeShowing[] | undefined,
   file: OpenFile,
-): PlanCode | undefined {
+): TaskCode | undefined {
   const ofFile = (shown ?? []).filter(
     (each) => each.code.ref.path === file.path && shownWhereRead(each.code, file.commit),
   );
@@ -134,7 +134,7 @@ export interface FileNote {
  * notes were asked for leave no note.
  */
 export function notesOf(
-  shown: readonly PlanCodeShowing[] | undefined,
+  shown: readonly TaskCodeShowing[] | undefined,
   path: string,
   repository: string | null,
   commit: string | undefined,
@@ -166,8 +166,8 @@ export function fileUrl(held: FileLines, file: OpenFile): string {
 }
 
 /** Whether a refusal may pass with time, so the tab offers to read again. */
-export function refusalPasses(refusal: PlanFileRefusal): boolean {
-  return refusal === PLAN_FILE_REFUSAL.UNAVAILABLE;
+export function refusalPasses(refusal: TaskFileRefusal): boolean {
+  return refusal === TASK_FILE_REFUSAL.UNAVAILABLE;
 }
 
 /**
@@ -176,7 +176,7 @@ export function refusalPasses(refusal: PlanFileRefusal): boolean {
  * below one join it exactly.
  */
 export function windowAt(line: number): FileWindow {
-  const { WINDOW_LINES } = PLAN_FILE_BOUNDS;
+  const { WINDOW_LINES } = TASK_FILE_BOUNDS;
   const firstLine = Math.floor((Math.max(1, line) - 1) / WINDOW_LINES) * WINDOW_LINES + 1;
   return { firstLine, lastLine: firstLine + WINDOW_LINES - 1 };
 }
@@ -209,7 +209,7 @@ export function windowUnread(held: FileLines): FileWindow | undefined {
  * run afresh. The file's length is the newest read's, since the file is
  * read as it stands at each read.
  */
-export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
+export function withWindow(held: FileRead, read: TaskFileShown): FileLines {
   const window: FileLines = {
     repository: read.repository,
     branch: read.branch,
@@ -250,7 +250,7 @@ export type WholeText =
  * to carry whole, as one grown past its bound since it was drawn; or a read
  * that did not land.
  */
-export function wholeTextOf(answer: PlanningFileAnswer): WholeText {
+export function wholeTextOf(answer: TasksFileAnswer): WholeText {
   if ("text" in answer) return { kind: WHOLE_TEXT.READ, text: answer.text.text };
   if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED };
   return { kind: WHOLE_TEXT.UNREAD };

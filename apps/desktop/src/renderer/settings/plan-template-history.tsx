@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/plan-wire";
-import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -42,7 +42,7 @@ const DEFAULT_SUMMARY = {
 const EARLIER_SUMMARY = "The template before its history began";
 
 /** A read the service did not answer, as the history hears one. */
-const UNANSWERED = { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
 /**
  * What a template revision did, in a few words: the version a restore

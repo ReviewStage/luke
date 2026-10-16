@@ -41,24 +41,22 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.VIDEO_CALLS,
     name: "Video calls",
     detail:
-      "Calls open with Luke on video at the top of the Call tab. Keyframe Labs animates him from his " +
-      "voice, so what he says about your plan reaches Keyframe. Your own voice never does.",
+      "Keyframe Labs animates Luke from his voice, so what he says about your plan reaches " +
+      "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
   },
   {
     key: EXPERIMENT.AUTOMATIONS,
     name: "Automations",
-    detail:
-      "Start a coding agent on a schedule, for you or for the whole workspace, from the Automations page in the sidebar.",
+    detail: "Start a coding agent on a schedule, for you or for the whole workspace.",
     owner: "Dean",
     since: "2026-10-15",
   },
   {
     key: EXPERIMENT.FACTORY,
     name: "Factory",
-    detail:
-      "Every task on one board, from Talk to Build to Ship, beside the Inbox. Read-only for now.",
+    detail: "Every task on one board, from Talk to Build to Ship. Read-only for now.",
     owner: "Dean",
     since: "2026-10-14",
   },

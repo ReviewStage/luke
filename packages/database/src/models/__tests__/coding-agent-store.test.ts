@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -14,36 +17,43 @@ import {
   TURN_STATUS,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Clock, DateTime, Effect, Option } from "effect";
+import { Clock, DateTime, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
+import { task } from "../../schemas/plan.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {
   archiveCodingAgent,
+  archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
   delegationsOf,
+  IDLE_ARCHIVE,
+  linePlacesOf,
   lineSendersOf,
   listCodingAgentsOnPullRequest,
-  listPlanlessCodingAgents,
+  listPublishedCodingAgentsById,
+  listTasklessCodingAgents,
   listWorkspaceCodingAgents,
   pinCodingAgent,
+  planNamesOf,
   readCodingAgent,
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
   recordTurnFastRefused,
   settleCodingAgentAuthor,
   turnUsagesOf,
+  unarchiveCodingAgentFrom,
   writeDelegation,
 } from "../coding-agent-store.js";
 import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
-import { createPlan } from "../plan-store.js";
 import { conversationReachableBy } from "../recorded-session.js";
+import { createTask } from "../task-store.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
 /**
@@ -54,6 +64,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * with no plan, which its workspace's members reach and no one else does,
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
+ * And where in a turn under way each line arrived, as the turn took it in.
  * And who an agent writes as on GitHub, settled once by its first session.
  * And an agent's pin, which is its reader's own, as a plan's is.
  *
@@ -166,6 +177,10 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
+        const byAgent = yield* line("agent", {
+          kind: MESSAGE_SENDER.AGENT,
+          name: "Invite expiry",
+        });
         // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
           .insert(messages)
@@ -180,7 +195,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
-        const ids = [byTeammate, byLuke, byAutomation, byGitHub, earlier?.id ?? ""];
+        const ids = [byTeammate, byLuke, byAutomation, byGitHub, byAgent, earlier?.id ?? ""];
 
         const senders = yield* lineSendersOf(target, ids);
         assert.deepEqual(
@@ -190,6 +205,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             { kind: MESSAGE_SENDER.LUKE },
             { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
             { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
+            { kind: MESSAGE_SENDER.AGENT, name: "Invite expiry" },
             undefined,
           ],
         );
@@ -204,6 +220,86 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           kind: MESSAGE_SENDER.MEMBER,
           member: undefined,
         });
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's line places", (it) => {
+  it.effect(
+    "a line a turn took in after its second step reads as arriving after that step of the turn's journal, the line that opened the turn names no place, and another account reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        /** A line sent and then taken in by the turn, answering its row's id. */
+        const taken = (text: string) =>
+          Effect.gen(function* () {
+            const sender: LineSender = { kind: MESSAGE_SENDER.GITHUB, login: "octocat" };
+            yield* writer.writeAwaitingLine(
+              target,
+              { text, clientKey: text, sender },
+              Effect.succeed(true),
+            );
+            assert.deepEqual(
+              Result.map(
+                yield* writer.takeAwaitingLine(target, { text, turnId }),
+                (ids) => ids.length,
+              ),
+              Result.succeed(1),
+            );
+            const read = yield* readMessageByClientId(
+              owner,
+              target.conversationId,
+              {},
+              sentLineId(text),
+            );
+            assert.ok(read.ok);
+            return read.value[0]?.id ?? "";
+          });
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          ...turn,
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: 0,
+        });
+        const opening = yield* taken("Fix the tile.");
+        for (const step of [1, 2]) {
+          yield* writer.consume(target, {
+            ...turn,
+            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            sequence: step + 1,
+            step,
+          });
+        }
+        const reviewed = yield* taken("@octocat reviewed your pull request #12.");
+        const journal = yield* readMessageByClientId(owner, target.conversationId, {}, turnId);
+        assert.ok(journal.ok);
+
+        const places = yield* linePlacesOf(target, [opening, reviewed]);
+        assert.deepEqual(
+          [opening, reviewed].map((id) => places.get(id)),
+          [undefined, { journalId: journal.value[0]?.id, afterStep: 2 }],
+        );
+        assert.equal(
+          (yield* linePlacesOf({ userId: other, conversationId: target.conversationId }, [
+            reviewed,
+          ])).size,
+          0,
+        );
       }),
   );
 });
@@ -266,7 +362,7 @@ const openWorkspace = (userId: string) =>
   });
 
 /** An agent of the workspace, on no plan as an automation's run leaves one unless a plan is given, on the repository and at the instant given where they are. */
-const planlessAgent = (
+const tasklessAgent = (
   userId: string,
   organizationId: string,
   patch: {
@@ -284,7 +380,7 @@ const planlessAgent = (
       organizationId,
       userId,
       conversationId,
-      ...(patch.planId === undefined ? undefined : { planId: patch.planId }),
+      ...(patch.planId === undefined ? undefined : { taskId: patch.planId }),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       prompt: "Sweep the flaky tests.",
@@ -292,6 +388,7 @@ const planlessAgent = (
       repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
       ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
+      ...(patch.planId === undefined ? undefined : { planId: patch.planId }),
     });
     return { agentId: id, conversationId };
   });
@@ -315,11 +412,11 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
           }),
         );
         yield* openWorkspace(outsider);
-        const { agentId, conversationId } = yield* planlessAgent(starter, workspace);
+        const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
 
         const read = Option.getOrThrow(yield* readCodingAgent(teammate, agentId));
         assert.deepEqual(
-          [read.planId, read.organizationId, read.userId],
+          [read.taskId, read.organizationId, read.userId],
           [null, workspace, starter],
         );
         assert.ok(Option.isNone(yield* readCodingAgent(outsider, agentId)));
@@ -336,6 +433,42 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
   );
 });
 
+it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
+  it.effect(
+    "agents named by id are read for any member of their workspace, an archived one among them, and as none for an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const first = yield* tasklessAgent(starter, workspace);
+        const second = yield* tasklessAgent(starter, workspace);
+        yield* archiveCodingAgent(starter, second.agentId, true);
+
+        const read = yield* listPublishedCodingAgentsById(teammate, [
+          first.agentId,
+          second.agentId,
+          randomUUID(),
+        ]);
+        assert.deepEqual(
+          read.map(({ agent, published }) => [agent.id, agent.archivedAt !== null, published]),
+          [
+            [first.agentId, false, null],
+            [second.agentId, true, null],
+          ],
+        );
+        assert.deepEqual(
+          yield* listPublishedCodingAgentsById(outsider, [first.agentId, second.agentId]),
+          [],
+          "another workspace's agents are none of an outsider's",
+        );
+      }),
+  );
+});
+
 it.layer(getTestDB())("the coding-agent store's archive of an agent left as it was read", (it) => {
   it.effect(
     "an agent whose conversation's lines moved on since it was read stands, and one whose did not is archived, once",
@@ -343,7 +476,7 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
       Effect.gen(function* () {
         const starter = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
-        const { agentId, conversationId } = yield* planlessAgent(starter, workspace);
+        const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
         const db = yield* Database;
         const [read] = yield* db
           .select({ seq: conversations.nextMessageSeq })
@@ -366,9 +499,67 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
   );
 });
 
+it.layer(getTestDB())("the coding-agent store's record of who archived an agent", (it) => {
+  it.effect(
+    "a member's archive records the member, an idle agent's archive made for a member records who made it and why once, a working one stands, and an unarchive clears only the archive its reader saw",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const byAgent = {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          userId: teammate,
+          agentId: randomUUID(),
+          agentName: "Billing helper",
+          reason: "Its pull request merged.",
+        };
+        const idle = () => Effect.succeed(true);
+
+        const byMember = yield* archiveCodingAgent(teammate, agentId, true);
+        assert.deepEqual(Option.getOrThrow(byMember).archivedBy, {
+          by: CODING_AGENT_ARCHIVER.MEMBER,
+          userId: teammate,
+        });
+        const seen = Option.getOrThrow(byMember).archivedAt;
+        assert.ok(seen !== null);
+        assert.equal(yield* unarchiveCodingAgentFrom(teammate, agentId, seen), true);
+        // The archive made again is made later, as any archive after a read of the last one is.
+        yield* TestClock.adjust("1 second");
+        assert.equal(
+          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, () => Effect.succeed(false)),
+          IDLE_ARCHIVE.WORKING,
+        );
+        assert.equal(
+          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, idle),
+          IDLE_ARCHIVE.ARCHIVED,
+        );
+        assert.equal(
+          yield* archiveIdleCodingAgent(starter, agentId, { ...byAgent, reason: "Again." }, idle),
+          IDLE_ARCHIVE.ALREADY,
+        );
+        const archived = Option.getOrThrow(yield* readCodingAgent(starter, agentId));
+        assert.deepEqual(archived.archivedBy, byAgent);
+        assert.equal(
+          yield* archiveIdleCodingAgent(outsider, agentId, byAgent, idle),
+          IDLE_ARCHIVE.NOT_FOUND,
+        );
+        // An unarchive from the archive a reader saw before it was made again takes nothing.
+        assert.equal(yield* unarchiveCodingAgentFrom(starter, agentId, seen), false);
+        assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+        const back = Option.getOrThrow(yield* archiveCodingAgent(starter, agentId, false));
+        assert.deepEqual([back.archivedAt, back.archivedBy], [null, null]);
+      }),
+  );
+});
+
 it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => {
   it.effect(
-    "a workspace's agents are listed newest first for any member, an archived one left out, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
+    "a workspace's agents are listed newest first for any member, an archived one left out unless asked for, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -386,14 +577,14 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           }),
         );
         const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
-        const oldest = yield* planlessAgent(starter, workspace, { createdAt: at(8) });
-        const web = yield* planlessAgent(teammate, workspace, {
+        const oldest = yield* tasklessAgent(starter, workspace, { createdAt: at(8) });
+        const web = yield* tasklessAgent(teammate, workspace, {
           repository: "Acme/Web",
           createdAt: at(9),
         });
-        const archived = yield* planlessAgent(starter, workspace, { createdAt: at(10) });
-        const newest = yield* planlessAgent(starter, workspace, { createdAt: at(11) });
-        yield* planlessAgent(outsider, elsewhere, { createdAt: at(12) });
+        const archived = yield* tasklessAgent(starter, workspace, { createdAt: at(10) });
+        const newest = yield* tasklessAgent(starter, workspace, { createdAt: at(11) });
+        yield* tasklessAgent(outsider, elsewhere, { createdAt: at(12) });
         yield* Effect.flatMap(Database, (db) =>
           db
             .update(codingAgent)
@@ -415,11 +606,75 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           ),
           [web.agentId],
         );
+        assert.deepEqual(
+          ids(
+            yield* listWorkspaceCodingAgents(teammate, workspace, {
+              includeArchived: true,
+              limit: 10,
+            }),
+          ),
+          [newest.agentId, archived.agentId, web.agentId, oldest.agentId],
+        );
         assert.deepEqual(ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 2 })), [
           newest.agentId,
           web.agentId,
         ]);
         assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
+
+        // An agent on a plan is listed with the rest, and alone where its plan is named.
+        const invitations = yield* createTask(teammate, {
+          organizationId: workspace,
+          name: "Teammate invitations",
+        });
+        const archivedPlan = yield* createTask(starter, { organizationId: workspace, name: "Old" });
+        yield* Effect.flatMap(Database, (db) =>
+          db
+            .update(task)
+            .set({ archivedAt: at(14) })
+            .where(eq(task.id, archivedPlan.id)),
+        );
+        const onTask = yield* tasklessAgent(teammate, workspace, {
+          planId: invitations.id,
+          createdAt: at(15),
+        });
+        assert.deepEqual(
+          ids(
+            yield* listWorkspaceCodingAgents(starter, workspace, {
+              planId: invitations.id,
+              includeArchived: true,
+              limit: 10,
+            }),
+          ),
+          [onTask.agentId],
+        );
+        assert.equal(
+          ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 10 }))[0],
+          onTask.agentId,
+        );
+        const elsewherePlan = yield* createTask(outsider, {
+          organizationId: elsewhere,
+          name: "Elsewhere",
+        });
+        const names = yield* planNamesOf(starter, [
+          invitations.id,
+          archivedPlan.id,
+          elsewherePlan.id,
+          invitations.id,
+        ]);
+        assert.equal(names.size, 2, "a plan of a workspace the account is not in names nothing");
+        assert.deepEqual(names.get(invitations.id), {
+          name: "Teammate invitations",
+          archived: false,
+        });
+        assert.deepEqual(names.get(archivedPlan.id), { name: "Old", archived: true });
+        assert.equal((yield* planNamesOf(outsider, [invitations.id])).size, 0);
+        assert.deepEqual(
+          yield* listWorkspaceCodingAgents(outsider, workspace, {
+            includeArchived: true,
+            limit: 10,
+          }),
+          [],
+        );
       }),
   );
 });
@@ -433,7 +688,7 @@ it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
         const outsider = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
         yield* openWorkspace(outsider);
-        const { agentId } = yield* planlessAgent(starter, workspace);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
         const before = Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author;
 
         const refused = yield* settleCodingAgentAuthor(
@@ -494,12 +749,12 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
           }),
         );
         const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
-        const task = yield* createPlan(starter, { organizationId: workspace, name: "Billing" });
-        const oldest = yield* planlessAgent(starter, workspace, { createdAt: at(8) });
-        yield* planlessAgent(starter, workspace, { createdAt: at(9), planId: task.id });
-        const archived = yield* planlessAgent(teammate, workspace, { createdAt: at(10) });
-        const newest = yield* planlessAgent(teammate, workspace, { createdAt: at(11) });
-        const outside = yield* planlessAgent(outsider, elsewhere, { createdAt: at(12) });
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const oldest = yield* tasklessAgent(starter, workspace, { createdAt: at(8) });
+        yield* tasklessAgent(starter, workspace, { createdAt: at(9), planId: task.id });
+        const archived = yield* tasklessAgent(teammate, workspace, { createdAt: at(10) });
+        const newest = yield* tasklessAgent(teammate, workspace, { createdAt: at(11) });
+        const outside = yield* tasklessAgent(outsider, elsewhere, { createdAt: at(12) });
         yield* Effect.flatMap(Database, (db) =>
           db
             .update(codingAgent)
@@ -508,15 +763,15 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
         );
         const ids = (agents: readonly { readonly id: string }[]) => agents.map((agent) => agent.id);
 
-        assert.deepEqual(ids(yield* listPlanlessCodingAgents(starter)), [
+        assert.deepEqual(ids(yield* listTasklessCodingAgents(starter)), [
           newest.agentId,
           oldest.agentId,
         ]);
         assert.deepEqual(
-          ids(yield* listPlanlessCodingAgents(teammate, { includeArchived: true })),
+          ids(yield* listTasklessCodingAgents(teammate, { includeArchived: true })),
           [newest.agentId, archived.agentId, oldest.agentId],
         );
-        assert.deepEqual(ids(yield* listPlanlessCodingAgents(outsider)), [outside.agentId]);
+        assert.deepEqual(ids(yield* listTasklessCodingAgents(outsider)), [outside.agentId]);
       }),
   );
 });
@@ -540,12 +795,12 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
           deletions: 0,
           changedFiles: 1,
         });
-        const author = yield* planlessAgent(dean, deans, { createdAt: new Date(1_000) });
-        const reviewer = yield* planlessAgent(charles, charless, { createdAt: new Date(2_000) });
-        const other = yield* planlessAgent(dean, deans);
-        const elsewhere = yield* planlessAgent(dean, deans, { repository: "acme/web" });
+        const author = yield* tasklessAgent(dean, deans, { createdAt: new Date(1_000) });
+        const reviewer = yield* tasklessAgent(charles, charless, { createdAt: new Date(2_000) });
+        const other = yield* tasklessAgent(dean, deans);
+        const elsewhere = yield* tasklessAgent(dean, deans, { repository: "acme/web" });
         // An agent that published nothing yet is found by no pull request.
-        yield* planlessAgent(dean, deans);
+        yield* tasklessAgent(dean, deans);
         yield* recordCodingAgentPublished(dean, author.agentId, pullRequest(12));
         yield* recordCodingAgentPublished(charles, reviewer.agentId, pullRequest(12));
         yield* recordCodingAgentPublished(dean, other.agentId, pullRequest(13));
@@ -573,13 +828,13 @@ const openSharedAgent = Effect.gen(function* () {
   const charles = yield* openAccount;
   const workspace = yield* openWorkspace(dean);
   yield* joinWorkspace(workspace, charles);
-  const { agentId } = yield* planlessAgent(dean, workspace);
+  const { agentId } = yield* tasklessAgent(dean, workspace);
   return { dean, charles, agentId };
 });
 
 /** The agent's pin as the account's list reads it, archived agents among the rest; none where the list holds no pin of it. */
 const pinReadBy = (userId: string, agentId: string) =>
-  Effect.map(listPlanlessCodingAgents(userId, { includeArchived: true }), (agents) =>
+  Effect.map(listTasklessCodingAgents(userId, { includeArchived: true }), (agents) =>
     agents.find(({ id }) => id === agentId)?.pinnedAt?.getTime(),
   );
 
@@ -646,7 +901,7 @@ it.layer(getTestDB())("an agent's pin", (it) => {
 
       assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, true)));
       assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, false)));
-      assert.deepEqual(yield* listPlanlessCodingAgents(outsider, { includeArchived: true }), []);
+      assert.deepEqual(yield* listTasklessCodingAgents(outsider, { includeArchived: true }), []);
       assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: dean }]);
     }),
   );
@@ -657,8 +912,8 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       Effect.gen(function* () {
         const dean = yield* openAccount;
         const workspace = yield* openWorkspace(dean);
-        const task = yield* createPlan(dean, { organizationId: workspace, name: "Billing" });
-        const { agentId } = yield* planlessAgent(dean, workspace, { planId: task.id });
+        const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
+        const { agentId } = yield* tasklessAgent(dean, workspace, { planId: task.id });
 
         assert.ok(Option.isNone(yield* pinCodingAgent(dean, agentId, true)));
         assert.deepEqual(yield* pinnedOnes(agentId), []);

@@ -3,9 +3,9 @@ import {
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
-import { PLAN_CALL_FAILURE, type PlanningFileAnswer } from "@luke/features/planning-view";
+import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -89,8 +89,8 @@ const NOT_READ = "Some items could not be read.";
 function listedHoldings(
   holdings: PlansControl["inboxPlans"],
   listed: PlansControl["plans"],
-): readonly AppInboxPlanHolding[] {
-  return holdings.filter((holding) => listed.some((plan) => plan.id === holding.planId));
+): readonly AppInboxTaskHolding[] {
+  return holdings.filter((holding) => listed.some((plan) => plan.id === holding.taskId));
 }
 
 /** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
@@ -130,8 +130,8 @@ function ListNote({
 }
 
 /** A planless item's code reads no file, there being no plan whose repository it reads through. */
-const UNREAD_FILE = (): Promise<PlanningFileAnswer> =>
-  Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
+  Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
 /** The window's Inbox, in the plan's place: every plan's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Element {
@@ -193,7 +193,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
     shown: plans.shown,
     waiting:
-      plans.inbox.some((each) => each.planId === planId) ||
+      plans.inbox.some((each) => each.taskId === planId) ||
       plans.inboxPlanless.some((each) => each.agentId === chosenAgentId),
     agents,
   });
@@ -204,10 +204,10 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
   const holdsLive = live.read && !live.failed;
   const planEntries: InboxGroup[] = holdings.flatMap((holding) => {
-    const plan = plans.plans.find((each) => each.id === holding.planId);
+    const plan = plans.plans.find((each) => each.id === holding.taskId);
     if (plan === undefined) return [];
     const items =
-      holdsLive && holding.planId === planId ? liveItems : read.items.get(holding.planId);
+      holdsLive && holding.taskId === planId ? liveItems : read.items.get(holding.taskId);
     return [{ holder: planHolder(plan), items: items ?? [] }];
   });
   const planlessRead =
@@ -258,13 +258,13 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     (planId !== undefined &&
       !read.current.has(planId) &&
       !live.read &&
-      (holdings.some((holding) => holding.planId === planId) || agentsUnread)) ||
+      (holdings.some((holding) => holding.taskId === planId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
       !planless.current.has(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
   const reading =
-    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    holdings.some((holding) => !read.items.has(holding.taskId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   // An item asked for by a link or a notification that no read holds once every read has landed is
   // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
@@ -437,7 +437,7 @@ function paneDoors(
       openLink: seams.openLink,
       code: {
         repository: plan.repository,
-        readFile: (window) => seams.act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
+        readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: plan.id, ...window }),
         onOpenFile: (ref, commit) => plans.onShowFile(plan.id, ref, commit),
       },
     };

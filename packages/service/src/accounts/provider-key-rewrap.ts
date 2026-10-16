@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { PlanStoreEffect } from "@luke/database/models/plan-store";
 import {
   type KeyRing,
   parseKeyRing,
@@ -9,6 +8,7 @@ import {
   listEveryProviderKeyRow,
   rewrapProviderKeyRow,
 } from "@luke/database/models/provider-key-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { Effect, type Redacted, Result } from "effect";
 import {
   bearerMatchesSecret,
@@ -56,7 +56,7 @@ export interface ProviderKeyRewrapOptions {
 }
 
 /** One pass over every stored key. */
-export function rewrapProviderKeys(ring: KeyRing): PlanStoreEffect<ProviderKeyRewrap> {
+export function rewrapProviderKeys(ring: KeyRing): TaskStoreEffect<ProviderKeyRewrap> {
   return Effect.gen(function* () {
     const counts = { moved: 0, current: 0, changed: 0, unreadable: 0 };
     for (const row of yield* listEveryProviderKeyRow()) {

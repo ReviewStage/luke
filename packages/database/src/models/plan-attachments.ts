@@ -5,10 +5,10 @@ import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { planAttachment } from "../schemas/plan-attachment.js";
-import type { PlanStoreEffect } from "./plan-store.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
+import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
  * plan-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
@@ -27,47 +27,47 @@ import { planReachableBy, reachablePlan } from "./workspace-store.js";
 export const PLAN_ATTACHMENT_KEEP = {
   KEPT: "kept",
   TOO_MANY: "too-many",
-  NO_PLAN: "no-plan",
+  NO_TASK: "no-plan",
 } as const;
 
 export type PlanAttachmentKeep =
   | { readonly status: typeof PLAN_ATTACHMENT_KEEP.KEPT; readonly id: string }
   | { readonly status: typeof PLAN_ATTACHMENT_KEEP.TOO_MANY }
-  | { readonly status: typeof PLAN_ATTACHMENT_KEEP.NO_PLAN };
+  | { readonly status: typeof PLAN_ATTACHMENT_KEEP.NO_TASK };
 
 /** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
 const PURGE_BATCH = 200;
 
 /** The plan's id under its row's lock, where the account reaches it and it is not archived; nothing otherwise. */
-const lockOpenPlan = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+const lockOpenTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id })
-        .from(plan)
-        .where(and(reachablePlan(userId, planId), isNull(plan.archivedAt)))
+        .select({ id: task.id })
+        .from(task)
+        .where(and(reachableTask(userId, taskId), isNull(task.archivedAt)))
         .for("update"),
     ),
 });
 
 const countPictures = SqlSchema.findOne({
-  Request: Schema.Struct({ planId: Schema.String }),
+  Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ count: Schema.Number }),
-  execute: ({ planId }) =>
+  execute: ({ taskId }) =>
     Database.use((db) =>
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(planAttachment)
-        .where(eq(planAttachment.planId, planId)),
+        .where(eq(planAttachment.taskId, taskId)),
     ),
 });
 
 const insertPicture = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
-    planId: Schema.String,
+    taskId: Schema.String,
     userId: Schema.String,
     contentType: pictureTypeSchema,
     byteCount: Schema.Number,
@@ -80,21 +80,21 @@ const insertPicture = SqlSchema.void({
 const findPicture = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.String,
+    taskId: Schema.String,
     attachmentId: Schema.String,
   }),
   Result: Schema.Struct({ contentType: pictureTypeSchema, bytes: Schema.Uint8Array }),
-  execute: ({ userId, planId, attachmentId }) =>
+  execute: ({ userId, taskId, attachmentId }) =>
     Database.use((db) =>
       db
         .select({ contentType: planAttachment.contentType, bytes: planAttachment.bytes })
         .from(planAttachment)
-        .innerJoin(plan, eq(plan.id, planAttachment.planId))
+        .innerJoin(task, eq(task.id, planAttachment.taskId))
         .where(
           and(
-            eq(planAttachment.planId, planId),
+            eq(planAttachment.taskId, taskId),
             eq(planAttachment.id, attachmentId),
-            planReachableBy(userId),
+            taskReachableBy(userId),
           ),
         ),
     ),
@@ -102,18 +102,18 @@ const findPicture = SqlSchema.findOneOption({
 
 const stampSaved = SqlSchema.void({
   Request: Schema.Struct({
-    planId: Schema.String,
+    taskId: Schema.String,
     ids: Schema.Array(Schema.String),
     now: Schema.Date,
   }),
-  execute: ({ planId, ids, now }) =>
+  execute: ({ taskId, ids, now }) =>
     Database.use((db) =>
       db
         .update(planAttachment)
         .set({ savedAt: now })
         .where(
           and(
-            eq(planAttachment.planId, planId),
+            eq(planAttachment.taskId, taskId),
             inArray(planAttachment.id, [...ids]),
             isNull(planAttachment.savedAt),
           ),
@@ -135,11 +135,11 @@ const lockUnsaved = SqlSchema.findAll({
       db
         .select({ id: planAttachment.id })
         .from(planAttachment)
-        .innerJoin(plan, eq(plan.id, planAttachment.planId))
+        .innerJoin(task, eq(task.id, planAttachment.taskId))
         .where(and(isNull(planAttachment.savedAt), lt(planAttachment.createdAt, before)))
         .orderBy(asc(planAttachment.createdAt))
         .limit(PURGE_BATCH)
-        .for("update", { of: plan, skipLocked: true }),
+        .for("update", { of: task, skipLocked: true }),
     ),
 });
 
@@ -156,16 +156,16 @@ const deletePictures = SqlSchema.void({
  */
 export function keepPlanAttachment(
   userId: string,
-  planId: string,
+  taskId: string,
   picture: Picture,
-): PlanStoreEffect<PlanAttachmentKeep> {
+): TaskStoreEffect<PlanAttachmentKeep> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockOpenPlan({ userId, planId });
-        if (Option.isNone(locked)) return { status: PLAN_ATTACHMENT_KEEP.NO_PLAN } as const;
+        const locked = yield* lockOpenTask({ userId, taskId });
+        if (Option.isNone(locked)) return { status: PLAN_ATTACHMENT_KEEP.NO_TASK } as const;
         // A count that returned no row is the database breaking its own contract, not an outcome.
-        const { count } = yield* countPictures({ planId }).pipe(
+        const { count } = yield* countPictures({ taskId }).pipe(
           Effect.catchTag("NoSuchElementError", Effect.die),
         );
         if (count >= PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN) {
@@ -174,7 +174,7 @@ export function keepPlanAttachment(
         const id = randomUUID();
         yield* insertPicture({
           id,
-          planId,
+          taskId,
           userId,
           contentType: picture.contentType,
           byteCount: picture.bytes.length,
@@ -190,19 +190,19 @@ export function keepPlanAttachment(
 /** One picture of the plan, its type and bytes; nothing where the account reaches no such plan or the plan no such picture. */
 export function readPlanAttachment(
   userId: string,
-  planId: string,
+  taskId: string,
   attachmentId: string,
-): PlanStoreEffect<Option.Option<Picture>> {
-  return findPicture({ userId, planId, attachmentId });
+): TaskStoreEffect<Option.Option<Picture>> {
+  return findPicture({ userId, taskId, attachmentId });
 }
 
 /** Stamps the plan's pictures the saved text names as saved, the ones no save stamped before; nothing where it names none. */
 export function stampSavedAttachments(
-  planId: string,
+  taskId: string,
   ids: readonly string[],
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   if (ids.length === 0) return Effect.void;
-  return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ planId, ids, now }));
+  return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ taskId, ids, now }));
 }
 
 /**
@@ -210,7 +210,7 @@ export function stampSavedAttachments(
  * before `before`, a sweep's worth, under their plans' locks, so a save
  * stamping one cannot cross it; how many went.
  */
-export function purgeUnsavedAttachments(before: Date): PlanStoreEffect<number> {
+export function purgeUnsavedAttachments(before: Date): TaskStoreEffect<number> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

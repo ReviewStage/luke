@@ -4,6 +4,7 @@ import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
   decodeMention,
   encodeMention,
+  handedMentionsIn,
   isMentionableTool,
   isMentionLabel,
   linkLabels,
@@ -20,7 +21,7 @@ import {
   sectionAnchors,
 } from "./mention-link.js";
 
-const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/checkout";
 const PLACE: MentionPlace = { workspace: "acme", repository: REPOSITORY };
 
@@ -29,33 +30,33 @@ function namesNoFile(target: string, repository: string | null): boolean {
   const kind = decodeMention(target, repository)?.kind;
   return kind !== MENTION_KIND.FILE && kind !== MENTION_KIND.FOLDER;
 }
-const PLAN: Mention = { kind: MENTION_KIND.PLAN, planId: PLAN_ID };
-const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" };
+const TASK: Mention = { kind: MENTION_KIND.TASK, taskId: TASK_ID };
+const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
 test("a plan and its section are written as their address on tryluke.dev, under the plan's workspace", () => {
-  assert.equal(encodeMention(PLAN, PLACE), `https://tryluke.dev/acme/plan/${PLAN_ID}`);
-  assert.equal(encodeMention(ROLLOUT, PLACE), `https://tryluke.dev/acme/plan/${PLAN_ID}#rollout`);
-  assert.deepEqual(decodeMention(encodeMention(PLAN, PLACE), null), PLAN);
+  assert.equal(encodeMention(TASK, PLACE), `https://tryluke.dev/acme/plan/${TASK_ID}`);
+  assert.equal(encodeMention(ROLLOUT, PLACE), `https://tryluke.dev/acme/plan/${TASK_ID}#rollout`);
+  assert.deepEqual(decodeMention(encodeMention(TASK, PLACE), null), TASK);
   assert.deepEqual(decodeMention(encodeMention(ROLLOUT, PLACE), null), ROLLOUT);
 });
 
 test("a plan's address is found by its id alone, whatever workspace it is spelled under, and by the app's own scheme", () => {
   for (const target of [
-    `https://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
-    `https://tryluke.dev/personal-u_1/plan/${PLAN_ID}#rollout`,
-    `https://tryluke.dev/acme/plan/${PLAN_ID}?from=slack#Rollout`,
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+    `https://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
+    `https://tryluke.dev/personal-u_1/plan/${TASK_ID}#rollout`,
+    `https://tryluke.dev/acme/plan/${TASK_ID}?from=slack#Rollout`,
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   ]) {
     assert.deepEqual(decodeMention(target, null), ROLLOUT, target);
   }
 });
 
 test("every form written before the link was settled reads as the mention the settled form names", () => {
-  assert.deepEqual(decodeMention(`luke://plan/${PLAN_ID}`, null), PLAN);
-  assert.deepEqual(decodeMention(`luke://plan/${PLAN_ID}#Rollout`, null), ROLLOUT);
+  assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}`, null), TASK);
+  assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}#Rollout`, null), ROLLOUT);
   assert.deepEqual(decodeMention(`luke://plan/pl_1#Auth%20token%20refresh`, null), {
     kind: MENTION_KIND.SECTION,
-    planId: "pl_1",
+    taskId: "pl_1",
     anchor: "auth-token-refresh",
   });
   assert.deepEqual(decodeMention("luke://file/apps/web/session-store.ts", REPOSITORY), {
@@ -100,7 +101,7 @@ test("a heading at its bound, borne twice, still has an anchor that reads back f
   const anchors = sectionAnchors([heading, heading]);
 
   for (const anchor of anchors) {
-    const section: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor };
+    const section: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor };
     assert.deepEqual(decodeMention(encodeMention(section, PLACE), null), section);
   }
   assert.equal(anchors[1]?.endsWith("-1"), true);
@@ -109,7 +110,7 @@ test("a heading at its bound, borne twice, still has an anchor that reads back f
 test("a section's anchor keeps every character it is spelled in through its target, which never closes the link", () => {
   for (const heading of ["Größe & Ölçü — 次の手順", "a) b (c", "語".repeat(1_000)]) {
     const [anchor = ""] = sectionAnchors([heading]);
-    const section: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor };
+    const section: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor };
     const target = encodeMention(section, PLACE);
 
     assert.deepEqual(decodeMention(target, null), section, heading);
@@ -211,11 +212,11 @@ test("a link that names no mention reads as none", () => {
   for (const target of [
     "https://example.com/luke/issue/LUKE-142",
     "https://tryluke.dev/changelog",
-    `https://tryluke.dev//plan/${PLAN_ID}`,
-    `https://tryluke.dev/acme/plan/${PLAN_ID}/more`,
-    `https://tryluke.dev.evil.example/acme/plan/${PLAN_ID}`,
-    `http://tryluke.dev/acme/plan/${PLAN_ID}`,
-    `https://tryluke.dev/acme/plan/${PLAN_ID}#a%20b`,
+    `https://tryluke.dev//plan/${TASK_ID}`,
+    `https://tryluke.dev/acme/plan/${TASK_ID}/more`,
+    `https://tryluke.dev.evil.example/acme/plan/${TASK_ID}`,
+    `http://tryluke.dev/acme/plan/${TASK_ID}`,
+    `https://tryluke.dev/acme/plan/${TASK_ID}#a%20b`,
     "luke://page/pg_1",
     "luke://plan/",
     "luke://plan/pl_1#%E0%A4%A",
@@ -229,7 +230,7 @@ test("a link that names no mention reads as none", () => {
 test("a mention is written as a link whose label starts with @, its brackets escaped", () => {
   const written = mentionMarkdown(ROLLOUT, "Rollout [draft]", PLACE);
 
-  assert.equal(written, `[@Rollout \\[draft\\]](https://tryluke.dev/acme/plan/${PLAN_ID}#rollout)`);
+  assert.equal(written, `[@Rollout \\[draft\\]](https://tryluke.dev/acme/plan/${TASK_ID}#rollout)`);
 });
 
 test("only a label that starts with @ and says more is a mention's, which its chip names without the @", () => {
@@ -276,7 +277,7 @@ test("a bare address is named by what it says of the thing: a file's name and li
   );
   assert.equal(named(`https://github.com/${REPOSITORY}/tree/HEAD/apps/web/`), "web");
   assert.equal(named(encodeMention(ROLLOUT, PLACE)), "rollout");
-  assert.equal(named(encodeMention(PLAN, PLACE)), "Plan");
+  assert.equal(named(encodeMention(TASK, PLACE)), "Plan");
   assert.equal(
     named("https://linear.app/acme/issue/LUKE-142/fix-the-thing"),
     "LUKE-142/fix-the-thing",
@@ -368,7 +369,7 @@ test("the mentions in a message are its @ links outside code, in order, their la
       },
       {
         label: "@Rollout [draft]",
-        mention: { kind: MENTION_KIND.SECTION, planId: "pl_1", anchor: "rollout" },
+        mention: { kind: MENTION_KIND.SECTION, taskId: "pl_1", anchor: "rollout" },
       },
     ],
   );
@@ -704,4 +705,118 @@ test("a server or tool of an account past a provider's first names it by its con
   for (const target of ["luke://mcp/notion-1", "luke://mcp/jira-2", "luke://mcp/notion-02"]) {
     assert.equal(decodeMention(target, REPOSITORY), undefined, target);
   }
+});
+
+test("a page or an agent of a plan is its Luke link, read back by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
+  const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: "agent-1" };
+  const plan = `https://tryluke.dev/acme/plan/${TASK_ID}`;
+
+  assert.equal(encodeMention(page, PLACE), `${plan}/page/page-1`);
+  assert.equal(encodeMention(agent, PLACE), `${plan}/agent/agent-1`);
+  assert.deepEqual(
+    decodeMention(`tryluke://tryluke.dev/acme/plan/${TASK_ID}/agent/agent-1`, null),
+    agent,
+  );
+  assert.deepEqual(linkMention(`${plan}/page/page-1`, `${plan}/page/page-1`, null), {
+    mention: page,
+    name: "Page",
+  });
+  assert.deepEqual(linkMention("", `${plan}/agent/agent-1`, null)?.name, "Agent");
+  for (const target of [
+    `${plan}/page/page-1/version/2`,
+    `${plan}/agent/agent-1/changes`,
+    `${plan}/page/page-1#top`,
+    `${plan}/page/`,
+    `${plan}/version/2`,
+    `${plan}/agent/agent%2F1`,
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on no task names nothing", () => {
+  const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-9" };
+
+  assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-9");
+  assert.deepEqual(decodeMention("https://tryluke.dev/acme/agent/agent-9", null), agent);
+  assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/agent/agent-9", null), agent);
+  assert.deepEqual(linkMention("", "https://tryluke.dev/acme/agent/agent-9", null), {
+    mention: agent,
+    name: "Agent",
+  });
+  for (const target of [
+    "https://tryluke.dev/acme/agent/agent-9/inbox/item-1",
+    "https://tryluke.dev/acme/agent/agent-9#top",
+    "https://tryluke.dev/acme/agent/",
+    "https://tryluke.dev/acme/page/page-1",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("words pasted whole that are an address of Luke's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
+  const pasted = (words: string) => pastedLinkMention(words, REPOSITORY);
+  const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-2" };
+
+  assert.deepEqual(pasted(` ${encodeMention(ROLLOUT, PLACE)}\n`), {
+    mention: ROLLOUT,
+    name: "rollout",
+  });
+  assert.deepEqual(pasted(encodeMention(TASK, PLACE).replace("https:", "tryluke:")), {
+    mention: TASK,
+    name: "Plan",
+  });
+  assert.deepEqual(pasted(encodeMention(page, PLACE)), { mention: page, name: "Page" });
+  assert.deepEqual(pasted(encodeMention(agent, PLACE)), { mention: agent, name: "Agent" });
+  assert.equal(pasted(`https://github.com/${REPOSITORY}/blob/HEAD/src/app.ts`), undefined);
+  assert.equal(pasted("luke://mcp/linear"), undefined);
+  assert.equal(pasted(`see ${encodeMention(ROLLOUT, PLACE)}`), undefined);
+});
+
+test("an agent is handed each @ mention and each bare address of Luke's own, in order, a bare address ending where GFM ends it", () => {
+  const section = encodeMention(ROLLOUT, PLACE);
+  const plan = encodeMention(TASK, PLACE);
+  const words = [
+    `Read (${plan}), then [@app.ts](luke://file/app.ts) and **${section}**.`,
+    `Not https://github.com/${REPOSITORY}/blob/HEAD/a.ts, https://linear.app/acme/issue/LUKE-1,`,
+    `![@pic](${plan}), [the plan](${plan}), \`${section}\`, or x${section}.`,
+  ].join("\n");
+
+  assert.deepEqual(
+    handedMentionsIn(words, REPOSITORY).map(({ label, mention }) => ({ label, mention })),
+    [
+      { label: plan, mention: TASK },
+      { label: "@app.ts", mention: { kind: MENTION_KIND.FILE, path: "app.ts" } },
+      { label: section, mention: ROLLOUT },
+    ],
+  );
+});
+
+test("a message is read for at most twenty mentions across its @ links and its bare addresses", () => {
+  const words = Array.from({ length: 25 }, (_, at) =>
+    at % 2 === 0
+      ? `[@f${at}](luke://file/f${at}.ts)`
+      : encodeMention({ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: `s${at}` }, PLACE),
+  ).join(" ");
+
+  const handed = handedMentionsIn(words, null);
+
+  assert.equal(handed.length, 20);
+  assert.deepEqual(handed.at(-1)?.mention, {
+    kind: MENTION_KIND.SECTION,
+    taskId: TASK_ID,
+    anchor: "s19",
+  });
+});
+
+test("a bare address's end is read in one pass however long the punctuation after it", () => {
+  const section = encodeMention(ROLLOUT, PLACE);
+  const words = `${section}${"!".repeat(50_000)}${")".repeat(50_000)}`;
+
+  assert.deepEqual(
+    handedMentionsIn(words, null).map(({ target }) => target),
+    [section],
+  );
 });

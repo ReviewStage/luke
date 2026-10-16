@@ -43,15 +43,15 @@
  * each row's words instead.
  */
 
-import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
 import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
+import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -93,6 +93,7 @@ import {
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
+import { planOf } from "./plan-actions";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -174,7 +175,7 @@ const FILES_MISSED_LINE = "The files could not be read.";
 const READING_LINE = "Reading the repository's files…";
 
 /** What the Files filter says under a listing cut short at the wire's bound. */
-const TRUNCATED_LINE = `Only the repository's first ${PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
+const TRUNCATED_LINE = `Only the repository's first ${TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
 
 /** A footer hint: the chords it names and what they do. */
 interface FooterHint {
@@ -324,12 +325,12 @@ function ranked<Item>(
 }
 
 /** The repository's listing as the palette holds it: its files alone, by path, or why not. */
-function filesOf(answer: PlanningTreeAnswer): FilesRead {
+function filesOf(answer: TasksTreeAnswer): FilesRead {
   if ("folder" in answer) {
     return {
       read: FILES_READ.LISTED,
       paths: answer.folder.entries
-        .filter((entry) => entry.kind === PLAN_TREE_ENTRY.FILE)
+        .filter((entry) => entry.kind === TASK_TREE_ENTRY.FILE)
         .map((entry) => entry.name),
       truncated: answer.folder.truncated,
     };
@@ -348,7 +349,7 @@ function filesNotice(repositoryOpen: boolean, held: FilesHeld | undefined): stri
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
 function fileRow(
   path: string,
-  read: { readonly shown: readonly PlanCodeShowing[]; readonly repository: string | null },
+  read: { readonly shown: readonly TaskCodeShowing[]; readonly repository: string | null },
   open: (path: string) => void,
 ): PaletteRow {
   const note = newestFileNote(read.shown, path, { repository: read.repository, commit: undefined });
@@ -380,7 +381,7 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
 }
 
 /** A plan's muted words: its repository, and whether it is archived. */
-function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
+function planDetail(plan: TaskSummary, archived: boolean): string | undefined {
   const words = [plan.repository, archived ? "Archived" : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
 }
@@ -400,16 +401,16 @@ function planRows(
 ): readonly PaletteRow[] {
   const listedId = plans.workspace?.id;
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
-  const creatorOf = (plan: PlanSummary) =>
+  const creatorOf = (plan: TaskSummary) =>
     teammateCreator(plan, {
       members: plan.workspaceId === listedId ? members : undefined,
       readerId: plans.me,
     });
-  const elsewhereOf = (plan: PlanSummary): Workspace | undefined =>
+  const elsewhereOf = (plan: TaskSummary): Workspace | undefined =>
     listedId === undefined || plan.workspaceId === listedId
       ? undefined
       : plans.workspaces.find((each) => each.id === plan.workspaceId);
-  const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
+  const row = (plan: TaskSummary, archived: boolean): PaletteRow => {
     const elsewhere = elsewhereOf(plan);
     const creator = creatorOf(plan);
     const createdBy = plan.createdBy?.name ?? null;
@@ -431,7 +432,7 @@ function planRows(
       onChoose: () => open(plan.id),
     };
   };
-  const listedFirst = (list: readonly PlanSummary[]) => [
+  const listedFirst = (list: readonly TaskSummary[]) => [
     ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
     ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
   ];
@@ -601,7 +602,7 @@ function readMarkRows(
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
   if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
-  const { plan } = plans.region;
+  const { task: plan } = plans.region;
   if (plan.id !== reads.watched) return [];
   const item = markReadItem({
     unread: reads.markedUnread(plan.id),
@@ -613,6 +614,32 @@ function readMarkRows(
       label: item.label,
       terms: [item.label],
       onChoose: () => choose(item.onSelect),
+    },
+  ];
+}
+
+/**
+ * Pin task, or Unpin task once it is pinned, for the plan on screen, as its
+ * sidebar row's menu offers it: the reader's own pin, through the same mark.
+ * None while no plan is looked at, nor for an archived plan, which offers
+ * no pin.
+ */
+function planPinRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const plan = reads.watched === undefined ? undefined : planOf(plans, reads.watched);
+  if (plan === undefined || plan.archivedAt !== undefined) return [];
+  const pinned = plan.pinnedAt !== undefined;
+  const label = pinned ? "Unpin task" : "Pin task";
+  const mark = pinned ? TASK_MARK.UNPIN : TASK_MARK.PIN;
+  return [
+    {
+      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      label,
+      terms: [label],
+      onChoose: () => choose(() => plans.onMarkPlan(plan.id, mark)),
     },
   ];
 }
@@ -808,7 +835,7 @@ export function CommandPalette({
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the plan's repository in one read, which the Files rows are. */
-  readFiles: (planId: string) => Promise<PlanningTreeAnswer>;
+  readFiles: (planId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   if (open && !available) setOpen(false);
@@ -877,7 +904,7 @@ export function CommandPalette({
   // press in the sidebar is.
   const onPlans = (run: () => void) =>
     choose(() => {
-      if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+      if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
       run();
     });
   // The seek for a setting's row gives itself up once another is asked
@@ -992,6 +1019,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
         ...readMarkRows(plans, reads, choose),
+        ...planPinRows(plans, reads, choose),
         ...agentPinRows(plans, choose),
       ],
     ],
@@ -1049,7 +1077,7 @@ export function CommandPalette({
         />
       </div>
       <FilterChips filter={filter} onFilter={changeFilter} />
-      <Command.List className="command-palette-list" label="Results">
+      <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
           <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
         ) : (

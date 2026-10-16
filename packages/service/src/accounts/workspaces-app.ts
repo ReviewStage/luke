@@ -13,7 +13,7 @@ import {
   type Workspace,
   workspaceOf,
 } from "@luke/database/models/workspace-store";
-import { workspaceIdSchema } from "@luke/features/plan-wire";
+import { workspaceIdSchema } from "@luke/features/task-wire";
 import {
   INVITATION_OFFER_QUERY,
   INVITATION_ROLE,

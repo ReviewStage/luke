@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import type { Task } from "@luke/features/task-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { act, createElement } from "react";
@@ -12,6 +14,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { PlanBody } from "./plan-body";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 
 /**
  * `@` in the plan's editor over the real editor bundle: the word typed
@@ -21,8 +24,9 @@ import { PlanBody } from "./plan-body";
  * repository.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
+  repository: "acme/relay",
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
 };
 
@@ -36,7 +40,7 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.PLANNING_TREE
+          request.kind === ACT_KIND.TASKS_TREE
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
@@ -45,8 +49,9 @@ beforeEach(() => {
                     repository: "acme/relay",
                     branch: "main",
                     entries: [
-                      { name: "apps/web/rollout-store.ts", kind: PLAN_TREE_ENTRY.FILE },
-                      { name: "apps/web", kind: PLAN_TREE_ENTRY.FOLDER },
+                      { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+                      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+                      { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
                     ],
                     truncated: false,
                   },
@@ -64,25 +69,26 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page drawn editable with its mentions, its editor opened on Rollout. */
-async function opened() {
+/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
+async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const body = createElement(PlanBody, {
+    plan,
+    live: false,
+    onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+    sectionLinks: {
+      workspace: "acme",
+      onOpen: () => undefined,
+      onOpenFile: () => undefined,
+      reveal: undefined,
+    },
+  });
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        plan: PLAN,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: {
-          workspace: "acme",
-          onOpen: () => undefined,
-          onOpenFile: () => undefined,
-          reveal: undefined,
-        },
-      }),
+      page === undefined ? body : createElement(PlanMentions, { value: page, children: body }),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -125,7 +131,24 @@ async function opened() {
     });
     await act(async () => undefined);
   };
-  return { container, typeAtEnd, typeAfter, press };
+  /** Words pasted at the end of the text, as the system's clipboard hands them over. */
+  const pasteAtEnd = async (words: string) => {
+    act(() => {
+      editor.view.focus();
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.atEnd(editor.state.doc)));
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          files: [],
+          types: ["text/plain"],
+          getData: (type: string) => (type === "text/plain" ? words : ""),
+        },
+      });
+      editor.view.dom.dispatchEvent(event);
+    });
+    await act(async () => undefined);
+  };
+  return { container, typeAtEnd, typeAfter, press, pasteAtEnd };
 }
 
 /** The list's groups as it draws them: each heading and its rows' names. */
@@ -143,7 +166,10 @@ test("an @ typed in the plan offers the plan's sections and, as the word is type
   const empty = listed(plan.container);
   await plan.typeAtEnd("roll");
 
-  assert.deepEqual(empty, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
+  assert.deepEqual(empty, [
+    ["Plan", ["Goal", "Rollout", "Teammate invitations"]],
+    ["Mention from", ["Files and folders", "Plan"]],
+  ]);
   assert.deepEqual(listed(plan.container), [
     ["Files and folders", ["rollout-store.ts"]],
     ["Plan", ["Rollout"]],
@@ -186,4 +212,157 @@ test("a heading just renamed is offered by its new words, before the editor hand
     listed(plan.container).find(([group]) => group === "Plan"),
     ["Plan", ["Rollout plan"]],
   );
+});
+
+test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    pages: [{ id: "page-1", title: "Invites by week" }],
+    agents: [
+      {
+        id: "agent-2",
+        name: "Wire the desktop",
+        actor: {
+          kind: ACTOR_KIND.AGENT,
+          name: "Wire the desktop",
+          provider: undefined,
+          state: ACTOR_STATE.REST,
+        },
+      },
+    ],
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).map(([group]) => group),
+    ["Plan", "Pages", "Agents", "Mention from"],
+  );
+});
+
+test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labelled by its task", async () => {
+  const agent = (id: string, name: string) => ({
+    id,
+    name,
+    actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
+  });
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    agents: [agent("agent-2", "Wire the desktop")],
+    readAgents: () =>
+      Promise.resolve([
+        { ...agent("agent-3", "Bill by seat"), task: { id: "task-billing", name: "Billing" } },
+        agent("agent-4", "Sweep flaky tests"),
+      ]),
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Agents"),
+    ["Agents", ["Wire the desktop", "Bill by seat", "Sweep flaky tests"]],
+  );
+});
+
+test("a section's address pasted whole into the plan is laid in as its chip, called by its heading", async () => {
+  const plan = await opened();
+  const goal = encodeMention(
+    { kind: MENTION_KIND.SECTION, taskId: PLAN.id, anchor: "goal" },
+    { workspace: "acme", repository: PLAN.repository },
+  );
+
+  await plan.typeAtEnd(" See ");
+  await plan.pasteAtEnd(goal);
+
+  const chips = [...plan.container.querySelectorAll(".plan-document-text .mention-chip")];
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Goal"],
+  );
+});
+
+/** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
+function crumb(container: HTMLElement): string | undefined {
+  return (
+    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
+    undefined
+  );
+}
+
+test("a plan with no repository offers no files and folders to narrow to", async () => {
+  const plan = await opened(undefined, { ...PLAN, repository: null });
+
+  await plan.typeAtEnd(" See @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Mention from"),
+    ["Mention from", ["Plan"]],
+  );
+});
+
+test("a bare @ in the plan narrows by its kind's row to the repository's paths, where → walks into a folder, ⌫ climbs out, and Enter writes the folder", async () => {
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See @");
+  plan.press("ArrowDown");
+  plan.press("ArrowDown");
+  plan.press("ArrowDown");
+  plan.press("ArrowRight");
+  await act(async () => undefined);
+  const narrowed = [crumb(plan.container), listed(plan.container)];
+  plan.press("ArrowRight");
+  plan.press("ArrowDown");
+  plan.press("ArrowRight");
+  const inWeb = [crumb(plan.container), listed(plan.container)];
+  plan.press("Backspace");
+  const climbed = [crumb(plan.container), listed(plan.container)];
+  plan.press("ArrowDown");
+  plan.press("Enter");
+  await act(async () => undefined);
+
+  assert.deepEqual(narrowed, ["Files and folders", [["Files and folders", ["apps/"]]]]);
+  assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
+  assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
+  assert.deepEqual(
+    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+      (chip) => chip.textContent,
+    ),
+    ["web/"],
+  );
+});
+
+test("@plan: typed in the plan narrows the list to the plan, searched by the words after the colon", async () => {
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See @plan:");
+  const all = listed(plan.container);
+  await plan.typeAtEnd("roll");
+
+  assert.equal(crumb(plan.container), "Plan");
+  assert.deepEqual(all, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
+  assert.deepEqual(listed(plan.container), [["Plan", ["Rollout"]]]);
 });

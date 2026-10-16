@@ -1,5 +1,5 @@
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { boolean, index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -42,8 +42,6 @@ export const integrationConnection = pgTable(
     connectionName: text("connection_name").notNull(),
     /** The account's name at the provider ("Acme"), or the developer's own for it; null until either is known. */
     label: text("label"),
-    /** Whether the developer made this the provider's primary account, which only what a model is told of it reads. */
-    primary: boolean("is_primary").notNull().default(false),
     /** `integration-store.ts`'s `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
     status: text("status").notNull(),
     /** The sign-in under way's own value, which only its callback carries back; null when none is. */

@@ -1,7 +1,7 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
@@ -17,7 +17,6 @@ import {
   UnpinIcon,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
-import { PLANS_PAGE, repositoryPageUrl } from "@luke/ui/planning-model";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
@@ -36,9 +35,10 @@ import {
   taskRowsCreatedBy,
   taskRowTime,
 } from "@luke/ui/task-list-model";
+import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -63,10 +63,11 @@ import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
+import { type HoverPane, useHoverPane } from "./hover-pane";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SidebarAgent } from "./sidebar-agent";
-import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -172,7 +173,7 @@ interface RowContext {
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
   /** Whether a plan was saved since the developer last looked at it on this Mac. */
-  readonly unread: (plan: PlanSummary) => boolean;
+  readonly unread: (plan: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -242,7 +243,7 @@ function PlanRows({
 }
 
 /** Pin or Unpin for an agent's row, the account's own; none for an archived agent, which the sidebar draws among the archived whether or not it is pinned, as a plan's. */
-function pinOf(plans: PlansControl, agent: PlanlessAgent): ((pinned: boolean) => void) | undefined {
+function pinOf(plans: PlansControl, agent: TasklessAgent): ((pinned: boolean) => void) | undefined {
   return agent.archivedAt === undefined
     ? (pinned) => plans.onPinAgent(agent.id, pinned)
     : undefined;
@@ -252,11 +253,11 @@ function pinOf(plans: PlansControl, agent: PlanlessAgent): ((pinned: boolean) =>
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
-      readonly plan: PlanSummary;
+      readonly plan: TaskSummary;
       readonly pin: PinnedTab | undefined;
       readonly at: number;
     }
-  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: PlanlessAgent; readonly at: number };
+  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent; readonly at: number };
 
 /**
  * The rows under Pinned, newest pinned first: the pinned plans, the pinned
@@ -265,8 +266,8 @@ type PinnedRow =
  * nowhere, its plan being out of the list.
  */
 function pinnedRows(
-  pinned: readonly PlanSummary[],
-  agents: readonly PlanlessAgent[],
+  pinned: readonly TaskSummary[],
+  agents: readonly TasklessAgent[],
   plans: PlansControl,
 ): PinnedRow[] {
   const planRows = pinned.map(
@@ -585,7 +586,7 @@ function CreatorSection({
 }
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
-function creatorOf(row: TaskRow): Pick<PlanSummary, "createdBy" | "ownerId"> {
+function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
   if (row.kind === TASK_ROW.TASK) return row.plan;
   const { startedBy } = row.agent;
   return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
@@ -813,104 +814,38 @@ function SidebarInboxRow({
   );
 }
 
-/** The layers that answer their own Escape before a floating sidebar is put away. */
-const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
-
 /** What the sidebar is drawn with while it floats, or could. */
-interface FloatingSidebar {
-  readonly ref: React.RefObject<HTMLElement | null>;
+interface FloatingSidebar extends HoverPane {
   /** Whether the sidebar is on screen: pinned, or floating over the work. */
   readonly inSight: boolean;
-  /** A choice made in the sidebar, which puts a floating sidebar away once made. */
-  readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
-  readonly onPress: () => void;
-  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
-  readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+}
+
+/** Where a sidebar opened from away takes the keyboard: the row it marks, else New plan. */
+function sidebarFocus(sidebar: HTMLElement): HTMLElement | null {
+  return (
+    sidebar.querySelector<HTMLElement>('[aria-current="page"]') ??
+    sidebar.querySelector<HTMLElement>(".sidebar-new-plan")
+  );
 }
 
 /**
- * The floating sidebar's doors: a press in a peek opens it, the pointer
- * leaving a peek puts it away, though not for the toggle standing over its
- * head, and Escape puts it away while no menu in it took the key first,
- * wherever the keyboard stands, a peek leaving it in the work under it.
- * Opened from away, it takes the keyboard, which Escape gives back. It goes
- * with the sidebar, so a menu's way to Settings or a version history, or
- * any other way off the plans, leaves it away for their return.
+ * The floating sidebar's doors (`hover-pane.ts`), the pointer leaving a peek
+ * for the toggle standing over its head leaving it out. It goes with the
+ * sidebar, so a menu's way to Settings or a version history, or any other
+ * way off the plans, leaves it away for their return.
  */
 function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
-  const ref = useRef<HTMLElement | null>(null);
-  const handBack = useRef<HTMLElement | null>(null);
-  const was = useRef(sidebar.overlay);
-  const { overlay, onOverlay } = sidebar;
-  const floating = overlay !== SIDEBAR_OVERLAY.CLOSED;
-  useEffect(() => {
-    const from = was.current;
-    was.current = overlay;
-    const held = ref.current;
-    if (overlay !== SIDEBAR_OVERLAY.OPEN || from !== SIDEBAR_OVERLAY.CLOSED || held === null) {
-      return;
-    }
-    handBack.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const first =
-      held.querySelector<HTMLElement>('[aria-current="page"]') ??
-      held.querySelector<HTMLElement>(".sidebar-new-plan");
-    first?.focus();
-  }, [overlay]);
-  useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
-  // Note that a floating sidebar need not hold the keyboard, a peek or one a
-  // bare press opened leaving it in the work under it, so Escape is heard at
-  // the window before the work's layers hear it. A key aimed into the
-  // sidebar is left to its own handler, and one aimed into a menu or a
-  // dialog to that layer, which may have been raised from the sidebar.
-  useEffect(() => {
-    if (!floating) return;
-    const putAway = (event: KeyboardEvent) => {
-      const held = ref.current;
-      const target = event.target instanceof Element ? event.target : null;
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
-        return;
-      }
-      event.preventDefault();
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-    };
-    window.addEventListener("keydown", putAway, true);
-    return () => window.removeEventListener("keydown", putAway, true);
-  }, [floating, onOverlay]);
-  return {
-    ref,
-    inSight: !sidebar.collapsed || floating,
-    chosen:
-      (go) =>
-      (...args) => {
-        go(...args);
-        if (floating) onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      },
-    onPress: () => {
-      if (overlay === SIDEBAR_OVERLAY.PEEK) onOverlay(SIDEBAR_OVERLAY.OPEN);
-    },
-    onPointerLeave: (event) => {
-      if (overlay !== SIDEBAR_OVERLAY.PEEK) return;
-      const to = event.relatedTarget;
-      if (to instanceof Element && to.closest(".title-bar-controls") !== null) return;
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-    },
-    onKeyDown: (event) => {
-      if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
-      // Note that the window's layered Escape stands down for a key already taken.
-      event.preventDefault();
-      onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      handBack.current?.focus();
-      handBack.current = null;
-    },
-  };
+  const pane = useHoverPane(
+    { state: sidebar.overlay, onState: sidebar.onOverlay },
+    { focusAt: sidebarFocus, stays: ".title-bar-controls" },
+  );
+  return { ...pane, inSight: !sidebar.collapsed || pane.floating };
 }
 
 /**
- * Factory's row, after the Inbox's and drawn as it is: the factory, its
- * name, and its chord at its end while the row is hovered or reached from
- * the keyboard. A press opens the window's Factory (`desktop-factory.tsx`),
+ * Factory's row, after the Inbox's and drawn as it is: the factory and its
+ * name, with no chord, since Factory keeps none while it is an experiment
+ * (⌘K reaches it). A press opens the window's Factory (`desktop-factory.tsx`),
  * and the row is the place shown while it stands.
  */
 function SidebarFactoryRow({
@@ -927,13 +862,11 @@ function SidebarFactoryRow({
       type="button"
       className="sidebar-search sidebar-factory"
       aria-current={current ? "page" : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FACTORY)}
       disabled={disabled}
       onClick={onOpen}
     >
       <FactoryIcon />
       Factory
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FACTORY].chord} className="row-shortcut" />
     </button>
   );
 }
@@ -1099,11 +1032,12 @@ function NewPlanButton({
  * folds it away. Folded away, it is inert as well as out of sight, so no key
  * reaches a row nobody can see, until it floats open over the work
  * (`sidebar-collapse.ts`). A floating sidebar is put away by a choice in it,
- * by Escape, or once the pointer leaves a peek; a press in a peek opens it,
- * so a menu it raises outlasts the pointer. Opened from away, it takes the
- * keyboard at the row it marks, else at New plan, and Escape gives the
- * keyboard back where it was. Floating, it has no edge to drag, since only a
- * pinned sidebar is resized.
+ * by Escape, by a press outside, or once the pointer leaves a peek, a press
+ * in it or not, though not for a menu it raised (`hover-pane.ts`). Opened
+ * from away, it takes the keyboard at the row it marks, else at New plan,
+ * holds it there against Tab, and Escape gives the keyboard back where it
+ * was. Floating, it has no edge to drag, since only a pinned sidebar is
+ * resized.
  */
 function SidebarColumn({
   sidebar,
@@ -1117,7 +1051,7 @@ function SidebarColumn({
   call,
   onPressWithin,
 }: DesktopSidebarProps): React.JSX.Element {
-  const onPlans = tab === PANEL_TAB.PLANS;
+  const onPlans = tab === PANEL_TAB.TASKS;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
@@ -1141,41 +1075,41 @@ function SidebarColumn({
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onSelect(planId);
   };
   const showPlans = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
   };
   const newPlan = () => {
     showPlans();
     plans.onNewPlan();
   };
   const openPinnedTab = (pin: PinnedTab) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onOpenPinnedTab(pin);
   };
   const openInbox = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.inboxView.onOpen();
   };
   const openFactory = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.factoryView.onOpen();
   };
   const openAutomations = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.automationsView.onOpen();
   };
   const goHome = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onGoHome();
   };
   // The home page is the place shown while no plan is open, the Inbox is not
   // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !standingIn && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const atHome = onPlans && !standingIn && plans.page === TASKS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onNewPlanIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
@@ -1205,7 +1139,7 @@ function SidebarColumn({
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.plan.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.agentView.onOpen(agentId);
   };
   // The list is the chosen workspace's; the unread marks above read every plan.
@@ -1323,10 +1257,7 @@ function SidebarColumn({
       ref={overlay.ref}
       className="desktop-sidebar"
       inert={!overlay.inSight}
-      onPointerDown={() => {
-        onPressWithin();
-        overlay.onPress();
-      }}
+      onPointerDown={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
       onKeyDown={overlay.onKeyDown}
     >
@@ -1382,7 +1313,7 @@ function SidebarColumn({
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
-      <div className="sidebar-section">
+      <div className="sidebar-section scroll-fade">
         {plans.signedIn && pinnedSection.length > 0 && !archive.shown ? (
           <PinnedSection
             rows={pinnedSection}

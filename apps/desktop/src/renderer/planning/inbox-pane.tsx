@@ -19,10 +19,11 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { CodeRef } from "@luke/features/plan-wire";
-import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
+import type { CodeRef } from "@luke/features/task-wire";
+import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
-import { CheckIcon, ClockIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
@@ -38,9 +39,10 @@ import {
 import { useAutomation } from "../automation-directory";
 import { PlanRef } from "../desktop/plan-card";
 import { usePerson } from "../member-directory";
+import { PictureBlock } from "../picture-block";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
-import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
+import { BusyLabel, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
@@ -67,6 +69,7 @@ import {
   type InboxDraft,
   type InboxHolder,
   inboxReply,
+  itemWorkspaceId,
   pressesOf,
   proposedOptions,
   SETTLED_BY,
@@ -81,6 +84,7 @@ import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { WordsWorkspace } from "./use-link-standing";
 import { opensAsLink } from "./use-open-link";
 import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
@@ -91,14 +95,16 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * one more exchange with its agent: the agent's message
  * (`ai-elements/message.tsx`), its mark, name, and when it asked, then the
  * item's title and the blocks of context the agent wrote, Markdown as the
- * transcript draws it, a link as the transcript draws one, opened in the
+ * transcript draws it, its links read under the item's own workspace, its
+ * plan's or its agent's, a link as the transcript draws one, opened in the
  * browser where it is a web page, code as the Code tab draws a card
  * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
  * through the File tab's own read and opened there in the File tab, and an
- * image the agent took in its sandbox, drawn at the pane's own width from
- * the bytes the host fetched under the account (`use-plan-inbox.ts`) and
- * opened larger over the window by a press, in the viewer an attached file
- * opens in (`attachment-viewer.tsx`). What the item asks for closes the
+ * image the agent took in its sandbox, drawn from the bytes the host fetched
+ * under the account (`use-plan-inbox.ts`) as a plan's or a transcript's
+ * picture is (`picture-block.tsx`), up to the pane's width and no taller
+ * than theirs, and opened larger over the window by a press, in the viewer
+ * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
  * message: a choice's options, one perhaps recommended, pressed one at a
  * time or several where the choice allows; a form's fields, each the
  * control Settings draws for its type; nothing for the rest. While the item
@@ -285,11 +291,12 @@ function CodeBlock({
 }
 
 /**
- * An image block: the picture at the card's width once its bytes are held,
- * pressed to open it larger over the window; a spinner while they are read,
- * and a line with Retry where the read did not answer. The block asks for
- * its image as it is first drawn, so a picture inside a card no one opened
- * is never fetched.
+ * An image block: the picture drawn as a plan's picture is, at its own size
+ * up to the card's width and a screenful's height, once its bytes are held,
+ * pressed to open it larger over the window; that block's quiet box while
+ * they are read, and a line with Retry where the read did not answer. The
+ * block asks for its image as it is first drawn, so a picture inside a card
+ * no one opened is never fetched.
  */
 function ImageBlock({
   itemId,
@@ -311,9 +318,7 @@ function ImageBlock({
   }, [held, itemId, block.attachmentId, onImage]);
   if (image === undefined) {
     return (
-      <div className="inbox-image-pending" data-inbox-image-pending="">
-        <Spinner label="Loading image" size={SPINNER_SIZE.INLINE} />
-      </div>
+      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={block.alt} caption={undefined} />
     );
   }
   if ("failed" in image) {
@@ -325,14 +330,12 @@ function ImageBlock({
   }
   return (
     <>
-      <button
-        type="button"
-        className="inbox-image"
-        aria-label={`Open ${block.alt}`}
-        onClick={() => setViewing(true)}
-      >
-        <img src={image.url} alt={block.alt} />
-      </button>
+      <PictureBlock
+        state={{ kind: PICTURE_STATE.READY, url: image.url }}
+        alt={block.alt}
+        caption={undefined}
+        onOpen={() => setViewing(true)}
+      />
       {viewing ? (
         <AttachmentViewer
           files={[viewerFile(block, image.url)]}
@@ -863,6 +866,8 @@ function AnswerBox({
     <div className="agent-composer">
       {knownResponse(item.response) ? (
         <PromptInput
+          className="inbox-answer"
+          data-presses={byPress ? "" : undefined}
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
         >
@@ -951,8 +956,8 @@ function AutomationCrumb({
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
   const known = useAutomation(holder.automationId ?? undefined);
-  // Note that the agents no automation names stand under no automation, so their crumb wears the coding agents' glyph, as their group's header does.
-  const icon = holder.automationId === null ? <CodingAgentsIcon /> : <ClockIcon />;
+  // Note that the agents no automation names stand under no automation, so their crumb wears the Factory's glyph, where every agent is listed, as their group's header does.
+  const icon = holder.automationId === null ? <FactoryIcon aria-hidden="true" /> : <ClockIcon />;
   return (
     <Tooltip
       label={holder.name}
@@ -1078,14 +1083,21 @@ export function InboxPane({
   };
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
+  // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
+  const workspaceId = itemWorkspaceId(holder, item.agentId);
   return (
     <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
           <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-            <button type="button" className="toolbar-button inbox-back" onClick={onBack}>
+            <button
+              type="button"
+              className="toolbar-button inbox-back"
+              aria-label="Inbox"
+              onClick={onBack}
+            >
               <BackIcon />
-              Inbox
+              <span className="inbox-back-word">Inbox</span>
             </button>
           </Tooltip>
         )}
@@ -1098,38 +1110,40 @@ export function InboxPane({
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
+          className={`inbox-board scroll-fade ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
           ref={board}
         >
-          <Message from="assistant">
-            <Byline by={by} did="asked" at={item.postedAt} now={now} />
-            <MessageContent className="inbox-indent">
-              <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
-                {cardTitle(item.title)}
-              </h3>
-              <Blocks
-                item={item}
-                images={control.images}
-                onImage={control.onImage}
-                onRetryImage={control.onRetryImage}
-                openLink={doors.openLink}
-                code={doors.code}
-              />
-              {open ? (
-                <ResponseControls
+          <WordsWorkspace value={workspaceId}>
+            <Message from="assistant">
+              <Byline by={by} did="asked" at={item.postedAt} now={now} />
+              <MessageContent className="inbox-indent">
+                <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
+                  {cardTitle(item.title)}
+                </h3>
+                <Blocks
                   item={item}
-                  draft={draft}
-                  disabled={control.sending.has(item.id)}
-                  onDraft={(next) => control.onDraft(item, next)}
+                  images={control.images}
+                  onImage={control.onImage}
+                  onRetryImage={control.onRetryImage}
+                  openLink={doors.openLink}
+                  code={doors.code}
                 />
-              ) : (
-                <Proposal item={item} />
-              )}
-            </MessageContent>
-          </Message>
-          <Answered item={item} by={by} now={now} />
-          <Withdrawn item={item} by={by} now={now} />
+                {open ? (
+                  <ResponseControls
+                    item={item}
+                    draft={draft}
+                    disabled={control.sending.has(item.id)}
+                    onDraft={(next) => control.onDraft(item, next)}
+                  />
+                ) : (
+                  <Proposal item={item} />
+                )}
+              </MessageContent>
+            </Message>
+            <Answered item={item} by={by} now={now} />
+            <Withdrawn item={item} by={by} now={now} />
+          </WordsWorkspace>
           {control.failed ? (
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}

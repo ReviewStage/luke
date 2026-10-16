@@ -31,7 +31,15 @@ message box.
 5. **No agent mentions for now.** Coding agents have no tool to see or
    message another agent; only Luke's planning model has list, read, message
    and start (`packages/service/src/agents/coding-agent-tools.ts`). Agent
-   mentions wait until coding agents get such tools.
+   mentions wait until coding agents get such tools. Superseded on
+   2026-10-16 (Dean: "Let's add @-mention support for Pages. And any other
+   tabs that make sense."): the task's other agents are mentioned, and the
+   one mentioned is handed by its id, its branch and its pull request, which
+   a coding agent reads with `gh` and `git`, never its conversation. Widened
+   the same day (Dean: "Let's support @-mentions for agents (workspace
+   wide)"): any agent of the sender's workspace, on any task or none, is
+   mentioned and handed with its task and the id `message_agent` reaches it
+   by; one of another workspace is handed nothing.
 6. **No person mentions yet.**
 7. **The plan document takes mentions too** (§5).
 8. **The message box moves to TipTap**, the rich editor the plan already
@@ -1154,6 +1162,9 @@ VoiceOver, since CI can't see the Mac.
 | 8 | The Skills group in the `@` list | merged, #2664 |
 | 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
 | links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
+| 10 | The task's pages and other agents in the `@` list, by their Luke links | merged, #3031 |
+| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | #3064 |
+| 13 | `read_page`; a page mention hands its reference and `read_page`, never its HTML | this PR |
 
 ## 9. Risks
 

@@ -7,12 +7,13 @@ import {
   type MentionLines,
   mentionMarkdown,
 } from "@luke/features/mention-link";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
+import { layWindowStyles } from "#testing/focus-ring";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -33,7 +34,7 @@ const WORKSPACE = "acme";
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
 
 /** A plan whose last section mentions an earlier one, and one since renamed. */
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   document: {
     body: [
@@ -111,7 +112,7 @@ test("a mention of a section is drawn as its chip, and a press opens that sectio
   act(() => chip.click());
 
   assert.equal(chip.dataset.state, "found");
-  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" }]);
+  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "rollout" }]);
 });
 
 test("a mention of a heading the plan no longer holds is struck through, and a press opens the plan at its top", () => {
@@ -121,7 +122,7 @@ test("a mention of a heading the plan no longer holds is struck through, and a p
   act(() => chip.click());
 
   assert.equal(chip.dataset.state, "gone");
-  assert.deepEqual(opened, [{ kind: MENTION_KIND.PLAN, planId: PLAN_ID }]);
+  assert.deepEqual(opened, [{ kind: MENTION_KIND.TASK, taskId: PLAN_ID }]);
 });
 
 test("a section's ⋯ copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
@@ -178,6 +179,42 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   assert.deepEqual(revealed, [1, 2], "each ask is said shown once, so it can be let go");
 });
 
+test("a section shown stands clear of the document's faded top edge, its heading whole", async () => {
+  const { container } = drawn();
+  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
+  assert.ok(scroller);
+  const rollout = container.querySelectorAll<HTMLElement>(".plan-unit")[1];
+  assert.ok(rollout);
+  // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
+  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
+  vi.spyOn(rollout, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 700 }));
+  const root = roots[0];
+  assert.ok(root);
+  const sheets = await layWindowStyles();
+  try {
+    const fade = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
+    );
+    act(() =>
+      root.render(
+        createElement(PlanBody, {
+          plan: PLAN,
+          live: false,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: () => undefined,
+            reveal: { anchor: "rollout", ask: 1 },
+          },
+        }),
+      ),
+    );
+    assert.ok(fade > 16, "the fade runs deeper than the room a section was shown with");
+    assert.equal(scroller.scrollTop, 600 - fade);
+  } finally {
+    sheets.remove();
+  }
+});
+
 test("no attribute of the plan's page carries what a mention names", () => {
   const { container } = drawn();
 
@@ -207,10 +244,10 @@ test("off a plan's own page a mention stays its words", () => {
 
 test("a section whose heading is formatted is copied as a link that is drawn as its chip", () => {
   const heading = "Rollout *draft*";
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     document: {
-      body: `## ${heading}\nStore first.\n\n## Notes\nSee ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout-draft" }, heading, PLACE)}.`,
+      body: `## ${heading}\nStore first.\n\n## Notes\nSee ${mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "rollout-draft" }, heading, PLACE)}.`,
       assumptions: [],
     },
   };
@@ -238,7 +275,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
 
   assert.equal(chip.dataset.state, "found");
   assert.deepEqual(opened, [
-    { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout-draft" },
+    { kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "rollout-draft" },
   ]);
 });
 
@@ -306,7 +343,7 @@ test("on a plan that cannot be edited, where no block is a Tab stop, every secti
 });
 
 /** A plan whose words mention a file and a folder of its repository. */
-const FILES_PLAN: Plan = {
+const FILES_PLAN: Task = {
   ...PLAN,
   document: {
     body: "## Goal\nMove [@session-store.ts](luke://file/apps/web/session-store.ts) out of [@auth/](luke://folder/apps/web/auth/).",
@@ -316,7 +353,7 @@ const FILES_PLAN: Plan = {
 
 function drawnFiles(
   onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined,
-  plan: Plan = FILES_PLAN,
+  plan: Task = FILES_PLAN,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -349,7 +386,7 @@ test("a mention of a file is drawn as its chip, and a press opens the file's tab
 });
 
 test("a mention of a file as its page on GitHub opens its tab, at the lines it pins where it pins them, and another repository's page opens none", () => {
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     repository: PLACE.repository,
     document: {
@@ -377,7 +414,7 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     document: {
       body: `## Notes\nfirst\n\n## Notes\nsecond, see [@Notes](https://tryluke.dev/acme/plan/${PLAN_ID}#notes-1)`,
@@ -413,7 +450,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
     await act(async () => item.click());
   }
 
-  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "notes-1" }]);
+  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "notes-1" }]);
   assert.deepEqual(copied, [
     `https://tryluke.dev/acme/plan/${PLAN_ID}#notes`,
     `https://tryluke.dev/acme/plan/${PLAN_ID}#notes-1`,

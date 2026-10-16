@@ -99,9 +99,10 @@ A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
 he answers a spoken ask he reads on our service, from the plan and the record
 described under "Your account". During the call, Luke can
-list the task's coding agents, read the last few turns of one's transcript,
-send one a message it writes for you (kept in that agent's transcript as
-Luke's), and start a new one; what he read and sent is kept with the task's
+list the coding agents of the task's workspace, on any task and whichever
+member started them, read the last few turns of one's transcript, send one a
+message it writes for you (kept in that agent's transcript as Luke's), and
+start a new one on the task; what he read and sent is kept with the task's
 conversation. A fixture or evidence run keeps no conversation at all.
 
 **Tasks.** When you start a named task, our service stores it in a
@@ -114,7 +115,15 @@ message, rename, and stop the coding agents any member started on it. Each
 message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
 message of a member whose account is deleted keeps no account and reads as a
-former member's. It stores
+former member's. A coding agent can also list the other coding agents of its
+workspace, on any task and whichever member started them, send one a
+message, list the workspace's open tasks, and start a new one on its own
+task or another task of the workspace, without asking you first; a
+message is kept in the receiving agent's transcript under the sending
+agent's title, opening with the sending agent's title and id, and goes to
+the receiving agent's model provider as the rest of its conversation does,
+and an agent it starts runs as the member who started it, on that member's
+keys, and is told which agent started it. It stores
 under your account its name and its plan, one Markdown document, which begins as a copy of
 your plan template and is written by the call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
@@ -349,7 +358,10 @@ GitHub with a token the Luke GitHub App mints for that one repository on the
 workspace's installation: each file's name and patch, for up to 300
 files, leaving out a patch over 100,000 characters. It stores none of it, and
 Luke holds it in memory while the tab is open, never on disk, except that
-downloading the patch writes it where you save it.
+downloading the patch writes it where you save it. Wherever Luke names
+someone on GitHub, as the tab does who opened and reviewed the pull request,
+it draws them by their GitHub avatar, which your Mac loads straight from
+GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
@@ -374,6 +386,10 @@ most 262,144 characters a version, and every version it has had, each kept as
 written and never changed. Deleting the task deletes its pages. A page made by
 Luke is part of the task conversation, so it is sent back to
 Luke's model as the conversation goes on (see "Who we send it to"). Luke
+and coding agents can also read a page of any task of the workspace by its
+id, as a mention of the page points them to it: its HTML, at most 40,000
+characters of it, is then sent to that agent's model as part of its
+conversation. Luke
 on your Mac reads a page's HTML from our service only to draw it, holds it in
 memory only, and never passes it to the rest of the panel. A page runs sealed
 off from Luke: it cannot read the panel, your account, or another page, and
@@ -568,7 +584,15 @@ place of a member's own, so what they change in Linear shows as made by the
 person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
-deleted with the plan. Disconnecting stops every read through it at once,
+deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+to a Linear issue, the app asks our service for that issue's key, title, and
+state, which it reads through this connection as you look and keeps
+nowhere; the app shows them on the link, and they go no further. The
+connection read through is that of the workspace the words belong to: a
+plan's, or an Inbox item's own, its plan's or its agent's, never the
+workspace the Inbox happens to list; an item whose workspace is not known
+reads nothing.
+Disconnecting stops every read through it at once,
 removes the connection's record, and asks Vercel Connect to revoke the grant;
 what plans already copied of an issue stays with them.
 
@@ -837,8 +861,10 @@ only when you press Send.
   and hands the session's one-time pass to your Mac, where only Luke's main
   window holds it. That window then sends Keyframe Luke's synthesized voice as
   he speaks, which carries what he says about your plan, and plays back the
-  video, at the top of the plan's Call tab, and the audio Keyframe renders
-  from it. Your microphone never reaches
+  video, at the top of the plan's Call tab and on the call card, and the
+  audio Keyframe renders from it. While another app is in front, that window
+  also hands the video, and nothing else, to Luke's floating call window over
+  a connection between the two windows on your Mac. Your microphone never reaches
   Keyframe, nor does anything else on your Mac or in your account: the voice it
   receives is Luke's alone. Our service logs only whether a session started, the
   Keyframe server it opened on, and, when one could not, why, and keeps, with
@@ -868,7 +894,13 @@ only when you press Send.
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
   stops a running turn and sets the agent aside; its transcript, with your
-  files, and its pull request are kept, and you can bring it back. The sandbox
+  files, and its pull request are kept, and you can bring it back. Luke and
+  coding agents can archive an idle agent of the workspace too, a teammate's
+  included, for the member they act for, and bring one back; neither archives
+  one that is still working. The agent records who archived it (you, or Luke
+  or the archiving agent's title on your behalf) and any reason given, which
+  every member of the workspace sees on the archived agent until it is
+  brought back, when the record is cleared. The sandbox
   has ordinary Internet access and runs the repository's own checks; the agent
   searches the web as described above. The sandbox stops when a turn ends or
   you stop it, and its checkout, with the agent's changes, stays in a snapshot
@@ -934,8 +966,12 @@ only when you press Send.
   the App's token, and what it reads lands in its transcript like any other
   command's output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
-  open, a pull request's changed files for the Changes tab, and a repository's
-  skills.
+  open, a pull request's changed files for the Changes tab, a repository's
+  skills, and the number, title, link, and state of a pull request or an
+  issue a plan, a reply, or an Inbox item links to, which the app shows on
+  the link; an issue is read on a token cut to reading issues alone, and an
+  Inbox item's link is read through its own workspace's installation, its
+  plan's or its agent's, and through none where that is not known.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
   Linear's MCP server, which keeps it under Linear's own policy.
@@ -993,6 +1029,11 @@ in, the site names you to PostHog by your account's id, name, and email
 address, which links your earlier visits to your account. Your browser
 contacts PostHog directly, so PostHog sees your network address, as it does
 for the app's recordings.
+
+A link to something in Luke, pasted into Slack, iMessage, or anywhere else
+that previews links, shows only Luke's own card: the Luke name and logo, the
+same for every link, and nothing of the task, the agent, the person, or the
+workspace it opens.
 
 ## Storage
 

@@ -4,7 +4,12 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
-import { type CoderHost, coderHost, type InboxCall } from "@luke/service/agents/coder-host/host";
+import {
+  type AgentToolCall,
+  type CoderHost,
+  coderHost,
+  type InboxCall,
+} from "@luke/service/agents/coder-host/host";
 import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
@@ -20,9 +25,10 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
-  type PlanTool,
-  planToolsOf,
+  type TaskTool,
+  taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -30,8 +36,8 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
-import { showPageRejected } from "@luke/service/plans/page-tool";
-import { type PictureLookResult, pictureNotLooked } from "@luke/service/plans/picture-look";
+import { showPageRejected } from "@luke/service/tasks/page-tool";
+import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -161,14 +167,14 @@ export function relayChildEvent(
 export function offeredPlanTools(
   auth: SessionAuth,
   sessionId: string,
-): Promise<ReadonlySet<PlanTool>> {
+): Promise<ReadonlySet<TaskTool>> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<PlanTool>();
+      if (Result.isFailure(admitted)) return new Set<TaskTool>();
       const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<PlanTool>();
-      return planToolsOf(agent.success);
+      if (Result.isFailure(agent)) return new Set<TaskTool>();
+      return taskToolsOf(agent.success);
     }),
   );
 }
@@ -231,6 +237,21 @@ export function lookAtPlanPicture(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
       return yield* host.lookAtPicture(admitted.success, input);
+    }),
+  );
+}
+
+/** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */
+export function runAgentTool(
+  auth: SessionAuth,
+  sessionId: string,
+  call: AgentToolCall,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return agentToolRejected(admitted.failure);
+      return yield* host.agentTools(admitted.success, call);
     }),
   );
 }

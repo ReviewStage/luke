@@ -5,7 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { openAvatarSession } from "@luke/database/models/voice-avatar-sessions";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceAvatarSessions } from "@luke/database/schemas/voice";
-import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { AVATAR_END_REASON, VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import {
   AVATAR_STOP_REASON,
@@ -109,7 +109,7 @@ interface Stand {
 /** The service for one account holding one plan, with the avatar on the Keyframe given, or none. */
 async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand> {
   const userId = await database.createUser();
-  const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
+  const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
   const openAi = await startFakeOpenAi();
   const log: LogEntry[] = [];
   const voice = voiceServer();
@@ -254,7 +254,7 @@ it.effect(
 
       const keyframe = scriptedKeyframe([
         Effect.fail(new KeyframeError({ failure: KEYFRAME_FAILURE.NO_CAPACITY, status: 503 })),
-        Effect.fail(new KeyframeError({ failure: KEYFRAME_FAILURE.PLAN_REFUSED, status: 403 })),
+        Effect.fail(new KeyframeError({ failure: KEYFRAME_FAILURE.TASK_REFUSED, status: 403 })),
         Effect.fail(new KeyframeError({ failure: KEYFRAME_FAILURE.UPSTREAM })),
       ]);
       const refusing = await stand(keyframe.layer);
@@ -380,13 +380,13 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
-      const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
+      const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const record = voiceSessionRecord();
       const voiceSessionId = await database.run(
         record.register({
           userId,
           sessionId: `live_reattached_${userId}`,
-          planId: plan.id,
+          taskId: plan.id,
           attachId: "attach-1",
           model: LIVE_DEFAULTS.MODEL,
         }),
@@ -426,13 +426,13 @@ it.effect(
       const startedAt = 1_800_000_000_000;
       const record = voiceSessionRecord(() => startedAt);
       const userId = await database.createUser();
-      const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
+      const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const sessionId = `live_orphan_${userId}`;
       const voiceSessionId = await database.run(
         record.register({
           userId,
           sessionId,
-          planId: plan.id,
+          taskId: plan.id,
           attachId: "attach-1",
           model: LIVE_DEFAULTS.MODEL,
         }),
@@ -454,7 +454,7 @@ it.effect(
         record.register({
           userId,
           sessionId: strandedSessionId,
-          planId: plan.id,
+          taskId: plan.id,
           attachId: "attach-2",
           model: LIVE_DEFAULTS.MODEL,
         }),

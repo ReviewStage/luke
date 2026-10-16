@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { account, user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-
 import { CHANGES_BOUNDS, REVIEW_STATE } from "@luke/features/coding-agent-wire";
 import { Effect, Redacted } from "effect";
 import {
@@ -49,6 +48,7 @@ const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.png");
 const DEVIN = githubUser(1004, "devin-ai-integration[bot]");
+const PAIR = githubUser(1005, "pairdev");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
 
 /** A review as GitHub lists one. */
@@ -253,7 +253,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
-    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
+    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, a person co-authoring there by the avatar GitHub serves for their id, and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -278,6 +278,12 @@ it.layer(getTestDB())("who a pull request names", (it) => {
                 },
               },
               { author: CHARLES, commit: { message: `Fix the test\n\n${coAuthor}\n` } },
+              {
+                author: CHARLES,
+                commit: {
+                  message: `Pair on the copy\n\nCo-authored-by: ${PAIR.login} <${PAIR.id}+${PAIR.login}@users.noreply.github.com>`,
+                },
+              },
             ],
           }),
         );
@@ -292,6 +298,11 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         assert.deepEqual(people.commitAuthors, [
           asCharles,
           { login: LUKE.login, bot: true, luke: true },
+          {
+            login: PAIR.login,
+            bot: false,
+            avatarUrl: "https://avatars.githubusercontent.com/u/1005?v=4",
+          },
         ]);
       }),
   );

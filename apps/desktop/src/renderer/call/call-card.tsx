@@ -11,19 +11,23 @@
  * validates and hands to the voice window, which holds the call.
  */
 
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { ReturnIcon } from "@luke/ui";
-import { type CallCardModel, callCard } from "@luke/ui/call-card-model";
+import { type CallCardModel, callCard, callCardVideoStatus } from "@luke/ui/call-card-model";
+import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
 import { Tooltip } from "../tooltip";
-import { useAppState } from "../use-app-state";
+import { useAppState, useExperiment } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
+import { useAvatarView } from "./avatar-view";
+import { CallVideoTile, VideoToggle } from "./call-video-tile";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
@@ -51,11 +55,48 @@ export interface CallControls {
   onEnd: () => void;
 }
 
+/**
+ * The avatar as a card draws it (`callCardVideoStatus`): its tile while it
+ * is starting or live, playing the track handed, and Video on beside the
+ * plan's name while it is `OFF`. Video off and Video on ask main, as the
+ * Call tab's do, so one press turns video off or on in every view at once.
+ */
+export interface CallCardVideo {
+  status: AvatarStatus;
+  /** The avatar's video, or nothing yet, which the tile draws as Luke's still face. */
+  track: MediaStreamTrack | undefined;
+  onSetVideo: (on: boolean) => void;
+}
+
 /** Everything a card is drawn from, as a Luke window hands it to wherever it docks. */
 export interface CallCardInput {
   card: CallCardModel;
   speakerMuted: boolean;
   controls: CallControls;
+  /** Absent on a call with no video to offer, which draws the card alone. */
+  video?: CallCardVideo | undefined;
+}
+
+/** What a card draws of the avatar on this window's document (`callCardVideoStatus`). */
+export function useCardVideoStatus(): AvatarStatus | undefined {
+  const state = useAppState();
+  const { view } = useVoiceView();
+  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
+  return callCardVideoStatus({ view, avatar: state?.voice.avatar ?? AVATAR_OFF, videoCalls });
+}
+
+/**
+ * The card's video from its status and the track the window holds for it,
+ * its Video off and Video on asking main as the Call tab's do, or nothing
+ * while the card has no video to offer.
+ */
+export function cardVideo(
+  status: AvatarStatus | undefined,
+  track: MediaStreamTrack | undefined,
+  tell: ActHandle["tell"],
+): CallCardVideo | undefined {
+  if (status === undefined) return undefined;
+  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }
 
 /**
@@ -66,7 +107,7 @@ export interface CallCardInput {
 export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
   return {
-    onReturn: () => tell(ACT_KIND.CALL_SHOW_PLAN),
+    onReturn: () => tell(ACT_KIND.CALL_SHOW_TASK),
     onToggleMicrophone: () => command(VOICE_COMMAND.TOGGLE_MICROPHONE),
     onToggleSpeaker: () =>
       command(speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER),
@@ -83,12 +124,15 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
  * for the plan it opens. In the floating window the name is the drag handle,
  * since macOS hands a press on a drag region to the drag, never the page.
  * There is no ×: End call is the way to put a call away, and a live call
- * nobody can see is what the card is for.
+ * nobody can see is what the card is for. On a video call the Call tab's
+ * own tile stands over the name while the avatar does, with its Video off
+ * and no end of its own, and Video on stands beside the name once it is down.
  */
 function CallCard({
   card,
   speakerMuted,
   controls,
+  video,
   surface,
   leaving = false,
   onLeft,
@@ -102,7 +146,7 @@ function CallCard({
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
   const name = (
     <span className="call-card-plan" ref={title} data-overflow={clipped}>
-      {card.planName}
+      {card.taskName}
     </span>
   );
   // The floating window is too small to hold a tooltip, so there the
@@ -111,8 +155,8 @@ function CallCard({
     <button
       type="button"
       className="icon-button"
-      aria-label={returnLabel(card.planName)}
-      title={inWindow ? returnLabel(card.planName) : undefined}
+      aria-label={returnLabel(card.taskName)}
+      title={inWindow ? returnLabel(card.taskName) : undefined}
       onClick={controls.onReturn}
     >
       <ReturnIcon />
@@ -126,6 +170,7 @@ function CallCard({
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
+  const tiled = video !== undefined && video.status !== AVATAR_STATUS.OFF;
   return (
     <section
       className="call-card"
@@ -135,12 +180,18 @@ function CallCard({
       onAnimationEnd={left}
       onMouseDown={inWindow ? keepFocus : undefined}
     >
+      {tiled ? (
+        <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
+      ) : null}
       <div className="call-card-head">
         <p className="call-card-title">{name}</p>
+        {video?.status === AVATAR_STATUS.OFF ? (
+          <VideoToggle on={false} onSetVideo={video.onSetVideo} />
+        ) : null}
         {inWindow ? (
           returnButton
         ) : (
-          <Tooltip label={returnLabel(card.planName)}>{returnButton}</Tooltip>
+          <Tooltip label={returnLabel(card.taskName)}>{returnButton}</Tooltip>
         )}
       </div>
       {/* A block of its own, as the plan's page holds it, so the bar spans the card. */}
@@ -155,6 +206,7 @@ function CallCard({
           }}
           speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
           stop={{ shown: true, onPress: controls.onEnd }}
+          titled={inWindow}
         />
       </div>
     </section>
@@ -213,18 +265,26 @@ export function ColumnFoot({
   );
 }
 
-/** The floating window's root: the card over the document it is handed. */
+/**
+ * The floating window's root: the card over the document it is handed. On
+ * a video call it views the avatar's video from the panel, which runs the
+ * avatar (`avatar-view.ts`), while its card draws the avatar live; main
+ * grows the window to hold the tile on the same document.
+ */
 export function CallWindowCard(): React.JSX.Element {
   useKeyboardModality();
   useStaleHoverAfterMove();
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
+  const videoStatus = useCardVideoStatus();
+  const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
   return (
     <CallCard
-      card={callCard({ view, planning: state?.planning ?? IDLE_PLANNING_VIEW })}
+      card={callCard({ view, tasks: state?.tasks ?? IDLE_TASKS_VIEW })}
       speakerMuted={view.speakerMuted}
       controls={callControls(tell, view.speakerMuted)}
+      video={cardVideo(videoStatus, track, tell)}
       surface={CALL_CARD_SURFACE.WINDOW}
     />
   );

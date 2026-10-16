@@ -14,6 +14,7 @@
     "./audio": "./src/audio.js",
     "./voice-view": "./src/voice-view.js",
     "./avatar": "./src/avatar.js",
+    "./avatar-view": "./src/avatar-view.js",
     "./avatar-handover": "./src/avatar-handover.js",
     "./avatar-pcm": "./src/avatar-pcm.js",
     "./avatar-pcm-chunker": "./src/avatar-pcm-chunker.js",

@@ -6,7 +6,7 @@ import {
   type PlanDocument,
   type PlanEditor,
   type PlanRevisionLine,
-} from "@luke/features/plan-wire";
+} from "@luke/features/task-wire";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,

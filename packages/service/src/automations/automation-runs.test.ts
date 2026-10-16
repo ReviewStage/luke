@@ -26,7 +26,8 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, leaveWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
+import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -145,25 +146,26 @@ const openAutomation = (
     readonly guards?: AutomationGuards;
     readonly archiveSuccessful?: boolean;
     readonly disabledServers?: readonly IntegrationProvider[];
+    readonly prompt?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const plan = yield* startPlan(owner, {
+    const task = yield* startTask(owner, {
       name: "Flaky tests",
       repository: options.repository === undefined ? `${RELAY.owner}/${RELAY.name}` : null,
     });
     const installation = INSTALLATIONS[installationsConnected++];
     assert.ok(installation);
-    yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
     const now = yield* Clock.currentTimeMillis;
     const made = yield* createAutomation(owner, {
-      planId: plan.id,
+      taskId: task.id,
       name: "Flaky-test sweep",
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: {
         kind: AUTOMATION_ACTION.CODING_AGENT,
-        prompt: PROMPT,
+        prompt: options.prompt ?? PROMPT,
         choice: { model: SOL, effort: "low" },
         ...(options.disabledServers === undefined
           ? undefined
@@ -174,7 +176,7 @@ const openAutomation = (
       webhookSecretHash: null,
       archiveSuccessful: options.archiveSuccessful ?? false,
     });
-    return { owner, automation: Option.getOrThrow(made), now, workspaceId: plan.workspaceId };
+    return { owner, automation: Option.getOrThrow(made), now, workspaceId: task.workspaceId };
   });
 
 /** A "Run now" of the automation, queued. */
@@ -318,7 +320,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         // Another automation of the owner's on the busy agent: no run of its own started it, and still its work counts.
         const fresh = Option.getOrThrow(
           yield* createAutomation(owner, {
-            planId: automation.planId,
+            taskId: automation.taskId,
             name: "Follow-up sweep",
             trigger: automation.trigger,
             action: automation.action,
@@ -366,7 +368,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const teammate = yield* openGithubUser();
         yield* joinWorkspace(workspaceId, teammate);
         const made = yield* createCodingAgent(teammate, {
-          planId: null,
+          taskId: null,
           organizationId: workspaceId,
           idempotencyKey: randomUUID(),
           model: SOL,
@@ -438,7 +440,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const lost = yield* runNow(same);
         // The automation turned to another agent of the workspace since: the run is still its claim's.
         const made = yield* createCodingAgent(owner, {
-          planId: null,
+          taskId: null,
           organizationId: workspaceId,
           idempotencyKey: randomUUID(),
           model: SOL,
@@ -544,7 +546,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
         yield* leaveWorkspace(departing.workspaceId, departing.owner);
         const question = yield* postInboxItem(
-          { userId: archiving.owner, planId: null, agentId: asking },
+          { userId: archiving.owner, taskId: null, agentId: asking },
           { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },
         );
         assert.ok(Result.isSuccess(question));
@@ -613,7 +615,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.equal(agent.effort, "low");
         assert.equal(agent.automationId, automation.id, "the agent names the automation it ran");
         assert.deepEqual(
-          [agent.planId, agent.organizationId, agent.repository],
+          [agent.taskId, agent.organizationId, agent.repository],
           [null, workspaceId, `${RELAY.owner}/${RELAY.name}`],
           "the run's agent stands in the automation's workspace on no plan, on its repository",
         );
@@ -950,14 +952,14 @@ it.layer(getTestDB())("an automation's runs", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
-        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const installation = INSTALLATIONS[installationsConnected++];
         assert.ok(installation);
-        yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+        yield* connectWorkspaceGitHub(task.workspaceId, installation);
         const automation = Option.getOrThrow(
           yield* createAutomation(owner, {
-            planId: null,
-            organizationId: plan.workspaceId,
+            taskId: null,
+            organizationId: task.workspaceId,
             repositories: ["Acme/Elsewhere", `${RELAY.owner}/${RELAY.name}`],
             name: "Code review",
             trigger: {
@@ -1065,6 +1067,36 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         assert.equal(opened, "#2905 View commands");
         assert.equal(pushed, null);
+      }),
+  );
+
+  it.effect(
+    "a code review's run about a pull request starts its agent named as a review of it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({ prompt: codeReviewPreset().prompt });
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: {
+              kind: AUTOMATION_FIRING.GITHUB,
+              event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+              repository: `${RELAY.owner}/${RELAY.name}`,
+              number: 2905,
+              title: "View commands",
+            },
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(owner, agentId)).title,
+          "Review #2905 View commands",
+        );
       }),
   );
 

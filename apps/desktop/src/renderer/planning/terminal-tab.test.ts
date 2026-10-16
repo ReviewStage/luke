@@ -24,6 +24,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
@@ -212,6 +213,7 @@ afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
 
@@ -836,6 +838,137 @@ test("the shells list folds away beside the screen, and its toggle asks the pane
   assert.equal(tab.container.querySelector(".terminal-shells"), null);
   await tab.press("Show shells");
   assert.equal(tab.toggled(), 1);
+});
+
+// Note that the test is given longer than most, because jsdom takes seconds
+// to lay the window's stylesheets for a width beside a running terminal.
+test("in a side panel too narrow for the list beside the screen, the list stands over the screen only while its own toggle holds it open, and a shell chosen there takes it down", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  layContainersAt({ "side-panel": 280 });
+  // Note that each element is read for its own display alone, which is where
+  // the rules read here hide one, because jsdom takes a tenth of a second to
+  // cascade an element through the window's stylesheets.
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const drawn = () => {
+    const list = tab.container.querySelector(".terminal-shells");
+    return list !== null && displayed(list);
+  };
+  const toggles = () =>
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].filter(displayed);
+
+  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
+  assert.deepEqual(
+    toggles().map((button) => button.getAttribute("aria-label")),
+    ["Show shells"],
+  );
+
+  await act(async () => toggles()[0]?.click());
+  await settle();
+  assert.equal(drawn(), true, "the list stands over the screen");
+  assert.equal(toggles()[0]?.getAttribute("aria-label"), "Hide shells");
+  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
+
+  await tab.choose("dev server");
+  assert.equal(drawn(), false, "a shell chosen takes the list down");
+  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
+  assert.ok(
+    document.activeElement === tab.container.querySelector("textarea"),
+    "the screen holds the keyboard, the list's hold on it gone with the list",
+  );
+});
+
+// Note that the test is given longer than most, for the reason the one above is.
+test("a list opened over the screen and then given room beside it by a widened panel holds the keyboard no more, nor takes the window's Escape", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  const narrow = layContainersAt({ "side-panel": 280 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  toggle.focus();
+  await act(async () => toggle.click());
+  await settle();
+  const list = tab.container.querySelector(".terminal-shells") ?? assert.fail("the list is drawn");
+  assert.ok(list.contains(document.activeElement), "the keyboard lands in the list");
+
+  narrow.remove();
+  layContainersAt({ "side-panel": 520 });
+  const screen =
+    tab.container.querySelector<HTMLTextAreaElement>("textarea") ??
+    assert.fail("the screen is drawn");
+  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+    );
+    screen.focus();
+  });
+  assert.ok(document.activeElement === screen, "the keyboard stays where it was taken");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    window.dispatchEvent(press);
+  });
+  assert.equal(press.defaultPrevented, false, "the window's own Escape is left to it");
+});
+
+// Note that the test is given longer than most, for the reason the one above is.
+test("in a side panel at its default width the shells float over the screen rather than stand beside it, peeked by the pointer resting on their toggle and gone once it leaves", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  layContainersAt({ "side-panel": 400 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const drawn = () => {
+    const list = tab.container.querySelector(".terminal-shells");
+    return list !== null && displayed(list);
+  };
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  const screen =
+    tab.container.querySelector(".terminal-tab-screen") ?? assert.fail("the screen is drawn");
+  const cross = (from: Element, to: Element, clientY: number) =>
+    act(() => {
+      from.dispatchEvent(
+        new PointerEvent("pointerout", { bubbles: true, relatedTarget: to, clientY }),
+      );
+      to.dispatchEvent(
+        new PointerEvent("pointerover", { bubbles: true, relatedTarget: from, clientY }),
+      );
+    });
+
+  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
+  assert.equal(toggle.dataset.place, "over");
+  cross(screen, toggle, 0);
+  assert.equal(drawn(), true, "the list floats over the screen");
+  cross(toggle, screen, -10);
+  assert.equal(drawn(), false, "leaving the toggle takes it down");
+  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
+});
+
+// Note that the test is given longer than most, for the reason the one above is.
+test("a shell started from the list floating over the screen takes the list down, its screen holding the keyboard", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  layContainersAt({ "side-panel": 280 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  await act(async () => toggle.click());
+  await tab.press("New shell");
+  const list = tab.container.querySelector(".terminal-shells");
+  assert.equal(list !== null && displayed(list), false, "the list is taken down");
+  assert.ok(
+    document.activeElement === tab.container.querySelector("textarea"),
+    "the new shell's screen holds the keyboard",
+  );
 });
 
 test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {

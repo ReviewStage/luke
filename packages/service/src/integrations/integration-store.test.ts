@@ -9,9 +9,11 @@ import { noNetwork } from "../testing/no-network.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
+  deleteIntegrationAccount,
   deleteIntegrationConnection,
   endIntegrationSignIn,
   expireIntegrationConnection,
+  fillIntegrationLabel,
   INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
   readIntegrationConnections,
@@ -167,7 +169,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
   );
 
   it.effect(
-    "two accounts at one provider are two rows, each settled and disconnected on its own, the first of them primary",
+    "two accounts at one provider are two rows, each settled and disconnected on its own",
     () =>
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
@@ -200,10 +202,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
 
         const rows = yield* readIntegrationConnections(userId);
         assert.deepEqual(
-          rows.map((row) => [row.connectionName, row.connectSubject, row.primary, row.status]),
+          rows.map((row) => [row.connectionName, row.connectSubject, row.status]),
           [
-            ["notion", userId, true, INTEGRATION_ROW_STATUS.PENDING],
-            ["notion-2", "subject-2", false, INTEGRATION_ROW_STATUS.CONNECTED],
+            ["notion", userId, INTEGRATION_ROW_STATUS.PENDING],
+            ["notion-2", "subject-2", INTEGRATION_ROW_STATUS.CONNECTED],
           ],
         );
         assert.notEqual(rows[0]?.id, rows[1]?.id);
@@ -294,6 +296,62 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         assert.deepEqual(
           [first, second, row?.connectSubject, row?.state],
           [true, false, "subject-a", `state-race-a-${userId}`],
+        );
+      }),
+  );
+
+  it.effect(
+    "a name read for one account's grant labels only that account, never one that replaced it under the same name",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const under = (connectSubject: string, state: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              userId,
+              { provider: NOTION, connectionName: "notion-2", connectSubject },
+              state,
+              Redacted.make("verifier"),
+            ),
+            completeIntegrationSignIn(userId, "notion-2", state),
+          );
+        yield* under("subject-old", `state-old-${userId}`);
+        const old = yield* readIntegrationConnection(userId, "notion-2");
+        assert.ok(old !== undefined);
+        // Disconnected and replaced by another account under the same name while the old grant's name was read.
+        yield* deleteIntegrationConnection(userId, "notion-2");
+        yield* under("subject-new", `state-new-${userId}`);
+        yield* fillIntegrationLabel(old, "Acme");
+        assert.equal((yield* readIntegrationConnection(userId, "notion-2"))?.label, undefined);
+      }),
+  );
+
+  it.effect(
+    "a disconnect of the account read deletes only that account, never one that replaced it under the same name",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const under = (connectSubject: string, state: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              userId,
+              { provider: NOTION, connectionName: "notion-2", connectSubject },
+              state,
+              Redacted.make("verifier"),
+            ),
+            completeIntegrationSignIn(userId, "notion-2", state),
+          );
+        yield* under("subject-read", `state-read-${userId}`);
+        const read = yield* readIntegrationConnection(userId, "notion-2");
+        assert.ok(read !== undefined);
+        // Disconnected and replaced by another account under the same name after it was read.
+        yield* deleteIntegrationConnection(userId, "notion-2");
+        yield* under("subject-replacing", `state-replacing-${userId}`);
+
+        assert.equal(yield* deleteIntegrationAccount(read), false);
+        assert.equal(
+          (yield* readIntegrationConnection(userId, "notion-2"))?.connectSubject,
+          "subject-replacing",
         );
       }),
   );

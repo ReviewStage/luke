@@ -1,5 +1,10 @@
 import type { FileChip } from "@luke/features/attachment-model";
-import { planAttachmentIdsIn, planAttachmentOf } from "@luke/features/plan-attachment-link";
+import {
+  planAttachmentIdsIn,
+  planAttachmentOf,
+  taskPicturesIn,
+} from "@luke/features/plan-attachment-link";
+import { planSections } from "@luke/features/plan-document";
 import { ACT_KIND } from "@luke/host/acts";
 import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
 import { ImageIcon } from "lucide-react";
@@ -29,6 +34,9 @@ import { useOpenLink } from "./use-open-link";
  * `usePlanPictureDrawer` hands. A press on a picture opens the window's file
  * viewer (`attachment-viewer.tsx`) on it, its arrows walking the plan's
  * other pictures that have been read, in the order the text names them. A
+ * place that knows who last changed each section hands `sectionNote`, and
+ * the viewer's header says it of the section the picture shown stands in,
+ * which is where a picture's edit is named rather than over it in the text. A
  * picture of another plan, one copied across, is read as that plan's, which
  * only that plan's readers may, and opens nothing here. A picture from
  * outside Luke is never fetched, since the window's policy refuses it and a
@@ -53,8 +61,9 @@ export interface PlanPicturesDoor {
 
 const PlanPicturesContext = createContext<PlanPicturesDoor | undefined>(undefined);
 
-/** The viewer as it stands open: the plan's read pictures, and the one shown. */
+/** The viewer as it stands open: the plan's read pictures, each by its id, and the one shown. */
 interface Viewing {
+  readonly ids: readonly string[];
   readonly files: readonly FileChip[];
   readonly at: number;
 }
@@ -65,16 +74,36 @@ function chipOf(url: string, name: string): FileChip {
 }
 
 /**
+ * The heading of the section of `text` that draws the plan's picture `id`,
+ * empty for the words before the first; none where the text draws it
+ * nowhere. Note that only a drawn picture counts, never its address in
+ * words or code, and that a picture drawn twice is named by its first
+ * section, as the viewer walks each picture once.
+ */
+function sectionOfPicture(text: string, planId: string, id: string): string | undefined {
+  return planSections(text).find((section) =>
+    taskPicturesIn(section.text).some((address) => {
+      const named = planAttachmentOf(address);
+      return named?.taskId === planId && named.attachmentId === id;
+    }),
+  )?.heading;
+}
+
+/**
  * The plan's pictures for every message drawn under it: `text` is the words
- * shown, which name the pictures in the order the viewer walks them.
+ * shown, which name the pictures in the order the viewer walks them, and
+ * `sectionNote` what the viewer says of a picture by the heading of the
+ * section it stands in.
  */
 export function PlanPictures({
   planId,
   text,
+  sectionNote,
   children,
 }: {
   planId: string;
   text: string;
+  sectionNote?: ((heading: string) => ReactNode) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -82,7 +111,7 @@ export function PlanPictures({
   const names = useRef(new Map<string, string>());
   const read = useCallback(
     (owner: string, id: string) =>
-      act(ACT_KIND.PLANNING_PICTURE_READ, { planId: owner, attachmentId: id }),
+      act(ACT_KIND.TASKS_PICTURE_READ, { planId: owner, attachmentId: id }),
     [act],
   );
   const door = useMemo<PlanPicturesDoor>(
@@ -100,11 +129,19 @@ export function PlanPictures({
           ];
         });
         const at = shown.findIndex((each) => each.id === id);
-        if (at !== -1) setViewing({ files: shown.map((each) => each.chip), at });
+        if (at !== -1) {
+          setViewing({
+            ids: shown.map((each) => each.id),
+            files: shown.map((each) => each.chip),
+            at,
+          });
+        }
       },
     }),
     [planId, read, text],
   );
+  const shownId = viewing?.ids[viewing.at];
+  const heading = shownId === undefined ? undefined : sectionOfPicture(text, planId, shownId);
   return (
     <PlanPicturesContext.Provider value={door}>
       {children}
@@ -114,6 +151,7 @@ export function PlanPictures({
           at={viewing.at}
           onAt={(at) => setViewing({ ...viewing, at })}
           onClose={() => setViewing(undefined)}
+          note={heading === undefined ? undefined : sectionNote?.(heading)}
         />
       )}
     </PlanPicturesContext.Provider>
@@ -183,7 +221,7 @@ export function usePlanPictureDrawer(): PictureDrawer | undefined {
       return (
         <PlanPicture
           door={door}
-          owner={named.planId}
+          owner={named.taskId}
           id={named.attachmentId}
           alt={alt}
           caption={title}

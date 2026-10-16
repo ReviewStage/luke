@@ -28,6 +28,8 @@ export interface WaitingItems {
   readonly items: readonly InboxListed[];
   /** The plans whose items were read as main says they stand now, which `items` speaks for whole; a plan that changed since, its read out or failed, is not among them. */
   readonly readPlans: ReadonlySet<string>;
+  /** The agents with no plan whose items were read as main says they stand now, which `items` speaks for whole. */
+  readonly readAgents: ReadonlySet<string>;
   readonly reading: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
@@ -51,17 +53,17 @@ export function useWaitingItems(plans: PlansControl): WaitingItems {
   // Note that every plan holding an item is read, not only those main counts as waiting on the
   // account, because those are its own agents' alone, and the Inbox lists every member's.
   const holdings = useMemo(
-    () => inboxPlans.filter((holding) => listed.some((plan) => plan.id === holding.planId)),
+    () => inboxPlans.filter((holding) => listed.some((plan) => plan.id === holding.taskId)),
     [inboxPlans, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
   const planless = usePlanlessInboxItems(plans.inboxPlanless);
   const entries = [
     ...holdings.flatMap((holding) => {
-      const plan = listed.find((each) => each.id === holding.planId);
+      const plan = listed.find((each) => each.id === holding.taskId);
       return plan === undefined
         ? []
-        : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
+        : [{ holder: planHolder(plan), items: read.items.get(holding.taskId) ?? [] }];
     }),
     ...planlessGroups(plans.inboxPlanless, planless.items, plans.workspace?.id),
   ];
@@ -78,6 +80,7 @@ export function useWaitingItems(plans: PlansControl): WaitingItems {
   return {
     items,
     readPlans: read.current,
+    readAgents: planless.current,
     reading,
     failed: read.failed || planless.failed,
     onRetry,

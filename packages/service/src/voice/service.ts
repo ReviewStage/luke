@@ -12,11 +12,11 @@ import {
   HOSTED_API_ERROR,
   type HostedApiError,
   HTTP_STATUS,
-  type PlanActivityFrame,
-  type PlanCallEndingFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
+  type TaskActivityFrame,
+  type TaskCallEndingFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
@@ -510,7 +510,7 @@ export class VoiceService {
       const standing = yield* this.#attachExchange({
         accountId,
         sessionId,
-        planId: opened.planId,
+        taskId: opened.taskId,
         started: opened.started,
         sideband,
         // The call's plan as its notetaker has it now, sent on a fiber of
@@ -520,7 +520,7 @@ export class VoiceService {
         onPlanDraft: (draft) => {
           const frame: PlanDraftFrame = {
             type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
-            planId: opened.planId,
+            planId: opened.taskId,
             document: draft.document,
             readAt: draft.readAt,
             ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
@@ -533,9 +533,9 @@ export class VoiceService {
         // What each part of Luke is doing, sent the same way, so the
         // Plans tab says the voice's state and the backend's apart.
         onActivity: (activity) => {
-          const frame: PlanActivityFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
-            planId: opened.planId,
+          const frame: TaskActivityFrame = {
+            type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+            planId: opened.taskId,
             ...activity,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
@@ -544,9 +544,9 @@ export class VoiceService {
         // model read them from the plan's repository, sent the same way, so
         // the Plans tab's code pane draws it as he says it.
         onCode: (shown) => {
-          const frame: PlanCodeFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_CODE,
-            planId: opened.planId,
+          const frame: TaskCodeFrame = {
+            type: VOICE_SERVICE_FRAME.TASK_CODE,
+            planId: opened.taskId,
             ...shown,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
@@ -554,9 +554,9 @@ export class VoiceService {
         // Each planning turn's work, sent the same way, so the Plans tab's
         // Work tab reads what Luke's planning model wrote and ran as it goes.
         onWork: (turn) => {
-          const frame: PlanWorkFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_WORK,
-            planId: opened.planId,
+          const frame: TaskWorkFrame = {
+            type: VOICE_SERVICE_FRAME.TASK_WORK,
+            planId: opened.taskId,
             turn,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
@@ -566,9 +566,9 @@ export class VoiceService {
         // is the one the developer's stop asks for and nothing ends here.
         onCallEnding: () => {
           this.#log({ event: LOG_EVENT.CALL_ENDING });
-          const frame: PlanCallEndingFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
-            planId: opened.planId,
+          const frame: TaskCallEndingFrame = {
+            type: VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
+            planId: opened.taskId,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

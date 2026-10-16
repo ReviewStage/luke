@@ -1,5 +1,5 @@
-import type { CodeRef } from "@luke/features/plan-wire";
-import type { CodeToken, PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
+import type { CodeRef } from "@luke/features/task-wire";
+import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
 import { cssCustomProperties } from "@luke/ui";
 import {
   type CodeFeedCall,
@@ -111,7 +111,7 @@ export function CodeLineNumber({ line }: { line: number | undefined }): React.JS
 }
 
 /** Whether a line holds no text to copy. */
-function isBlank(tokens: PlanCode["lines"][number]): boolean {
+function isBlank(tokens: TaskCode["lines"][number]): boolean {
   return tokens.every((token) => token.text === "");
 }
 
@@ -123,7 +123,7 @@ export function CodeLineRows({
   before,
 }: {
   firstLine: number;
-  lines: PlanCode["lines"];
+  lines: TaskCode["lines"];
   pointed: CodeRef;
   /** What stands before a line, by its number; nothing where absent. */
   before?: ((line: number) => ReactNode) | undefined;
@@ -154,11 +154,14 @@ export function CodeLineRows({
   );
 }
 
-/** How far below the feed's top a card revealed stands, in pixels: clear of the call's checkpoint, which sticks there. */
-const REVEAL_TOP_PX = 44;
+/** How far below the feed's top a card revealed stands, in pixels: the feed's scroll padding, which clears the call's checkpoint stuck there and the fade beneath it. */
+function revealTop(list: HTMLElement): number {
+  const padding = Number.parseFloat(getComputedStyle(list).scrollPaddingTop);
+  return Number.isNaN(padding) ? 0 : padding;
+}
 
 /** A card's lines. */
-export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+export function CodeLines({ code }: { code: TaskCode }): React.JSX.Element {
   return (
     <div className="code-lines">
       <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
@@ -249,7 +252,7 @@ function CodeCardContent({
   showing,
   onOpenFile,
 }: {
-  showing: PlanCodeShowing;
+  showing: TaskCodeShowing;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
@@ -312,7 +315,7 @@ export function CodePane({
   reveal,
   onRevealed,
 }: {
-  shown: readonly PlanCodeShowing[];
+  shown: readonly TaskCodeShowing[];
   /** The plan's calls as the Call tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
@@ -333,7 +336,7 @@ export function CodePane({
     const card = pane.current?.querySelector<HTMLElement>(`[data-call-id="${CSS.escape(reveal)}"]`);
     if (list != null && card != null) {
       const top = card.getBoundingClientRect().top - list.getBoundingClientRect().top;
-      list.scrollTop += top - REVEAL_TOP_PX;
+      list.scrollTop += top - revealTop(list);
       list.dispatchEvent(new Event("scroll"));
     }
     onRevealed?.();
@@ -341,8 +344,8 @@ export function CodePane({
   return (
     <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-        <ConversationContent className="pt-0">
+        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; cards fade beneath it. */}
+        <ConversationContent className="checkpoint-log scroll-fade pt-0">
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}

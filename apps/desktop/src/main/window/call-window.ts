@@ -4,11 +4,14 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@luke/host";
+import type { AvatarViewSignal } from "@luke/voice/avatar-view";
+import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import {
-  CALL_WINDOW_BOUNDS,
+  type CallWindowArea,
+  CallWindowPlace,
   type CallWindowPoint,
   type CallWindowSurface,
   callWindowPosition,
@@ -39,6 +42,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
   return Option.getOrUndefined(decodePlacement(text));
 }
 
+/** Every display's work area, the screen less the menu bar and the Dock. */
+function workAreas(): readonly CallWindowArea[] {
+  return screen.getAllDisplays().map((display) => display.workArea);
+}
+
 /**
  * The one floating window that draws the standing call while no Luke window
  * has the keyboard. It loads the same renderer bundle as the panels from a
@@ -52,6 +60,12 @@ function readPlacement(file: string): CallWindowPoint | undefined {
  * that comes and goes with every switch of app would reload its renderer
  * each time. A renderer that dies is let go of, and the next show opens a fresh
  * one. Like the voice window it never counts toward the app's lifetime.
+ *
+ * On a video call it grows upward by the avatar's tile while the avatar
+ * stands and shrinks back once it is down (`callWindowFrame`), its card's
+ * controls staying where the developer left them. The place kept, in the
+ * window's life and between launches, is the card's alone (`CallWindowPlace`),
+ * whatever the window's height when it moved.
  */
 export class CallWindow implements CallWindowSurface {
   readonly #options: CallWindowOptions;
@@ -60,6 +74,10 @@ export class CallWindow implements CallWindowSurface {
   #ready = false;
   #wanted = false;
   #closedForGood = false;
+  /** Whether the window holds the avatar's tile above the card, as the presence last fitted it. */
+  #video = false;
+  /** Where the card is kept while the window stands, which only the developer's drag moves. */
+  #place: CallWindowPlace | undefined;
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
@@ -77,19 +95,37 @@ export class CallWindow implements CallWindowSurface {
     this.current()?.hide();
   }
 
+  fitVideo(video: boolean): void {
+    this.#video = video;
+    const window = this.current();
+    if (!window) return;
+    const place = this.#place;
+    if (place !== undefined) window.setBounds(place.frame(video, workAreas()));
+  }
+
+  /** The panel's answer to the window's view of the avatar's video. */
+  signalAvatarView(signal: AvatarViewSignal): void {
+    // SAFETY: the signal is the structured-clone value `avatarViewSignalFromWire` admitted.
+    this.current()?.webContents.send(channels.onAvatarViewSignal, signal as UnparsedWireValue);
+  }
+
   #open(): BrowserWindow {
-    const { x, y } = callWindowPosition({
-      saved: readPlacement(this.#options.placementPath),
-      workAreas: screen.getAllDisplays().map((display) => display.workArea),
-      primary: screen.getPrimaryDisplay().workArea,
-    });
+    const place = new CallWindowPlace(
+      callWindowPosition({
+        saved: readPlacement(this.#options.placementPath),
+        workAreas: workAreas(),
+        primary: screen.getPrimaryDisplay().workArea,
+      }),
+    );
+    this.#place = place;
+    const { x, y, width, height } = place.frame(this.#video, workAreas());
     const window = new BrowserWindow({
       title: "Luke call",
       show: false,
       x,
       y,
-      width: CALL_WINDOW_BOUNDS.WIDTH,
-      height: CALL_WINDOW_BOUNDS.HEIGHT,
+      width,
+      height,
       type: "panel",
       frame: false,
       transparent: true,
@@ -137,10 +173,14 @@ export class CallWindow implements CallWindowSurface {
     window.on("move", () => {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
+    // Only the developer's own drag moves the card's kept place: a move to
+    // the frame this side just set, which macOS reports as a move too, is
+    // not one.
     window.on("moved", () => {
-      const [left, top] = window.getPosition();
+      const kept = place.moved(window.getBounds());
+      if (kept === undefined) return;
       try {
-        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify(kept));
       } catch {
         // Note that a place that cannot be kept is let go of, because the
         // card opening at its corner next time costs nothing, and a throw

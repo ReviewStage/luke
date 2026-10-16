@@ -23,14 +23,14 @@ import {
 
 export const LINK_ROUTE = {
   SETTINGS: "settings",
-  PLANS: "plans",
+  TASKS: "plans",
   EXPERIMENT_OFF: "experiment-off",
 } as const;
 
 /** Where a link opens, with the Settings place where it opens there. */
 export type LinkRoute =
   | { readonly kind: typeof LINK_ROUTE.SETTINGS; readonly settings: SettingsLink }
-  | { readonly kind: typeof LINK_ROUTE.PLANS }
+  | { readonly kind: typeof LINK_ROUTE.TASKS }
   | { readonly kind: typeof LINK_ROUTE.EXPERIMENT_OFF };
 
 /** What a link to a place of an experiment that is off says, since the place stands nowhere until it is on. */
@@ -58,14 +58,14 @@ export function linkRoute(
       };
     }
     case LINK_PLACE.FACTORY:
-      return window.factoryOn ? { kind: LINK_ROUTE.PLANS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
+      return window.factoryOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     case LINK_PLACE.AUTOMATIONS:
     case LINK_PLACE.AUTOMATION:
     case LINK_PLACE.AUTOMATION_RUN:
       return window.automationsOn
-        ? { kind: LINK_ROUTE.PLANS }
+        ? { kind: LINK_ROUTE.TASKS }
         : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     default:
-      return { kind: LINK_ROUTE.PLANS };
+      return { kind: LINK_ROUTE.TASKS };
   }
 }

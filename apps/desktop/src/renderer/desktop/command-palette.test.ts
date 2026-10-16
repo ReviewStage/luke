@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -11,23 +13,25 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
+import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
@@ -38,6 +42,7 @@ import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../planning/use-side-panel";
 import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
+import { DesktopSidebar } from "./desktop-sidebar";
 import { ListedAutomations } from "./listed-automations";
 import { panelEntries } from "./side-panel";
 
@@ -46,6 +51,9 @@ interface Sent {
   tabs: PanelTab[];
   views: SettingsView[];
 }
+
+/** The window's own stylesheet, which says which part of a row gives way. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const roots: Root[] = [];
 
@@ -56,6 +64,7 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 /** An agent's page, as far as it tells the window the workspace it read its agent into. */
@@ -83,7 +92,7 @@ function WindowPalette({
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
   plans: PlansControl = plansControl(),
-  readFiles: (planId: string) => Promise<PlanningTreeAnswer> = () =>
+  readFiles: (planId: string) => Promise<TasksTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
 ): Sent {
@@ -96,7 +105,7 @@ function openPalette(
     root.render(
       createElement(WindowPalette, {
         available: true,
-        tab: PANEL_TAB.PLANS,
+        tab: PANEL_TAB.TASKS,
         onTabChange: (tab) => sent.tabs.push(tab),
         plans,
         settings: {
@@ -126,7 +135,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
   roots.push(root);
   const registry = AtomRegistry.make();
   const plans = plansControl({
-    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
     activePlanId: DOCUMENT_PLAN.id,
   });
   return (looked) =>
@@ -140,7 +149,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
             createElement(Looker, { looked }),
             createElement(WindowPalette, {
               available: true,
-              tab: PANEL_TAB.PLANS,
+              tab: PANEL_TAB.TASKS,
               onTabChange: () => undefined,
               plans,
               settings: {
@@ -245,6 +254,17 @@ const SETTINGS_PAGES = [
   "About",
   "Keyboard shortcuts",
 ];
+
+test("the results fade under the filters above them and over the keys' hints below them, rather than being sliced at either hairline", () => {
+  openPalette();
+  const sheets = layFades();
+  try {
+    const list = document.querySelector(".command-palette-list") ?? assert.fail("results stand");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("the Settings filter lists every Settings page by its name, ahead of the settings", () => {
   openPalette();
@@ -487,7 +507,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     roots.push(root);
     const palette = createElement(WindowPalette, {
       available: true,
-      tab: PANEL_TAB.PLANS,
+      tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       plans,
       settings: {
@@ -602,7 +622,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
           repository: "acme/relay",
         },
       ],
-      region: { kind: DOCUMENT_REGION.READY, plan: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
+      region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
       agents: codingAgentsControl({
         agents: [agent],
@@ -646,7 +666,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
   const path = "src/invites/accept.ts";
   const note = "A used invite is refused here.";
-  const showing: PlanCodeShowing = {
+  const showing: TaskCodeShowing = {
     callId: "c",
     turnId: "t",
     shownAt: 1_000,
@@ -687,7 +707,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
         path: "",
         repository: "acme/relay",
         branch: "main",
-        entries: [{ name: path, kind: PLAN_TREE_ENTRY.FILE }],
+        entries: [{ name: path, kind: TASK_TREE_ENTRY.FILE }],
         truncated: false,
       },
     }),
@@ -865,11 +885,11 @@ const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** A task drawn in Acme, its agent's tab chosen in the work column and the agent named. */
 const ON_AGENT_TAB: PlansControl = plansControl({
-  page: PLANS_PAGE.DOCUMENT,
+  page: TASKS_PAGE.DOCUMENT,
   activePlanId: DOCUMENT_PLAN.id,
   region: {
     kind: DOCUMENT_REGION.READY,
-    plan: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
+    task: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
   },
   workspaces: [
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
@@ -911,6 +931,35 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
     `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
   ]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("an action's name keeps its width beside the task it acts on, and the task's name is what gives way, while a name with no detail has the whole row", () => {
+  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  openPalette(ON_AGENT_TAB);
+  type("copy link");
+  const at = rows().indexOf(`Copy link to task · ${DOCUMENT_PLAN.name}`);
+  const row =
+    document.querySelectorAll(".menu-item")[at] ?? assert.fail("Copy link to task is listed");
+  const name = row.querySelector(".command-palette-name") ?? assert.fail("the row's name");
+  const detail = row.querySelector(".command-palette-detail") ?? assert.fail("the task it acts on");
+
+  type("");
+  const bare =
+    [...document.querySelectorAll(".command-palette-name")].find(
+      (each) => each.nextElementSibling?.classList.contains("command-palette-detail") !== true,
+    ) ?? assert.fail("a row with no detail is listed");
+
+  assert.equal(getComputedStyle(name).flexShrink, "0", "the name keeps its width");
+  assert.deepEqual(
+    [getComputedStyle(bare).flexShrink, getComputedStyle(bare).maxWidth],
+    ["1", "none"],
+    "a name with nothing after it has the whole row",
+  );
+  assert.deepEqual(
+    [getComputedStyle(detail).flexShrink, getComputedStyle(detail).minWidth],
+    ["1", "0px"],
+    "the task's name gives way",
+  );
 });
 
 test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
@@ -1155,4 +1204,75 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   press("Unpin agent");
   assert.deepEqual(pinRows([]), []);
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
+});
+
+/** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
+function PinnableTask(): React.JSX.Element {
+  const [listed, setListed] = useState<Task>(DOCUMENT_PLAN);
+  const plans = plansControl({
+    plans: [listed],
+    region: { kind: DOCUMENT_REGION.READY, task: listed },
+    activePlanId: listed.id,
+    onMarkPlan: (planId, mark) => {
+      assert.equal(planId, listed.id);
+      setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_PLAN, pinnedAt: 5 } : DOCUMENT_PLAN);
+    },
+  });
+  return createElement(
+    Fragment,
+    null,
+    createElement(Looker, { looked: listed }),
+    createElement(DesktopSidebar, sidebarProps(plans)),
+    createElement(WindowPalette, {
+      available: true,
+      tab: PANEL_TAB.TASKS,
+      onTabChange: () => undefined,
+      plans,
+      settings: {
+        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        onViewChange: () => undefined,
+      },
+      readFiles: () => Promise.reject(new Error("no repository is open")),
+    }),
+  );
+}
+
+/** The names the sidebar's Pinned section lists, none while it stands nowhere. */
+function pinnedNames(): (string | null)[] {
+  const section = document.querySelector('nav[aria-label="Pinned"]');
+  return [...(section?.querySelectorAll(".sidebar-plan-name") ?? [])].map(
+    (name) => name.textContent,
+  );
+}
+
+/** The rows ⌘K lists for "pin", the palette opened afresh. */
+function pinRows(): string[] {
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+  type("pin");
+  return rows().filter((row) => /^(Pin|Unpin) /u.test(row));
+}
+
+test("with a task open, ⌘K offers Pin task, which pins it under Pinned and turns to Unpin task", () => {
+  // The sidebar asks whether motion is reduced, which jsdom cannot answer.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(PinnableTask))));
+
+  assert.deepEqual(pinRows(), ["Pin task"]);
+  press("Pin task");
+  assert.deepEqual(pinnedNames(), [DOCUMENT_PLAN.name]);
+  assert.deepEqual(pinRows(), ["Unpin task"]);
+  press("Unpin task");
+  assert.deepEqual(pinnedNames(), []);
+  assert.deepEqual(pinRows(), ["Pin task"]);
 });

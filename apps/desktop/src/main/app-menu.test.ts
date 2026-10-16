@@ -3,7 +3,16 @@ import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { APP_COMMAND, shortcutShown, shownShortcutGroups } from "#shared/shortcuts";
+import {
+  APP_COMMAND,
+  APP_SHORTCUTS,
+  appCommandLabel,
+  KEYED_COMMANDS,
+  SHORTCUT_KEY,
+  shortcutAccelerator,
+  shortcutShown,
+  shownShortcutGroups,
+} from "#shared/shortcuts";
 import { ellipsized } from "#testing/action-label";
 import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 
@@ -12,7 +21,8 @@ import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
  * command does not stand is not in its menu, and leaves no separator
  * stranded where it stood; and the one drawer redraws when the update item
  * or the account's experiments move, and only then; and no item a reader
- * can choose ends its name with an ellipsis.
+ * can choose ends its name with an ellipsis; and only a development build
+ * offers the developer tools.
  */
 
 /** The labels of one top-level menu's items, a separator as a dash. */
@@ -29,7 +39,6 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Home",
       "Inbox",
-      "Factory",
       "Automations",
       "-",
       "Back",
@@ -43,14 +52,7 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), [
-      "Home",
-      "Factory",
-      "Automations",
-      "-",
-      "Back",
-      "Forward",
-    ]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Automations", "-", "Back", "Forward"]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
@@ -58,7 +60,6 @@ describe("the menu bar's gate", () => {
       (command) =>
         command !== APP_COMMAND.HOME &&
         command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.FACTORY &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
@@ -76,22 +77,21 @@ describe("the Automations item", () => {
   });
 });
 
-describe("Factory's item", () => {
-  test("stands under Go only while the account has Factory's experiment on", () => {
-    const off = appMenuTemplate("Luke", undefined, (command) => shortcutShown(command, {}));
-    assert.ok(!labelsOf(off, "Go").includes("Factory"));
+describe("Factory", () => {
+  test("keeps no menu bar item and no chord, with its experiment on as off, so ⇧⌘F reaches no command", () => {
     const on = appMenuTemplate("Luke", undefined, (command) =>
       shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY)),
     );
-    assert.ok(labelsOf(on, "Go").includes("Factory"));
-  });
-
-  test("Factory's chord is listed only while its experiment is on", () => {
-    const listed = (groups: ReturnType<typeof shownShortcutGroups>) =>
-      groups.flatMap((group) => group.commands);
-    assert.ok(!listed(shownShortcutGroups({})).includes(APP_COMMAND.FACTORY));
+    assert.ok(!labelsOf(on, "Go").includes("Factory"));
+    const listed = shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY)).flatMap(
+      (group) => group.commands,
+    );
+    assert.ok(!listed.some((command) => appCommandLabel(command) === "Factory"));
+    const freed = shortcutAccelerator({ key: SHORTCUT_KEY.F, shift: true });
     assert.ok(
-      listed(shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY))).includes(APP_COMMAND.FACTORY),
+      !KEYED_COMMANDS.some(
+        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === freed,
+      ),
     );
   });
 });
@@ -99,7 +99,9 @@ describe("Factory's item", () => {
 describe("the menu bar's drawer", () => {
   test("draws what it holds, and again only when the update item or the experiments move", () => {
     const drawn: MenuItemConstructorOptions[][] = [];
-    const show = menuBarDrawer("Luke", (template) => drawn.push(template));
+    const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
+      drawn.push(template),
+    );
 
     show();
     assert.equal(drawn.length, 1);
@@ -147,5 +149,60 @@ describe("the menu bar's names", () => {
       };
       assert.deepEqual(ellipsized(choosableLabels(appMenuTemplate("Luke", update))), [], act);
     }
+  });
+});
+
+/** Every item, every submenu walked. */
+function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
+  return items.flatMap((item) => [
+    item,
+    ...(Array.isArray(item.submenu) ? everyItem(item.submenu) : []),
+  ]);
+}
+
+const developerTools = { onOpenVoiceWindow: () => undefined, onOpenCallWindow: () => undefined };
+
+/** The menu bar a build draws once the windows have told it of their developer tools. */
+function drawnFor(packaged: boolean): MenuItemConstructorOptions[] {
+  let last: MenuItemConstructorOptions[] = [];
+  const show = menuBarDrawer({ appName: "Luke", packaged }, (template) => {
+    last = template;
+  });
+  show({ developerTools });
+  return last;
+}
+
+describe("the developer tools", () => {
+  test("a development build offers them under View, for the window chosen over and the two it cannot reach", () => {
+    const view = drawnFor(false).find((item) => item.label === "View");
+    const developer = Array.isArray(view?.submenu)
+      ? view.submenu.find((item) => item.label === "Developer")
+      : undefined;
+    assert.ok(developer, "View has a Developer submenu");
+    assert.deepEqual(labelsOf([developer], "Developer"), [
+      "Developer Tools",
+      "-",
+      "Voice Window Developer Tools",
+      "Call Window Developer Tools",
+    ]);
+  });
+
+  test("a packaged build offers none, though the windows tell it of them", () => {
+    const items = everyItem(drawnFor(true));
+    assert.ok(!items.some((item) => item.role === "toggleDevTools"));
+    assert.deepEqual(
+      items.filter((item) => String(item.label ?? "").includes("Developer")),
+      [],
+    );
+  });
+
+  test("their chord is no window command's, so it shadows none of Luke's shortcuts", () => {
+    const tools = everyItem(drawnFor(false)).find((item) => item.role === "toggleDevTools");
+    assert.ok(tools?.accelerator, "the developer tools answer a chord");
+    assert.ok(
+      !KEYED_COMMANDS.some(
+        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === tools.accelerator,
+      ),
+    );
   });
 });

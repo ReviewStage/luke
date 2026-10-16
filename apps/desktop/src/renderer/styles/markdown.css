@@ -11,13 +11,19 @@
 }
 
 .markdown > * + *,
-.markdown li > * + *,
-.markdown blockquote > * + * {
+.markdown li > * + * {
   margin-top: 0.5em;
 }
 
 .markdown p {
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A tight list's item holds its words with no paragraph around them, so it
+   breaks a long path or identifier at the column's edge as a paragraph does,
+   rather than letting it run past the edge. */
+.markdown li {
   overflow-wrap: anywhere;
 }
 
@@ -74,19 +80,38 @@
   white-space: pre;
 }
 
-.markdown blockquote {
-  margin: 0;
-  padding-left: 0.85em;
-  border-left: 0.2em solid var(--markdown-edge);
-  opacity: 0.8;
-  text-align: left;
-}
-
 .markdown ul,
 .markdown ol {
   margin: 0;
   padding-left: 1.5em;
   text-align: left;
+}
+
+/* A quote (`@luke/ui/quote-face`), drawn alike in a transcript, a sent
+   bubble, an Inbox item, the plan, and the plan's editor, as a thread or a
+   document draws one: flush with the words around it, set off by a thin rule
+   and a short step of room after it, in the quiet ink at the same size and
+   upright. A quote inside a quote adds one more rule and step and nothing
+   else. The ink is the quote's colour and not its opacity, so a picture or a
+   code block inside it stays at full strength. Note that the rules over its
+   blocks name the element and stand after the lists, so they outrank the
+   `.markdown p` and `.markdown ul` above, and the browser's own margins on a
+   transcript's paragraphs, which no reset reaches there. */
+.markdown-quote {
+  margin: 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--hairline-strong);
+  color: var(--text-secondary);
+  font-style: normal;
+  text-align: left;
+}
+
+blockquote.markdown-quote > * {
+  margin-block: 0;
+}
+
+blockquote.markdown-quote > * + * {
+  margin-top: 0.5em;
 }
 
 .markdown li + li {
@@ -113,7 +138,8 @@
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's
-   alignment arrives as each cell's own inline style, from the delimiter row. */
+   alignment arrives as each cell's own inline style, from the delimiter row.
+   Its edges fade where it hides columns past them (`table-scroll-fade`). */
 .markdown table {
   display: block;
   max-width: 100%;
@@ -129,6 +155,41 @@
   padding: 0.3em 0.7em 0.3em 0;
   border-bottom: 1px solid var(--markdown-edge);
   vertical-align: top;
+}
+
+/* A cell keeps each word whole, so a table too wide for the column scrolls
+   rather than splitting its words into letters. Note that it outranks
+   `.markdown p`, which an editor's cell holds its words in, and a list item
+   around the table, whose words break anywhere. */
+.markdown :is(th, td),
+.markdown :is(th, td) > p {
+  overflow-wrap: normal;
+}
+
+/* A table that scrolls sideways fades each edge it hides columns past, as the
+   tab strip does, so a column cut at the edge reads as more to scroll to
+   rather than as words cut short. It is the window's one scroll fade
+   (base.css's `scroll-fade`), its two depths eased on the table's own
+   inline timeline, which stands only while the table overflows: one that
+   fits is left whole without asking JavaScript. Its mask multiplies with the
+   faded scroller it stands in, a document's or a log's, and neither reads
+   the other's depths, which do not inherit. */
+.markdown table,
+.transcript-table {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+  animation-name: scroll-fade-start, scroll-fade-end;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(self inline), scroll(self inline);
+  animation-range:
+    0 var(--scroll-fade),
+    calc(100% - var(--scroll-fade)) 100%;
 }
 
 .markdown th {
@@ -222,4 +283,21 @@ a.text-link {
    a hair apart, so the two read as two. */
 .markdown-deleted + .markdown-inserted {
   margin-left: 0.2em;
+}
+
+/* A chip stands with the punctuation written against it as one box no line
+   breaks inside (`link-glue.ts`), in a plan's words and a transcript's
+   alike, so a comma never starts a line alone after a chip and
+   an opening bracket never ends one alone before it. The box is held to the
+   column, and the chip in it gives way before it would push its comma past
+   the edge, so a long name in a narrow column still ellipsizes. */
+.link-glued {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.link-glued > * {
+  min-width: 0;
 }

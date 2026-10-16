@@ -1,7 +1,7 @@
 import {
   type AgentStripTab,
   type DraftStripTab,
-  inPlanOrder,
+  inTaskOrder,
   isAgentTab,
   isDraftTab,
   movedOrder,
@@ -274,7 +274,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const order = choices.order ?? NO_TABS;
   return [
     MAIN_TAB.PLAN,
-    ...inPlanOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
+    ...inTaskOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
   ];
 }
 

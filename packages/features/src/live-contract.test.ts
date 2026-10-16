@@ -27,7 +27,7 @@ const developer = {
 };
 const part = { type: "input_text", text: "What needs me?" };
 const user = { type: "message", role: "user", content: [part] };
-const PLAN_ID = "1a000000-0000-4000-8000-000000000001";
+const TASK_ID = "1a000000-0000-4000-8000-000000000001";
 
 const assistant = {
   type: "message",
@@ -41,7 +41,7 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
     sdp: SDP,
     voice: LIVE_VOICE.MARIN,
     input: [developer, user, assistant],
-    planId: PLAN_ID,
+    planId: TASK_ID,
     ...overrides,
   };
 }
@@ -68,8 +68,8 @@ test("an opening frame is either a create or an attach, told apart by type", () 
   );
   assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
   // Every call is about one plan: a create that names none, or names it in another shape, is refused.
-  const { planId: _named, ...planless } = createFrame();
-  assert.equal(sessionOpeningFrameFromWire(planless), undefined);
+  const { planId: _named, ...taskless } = createFrame();
+  assert.equal(sessionOpeningFrameFromWire(taskless), undefined);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);
   assert.equal(
     sessionOpeningFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),

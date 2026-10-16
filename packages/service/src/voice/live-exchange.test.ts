@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
+import { openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
@@ -11,7 +11,7 @@ import {
   readMessagesByConversationTyped,
   readVoiceSessionByLiveSessionId,
   readVoiceTranscriptSegmentsBySession,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
@@ -30,22 +30,22 @@ import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
-import { PLANNING_EXPLORE_ASK } from "../agents/brain-host/planning.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
 import { MESSAGE_ROLE } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
-import type { PlanDraft } from "../plans/plan-scribe.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
+import type { PlanDraft } from "../tasks/plan-scribe.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, said, sessionStarted } from "../testing/live-events.js";
-import { added } from "../testing/plan-contents.js";
 import { scriptedScribeModel } from "../testing/scribe-model.js";
 import { settled } from "../testing/settle.js";
+import { added } from "../testing/task-contents.js";
 import { hostedLiveExchange } from "./live-exchange.js";
 
 /**
@@ -137,7 +137,7 @@ function fakeEve(): FakeEve {
     answerWhen: undefined,
     open(message) {
       return Effect.gen(function* () {
-        if (message.message === PLANNING_EXPLORE_ASK) {
+        if (message.message === BRAIN_EXPLORE_ASK) {
           eve.explored.push(message);
           if (!eve.explores) {
             return { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY };
@@ -171,17 +171,17 @@ function fakeEve(): FakeEve {
 }
 
 /** An account holding one plan, and the plan's conversation every call about it lands in. */
-interface PlanTarget extends ConversationTarget {
-  readonly planId: string;
+interface TaskTarget extends ConversationTarget {
+  readonly taskId: string;
 }
 
-async function account(): Promise<PlanTarget> {
+async function account(): Promise<TaskTarget> {
   const userId = await database.createUser();
-  const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
+  const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
-    await database.run(openPlanConversation(userId, plan.id)),
+    await database.run(openTaskConversation(userId, task.id)),
   ).conversationId;
-  return { userId, conversationId, planId: plan.id };
+  return { userId, conversationId, taskId: task.id };
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
@@ -190,10 +190,10 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
 async function stand(
-  target: PlanTarget,
+  target: TaskTarget,
   options: {
     readonly scribe?: {
-      readonly planId: string;
+      readonly taskId: string;
       readonly model: LanguageModel;
       readonly onDraft?: (draft: PlanDraft) => void;
     };
@@ -209,7 +209,7 @@ async function stand(
       sessionRecord.register({
         userId: target.userId,
         sessionId: liveSessionId,
-        planId: target.planId,
+        taskId: target.taskId,
         attachId: randomUUID(),
         model: LIVE_DEFAULTS.MODEL,
       }),
@@ -373,7 +373,7 @@ it.live(
       const f = yield* Effect.promise(() =>
         stand(target, {
           scribe: {
-            planId: target.planId,
+            taskId: target.taskId,
             model: scriptedScribeModel([{ notes: [added(PLAN_HEADING.CONTEXT, problem)] }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
@@ -383,8 +383,8 @@ it.live(
       f.socket.receive(heard("Only admins can add people.", 1_500, 3_000));
       const body = () =>
         database.run(
-          Effect.map(readPlan(target.userId, target.planId), (stored) =>
-            Option.match(stored, { onNone: () => "", onSome: (found) => found.plan.document.body }),
+          Effect.map(readTask(target.userId, target.taskId), (stored) =>
+            Option.match(stored, { onNone: () => "", onSome: (found) => found.task.document.body }),
           ),
         );
       yield* settled(

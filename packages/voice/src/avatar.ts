@@ -78,6 +78,11 @@ const AVATAR_RESTART_REASONS: ReadonlySet<AvatarEndReason> = new Set([
   AVATAR_END_REASON.UNAVAILABLE,
 ]);
 
+/** Whether the avatar is up on the call: starting or live, which is while every view of the call draws its picture. */
+export function avatarStanding(avatar: AvatarState): boolean {
+  return avatar.status === AVATAR_STATUS.STARTING || avatar.status === AVATAR_STATUS.LIVE;
+}
+
 /**
  * Whether the avatar's tile is up at the top of the call's Call tab: while
  * the avatar is starting or live, and once it ended for a reason the tile offers

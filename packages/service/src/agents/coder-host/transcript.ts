@@ -6,8 +6,10 @@ import {
   delegationStartsOf,
   delegationsOf,
   delegationTitlesOf,
+  type LinePlace,
   type LineSent,
   latestTurnsOf,
+  linePlacesOf,
   lineSendersOf,
   readCodingAgentContext,
   readCodingAgentOfConversation,
@@ -87,7 +89,11 @@ import { usageOfTurn, usageOfTurns } from "./usage.js";
  * newest turn, each read once with the page that is answered rather than
  * on every look inside the hold, and on the agent's own transcript what
  * its model's context holds as its newest step left it (`context.ts`) and
- * when each worker its newest turn still waits on began. A turn's journal
+ * when each worker its newest turn still waits on began. A line that
+ * steered a turn under way carries the turn's journal and the steps it had
+ * begun before the line, since the journal closes behind every line its
+ * turn took and the order alone would draw the line ahead of the turn's
+ * work. A turn's journal
  * carries when the turn began, by the rule the working line counts from,
  * and when the journal closed: the close is written with the journal's
  * last parts, so the page that carries them carries it too, where the
@@ -120,6 +126,7 @@ type TranscriptMessage = StoredUIMessage &
     readonly startedAt?: number;
     readonly finishedAt?: number;
     readonly sentBy?: CodingAgentSender;
+    readonly arrivedIn?: LinePlace;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -227,7 +234,15 @@ const SENDER_NAME = {
   FORMER_MEMBER: "Former member",
 } as const;
 
-/** What sent a line, as the page names it and by its kind, so the window draws Luke, an automation, and GitHub's login as themselves. */
+/**
+ * What sent a line, as the page names it and by its kind, so the window
+ * draws Luke, an automation, and GitHub's login as themselves. Another agent
+ * is named with no kind and marked `agent`, because the window's schema reads
+ * the kind as one of the words it knows, so a kind it was built before would
+ * refuse the whole page, while a key it does not know is dropped: an older
+ * build draws it as a sender it cannot place, under its name, and a newer
+ * one as an agent.
+ */
 function senderOf(sent: LineSent): CodingAgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
@@ -240,26 +255,39 @@ function senderOf(sent: LineSent): CodingAgentSender {
       return { name: sent.name, kind: CODING_AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
+    case MESSAGE_SENDER.AGENT:
+      return { name: sent.name, agent: true };
   }
 }
 
-/** What sent each of the developer's lines among the rows, by row, where its row kept it. */
-const lineSendersAmong = (target: ConversationTarget, records: readonly StoredMessageRecord[]) =>
-  lineSendersOf(
-    target,
-    records
-      .filter((record) => record.message.role === MESSAGE_ROLE.USER)
-      .map((record) => record.id),
-  );
+/** The ids of the developer's lines among the rows. */
+function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
+  return records
+    .filter((record) => record.message.role === MESSAGE_ROLE.USER)
+    .map((record) => record.id);
+}
 
-/** A row as the page carries it: its message, for a developer's line what sent it, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
+/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
+interface LinesRead {
+  readonly senders: ReadonlyMap<string, LineSent>;
+  readonly places: ReadonlyMap<string, LinePlace>;
+}
+
+/** A row as the page carries it: its message, for a developer's line what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
-  senders: ReadonlyMap<string, LineSent>,
+  { senders, places }: LinesRead,
 ): TranscriptMessage {
   const sent = senders.get(record.id);
-  if (sent !== undefined) return { ...record.message, sentBy: senderOf(sent) };
+  const place = places.get(record.id);
+  if (sent !== undefined || place !== undefined) {
+    return {
+      ...record.message,
+      ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
+      ...(place === undefined ? undefined : { arrivedIn: place }),
+    };
+  }
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
@@ -397,10 +425,14 @@ function pagePast(
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
     const records = read.ok ? read.value : [];
     const journalTurns = yield* journalTurnsOf(target.userId, records);
-    const senders = yield* lineSendersAmong(target, records);
+    const lines = lineIdsAmong(records);
+    const linesRead: LinesRead = {
+      senders: yield* lineSendersOf(target, lines),
+      places: yield* linePlacesOf(target, lines),
+    };
     return {
       page: {
-        messages: records.map((record) => transcriptMessageOf(record, journalTurns, senders)),
+        messages: records.map((record) => transcriptMessageOf(record, journalTurns, linesRead)),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),

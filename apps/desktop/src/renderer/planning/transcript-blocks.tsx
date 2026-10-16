@@ -4,7 +4,8 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { linkMention, mayNameMention } from "@luke/features/mention-link";
+import { readLink } from "@luke/features/luke-link";
+import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   CALL_KIND,
@@ -18,8 +19,11 @@ import {
 } from "@luke/features/turn-rows";
 import { cn, ProviderMark } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
@@ -42,11 +46,11 @@ import {
   PencilLineIcon,
   PhoneOffIcon,
   PlayIcon,
+  ScrollTextIcon,
   SearchIcon,
   SendIcon,
   TerminalIcon,
   TimerIcon,
-  WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
 import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
@@ -75,7 +79,7 @@ import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { MentionChip } from "./mention-chip";
+import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
@@ -157,6 +161,7 @@ const PICTURE_ELEMENT = {
 const MENTION_TAGS = {
   [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
   [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS],
+  [LINK_GLUE.TAG]: [],
 };
 
 /** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
@@ -171,7 +176,7 @@ interface MarkdownNode extends WordsNode {
   readonly url?: string;
   readonly alt?: string | null;
   readonly identifier?: string;
-  readonly children?: readonly MarkdownNode[];
+  children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
 
@@ -182,9 +187,10 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention to be
- * drawn as its own element, which reads what it names against the plan
- * its page is of (`linkMention`): the same rule for a developer's `@`
+ * Marks every link in the words whose target may name a mention, or is a
+ * Luke link to any place (`readLink`), to be drawn as its own element,
+ * which reads what it names against the plan its page is of (`linkChip`):
+ * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
  * is read here before the page's repository is known (`mayNameMention`),
  * so every page of GitHub's is marked, and every other link is drawn as
@@ -200,7 +206,7 @@ function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, strin
       : node.type === "linkReference" && node.identifier !== undefined
         ? definitions.get(node.identifier)
         : undefined;
-  if (target !== undefined && mayNameMention(target)) {
+  if (target !== undefined && (mayNameMention(target) || readLink(target) !== undefined)) {
     node.data = {
       hName: MENTION_ELEMENT.TAG,
       hProperties: { [MENTION_ELEMENT.TARGET]: target },
@@ -252,11 +258,23 @@ function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, strin
   for (const child of node.children ?? []) markPictures(child, definitions);
 }
 
-/** The step that marks a transcript's links and its pictures, a reference's read through its definition. */
+/** Holds each link marked as a mention with the punctuation written against it (`link-glue.ts`), under a node and every node below it. */
+function glueMentions(node: MarkdownNode): void {
+  if (node.children === undefined) return;
+  for (const child of node.children) glueMentions(child);
+  node.children = gluedRun<MarkdownNode>(node.children, {
+    held: (child) => child.data?.hName === MENTION_ELEMENT.TAG,
+    text: (value) => ({ type: "text", value }),
+    box: (inside) => ({ type: LINK_GLUE.TAG, data: { hName: LINK_GLUE.TAG }, children: inside }),
+  });
+}
+
+/** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */
 function markLinks(tree: MarkdownNode): void {
   const definitions = definitionsIn(tree);
   markMentions(tree, definitions);
   markPictures(tree, definitions);
+  glueMentions(tree);
 }
 
 /** What a picture with no words of its own is called where it is named. */
@@ -287,16 +305,20 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const found =
-    node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
-  if (found === undefined) {
-    return (
-      <TranscriptLink href={target} words={node === undefined ? "" : wordsOf(node)}>
+  const words = node === undefined ? "" : wordsOf(node);
+  const chip = node === undefined ? undefined : linkChip(target, words, doors);
+  return (
+    chip ?? (
+      <TranscriptLink href={target} words={words}>
         {children}
       </TranscriptLink>
-    );
-  }
-  return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+    )
+  );
+}
+
+/** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
+function LinkGlueElement({ children }: ExtraProps & { children?: ReactNode }): ReactNode {
+  return <span className={LINK_GLUE.CLASS}>{children}</span>;
 }
 
 /**
@@ -317,6 +339,7 @@ const TRANSCRIPT_COMPONENTS: Components = {
   ),
   [MENTION_ELEMENT.TAG]: MentionElement,
   [PICTURE_ELEMENT.TAG]: PictureElement,
+  [LINK_GLUE.TAG]: LinkGlueElement,
   img: () => null,
 };
 
@@ -411,7 +434,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for an agent read (`CodingAgentsIcon`), never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -437,11 +460,14 @@ const CALL_ICON = {
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
   [CALL_KIND.LIST_AGENTS]: LayoutListIcon,
-  [CALL_KIND.READ_AGENT]: WorkflowIcon,
+  [CALL_KIND.READ_AGENT]: ScrollTextIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
+  [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
+  [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
+  [CALL_KIND.READ_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
   [CALL_KIND.SLEEP]: TimerIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
@@ -725,11 +751,11 @@ export function TranscriptTodosDock({
 }): ReactNode {
   return (
     <Fold
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
+      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]"
       data-todos-dock=""
       aria-label="To-dos"
     >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]">
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none">
         <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 text-muted-foreground">{summary}</span>
         {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}

@@ -5,16 +5,17 @@ import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
+  readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -22,6 +23,7 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
@@ -38,8 +40,8 @@ import {
   unparsedWire,
   type WireRecord,
 } from "../../core.js";
-import { PICTURE_LOOK_STATUS } from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { noNetwork } from "../../testing/no-network.js";
@@ -49,6 +51,7 @@ import { CODER_REFUSAL } from "./bounds.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
+import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
@@ -110,6 +113,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,
@@ -150,12 +154,12 @@ const unclaimedAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* startPlan(userId, {
+    const task = yield* startTask(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
     const started = yield* createCodingAgent(userId, {
-      planId: plan.id,
+      taskId: task.id,
       idempotencyKey: `start-${minted}`,
       model,
       effort,
@@ -287,6 +291,27 @@ function codingTurn(
   ];
 }
 
+/** A title model answering each call with the next of `answers`, nothing once they run out, keeping each prompt it was asked. */
+function scriptedTitleModel(answers: readonly string[]) {
+  const asked: string[] = [];
+  const model = new MockLanguageModelV4({
+    doGenerate: async (options) => {
+      const text = answers[asked.length] ?? "";
+      asked.push(JSON.stringify(options.prompt));
+      return {
+        content: [{ type: "text", text }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  return { model, asked };
+}
+
 const STEP_START = "step-start";
 
 const TurnRowSchema = Schema.Struct({
@@ -325,9 +350,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
-        const plan = yield* startPlan(userId, { name: "Billing export" });
+        const task = yield* startTask(userId, { name: "Billing export" });
         const conversationId = Option.getOrThrow(
-          yield* openPlanConversation(userId, plan.id),
+          yield* openTaskConversation(userId, task.id),
         ).conversationId;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
@@ -367,6 +392,50 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
         assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
+      }),
+  );
+
+  it.effect(
+    "an agent started on its plan is titled from the plan as its first turn's words are received, long before the turn ends",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["Teammate invitations by email"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        for (const event of [started, received]) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Teammate invitations by email");
+        assert.equal(asked.length, 1);
+        assert.match(asked[0] ?? "", /Invite a teammate by email/u);
+      }),
+  );
+
+  it.effect(
+    "an opening the title model names nothing from is asked again as the turn ends, with the answer beside it",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Read the agent guide");
+        assert.equal(asked.length, 2);
+        assert.match(asked[1] ?? "", /The guide is read; the plan fits the code\./u);
       }),
   );
 
@@ -431,32 +500,45 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       }),
   );
   it.effect(
-    "an agent's notes are taken into its plan as the notetaker's are, the ones the plan cannot take reported, and read back in the plan",
+    "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, admitted } = yield* openAgent(host);
-        const input = unparsedWire({
-          notes: [
-            {
-              kind: "add",
-              section: "Open questions",
-              text: "- Who may withdraw an invite? Going on as: the member who sent it.",
-            },
-            { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
-            { kind: "replace", find: "a phrase the plan never held", text: "an owner" },
-          ],
-        });
+        assert.ok(agent.taskId !== null);
+        const before = Option.getOrThrow(yield* readTask(userId, agent.taskId));
+        const notes = [
+          {
+            kind: "add",
+            section: "Open questions",
+            text: "- Who may withdraw an invite? Going on as: the member who sent it.",
+          },
+          { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
+        ];
 
-        const answer = yield* host.editPlan(admitted, input, 0, noSandbox);
+        const missed = yield* host.editPlan(
+          admitted,
+          unparsedWire({
+            notes: [...notes, { kind: "replace", find: "a phrase the plan never held", text: "x" }],
+          }),
+          0,
+          noSandbox,
+        );
 
-        assert.deepEqual(answer, {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          taken: 2,
-          missed: ["replace a phrase the plan never held"],
+        assert.deepEqual(missed, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.CONFLICT,
+          missed: "replace a phrase the plan never held",
+          current: before.text,
         });
-        assert.ok(agent.planId !== null);
-        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const untouched = Option.getOrThrow(yield* readTask(userId, agent.taskId));
+        assert.equal(untouched.text, before.text);
+        assert.deepEqual(untouched.agentEdits, []);
+
+        const answer = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
+
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
+        const stored = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         const sectionText = (heading: string) =>
           planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";
         assert.ok(
@@ -465,10 +547,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           ),
         );
         assert.ok(sectionText("Approach").endsWith("\n\n- Invites expire after 7 days."));
-        assert.equal(stored.plan.document.body, stored.text);
+        assert.equal(stored.task.document.body, stored.text);
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
-        assert.deepEqual(stored.plan.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(stored.task.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
         assert.deepEqual(
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],
@@ -482,14 +564,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
-        assert.ok(agent.planId !== null);
+        assert.ok(agent.taskId !== null);
         const picture = {
           contentType: PICTURE_TYPE.PNG,
           bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 2]),
         };
-        const kept = yield* keepPlanAttachment(userId, agent.planId, picture);
+        const kept = yield* keepPlanAttachment(userId, agent.taskId, picture);
         if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
-        const ref = { planId: agent.planId, attachmentId: kept.id };
+        const ref = { taskId: agent.taskId, attachmentId: kept.id };
         const input = { address: planAttachmentAddress(ref, "acme") };
 
         const answer = yield* host.lookAtPicture(admitted, unparsedWire(input));

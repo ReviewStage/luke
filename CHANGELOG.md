@@ -151,6 +151,34 @@ Linear issues, and picking one starts the task with that issue as Luke's
 context. Agents in the workspace use its Linear connection.
 ([#2859](https://github.com/ReviewStage/luke/pull/2859))
 
+### Several accounts at one integration
+
+Connect more than one account at a provider, such as a work and a personal
+Notion, in Settings › Integrations. Each stands as a row of its own, named for
+its workspace there, in Settings and in the MCP popover, and agents are handed
+each as a connection of its own, asking which one you mean where you have not
+said.
+([#2858](https://github.com/ReviewStage/luke/pull/2858),
+[#2864](https://github.com/ReviewStage/luke/pull/2864),
+[#2867](https://github.com/ReviewStage/luke/pull/2867),
+[#2868](https://github.com/ReviewStage/luke/pull/2868),
+[#2869](https://github.com/ReviewStage/luke/pull/2869),
+[#2896](https://github.com/ReviewStage/luke/pull/2896),
+[#2897](https://github.com/ReviewStage/luke/pull/2897),
+[#2915](https://github.com/ReviewStage/luke/pull/2915),
+[#2994](https://github.com/ReviewStage/luke/pull/2994))
+
+### Agents that talk to each other
+
+On a call, Luke lists, reads, and messages every coding agent in the task's
+workspace, each named with its task, and coding agents list and message the
+other coding agents of their workspace. In an agent's box, @ also offers the
+task's pages and its other agents.
+([#3026](https://github.com/ReviewStage/luke/pull/3026),
+[#3027](https://github.com/ReviewStage/luke/pull/3027),
+[#2822](https://github.com/ReviewStage/luke/pull/2822),
+[#3031](https://github.com/ReviewStage/luke/pull/3031))
+
 ### Drafts kept
 
 What you type in an agent's box or an Inbox answer stays when you switch tabs
@@ -160,17 +188,23 @@ a draft waiting out of sight.
 [#2948](https://github.com/ReviewStage/luke/pull/2948),
 [#3005](https://github.com/ReviewStage/luke/pull/3005))
 
-### Experiments: video calls and Automations
+### Experiments: video calls, Automations, and the Factory
 
 Settings › Experimental › Video calls puts Luke's face on a call, as a live
-avatar at the top of the Call tab. Automations choose the MCP servers their
-runs are handed, wear what fires them, and keep running through failures, a
-failed run saying why. An automation's agent is named by its pull request or
-issue, or from its prompt, and its transcript opens on the message that
-started it. Its agent stands among the sidebar's tasks and announces its
-turn's end as a task's agent does, and a run that fails to start is told to
-its owner. That agent's page keeps the side panel for its workers, Changes,
-and Terminal, and its box offers @ and / as a task's agent's does.
+avatar at the top of the Call tab, kept at 16:9 at any width. A new automation
+can start from Code review, which reviews pull requests as Luke, at most five at
+once and fifty a day. Automations choose the MCP servers their runs are handed,
+wear what fires them, and keep running through failures, a failed run saying
+why. An automation's agent is named by its pull request or issue, or from its
+prompt, and its transcript opens on the message that started it. Its agent
+stands among the sidebar's tasks, can be pinned there, and announces its turn's
+end as a task's agent does, and a run that fails to start is told to its owner.
+That agent's page keeps the side panel for its workers, Changes, and Terminal,
+and its box offers @ and / as a task's agent's does. The Factory now reads Talk,
+Build, Ship: the task on your call, the agents at work, failed, or waiting on
+you, and what merged in the last day, each row saying what, which task, who, and
+when. Its rows move with ↑ and ↓, open with Return, and offer Copy link, and ⌘K
+and the sidebar reach it.
 ([#2908](https://github.com/ReviewStage/luke/pull/2908),
 [#2923](https://github.com/ReviewStage/luke/pull/2923),
 [#2924](https://github.com/ReviewStage/luke/pull/2924),
@@ -193,7 +227,19 @@ and Terminal, and its box offers @ and / as a task's agent's does.
 [#2937](https://github.com/ReviewStage/luke/pull/2937),
 [#2951](https://github.com/ReviewStage/luke/pull/2951),
 [#2967](https://github.com/ReviewStage/luke/pull/2967),
-[#3009](https://github.com/ReviewStage/luke/pull/3009))
+[#3009](https://github.com/ReviewStage/luke/pull/3009),
+[#3016](https://github.com/ReviewStage/luke/pull/3016),
+[#2781](https://github.com/ReviewStage/luke/pull/2781),
+[#3018](https://github.com/ReviewStage/luke/pull/3018),
+[#2953](https://github.com/ReviewStage/luke/pull/2953),
+[#2954](https://github.com/ReviewStage/luke/pull/2954),
+[#2955](https://github.com/ReviewStage/luke/pull/2955),
+[#2956](https://github.com/ReviewStage/luke/pull/2956),
+[#2957](https://github.com/ReviewStage/luke/pull/2957),
+[#2958](https://github.com/ReviewStage/luke/pull/2958),
+[#2968](https://github.com/ReviewStage/luke/pull/2968),
+[#2998](https://github.com/ReviewStage/luke/pull/2998),
+[#3020](https://github.com/ReviewStage/luke/pull/3020))
 
 ### Improvements
 
@@ -212,6 +258,13 @@ and Terminal, and its box offers @ and / as a task's agent's does.
   ([#2904](https://github.com/ReviewStage/luke/pull/2904),
   [#2905](https://github.com/ReviewStage/luke/pull/2905),
   [#2966](https://github.com/ReviewStage/luke/pull/2966))
+- Luke and coding agents edit anywhere in the plan, headings included, and a
+  batch of their edits lands whole or not at all
+  ([#2916](https://github.com/ReviewStage/luke/pull/2916))
+- ⌘K offers Pin task or Unpin task for the task on screen
+  ([#3021](https://github.com/ReviewStage/luke/pull/3021))
+- A GitHub bot wears a bot badge beside its own GitHub picture
+  ([#3022](https://github.com/ReviewStage/luke/pull/3022))
 - Mark a task unread from its menus and ⌘K, and read again
   ([#2961](https://github.com/ReviewStage/luke/pull/2961))
 - A task's last update counts its agents' finished turns, so a task moves up
@@ -242,17 +295,21 @@ and Terminal, and its box offers @ and / as a task's agent's does.
   ([#3013](https://github.com/ReviewStage/luke/pull/3013))
 - Fixed Needs you keeping an answered item in the list, and it now says when
   nothing needs you ([#3002](https://github.com/ReviewStage/luke/pull/3002))
+- Fixed a message that reached an agent mid-turn being drawn above the turn
+  rather than where it arrived
+  ([#3023](https://github.com/ReviewStage/luke/pull/3023))
+- Fixed a coding agent sometimes never getting its title
+  ([#3024](https://github.com/ReviewStage/luke/pull/3024))
+- Fixed a quote in a transcript or plan standing far indented and in italics
+  ([#3033](https://github.com/ReviewStage/luke/pull/3033))
+- Fixed the page a pasted Luke link opens, and the sign-in pages, showing no
+  icon in the browser's tab
+  ([#3035](https://github.com/ReviewStage/luke/pull/3035))
 - Fixed a message to a coding agent started before October 15 staying at
   Starting ([#3010](https://github.com/ReviewStage/luke/pull/3010))
 
 ### Misc
 
-- Added the service's groundwork for connecting several accounts at one
-  integration provider, each handed to agents as a connection of its own
-  ([#2858](https://github.com/ReviewStage/luke/pull/2858),
-  [#2864](https://github.com/ReviewStage/luke/pull/2864),
-  [#2867](https://github.com/ReviewStage/luke/pull/2867),
-  [#2994](https://github.com/ReviewStage/luke/pull/2994))
 - Added repository checks that keep logic out of the agents' apps and refuse a
   tracked literal shaped like a provider's credential
   ([#2889](https://github.com/ReviewStage/luke/pull/2889),

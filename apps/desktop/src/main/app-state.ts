@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppState } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { idleUpdateSnapshot } from "@luke/host/update-service";
@@ -121,13 +121,13 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
  * commands run in the developer's repository and on the developer's Mac,
  * which nothing there needs.
  */
-export function voiceWindowState<State extends Pick<AppState, "planning">>(held: State): State {
-  const { work: _work, conversation: _conversation, ...planning } = held.planning;
-  return { ...held, planning };
+export function voiceWindowState<State extends Pick<AppState, "tasks">>(held: State): State {
+  const { work: _work, conversation: _conversation, ...tasks } = held.tasks;
+  return { ...held, tasks };
 }
 
 /** The document as the window that asked is to read it: the voice and call windows' as `voiceWindowState` leaves it, from their first read on, and a panel's whole. */
-export function windowAppState<State extends Pick<AppState, "planning">>(
+export function windowAppState<State extends Pick<AppState, "tasks">>(
   held: State,
   window: { readonly voice: boolean; readonly call: boolean },
 ): State {
@@ -175,9 +175,9 @@ export function initialAppState(
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
     voice: { avatar: AVATAR_OFF },
-    planning: IDLE_PLANNING_VIEW,
+    tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [], planless: [], automations: [], failedRuns: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };

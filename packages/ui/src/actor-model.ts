@@ -1,3 +1,4 @@
+import { githubUserAvatarUrl } from "@luke/features/account-picture";
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -5,7 +6,7 @@ import {
   type PlanEditor,
   type PlanLastEdit,
   type PlanSectionEdit,
-} from "@luke/features/plan-wire";
+} from "@luke/features/task-wire";
 import {
   type FormerMember,
   WORKSPACE_ROLE,
@@ -164,8 +165,20 @@ export function identityLetter(name: string): string {
 const BOT_LOGIN_SUFFIX = "[bot]";
 
 /** Whether a GitHub login is an App's bot's, which GitHub spells with its suffix. */
-export function isBotLogin(login: string): boolean {
+function isBotLogin(login: string): boolean {
   return login.endsWith(BOT_LOGIN_SUFFIX);
+}
+
+/**
+ * Someone GitHub names by their login alone, as a line GitHub told an agent
+ * of does: an App's bot by its login's suffix, on its robot, since GitHub
+ * serves its App's picture only at an address the login does not name, and
+ * a person by the avatar GitHub serves for their login.
+ */
+export function githubLoginActor(login: string): GitHubActor {
+  const bot = isBotLogin(login);
+  const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login, bot };
+  return bot ? actor : { ...actor, avatarUrl: githubUserAvatarUrl({ login }) };
 }
 
 /** What a GitHub account is called: its login, an App's bot's without the suffix GitHub gives it. */
@@ -287,11 +300,11 @@ export function accountActor(account: {
  * never a face with no name.
  */
 export function creatorActor(
-  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  task: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
   reader: EditReader,
   account: PersonActor | undefined,
 ): Actor {
-  const { createdBy, ownerId } = plan;
+  const { createdBy, ownerId } = task;
   if (createdBy !== undefined || ownerId === undefined) {
     return personActor(createdBy, reader.members, reader.readerId, reader.former);
   }

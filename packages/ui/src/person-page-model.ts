@@ -1,5 +1,5 @@
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { createdByOnly, TASK_ORDER, taskTime } from "./task-list-model.js";
 
 /**
@@ -22,20 +22,20 @@ export const PERSON_TASKS_SHOWN = 5;
 
 /** One of a person's agents, with the task it works on. */
 export interface PersonAgent {
-  readonly plan: PlanSummary;
-  readonly agent: PlanAgentLine;
+  readonly plan: TaskSummary;
+  readonly agent: TaskAgentLine;
 }
 
 /** What a person's page lists: their agents at work, their tasks, and their other agents, each newest first. */
 export interface PersonPage {
   readonly working: readonly PersonAgent[];
   /** Every task they created, newest first; the page draws the first `PERSON_TASKS_SHOWN`. */
-  readonly created: readonly PlanSummary[];
+  readonly created: readonly TaskSummary[];
   readonly agents: readonly PersonAgent[];
 }
 
 /** The statuses of an agent that may still write: starting, or running. */
-const AT_WORK: ReadonlySet<PlanAgentLine["status"]> = new Set([
+const AT_WORK: ReadonlySet<TaskAgentLine["status"]> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
 ]);
@@ -46,7 +46,7 @@ function agentTime({ plan, agent }: PersonAgent): number {
 }
 
 /** The person's page from the listed workspace's tasks, the archived left out by the list itself. */
-export function personPage(userId: string, plans: readonly PlanSummary[]): PersonPage {
+export function personPage(userId: string, plans: readonly TaskSummary[]): PersonPage {
   const theirs = plans.flatMap((plan) =>
     (plan.agents?.agents ?? [])
       .filter((agent) => agent.startedBy?.userId === userId)
@@ -70,7 +70,7 @@ export function personPage(userId: string, plans: readonly PlanSummary[]): Perso
  */
 export function personRef(
   userId: string,
-  plans: readonly PlanSummary[],
+  plans: readonly TaskSummary[],
 ): { readonly userId: string; readonly name: string } | undefined {
   for (const plan of plans) {
     if (plan.createdBy?.userId === userId) return plan.createdBy;
@@ -81,7 +81,7 @@ export function personRef(
 }
 
 /** Who started an agent a task's row names, by account id; none where the row names no such agent or no starter. */
-export function agentStarter(plan: PlanSummary, agentId: string): string | undefined {
+export function agentStarter(plan: TaskSummary, agentId: string): string | undefined {
   return plan.agents?.agents.find((agent) => agent.id === agentId)?.startedBy?.userId;
 }
 

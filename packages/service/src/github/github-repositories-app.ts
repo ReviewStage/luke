@@ -1,5 +1,5 @@
 /**
- * github-repositories-app.ts -- the repositories of a workspace: those of the GitHub installation connected to it, and one of them's tree and skills.
+ * github-repositories-app.ts -- the repositories of a workspace: those of the GitHub installation connected to it, and one of them's tree, skills, pull requests, and issues.
  *
  * One read under the account bearer, `GET /api/github/repositories`, which
  * is what the desktop's repository chip lists from. The answer is read from
@@ -21,17 +21,38 @@
  * workspace, through the same reach of its installation; a workspace the
  * account is not in is not found, and a repository the installation does
  * not reach is refused as a plan's is.
+ *
+ * And one pull request of such a repository is read by its number, for a
+ * link to it to draw its title and where it stands:
+ * `GET /api/github/repositories/pull-request`, on a token the installation
+ * mints for that one repository with pull requests read
+ * (`pull-requests.ts`), to a member of the workspace, answering its number,
+ * title, page, and state and nothing more of it. A repository the
+ * installation does not reach and a number the repository holds no pull
+ * request under both answer none, since a link to either draws the same; a
+ * workspace the account is not in is not found, as above.
+ *
+ * And one issue is read the same way, `GET /api/github/repositories/issue`,
+ * on a token minted for the one repository with issues read alone
+ * (`issues.ts`), answering its number, title, page, and state; an
+ * installation that does not grant the App issues answers none, as an
+ * unreached repository does, so a link to an issue there draws its address.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import {
   GITHUB_REPOSITORIES_QUERY,
+  type GitHubIssueSummary,
+  type GitHubPullRequestSummary,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryIssueAnswer,
+  type GitHubRepositoryPullRequestAnswer,
+  githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
-import { workspaceIdSchema } from "@luke/features/plan-wire";
+import { workspaceIdSchema } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {
@@ -52,11 +73,13 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { readWorkspaceSkills } from "../plans/plan-skills.js";
-import { readRepositoryTree, treeRequestOf } from "../plans/plan-tree.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { GitHubApp } from "./github-app.js";
+import { readWorkspaceSkills } from "../tasks/task-skills.js";
+import { readRepositoryTree, treeRequestOf } from "../tasks/task-tree.js";
+import { GitHubApp, type GitHubWorkspaceReadFailure } from "./github-app.js";
 import { githubReadOrRefusal } from "./github-refusal.js";
+import { issueByNumber } from "./issues.js";
+import { pullRequestByNumber } from "./pull-requests.js";
 
 const HTTP_METHOD = { GET: "GET" } as const;
 
@@ -174,6 +197,84 @@ const skillsEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositorySkillsEndp
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, skills);
 });
 
+/**
+ * The pull request of the number given, of a repository the workspace's
+ * installation reaches, as much of it as a link draws; none where the
+ * installation does not reach the repository or the repository holds none
+ * of that number. Note that the token is minted for the one repository and
+ * dropped with the answer, because a link is read again rather than held.
+ */
+const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  place: { readonly workspaceId: string; readonly repository: string },
+  number: number,
+): Effect.fn.Return<
+  GitHubPullRequestSummary | null,
+  GitHubWorkspaceReadFailure,
+  GitHubRepositoriesAppServices
+> {
+  const app = yield* GitHubApp;
+  const reached = yield* app.repositoryPullRequestToken(place.workspaceId, place.repository);
+  if (Option.isNone(reached)) return null;
+  const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
+  if (Option.isNone(found)) return null;
+  const { title, url, state } = found.value;
+  return { number: found.value.number, title, url, state };
+});
+
+/** GET: one pull request of a repository the workspace's installation reaches, by its number, or none where there is none to draw. */
+const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoryPullRequestEndpoint")(
+  function* (
+    seams: GitHubRepositoriesAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    GitHubRepositoriesAppServices | HttpServerRequest.HttpServerRequest
+  > {
+    const { userId, request } = yield* signedInGet(seams);
+    const place = yield* repositoryPlace(userId, request);
+    const number = yield* namedOnce(request, GITHUB_REPOSITORIES_QUERY.NUMBER, (value) =>
+      readEither(githubPullRequestNumberSchema)(unparsedWire(Number(value))),
+    );
+    const pullRequest = yield* githubReadOrRefusal(pullRequestOfPlace(place, number));
+    const answer: GitHubRepositoryPullRequestAnswer = { pullRequest };
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  },
+);
+
+/** The issue of the number given, of a repository the workspace's installation reaches, as a link draws it; none where there is none to draw, as `pullRequestOfPlace` answers. */
+const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  place: { readonly workspaceId: string; readonly repository: string },
+  number: number,
+): Effect.fn.Return<
+  GitHubIssueSummary | null,
+  GitHubWorkspaceReadFailure,
+  GitHubRepositoriesAppServices
+> {
+  const app = yield* GitHubApp;
+  const reached = yield* app.repositoryIssueToken(place.workspaceId, place.repository);
+  if (Option.isNone(reached)) return null;
+  const found = yield* issueByNumber(reached.value.token, place.repository, number);
+  return Option.getOrNull(found);
+});
+
+/** GET: one issue of a repository the workspace's installation reaches, by its number, or none where there is none to draw. */
+const issueEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoryIssueEndpoint")(function* (
+  seams: GitHubRepositoriesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  GitHubRepositoriesAppServices | HttpServerRequest.HttpServerRequest
+> {
+  const { userId, request } = yield* signedInGet(seams);
+  const place = yield* repositoryPlace(userId, request);
+  const number = yield* namedOnce(request, GITHUB_REPOSITORIES_QUERY.NUMBER, (value) =>
+    readEither(githubPullRequestNumberSchema)(unparsedWire(Number(value))),
+  );
+  const issue = yield* githubReadOrRefusal(issueOfPlace(place, number));
+  const answer: GitHubRepositoryIssueAnswer = { issue };
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
 /** GET: the repositories of the workspace's installation, and whether it has one. */
 const repositoriesEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoriesEndpoint")(function* (
   seams: GitHubRepositoriesAppSeams,
@@ -202,7 +303,7 @@ const repositoriesEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoriesEn
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** The group: the listing, one repository's tree and skills, and the hosted vocabulary's own refusal for any other path. */
+/** The group: the listing, one repository's tree, skills, pull request, and issue, and the hosted vocabulary's own refusal for any other path. */
 export function githubRepositoriesApp(
   seams: GitHubRepositoriesAppSeams,
 ): WebRoutes<GitHubRepositoriesAppServices> {
@@ -221,6 +322,16 @@ export function githubRepositoriesApp(
       ANY_METHOD,
       HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS,
       hostedRefusing(skillsEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST,
+      hostedRefusing(pullRequestEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE,
+      hostedRefusing(issueEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

@@ -60,12 +60,12 @@ test("an account with no picture is its letter on its hue, the face the sidebar 
 });
 
 test("an account with a picture draws it on the same face", () => {
-  const pictured: SignedIn = { ...ADA, pictureUrl: "https://avatars.githubusercontent.com/u/9" };
+  const pictured: SignedIn = { ...ADA, pictureUrl: "https://lh3.googleusercontent.com/a/photo-9" };
   const face = profileFace(pictured);
 
   assert.equal(
     face?.querySelector<HTMLImageElement>(".actor-mark img")?.src,
-    "https://avatars.githubusercontent.com/u/9",
+    "https://lh3.googleusercontent.com/a/photo-9",
   );
   assert.equal(face?.outerHTML, sharedFace(pictured)?.outerHTML);
 });

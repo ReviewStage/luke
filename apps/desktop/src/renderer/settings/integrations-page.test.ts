@@ -29,6 +29,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
@@ -1111,15 +1112,67 @@ test("a tool its server says nothing of has a page that says so", async () => {
   openRow(page, "Vercel");
 
   assert.equal(page.querySelector(".integration-tool-description"), null);
-  assert.equal(
-    page.querySelector(".integration-tool-silent")?.textContent,
-    "Vercel's server says nothing of what this tool does.",
-  );
+  assert.equal(page.querySelector(".integration-tool-silent")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
 });
 
-test("two accounts at a provider stand as two rows named by their labels, the primary's wearing the word, each offering Rename and Add another account, and the other Make primary", async () => {
+test("a connected row's line wraps between its state and its count of tools, never inside either", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  await searchFor(page, "deploy");
+  const line =
+    rowNamed(page, "Vercel").querySelector(".settings-state") ?? assert.fail("no state line");
+
+  const sheets = layContainersAt({});
+  try {
+    const drawn = getComputedStyle(line);
+    assert.deepEqual([drawn.flexWrap, drawn.whiteSpace], ["wrap", "nowrap"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a tool's page under a list too narrow to stand beside it gives its title a line of its own and its name the line under it, and beside the list keeps both on one line", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    {
+      name: "create_issue_with_template",
+      title: "Create issue with template and attachments",
+      description: "Creates an issue from a template.",
+    },
+  ]);
+  const page = await mount();
+  openRow(page, "Vercel");
+  const head =
+    page.querySelector(".integration-tools-panel .integration-tool-detail-head") ??
+    assert.fail("no tool page");
+  const parts = () => {
+    const title = head.querySelector(".integration-tool-detail-title") ?? assert.fail("no title");
+    const name = head.querySelector(".integration-tool-detail-name") ?? assert.fail("no name");
+    return {
+      wraps: getComputedStyle(head).flexWrap,
+      title: getComputedStyle(title).whiteSpace,
+      name: getComputedStyle(name).flexBasis,
+    };
+  };
+
+  // A Settings card in the smallest window beside the widest page list.
+  const narrow = layContainersAt({ "integration-tools": 268 });
+  try {
+    assert.deepEqual(parts(), { wraps: "wrap", title: "normal", name: "100%" });
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "integration-tools": 638 });
+  try {
+    assert.deepEqual(parts(), { wraps: "nowrap", title: "nowrap", name: "auto" });
+  } finally {
+    wide.remove();
+  }
+});
+
+test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   addable = [notion];
@@ -1128,14 +1181,14 @@ test("two accounts at a provider stand as two rows named by their labels, the pr
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
     {
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: false,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1145,21 +1198,14 @@ test("two accounts at a provider stand as two rows named by their labels, the pr
       row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
 
-  assert.equal(rowOf("Acme").querySelector(".settings-changed")?.textContent, "Primary");
-  assert.equal(rowOf("Personal").querySelector(".settings-changed"), null);
-  assert.deepEqual(menuOf(rowOf("Acme")).items, [
-    "Rename",
-    "Add another account",
-    "Reconnect",
-    "Disconnect",
-  ]);
-  assert.deepEqual(menuOf(rowOf("Personal")).items, [
-    "Rename",
-    "Make primary",
-    "Add another account",
-    "Reconnect",
-    "Disconnect",
-  ]);
+  for (const label of ["Acme", "Personal"]) {
+    assert.deepEqual(menuOf(rowOf(label)).items, [
+      "Rename",
+      "Add another account",
+      "Reconnect",
+      "Disconnect",
+    ]);
+  }
 
   await choose(rowOf("Acme"), "Add another account");
   const connects = sent.filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT);
@@ -1184,7 +1230,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1237,7 +1283,6 @@ test("an account added under the provider's own name, beside one that stands, wa
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: true,
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1270,13 +1315,11 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
       status: INTEGRATION_STATUS.CONNECTED,
     },
     {
       provider: notion,
       connection: "notion-2",
-      primary: false,
       status: INTEGRATION_STATUS.PENDING,
     },
   ];
@@ -1311,7 +1354,6 @@ test("a cancelled sign-in that held a provider's last place frees it at once, of
     provider: notion,
     connection: place === 1 ? notion : `notion-${place}`,
     label: `Workspace ${place}`,
-    primary: place === 1,
     status: place === 5 ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.CONNECTED,
   }));
   const page = await mount();
@@ -1343,7 +1385,6 @@ test("a statuses read answered after a newer one changes nothing the newer one d
     provider: notion,
     connection: "notion",
     label: "Acme",
-    primary: true,
     status: INTEGRATION_STATUS.CONNECTED,
   };
   accounts = [acme];
@@ -1356,7 +1397,6 @@ test("a statuses read answered after a newer one changes nothing the newer one d
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: false,
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1423,4 +1463,43 @@ test("a failure an older read was told never comes back over a sign-in a newer r
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page).buttons, ["Connect"]);
+});
+
+test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const acme =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    ) ?? assert.fail("Notion has a row");
+  await choose(acme, "Add another account");
+  const added =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    ) ?? assert.fail("the account added has a row");
+
+  sent = [];
+  act(() =>
+    (
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Reopen") ??
+      assert.fail("no Reopen")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT)
+      .map((request) => request.payload),
+    [{ provider: notion, connection: "notion-3" }],
+  );
 });

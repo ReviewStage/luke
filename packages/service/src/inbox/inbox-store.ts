@@ -5,7 +5,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
-  planReachableBy,
+  taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
@@ -13,12 +13,12 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
-import { plan } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/plan";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,
-  AccountInboxPlan,
-  AccountPlanlessEntry,
+  AccountInboxTask,
+  AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import {
   INBOX_BLOCK,
@@ -81,7 +81,7 @@ export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, DatabaseSe
 /** The agent an item belongs to, as every write of the agent's names it: the plan it works on, or none for an agent an automation started with no plan. */
 export interface InboxAgent {
   readonly userId: string;
-  readonly planId: string | null;
+  readonly taskId: string | null;
   readonly agentId: string;
 }
 
@@ -190,7 +190,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
 /** An item row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
-const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${inboxItem.planId}))`;
+const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${inboxItem.taskId}))`;
 
 /** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no plan as much as one on a plan. */
 function itemReachableBy(userId: string): SQL {
@@ -239,7 +239,7 @@ const countOpenBesides = SqlSchema.findOne({
 
 const PostWriteSchema = Schema.Struct({
   userId: Schema.String,
-  planId: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   agentId: Schema.String,
   key: Schema.String,
@@ -253,7 +253,7 @@ const PostWriteSchema = Schema.Struct({
 const AttachmentWriteSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   itemId: Schema.String,
   contentType: inboxImageTypeSchema,
@@ -347,7 +347,7 @@ const upsertItem = SqlSchema.findOne({
         .insert(inboxItem)
         .values({
           userId: write.userId,
-          planId: write.planId,
+          taskId: write.taskId,
           organizationId: write.organizationId,
           agentId: write.agentId,
           key: write.key,
@@ -392,7 +392,7 @@ const closeItem = SqlSchema.findOneOption({
 
 /** Where a read looks: one plan's items, any member's agents' alike; one agent's own, under the member who started it; or one agent's, as any member of its workspace reads them. */
 const INBOX_SCOPE = {
-  PLAN: "plan",
+  TASK: "plan",
   AGENT: "agent",
   AGENT_OF_WORKSPACE: "agent-of-workspace",
 } as const;
@@ -408,8 +408,8 @@ type InboxScope = typeof ScopeSchema.Type;
 /** The rows a scope names: the plan's or the agent's where the account is a member of their workspace, or the agent's under the account that started it. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
-    case INBOX_SCOPE.PLAN:
-      return and(eq(inboxItem.planId, scope.id), itemReachableBy(scope.userId));
+    case INBOX_SCOPE.TASK:
+      return and(eq(inboxItem.taskId, scope.id), itemReachableBy(scope.userId));
     case INBOX_SCOPE.AGENT_OF_WORKSPACE:
       return and(eq(inboxItem.agentId, scope.id), itemReachableBy(scope.userId));
     case INBOX_SCOPE.AGENT:
@@ -498,16 +498,16 @@ const findSettledStamps = SqlSchema.findAll({
  */
 function accountWaiting(userId: string) {
   return and(
-    planReachableBy(userId),
+    taskReachableBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
-    isNull(plan.archivedAt),
+    isNull(task.archivedAt),
   );
 }
 
 /** The open items of agents with no plan in the account's workspaces, whichever member's agent posted each: what the account's read names beside the plans' items. */
-function planlessWaiting(userId: string) {
+function tasklessWaiting(userId: string) {
   return and(
-    isNull(inboxItem.planId),
+    isNull(inboxItem.taskId),
     itemReachableBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
   );
@@ -518,7 +518,7 @@ const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
 /** One open item as the account's read carries it, with its agent as its row names it now. */
 const WaitingRowSchema = Schema.Struct({
   id: Schema.String,
-  planId: Schema.String,
+  taskId: Schema.String,
   agentId: Schema.String,
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
@@ -538,7 +538,7 @@ const findWaitingItems = SqlSchema.findAll({
       db
         .select({
           id: inboxItem.id,
-          planId: inboxItem.planId,
+          taskId: inboxItem.taskId,
           agentId: inboxItem.agentId,
           agentTitle: codingAgent.title,
           agentModel: codingAgent.model,
@@ -550,7 +550,7 @@ const findWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
         })
         .from(inboxItem)
-        .innerJoin(plan, eq(plan.id, inboxItem.planId))
+        .innerJoin(task, eq(task.id, inboxItem.taskId))
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
         .where(accountWaiting(userId))
         .orderBy(...LATEST_FIRST),
@@ -558,7 +558,7 @@ const findWaitingItems = SqlSchema.findAll({
 });
 
 /** One open item of an agent with no plan as the account's read carries it, with its automation and repository where a plan's item names its plan. */
-const PlanlessRowSchema = Schema.Struct({
+const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
   agentTitle: Schema.NullOr(Schema.String),
@@ -575,9 +575,9 @@ const PlanlessRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-const findPlanlessWaitingItems = SqlSchema.findAll({
+const findTasklessWaitingItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
-  Result: PlanlessRowSchema,
+  Result: TasklessRowSchema,
   execute: ({ userId }) =>
     Database.use((db) =>
       db
@@ -604,7 +604,7 @@ const findPlanlessWaitingItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        .where(planlessWaiting(userId))
+        .where(tasklessWaiting(userId))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -618,15 +618,15 @@ const findWaitingStamps = SqlSchema.findAll({
       db
         .select(STAMP_COLUMNS)
         .from(inboxItem)
-        .leftJoin(plan, eq(plan.id, inboxItem.planId))
-        .where(or(accountWaiting(userId), planlessWaiting(userId)))
+        .leftJoin(task, eq(task.id, inboxItem.taskId))
+        .where(or(accountWaiting(userId), tasklessWaiting(userId)))
         .orderBy(...LATEST_FIRST),
     ),
 });
 
 /** One plan holding items as the account's read lists it: how many, and when the latest changed. */
-const PlanItemsRowSchema = Schema.Struct({
-  planId: Schema.String,
+const TaskItemsRowSchema = Schema.Struct({
+  taskId: Schema.String,
   items: Schema.Number,
   updatedAt: InstantColumnSchema,
 });
@@ -639,18 +639,18 @@ const LATEST_ITEM = max(inboxItem.updatedAt);
  * item, open or settled, whichever member's agent posted it, the plan whose
  * item changed latest first.
  */
-const findPlansWithItems = SqlSchema.findAll({
+const findTasksWithItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
-  Result: PlanItemsRowSchema,
+  Result: TaskItemsRowSchema,
   execute: ({ userId }) =>
     Database.use((db) =>
       db
-        .select({ planId: inboxItem.planId, items: count(), updatedAt: LATEST_ITEM })
+        .select({ taskId: inboxItem.taskId, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
-        .innerJoin(plan, eq(plan.id, inboxItem.planId))
-        .where(and(planReachableBy(userId), isNull(plan.archivedAt)))
-        .groupBy(inboxItem.planId)
-        .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
+        .innerJoin(task, eq(task.id, inboxItem.taskId))
+        .where(and(taskReachableBy(userId), isNull(task.archivedAt)))
+        .groupBy(inboxItem.taskId)
+        .orderBy(desc(LATEST_ITEM), desc(inboxItem.taskId)),
     ),
 });
 
@@ -682,7 +682,7 @@ const findAutomationsWithItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        .where(and(isNull(inboxItem.planId), itemReachableBy(userId)))
+        .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
         .groupBy(automation.id)
         .orderBy(desc(LATEST_ITEM), desc(automation.id)),
     ),
@@ -793,7 +793,7 @@ export function postInboxItem(
           insertAttachment({
             id: attachment.id,
             userId: agent.userId,
-            planId: agent.planId,
+            taskId: agent.taskId,
             organizationId: locked.value.organizationId,
             itemId: row.id,
             contentType: attachment.contentType,
@@ -857,11 +857,11 @@ export function agentInboxItems(
  * bound, because one left unanswered while many others changed must still
  * wait where the developer looks.
  */
-export function planInboxItems(
+export function taskInboxItems(
   userId: string,
-  planId: string,
+  taskId: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  return scopeItems({ userId, scope: INBOX_SCOPE.PLAN, id: planId }, INBOX_BOUNDS.MAX_ITEMS_READ);
+  return scopeItems({ userId, scope: INBOX_SCOPE.TASK, id: taskId }, INBOX_BOUNDS.MAX_ITEMS_READ);
 }
 
 /** One agent's items as any member of its workspace reads them, an agent with no plan as much as one on a plan: every open one, then the latest settled. */
@@ -884,11 +884,11 @@ export function memberAgentInboxStamps(
 }
 
 /** Where each of the plan's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
-export function planInboxStamps(
+export function taskInboxStamps(
   userId: string,
-  planId: string,
+  taskId: string,
 ): InboxStoreEffect<readonly InboxStamp[]> {
-  return scopeStamps({ userId, scope: INBOX_SCOPE.PLAN, id: planId });
+  return scopeStamps({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
 }
 
 /** Where the scope's items stand: every open one, then the latest settled, as `scopeItems` reads them. */
@@ -987,8 +987,9 @@ export function accountWaitingItems(
   userId: string,
 ): InboxStoreEffect<readonly AccountWaitingRow[]> {
   return Effect.map(findWaitingItems({ userId }), (rows) =>
-    rows.map((row) => ({
+    rows.map(({ taskId, ...row }) => ({
       ...row,
+      planId: taskId,
       postedAt: row.postedAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
     })),
@@ -996,7 +997,7 @@ export function accountWaitingItems(
 }
 
 /** One open item of an agent with no plan as the account's read carries it, and where it stands. */
-type AccountPlanlessRow = AccountPlanlessEntry & Pick<InboxStamp, "status">;
+type AccountTasklessRow = AccountTasklessEntry & Pick<InboxStamp, "status">;
 
 /**
  * Every item that waits on the developer from an agent with no plan in the
@@ -1004,10 +1005,10 @@ type AccountPlanlessRow = AccountPlanlessEntry & Pick<InboxStamp, "status">;
  * repository that stand in a plan's place; none is left out for being old,
  * as `accountWaitingItems` leaves none out.
  */
-export function accountPlanlessItems(
+export function accountTasklessItems(
   userId: string,
-): InboxStoreEffect<readonly AccountPlanlessRow[]> {
-  return Effect.map(findPlanlessWaitingItems({ userId }), (rows) =>
+): InboxStoreEffect<readonly AccountTasklessRow[]> {
+  return Effect.map(findTasklessWaitingItems({ userId }), (rows) =>
     rows.map(({ workspaceId, ...row }) => ({
       ...row,
       ...(workspaceId === null ? undefined : { workspaceId }),
@@ -1029,9 +1030,13 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
  * waiting or settled, with how many and when the latest changed, the
  * plan whose item changed latest first: what the desktop's Inbox lists.
  */
-export function accountInboxPlans(userId: string): InboxStoreEffect<readonly AccountInboxPlan[]> {
-  return Effect.map(findPlansWithItems({ userId }), (rows) =>
-    rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+export function accountInboxTasks(userId: string): InboxStoreEffect<readonly AccountInboxTask[]> {
+  return Effect.map(findTasksWithItems({ userId }), (rows) =>
+    rows.map(({ taskId, ...row }) => ({
+      ...row,
+      planId: taskId,
+      updatedAt: row.updatedAt.getTime(),
+    })),
   );
 }
 

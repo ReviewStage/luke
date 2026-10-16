@@ -1,4 +1,4 @@
-import type { CodeLines } from "@luke/features/planning-view";
+import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import {
   type ComponentProps,
@@ -92,7 +92,7 @@ function colouringOf(act: ActHandle["act"], language: string, code: string): Col
   const colouring: Colouring = {
     lines: undefined,
     // Note that a refusal draws the block plain and is held as one, so it is not asked again.
-    asked: act(ACT_KIND.PLANNING_COLOUR_CODE, { language, code }).then(
+    asked: act(ACT_KIND.TASKS_COLOUR_CODE, { language, code }).then(
       (lines) => {
         colouring.lines = lines;
         return lines;

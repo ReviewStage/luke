@@ -36,7 +36,7 @@ import {
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PencilIcon, PlusIcon, RefreshCwIcon, StarIcon } from "lucide-react";
+import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
@@ -77,9 +77,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * alone. Where the provider offers more than one account, the ⋯ keeps Add
  * another account, which begins a sign-in for a new one that stands pending
  * as a row of its own until it settles; and where it holds more than one,
- * Rename, which names the account in place, and Make primary, which makes
- * it the account the agents use unless told otherwise, the primary's name
- * wearing the word. GitHub is granted by the
+ * Rename, which names the account in place. GitHub is granted by the
  * account's own GitHub (`integration-grant.ts`), which lets agents use
  * GitHub's tools as the developer and is linked nowhere else, as its ⋯ says
  * over its acts: its Connect links that GitHub in the browser, and its
@@ -137,7 +135,6 @@ const PAGE_LINE = {
   NONE_OFFERED: "No integrations are available for this account.",
   NOT_OPENED: "Luke could not open your browser to sign in.",
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
-  PRIMARY: "Primary",
 } as const;
 
 /** What a row offers to mend its connection, on its button or in its ⋯. */
@@ -145,7 +142,6 @@ const ROW_ACT = {
   RECONNECT: "Reconnect",
   ADD_ACCOUNT: "Add another account",
   RENAME: "Rename",
-  MAKE_PRIMARY: "Make primary",
 } as const;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -274,7 +270,7 @@ function ToolsLine({
   tools: RowTools;
 }): React.JSX.Element {
   return (
-    <small className="settings-state" data-state={LINE_STATE.CONNECTED}>
+    <small className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
       <button
         type="button"
@@ -504,7 +500,7 @@ function IntegrationRow({
   const [connecting, setConnecting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  // Several accounts at a provider each name themselves and may be made primary; one alone is the provider, as ever.
+  // Several accounts at a provider each name themselves; one alone is the provider, as ever.
   const several = row.accounts > 1 && account !== undefined;
 
   /** How a grant begun went, said under the row where it could not begin. */
@@ -553,19 +549,6 @@ function IntegrationRow({
     );
   };
 
-  const makePrimary = () => {
-    setRejection(undefined);
-    void act(ACT_KIND.INTEGRATIONS_PRIMARY, { provider, connection }).then(
-      (answer) => {
-        if ("failure" in answer) {
-          setRejection(`Luke could not make ${name} primary. Try again in a moment.`);
-        }
-        void statuses.read();
-      },
-      () => setRejection(`Luke could not make ${name} primary. Try again in a moment.`),
-    );
-  };
-
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
     disconnectAccount(act, github, row, statuses),
@@ -589,12 +572,7 @@ function IntegrationRow({
     onSelect: disconnect.ask,
   };
   const naming = several
-    ? [
-        { label: ROW_ACT.RENAME, icon: <PencilIcon />, onSelect: () => setEditing(true) },
-        ...(account.primary
-          ? []
-          : [{ label: ROW_ACT.MAKE_PRIMARY, icon: <StarIcon />, onSelect: makePrimary }]),
-      ]
+    ? [{ label: ROW_ACT.RENAME, icon: <PencilIcon />, onSelect: () => setEditing(true) }]
     : [];
   const adding =
     !bySignIn && statuses.canAdd(provider) && row.accounts < INTEGRATION_ACCOUNTS_MAX
@@ -636,9 +614,6 @@ function IntegrationRow({
           ) : (
             <strong>
               <Highlighted text={name} tokens={tools.tokens} />
-              {several && account.primary ? (
-                <span className="settings-changed">{PAGE_LINE.PRIMARY}</span>
-              ) : null}
             </strong>
           )}
           {connected && tools.all.length > 0 ? (
@@ -653,7 +628,6 @@ function IntegrationRow({
               type="button"
               className="toolbar-button quiet-button"
               disabled={connecting}
-              title={`Open the ${name} sign-in in your browser again`}
               onClick={connect}
             >
               {SIGN_IN_ACTION.REOPEN}
@@ -674,9 +648,6 @@ function IntegrationRow({
             type="button"
             className="toolbar-button bordered-button"
             disabled={connecting}
-            title={
-              bySignIn ? "Connect GitHub in your browser" : `Sign in to ${name} in your browser`
-            }
             onClick={connect}
           >
             {grantLabel(status, signIn)}

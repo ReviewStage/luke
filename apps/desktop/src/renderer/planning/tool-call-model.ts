@@ -20,8 +20,8 @@ import {
 } from "@luke/features/integration-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { PlanNote } from "@luke/features/plan-template";
-import type { CodeRef } from "@luke/features/plan-wire";
+import type { PlanAgentEdit } from "@luke/features/plan-template";
+import type { CodeRef } from "@luke/features/task-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";
@@ -197,16 +197,24 @@ export function loadedSkill(input: WireValue | undefined): string | undefined {
 }
 
 /**
- * What a plan note of each kind did, in the row's words, keyed by the
- * template's kinds. Note that the keys are held to the template's type and
- * not read from its module, because the template reaches Effect's Schema,
- * which the renderer bundle does not carry for one table of words.
+ * What a plan note of each kind did, in the row's words, keyed by the kinds
+ * the agents' journal keeps, a deletion among them as a strike. Note that the
+ * keys are held to the template's type and not read from its module, because
+ * the template reaches Effect's Schema, which the renderer bundle does not
+ * carry for one table of words.
  */
 const NOTE_VERB = {
   add: "added",
   replace: "corrected",
   remove: "struck",
-} as const satisfies Record<PlanNote["kind"], string>;
+} as const satisfies Record<PlanAgentEdit["notes"][number]["kind"], string>;
+
+/** What one note of a call's input did, by its kind: a replacement with no words is a strike. */
+function noteKind(note: WireValue): string {
+  const kind = stringAt(note, "kind") ?? "";
+  const text = stringAt(note, "text");
+  return kind === "replace" && text !== undefined && text.trim() === "" ? "remove" : kind;
+}
 
 /** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
 function planEditSummary(input: WireValue | undefined): string {
@@ -216,7 +224,7 @@ function planEditSummary(input: WireValue | undefined): string {
   const pictures = pictured !== undefined && isWireArray(pictured) ? pictured.length : 0;
   return Object.entries(NOTE_VERB)
     .flatMap(([kind, verb]) => {
-      const count = notes.filter((note) => stringAt(note, "kind") === kind).length;
+      const count = notes.filter((note) => noteKind(note) === kind).length;
       return count === 0 ? [] : [`${count} ${verb}`];
     })
     .concat(pictures === 0 ? [] : [`${pictures} ${pictures === 1 ? "picture" : "pictures"} added`])
@@ -505,6 +513,14 @@ function knownToolView(
         input: textBlock(stringAt(input, "path") ?? stringAt(input, "html") ?? ""),
         output: output === undefined ? undefined : jsonBlock(output),
       };
+    // A page read is named by the title its answer gives, the id alone being all the call holds.
+    case AGENT_TOOL.READ_PAGE:
+      return {
+        kind: CALL_KIND.READ_PAGE,
+        subject: stringAt(isRecord(output) ? output.page : undefined, "title") ?? "",
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : jsonBlock(output),
+      };
     case AGENT_TOOL.SHOW_IMAGE:
       return {
         kind: CALL_KIND.SHOW_IMAGE,
@@ -560,6 +576,16 @@ function namedCall(
   };
 }
 
+/** A call about one agent named by the agent's title its answer gives, as the agent's tab names it; nothing before the answer, whose input holds only an id. */
+function answeredAgentCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const agent = isRecord(output) ? output.agent : undefined;
+  return { ...namedCall(kind, input, output, undefined), subject: stringAt(agent, "title") ?? "" };
+}
+
 /** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
@@ -610,13 +636,18 @@ function planningToolView(
       return namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question");
     case AGENT_TOOL.WITHDRAW_QUESTION:
       return namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question");
-    case AGENT_TOOL.LIST_CODING_AGENTS:
+    // An agent tool is read alike under its name and the one it had on Luke's calls before every agent was offered it.
+    case AGENT_TOOL.LIST_AGENTS:
+    case RETIRED_TOOL.LIST_CODING_AGENTS:
       return namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined);
-    case AGENT_TOOL.READ_CODING_AGENT:
+    case AGENT_TOOL.READ_AGENT:
+    case RETIRED_TOOL.READ_CODING_AGENT:
       return namedCall(CALL_KIND.READ_AGENT, input, output, "agentId");
-    case AGENT_TOOL.MESSAGE_CODING_AGENT:
+    case AGENT_TOOL.MESSAGE_AGENT:
+    case RETIRED_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
-    case AGENT_TOOL.START_CODING_AGENT:
+    case AGENT_TOOL.START_AGENT:
+    case RETIRED_TOOL.START_CODING_AGENT:
       // Note that a start journaled before the prompt had its name carries it as `task`.
       return namedCall(
         CALL_KIND.START_AGENT,
@@ -624,6 +655,10 @@ function planningToolView(
         output,
         stringAt(input, "prompt") === undefined ? "task" : "prompt",
       );
+    case AGENT_TOOL.ARCHIVE_AGENT:
+      return answeredAgentCall(CALL_KIND.ARCHIVE_AGENT, input, output);
+    case AGENT_TOOL.UNARCHIVE_AGENT:
+      return answeredAgentCall(CALL_KIND.UNARCHIVE_AGENT, input, output);
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -736,14 +771,27 @@ const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
   const agent = stringAt(call.input, "agentId");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
+}
+
+/**
+ * Whether a call's answer says its agent is on another task than the one
+ * the call was made on, which opens nothing here: a task's column draws
+ * its own agents' tabs alone, so such an agent's row folds open in place.
+ * An answer from before the service said so is read as this task's.
+ */
+function onAnotherTask(call: TargetedCall): boolean {
+  const answer = isRecord(call.output) ? call.output.agent : undefined;
+  return isRecord(answer) && answer.onYourTask === false;
 }
 
 /** The agent a start began, which its answer names once it has. */
 function startedAgent(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.agent : undefined;
   const agent = stringAt(answer, "id");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
 }
 
 /** The page a write made or moved on, which its answer names once it has. */
@@ -751,6 +799,12 @@ function shownPage(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.page : undefined;
   const page = stringAt(answer, "id");
   return page === undefined ? undefined : { kind: TOOL_TARGET.PAGE, page };
+}
+
+/** The page a read answered, which opens its tab where it is on the call's own task; one of another task opens nothing here. */
+function readPage(call: TargetedCall): ToolTarget | undefined {
+  const answer = isRecord(call.output) ? call.output.page : undefined;
+  return isRecord(answer) && answer.isYourTask === true ? shownPage(call) : undefined;
 }
 
 /** The lines `show_code` put on screen, as a reference a File tab lights. */
@@ -778,15 +832,20 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
+  [AGENT_TOOL.READ_PAGE, readPage],
   [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
-  [AGENT_TOOL.READ_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.MESSAGE_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.START_CODING_AGENT, startedAgent],
+  [AGENT_TOOL.READ_AGENT, namedAgent],
+  [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
+  [AGENT_TOOL.START_AGENT, startedAgent],
+  [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
+  [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],

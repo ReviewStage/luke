@@ -60,14 +60,22 @@
   --pressed: rgba(255, 255, 255, 0.26);
   /* The keyboard's ring around whatever control it is on, in the system's
      own default accent, and how thick it is and how far it stands off the
-     control's edge. A control that clips what it holds sets the offset to
-     less the width, so the ring is drawn inside it. The reach is how far the
-     ring stands past the control's edge: a scroller pads by it, so the ring
-     of a row laid edge to edge in it is not clipped. */
+     control's edge. The reach is how far the ring stands past the control's
+     edge: a scroller pads by it, so the ring of a row laid edge to edge in
+     it is not clipped. A box that clips what it holds keeps the ring whole
+     one of two ways. One whose clip is only there to hold in what runs long
+     clips past the ring, `overflow: clip` with `overflow-clip-margin` the
+     room; note that the room names its box, because Chromium drops a bare
+     `calc()` there and clips at the edge after all. One whose clip is an
+     edge it draws, a card, sets the offset to the inset for everything in
+     it, so the ring is drawn inside the control, on the card's side of the
+     edge. */
   --focus-ring: var(--message-sent);
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
+  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
   --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
+  --focus-ring-room: padding-box var(--focus-ring-reach);
   --hairline: rgba(255, 255, 255, 0.08);
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */
@@ -286,37 +294,102 @@
   }
 }
 
-/* How every scroll container in the panel meets its bottom edge: content
-   dissolves into the surface over `--scroll-fade` rather than being sliced,
-   and the fade lifts as the last row arrives. A scroll timeline is exactly
-   the right tool: with nothing to scroll it never becomes active, so content
-   that fits is left alone without asking JavaScript whether it overflows.
-   Shared here because the session list and the settings tab must meet the
-   caption riding below them the same way. */
-@keyframes scroll-edge-fade {
+/* How a scroller meets an edge something stands pinned at: a toolbar, a
+   banner, a bar at its foot, a band stuck inside it, or the window's drag
+   strip. Content dissolves over `--scroll-fade` rather than being sliced
+   against that edge. A scroller wears `scroll-fade` to fade at both edges,
+   or `scroll-fade-top` where only its top meets something pinned.
+
+   Each edge's depth is a registered length that a scroll timeline eases
+   from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
+   of scrolling. So a scroller at rest at that end is left whole, and one
+   with nothing to scroll never fades, because its timeline never becomes
+   active. The two depths are composed into one mask, rather than each edge
+   animating a mask of its own, because the second animation's mask would
+   replace the first's. They are named by start and end rather than top and
+   bottom, because a table that scrolls sideways (markdown.css) eases the
+   same two depths on its inline timeline into a mask running to the right.
+
+   It is a mask, not a gradient in a ground colour, so its black is an
+   alpha: content dissolves into whatever ground the scroller stands on, in
+   either appearance, over a tinted row or a lit code line alike. A scroll
+   timeline is not motion, so reduced motion leaves it be. Its scroll padding
+   brings whatever the keys move to clear of a faded edge; a scroller that
+   pads further keeps its own. A band stuck inside the scroller that must
+   stand whole, a call's checkpoint, sets `--fade-inset-top` to its height,
+   and the fade starts beneath it; it pads its scroll past both. */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-inset-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Registered so it does not inherit: as the depths ease, only the scroller
+   is restyled, never the whole log inside it. A scroller that keeps a spot
+   whole beside it (the summary's chevron) adds a mask layer to this one. */
+@property --scroll-fade-mask {
+  syntax: "*";
+  inherits: false;
+}
+
+.scroll-fade,
+.scroll-fade-top {
+  --scroll-fade-mask: linear-gradient(
+    to bottom,
+    #000 var(--fade-inset-top),
+    transparent var(--fade-inset-top),
+    #000 calc(var(--fade-inset-top) + var(--fade-start)),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+  scroll-padding-top: var(--scroll-fade);
+  mask-image: var(--scroll-fade-mask);
+  animation-name: scroll-fade-start, scroll-fade-end;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(self block), scroll(self block);
+  animation-range:
+    0 var(--scroll-fade),
+    calc(100% - var(--scroll-fade)) 100%;
+}
+
+.scroll-fade {
+  scroll-padding-bottom: var(--scroll-fade);
+}
+
+.scroll-fade-top {
+  animation-name: scroll-fade-start, none;
+}
+
+@keyframes scroll-fade-start {
   from {
-    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+    --fade-start: 0px;
   }
 
   to {
-    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+    --fade-start: var(--scroll-fade);
   }
 }
 
-/* The same fade at a scroll container's top edge, where something stands
-   pinned over it, as the drag strip over the plan template does: content scrolled up
-   past the edge dissolves into the surface over `--scroll-fade` rather than
-   being sliced against the banner. A container runs it on its own scroll
-   timeline over its first `--scroll-fade` of scrolling, so a page at rest at
-   its top is left whole and the fade has fully risen by the time a line
-   could reach the edge. */
-@keyframes scroll-top-fade {
+@keyframes scroll-fade-end {
   from {
-    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+    --fade-end: var(--scroll-fade);
   }
 
   to {
-    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade));
+    --fade-end: 0px;
   }
 }
 
@@ -365,12 +438,13 @@
     font: inherit;
   }
 
-  /* One ring for every control. `:focus-visible` alone guesses wrong in a
-     window Luke focuses for itself and rings a button after a plain press,
-     so until the keyboard has actually moved focus (`keyboard-modality.ts`)
-     nothing but a field rings. In the base layer, so a sheet's own rule for
-     a control still wins: a menu row marks its focus with a fill, and says
-     so where it is drawn. */
+  /* One ring for every control, and for anything else in the tab order, so
+     no element given a tabindex is left to the engine's own ring.
+     `:focus-visible` alone guesses wrong in a window Luke focuses for itself
+     and rings a button after a plain press, so until the keyboard has
+     actually moved focus (`keyboard-modality.ts`) nothing but a field rings.
+     In the base layer, so a sheet's own rule for a control still wins: a
+     menu row marks its focus with a fill, and says so where it is drawn. */
   :is(
     button,
     a[href],
@@ -381,10 +455,46 @@
     [role="switch"],
     [role="option"],
     [role="menuitem"],
-    [role="menuitemcheckbox"]
-  ):focus-visible {
+    [role="menuitemcheckbox"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible:not(:has(> [data-focus-ring])) {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
+  }
+
+  /* A control whose drawn shape is a part of it, a picture tile's picture
+     over its caption, rings that part alone, which says so with
+     `data-focus-ring`, so the ring takes the shape that is seen and the
+     control draws no second one around it. */
+  :focus-visible:has(> [data-focus-ring]) {
+    outline: none; /* no ring: the part it names rings */
+  }
+
+  :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* The keyboard scrolls a control in with its ring's reach to spare, so a
+     row brought to a scroller's edge is not left with its ring sliced off
+     there; a scroller that fades an edge scroll-pads by the fade as well, so
+     the row is not left under it. Every control rather than the one focused,
+     because the scroll is measured as focus lands, before a rule on the
+     focus could take part. */
+  :is(
+    button,
+    a[href],
+    summary,
+    input[type="checkbox"],
+    [role="button"],
+    [role="tab"],
+    [role="switch"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [tabindex]:not([tabindex="-1"])
+  ) {
+    scroll-margin: var(--focus-ring-reach);
   }
 
   :root:not([data-keyboard="true"])
@@ -680,6 +790,13 @@ body,
    unavailability must not wear a fault's red. */
 .voice-caption[data-tone="notice"] .voice-caption-text {
   color: var(--state-attention);
+}
+
+/* A quote in a failure or a notice keeps the tone's colour and is set off by
+   its rule alone, because a quote's quiet ink would read as words that are
+   not the fault or the notice. */
+.voice-caption:is([data-tone="error"], [data-tone="notice"]) .markdown-quote {
+  color: inherit;
 }
 
 /* Volume hint ------------------------------------------------------------- */

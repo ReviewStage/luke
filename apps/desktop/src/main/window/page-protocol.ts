@@ -1,5 +1,5 @@
 import { framedPageOf, PAGE_SCHEME } from "@luke/features/page-frame";
-import type { PlanningPageAnswer, PlanningPageParams } from "@luke/features/planning-view";
+import type { TasksPageAnswer, TasksPageParams } from "@luke/features/tasks-view";
 import { Effect } from "effect";
 import type { CustomScheme } from "electron";
 
@@ -60,7 +60,7 @@ const NOT_FOUND = 404;
  */
 export function pageResponse(
   url: string,
-  readPage: (page: PlanningPageParams) => Effect.Effect<PlanningPageAnswer>,
+  readPage: (page: TasksPageParams) => Effect.Effect<TasksPageAnswer>,
 ): Effect.Effect<Response> {
   const framed = framedPageOf(url);
   if (framed === undefined) return Effect.succeed(new Response(null, { status: NOT_FOUND }));

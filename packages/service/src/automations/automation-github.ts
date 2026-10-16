@@ -1,5 +1,5 @@
 import { githubAutomationsOn, recordAutomationRun } from "@luke/database/models/automation-store";
-import type { PlanStoreEffect } from "@luke/database/models/plan-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
@@ -457,7 +457,7 @@ export function queueGithubRuns(
   event: string,
   payload: UnparsedWireValue,
   agentLogin: string | undefined,
-): PlanStoreEffect<number> {
+): TaskStoreEffect<number> {
   const reads = githubEventsOf(event, payload, agentLogin);
   if (reads.length === 0 || deliveryId.length === 0) return Effect.succeed(0);
   return Effect.map(

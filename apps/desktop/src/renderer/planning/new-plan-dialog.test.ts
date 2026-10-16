@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenSettingsProvider } from "../open-settings";
@@ -18,6 +20,9 @@ import type { RepositoryChooser } from "./repository-chip";
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window.
  */
+
+/** The window's own stylesheet, which says where the chip's menu hangs. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const roots: Root[] = [];
 
@@ -34,7 +39,10 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  vi.restoreAllMocks();
+  window.localStorage.clear();
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 async function settle(): Promise<void> {
@@ -54,6 +62,7 @@ async function mount(
   chooser: Partial<RepositoryChooser> = {},
 ) {
   const starts: [string, string | null][] = [];
+  const planned: boolean[] = [];
   const control = plansControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -69,8 +78,14 @@ async function mount(
         open,
         preset: preset === undefined ? undefined : { repository: preset },
         repositoriesIn: () => repositories,
-        start: (name: string, repository: string | null) => {
+        start: (
+          name: string,
+          repository: string | null,
+          _workspaceId: string | undefined,
+          planning: boolean,
+        ) => {
           starts.push([name, repository]);
+          planned.push(planning);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -112,6 +127,8 @@ async function mount(
   };
   return {
     starts,
+    /** Whether each start asked for its planning phase. */
+    planned,
     /** Every Settings link the dialog's presses followed. */
     links,
     opener,
@@ -141,9 +158,15 @@ async function mount(
   };
 }
 
-test("the dialog holds the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
+test("the dialog holds the Plan switch, the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
   const card = await mount();
-  assert.deepEqual(card.controls(), ["Task name", "acme/web", "Cancel", "Create task⏎"]);
+  assert.deepEqual(card.controls(), [
+    "Plan with Luke",
+    "Task name",
+    "acme/web",
+    "Cancel",
+    "Create task⏎",
+  ]);
   assert.equal(document.activeElement, card.field());
   assert.equal(
     card.dialog()?.textContent?.includes("Repository"),
@@ -171,6 +194,32 @@ test("the name is optional: with none, or only whitespace, Return and Create tas
     ["", "acme/web"],
     ["", "acme/web"],
   ]);
+});
+
+test("Plan starts on, a task started with it off starts without planning, and the next New task offers it as it was left", async () => {
+  const first = await mount();
+  const planSwitch = () => {
+    const found = document.querySelector<HTMLButtonElement>('[role="switch"]');
+    assert.ok(found, "the Plan switch is drawn");
+    return found;
+  };
+  assert.equal(planSwitch().getAttribute("aria-checked"), "true");
+  act(() => first.button("Create task").click());
+  await settle();
+  const label = document.querySelector<HTMLLabelElement>(`label[for="${planSwitch().id}"]`);
+  assert.ok(label, "the switch has a visible label");
+  act(() => label.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  assert.equal(planSwitch().getAttribute("aria-checked"), "false", "a press on its word turns it");
+  act(() => first.button("Create task").click());
+  await settle();
+  assert.deepEqual(first.planned, [true, false]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const next = await mount();
+  assert.equal(planSwitch().getAttribute("aria-checked"), "false");
+  await next.press("Enter", next.field());
+  assert.deepEqual(next.planned, [false]);
 });
 
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
@@ -210,6 +259,36 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
   await card.press("Escape", search);
   assert.equal(document.querySelector('input[aria-label="Search repositories"]'), null);
   assert.ok(card.dialog(), "the dialog still stands");
+});
+
+test("the repository menu hangs above its chip where the window leaves no room for it below, its list capped to the room above, and below a chip high in the window", async () => {
+  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(520);
+  const card = await mount();
+  const chip = card.button("acme/web");
+  const opened = async (top: number) => {
+    vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(40, top, 200, 32));
+    act(() => chip.click());
+    await settle();
+    const holder = chip.closest<HTMLElement>(".repository-chip") ?? assert.fail("the chip's box");
+    const menu = holder.querySelector(".searchable-menu") ?? assert.fail("the menu opens");
+    const placed = {
+      side: holder.dataset.side,
+      list: holder.style.getPropertyValue("--settings-picker-list-max"),
+      top: getComputedStyle(menu).top,
+    };
+    act(() => chip.click());
+    await settle();
+    return placed;
+  };
+
+  // A chip at the foot of a card in a 520px window, then one near its top.
+  const low = await opened(300);
+  const high = await opened(60);
+
+  assert.deepEqual(low, { side: "above", list: "240px", top: "auto" });
+  assert.equal(high.side, "below");
+  assert.notEqual(high.top, "auto");
 });
 
 test("a refusal keeps the dialog and the name, says why under the field, and Create plan can be pressed again", async () => {
@@ -371,7 +450,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
 
   assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
   assert.equal(
-    offered.includes("ReviewStage/luke"),
+    offered.some((words) => words?.startsWith("luke")),
     false,
     "the stranded repository is not offered",
   );
@@ -409,4 +488,54 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
 
   assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
   assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
+});
+
+test("the repository menu names each repository first and its owner after it, so two that share an owner tell apart, and finds one by its owner/name", async () => {
+  const owner = "northwind-platform";
+  const reached = (name: string) => ({
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    defaultBranch: "main",
+    private: true,
+    updatedAt: 1,
+  });
+  const dialog = await mount(undefined, undefined, {
+    recent: [],
+    read: () =>
+      Promise.resolve({
+        repositories: {
+          installed: true,
+          repositories: [
+            reached("customer-identity-and-access-management-service"),
+            reached("billing-ledger-and-invoicing-pipeline"),
+          ],
+          installationUrl: "https://github.com/apps/luke/installations/new",
+        },
+      }),
+  });
+  await openChip();
+  const rows = () =>
+    [...document.querySelectorAll('[role="option"]')].map((row) => [
+      row.querySelector(".plan-compose-menu-name")?.textContent,
+      row.querySelector(".plan-compose-menu-detail")?.textContent,
+    ]);
+
+  assert.deepEqual(rows(), [
+    ["customer-identity-and-access-management-service", owner],
+    ["billing-ledger-and-invoicing-pipeline", owner],
+  ]);
+  const search =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
+    assert.fail("the chip's menu opens");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, `${owner}/billing`);
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await dialog.press("Enter", search);
+  dialog.type("Ledger");
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(dialog.starts, [["Ledger", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
 });

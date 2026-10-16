@@ -8,7 +8,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -35,7 +35,7 @@ import type { PlanLooks } from "./use-plan-looks";
  * their card, and the time opening the version history. Synthetic people.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   document: { body: "## Goal\nInvite a teammate by email.", assumptions: [] },
 };
@@ -44,7 +44,7 @@ const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LEE = { userId: "user-lee", name: "Lee Park" };
 /** Who the workspace's work names but left, as the read of who left answers. */
-const LEE_PICTURE = "https://avatars.githubusercontent.com/u/7";
+const LEE_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 const FORMER = [{ ...LEE, pictureUrl: LEE_PICTURE }];
 /** The window's own stylesheet, which says what each mark stands on. */
 const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
@@ -99,7 +99,7 @@ interface Drawn {
 }
 
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
-async function draw(plan: Plan, drawn: Drawn = {}): Promise<HTMLElement> {
+async function draw(plan: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -136,7 +136,7 @@ async function draw(plan: Plan, drawn: Drawn = {}): Promise<HTMLElement> {
 }
 
 /** `PLAN` as last edited as `edit` says, now, over the document and on its Goal section. */
-function editedAs(edit: Omit<PlanLastEdit, "at">, at = Date.now()): Plan {
+function editedAs(edit: Omit<PlanLastEdit, "at">, at = Date.now()): Task {
   return { ...PLAN, lastEdit: { ...edit, at }, sectionEdits: [{ section: "Goal", ...edit, at }] };
 }
 
@@ -243,7 +243,7 @@ test("the time opens the version history, on the plan as it stands or on the sec
 
 test("a teammate's card says who they are and what they last changed in the plan", async () => {
   const at = Date.now();
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
     sectionEdits: [
@@ -262,7 +262,7 @@ test("a teammate's card says who they are and what they last changed in the plan
 test("Luke's card says whose call he wrote on, and what he wrote", async () => {
   const at = Date.now();
   const onCharlesCall = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: true };
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     lastEdit: onCharlesCall,
     sectionEdits: [
@@ -310,7 +310,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
 
 test("the sections changed since the last look are counted beside a face for each who changed them", async () => {
   const at = Date.now();
-  const plan: Plan = {
+  const plan: Task = {
     ...PLAN,
     sectionEdits: [
       { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
@@ -348,7 +348,7 @@ function groundOf(mark: Element): string {
 
 /** The ground of each face beside "Changed since you last looked", by its kind. */
 async function changedFaces(
-  sectionEdits: NonNullable<Plan["sectionEdits"]>,
+  sectionEdits: NonNullable<Task["sectionEdits"]>,
 ): Promise<[string, string][]> {
   const looks: PlanLooks = {
     changed: new Set(sectionEdits.map(({ section }) => section)),

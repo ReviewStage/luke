@@ -71,11 +71,6 @@ function fakeService(script: ServiceScript) {
           account: { provider, connection, label, primary: false, status: script.status },
         };
       }),
-    primary: (provider, connection) =>
-      Effect.sync(() => {
-        asked.push(provider);
-        return { account: { provider, connection, primary: true, status: script.status } };
-      }),
   };
   return { client, opened, asked };
 }

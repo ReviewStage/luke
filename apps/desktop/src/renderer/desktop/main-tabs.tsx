@@ -5,8 +5,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -31,6 +31,7 @@ import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-ma
 import type { ColumnPinnableTab, PinnedTab } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { useAgentArchive } from "./agent-archive";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import type { PlanCards } from "./side-panel";
@@ -114,6 +115,9 @@ const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the plan's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
+
+/** What the press that reads the plan's agents again, after a first read did not land, says. */
+const RETRY_AGENTS = "Retry agents";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -411,7 +415,7 @@ export function MainTabStrip({
   actionsSlot,
   onOpenTerminal,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
   planCard: React.ReactNode;
   main: MainTabsControl;
@@ -461,7 +465,7 @@ export function MainTabStrip({
     : [];
   // The agents', the draft's, and the Inbox's tabs in the column's order,
   // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
-  const own = inPlanOrder(
+  const own = inTaskOrder(
     [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
     main.tabs,
     (entry) => entry.tab,
@@ -560,12 +564,17 @@ export function MainTabStrip({
             />
           ),
         )}
-        {/* The first read of the plan's agents did not land: nothing is known
-            to draw, so the strip offers the read again where the tabs would be. */}
-        {agents.listFailed && agents.agents === undefined ? (
-          <RetryButton label="Retry agents" onRetry={agents.onRetryList} />
-        ) : null}
       </TabStrip>
+      {/* The first read of the plan's agents did not land: nothing is known
+          to draw, so the row offers the read again where the tabs would be,
+          after the strip rather than in it, so the strip's scrolling never
+          takes it out of reach, and as its glyph alone where the bar is
+          short of room (desktop.css's `plan-toolbar`). */}
+      {agents.listFailed && agents.agents === undefined ? (
+        <Tooltip label={RETRY_AGENTS}>
+          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        </Tooltip>
+      ) : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"

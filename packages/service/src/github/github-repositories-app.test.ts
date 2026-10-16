@@ -13,14 +13,18 @@ import {
 import {
   GITHUB_REPOSITORIES_QUERY,
   githubRepositoriesAnswerSchema,
+  githubRepositoryIssueAnswerSchema,
+  githubRepositoryPullRequestAnswerSchema,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import {
-  PLAN_FILE_REFUSAL,
-  PLAN_TREE_ENTRY,
-  planSkillsAnswerSchema,
-  planTreeAnswerSchema,
-} from "@luke/features/plan-wire";
+  TASK_FILE_REFUSAL,
+  TASK_TREE_ENTRY,
+  taskSkillsAnswerSchema,
+  taskTreeAnswerSchema,
+} from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
@@ -46,6 +50,69 @@ import { githubRepositoriesApp } from "./github-repositories-app.js";
  */
 
 const ORIGIN = "https://luke.test";
+
+/** A pull request of `acme/relay` as GitHub's API names it by number. */
+const PULL_PATH = /^\/repos\/acme\/relay\/pulls\/(\d+)$/u;
+
+/** One pull request of `acme/relay` as GitHub records it, whole: more than a link draws. */
+function pullRecord(
+  number: number,
+  title: string,
+  standing: { readonly merged: boolean; readonly draft: boolean },
+) {
+  return {
+    number,
+    title,
+    html_url: `https://github.com/acme/relay/pull/${number}`,
+    state: standing.merged ? "closed" : "open",
+    draft: standing.draft,
+    merged: standing.merged,
+    additions: 12,
+    deletions: 3,
+    changed_files: 2,
+    head: { ref: `invites-${number}`, sha: `sha-${number}` },
+  };
+}
+
+/** The pull requests `acme/relay` holds: one open, one merged. */
+const RELAY_PULLS = new Map([
+  [42, pullRecord(42, "Send invitations in batches", { merged: false, draft: false })],
+  [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false })],
+]);
+
+/** An issue of `acme/relay` as GitHub's API names it by number. */
+const ISSUE_PATH = /^\/repos\/acme\/relay\/issues\/(\d+)$/u;
+
+/** One issue of `acme/relay` as GitHub records it, whole: more than a link draws. */
+function issueRecord(number: number, title: string, state: string, reason: string | null) {
+  return {
+    number,
+    title,
+    html_url: `https://github.com/acme/relay/issues/${number}`,
+    state,
+    state_reason: reason,
+    body: "Seen on the staging invitations page.",
+    user: { login: "octo-dev" },
+    comments: 3,
+  };
+}
+
+/** The issues `acme/relay` answers on its issues path: one open, one done, one not planned, one a duplicate, and pull request 42, which GitHub answers there too. */
+const RELAY_ISSUES = new Map<number, object>([
+  [7, issueRecord(7, "Invitations expire too soon", "open", null)],
+  [8, issueRecord(8, "Batch the invitation emails", "closed", "completed")],
+  [9, issueRecord(9, "Invite by phone number", "closed", "not_planned")],
+  [10, issueRecord(10, "Invites expire early", "closed", "duplicate")],
+  [42, { ...issueRecord(42, "Send invitations in batches", "open", null), pull_request: {} }],
+]);
+
+/** An installation of the App granting what it asks today: issues write beside the rest. */
+const GRANTING_ISSUES = {
+  contents: "write",
+  metadata: "read",
+  pull_requests: "write",
+  issues: "write",
+} as const;
 
 interface Answer {
   readonly status: number;
@@ -326,18 +393,18 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ] as const;
 
         const tree = readOf(
-          planTreeAnswerSchema,
+          taskTreeAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, [
             ...place("acme/relay"),
             ["path", "src"],
           ]),
         );
         const skills = readOf(
-          planSkillsAnswerSchema,
+          taskSkillsAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, place("acme/relay")),
         );
         const elsewhere = readOf(
-          planTreeAnswerSchema,
+          taskTreeAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, place("acme/ledger")),
         );
 
@@ -347,8 +414,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
             repository: "acme/relay",
             branch: "main",
             entries: [
-              { name: "invite.ts", kind: PLAN_TREE_ENTRY.FILE },
-              { name: "mail", kind: PLAN_TREE_ENTRY.FOLDER },
+              { name: "invite.ts", kind: TASK_TREE_ENTRY.FILE },
+              { name: "mail", kind: TASK_TREE_ENTRY.FOLDER },
             ],
             truncated: false,
           },
@@ -356,7 +423,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
         assert.deepEqual(skills, {
           skills: { repository: "acme/relay", branch: "main", skills: [] },
         });
-        assert.deepEqual(elsewhere, { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE });
+        assert.deepEqual(elsewhere, { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE });
       }),
   );
 
@@ -393,6 +460,315 @@ it.layer(getTestDB())("the repositories route", (it) => {
             path,
           );
         }
+        assert.equal(github.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, and state and nothing more, a merged one as merged",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7801, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const pulled = PULL_PATH.exec(new URL(sent.url).pathname);
+            const record = pulled === null ? undefined : RELAY_PULLS.get(Number(pulled[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7801,
+          accountId: 9801,
+          accountLogin: "acme",
+        });
+        const pullRequest = (number: number) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+          ]);
+
+        const open = yield* pullRequest(42);
+        const merged = yield* pullRequest(43);
+
+        assert.deepEqual(open, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            pullRequest: {
+              number: 42,
+              title: "Send invitations in batches",
+              url: "https://github.com/acme/relay/pull/42",
+              state: PULL_REQUEST_STATE.OPEN,
+            },
+          },
+        });
+        assert.deepEqual(readOf(githubRepositoryPullRequestAnswerSchema, merged), {
+          pullRequest: {
+            number: 43,
+            title: "Retry a bounced invitation",
+            url: "https://github.com/acme/relay/pull/43",
+            state: PULL_REQUEST_STATE.MERGED,
+          },
+        });
+      }),
+  );
+
+  it.effect(
+    "a pull request of a repository the installation does not reach, or of a number the repository holds none under, answers none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7802, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/repos/acme/ledger/pulls/42"
+              ? Response.json(pullRecord(42, "Settle the ledger", { merged: false, draft: false }))
+              : undefined,
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7802,
+          accountId: 9802,
+          accountLogin: "acme",
+        });
+        const pullRequest = (repository: string, number: number) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+          ]);
+
+        const unreached = yield* pullRequest("acme/ledger", 42);
+        const missing = yield* pullRequest("acme/relay", 99);
+
+        const none = { status: HOSTED_HTTP_STATUS.OK, body: { pullRequest: null } };
+        assert.deepEqual(unreached, none);
+        assert.deepEqual(missing, none);
+      }),
+  );
+
+  it.effect(
+    "a pull request's read in a workspace the account is not in is not found, and one naming no number, or one that is not a pull request's, is invalid, before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7803, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ]);
+        const { owner, other, read } = yield* openAccounts(github);
+        const theirs = yield* openInstallationWorkspace(owner, {
+          installationId: 7803,
+          accountId: 9803,
+          accountLogin: "acme",
+        });
+        const place = [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+        ] as const;
+        const numbered = (...numbers: string[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            ...place,
+            ...numbers.map((number) => [GITHUB_REPOSITORIES_QUERY.NUMBER, number] as const),
+          ]);
+
+        const stranger = yield* read(other, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+          ...place,
+          [GITHUB_REPOSITORIES_QUERY.NUMBER, "42"],
+        ]);
+        const unnumbered = [
+          yield* numbered(),
+          yield* numbered("0"),
+          yield* numbered("4.2"),
+          yield* numbered("forty-two"),
+          yield* numbered("42", "43"),
+        ];
+
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        for (const answered of unnumbered) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.equal(github.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a member reads one issue of a repository the workspace's installation reaches by its number, its number, title, page, and state and nothing more, on a token minted for the one repository with issues read alone; a duplicate reads as not planned, and a pull request's number, a missing one, and an unreached repository answer none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [
+            {
+              id: 7811,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay" }],
+              permissions: GRANTING_ISSUES,
+            },
+          ],
+          undefined,
+          {},
+          (sent) => {
+            const named = ISSUE_PATH.exec(new URL(sent.url).pathname);
+            const record = named === null ? undefined : RELAY_ISSUES.get(Number(named[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7811,
+          accountId: 9811,
+          accountLogin: "acme",
+        });
+        const issue = (number: number, repository = "acme/relay") =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+          ]);
+        const page = (number: number) => `https://github.com/acme/relay/issues/${number}`;
+
+        const open = yield* issue(7);
+        const states = [yield* issue(8), yield* issue(9), yield* issue(10)].map(
+          (each) => readOf(githubRepositoryIssueAnswerSchema, each).issue?.state,
+        );
+        const none = [yield* issue(42), yield* issue(99), yield* issue(7, "acme/ledger")];
+
+        assert.deepEqual(open, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            issue: {
+              number: 7,
+              title: "Invitations expire too soon",
+              url: page(7),
+              state: ISSUE_STATE.OPEN,
+            },
+          },
+        });
+        assert.deepEqual(states, [
+          ISSUE_STATE.CLOSED,
+          ISSUE_STATE.NOT_PLANNED,
+          ISSUE_STATE.NOT_PLANNED,
+        ]);
+        for (const answered of none) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { issue: null } });
+        }
+        // The listing that finds the repository mints its own token; every token the issue is read on is cut to issues read on the one repository.
+        const mints = github.sent
+          .filter((sent) => sent.url.endsWith("/access_tokens"))
+          .map((sent) => JSON.parse(sent.body))
+          .filter((mint) => "repositories" in mint);
+        assert.ok(mints.length > 0);
+        for (const mint of mints) {
+          assert.deepEqual(mint, { repositories: ["relay"], permissions: { issues: "read" } });
+        }
+      }),
+  );
+
+  it.effect(
+    "an issue of a repository whose installation does not grant the App issues, or whose issues are turned off, answers none, and the first mints no token for the repository and asks GitHub for no issue",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [
+            { id: 7812, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+            {
+              id: 7813,
+              login: "globex",
+              repositories: [{ owner: "globex", name: "ledger" }],
+              permissions: GRANTING_ISSUES,
+            },
+          ],
+          undefined,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname.includes("/issues/")
+              ? Response.json({ message: "Issues are disabled for this repo" }, { status: 410 })
+              : undefined,
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const ungranted = yield* openInstallationWorkspace(owner, {
+          installationId: 7812,
+          accountId: 9812,
+          accountLogin: "acme",
+        });
+        const turnedOff = yield* openInstallationWorkspace(owner, {
+          installationId: 7813,
+          accountId: 9813,
+          accountLogin: "globex",
+        });
+        const issue = (workspace: string, repository: string) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, "7"],
+          ]);
+
+        const notGranted = yield* issue(ungranted, "acme/relay");
+        // The listing that looks for the repository mints its own token; none is minted for the repository, and no issue is asked.
+        const forTheIssue = github.sent
+          .filter(
+            (sent) =>
+              new URL(sent.url).pathname.includes("/issues/") ||
+              (sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body)),
+          )
+          .map((sent) => sent.url);
+        const off = yield* issue(turnedOff, "globex/ledger");
+
+        const none = { status: HOSTED_HTTP_STATUS.OK, body: { issue: null } };
+        assert.deepEqual(notGranted, none);
+        assert.deepEqual(off, none);
+        assert.deepEqual(forTheIssue, []);
+      }),
+  );
+
+  it.effect(
+    "an issue's read in a workspace the account is not in is not found, and one naming no number is invalid, before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          {
+            id: 7814,
+            login: "acme",
+            repositories: [{ owner: "acme", name: "relay" }],
+            permissions: GRANTING_ISSUES,
+          },
+        ]);
+        const { owner, other, read } = yield* openAccounts(github);
+        const theirs = yield* openInstallationWorkspace(owner, {
+          installationId: 7814,
+          accountId: 9814,
+          accountLogin: "acme",
+        });
+        const place = [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+        ] as const;
+
+        const stranger = yield* read(other, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE, [
+          ...place,
+          [GITHUB_REPOSITORIES_QUERY.NUMBER, "7"],
+        ]);
+        const unnumbered = yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE, [
+          ...place,
+          [GITHUB_REPOSITORIES_QUERY.NUMBER, "0"],
+        ]);
+
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          unnumbered,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
         assert.equal(github.sent.length, 0);
       }),
   );

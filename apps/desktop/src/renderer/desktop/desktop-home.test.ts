@@ -16,7 +16,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -27,8 +27,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
@@ -39,7 +41,7 @@ const DAY = 86_400_000;
 const NOW = Date.now();
 
 /** A plan of the personal workspace, saved `ago` before now. */
-function plan(n: number, name: string, ago: number, repository: string | null): PlanSummary {
+function plan(n: number, name: string, ago: number, repository: string | null): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -52,7 +54,7 @@ function plan(n: number, name: string, ago: number, repository: string | null): 
 
 const INVITES = plan(1, "Teammate invitations", 4 * 60_000, "acme/relay");
 const BILLING = plan(2, "Billing export", 2 * 3_600_000, "acme/ledger");
-const PLANS: readonly PlanSummary[] = [
+const PLANS: readonly TaskSummary[] = [
   plan(3, "Usage alerts", 5 * DAY, "acme/relay"),
   INVITES,
   plan(4, "Onboarding checklist", 12 * DAY, null),
@@ -127,18 +129,18 @@ const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUAR
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   inbox: [
-    { planId: INVITES.id, items: [waitingOf(EMAIL)] },
-    { planId: BILLING.id, items: [waitingOf(ACCOUNT)] },
+    { taskId: INVITES.id, items: [waitingOf(EMAIL)] },
+    { taskId: BILLING.id, items: [waitingOf(ACCOUNT)] },
   ],
   inboxPlans: [
-    { planId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
-    { planId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
+    { taskId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
+    { taskId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
   ],
 };
 
 /** The teammate who started Invitations' agent, and the workspace's members as a read of them answers. */
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/1?v=4";
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-1";
 const MEMBERS: readonly WorkspaceMember[] = [
   {
     userId: "user-dean",
@@ -187,7 +189,7 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.planId) ?? [],
+          items: INBOXES.get(request.payload.taskId) ?? [],
           cursor: "1",
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -200,6 +202,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 /** Every door the page opens, in order. */
@@ -285,6 +288,18 @@ test("the home page greets the account, lists what needs it with each item's pla
   ]);
 });
 
+test("Home's rows fade into the window's drag strip as they scroll up under it, rather than vanishing at an unseen line", async () => {
+  const { page } = mount();
+  await settle();
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
+});
+
 test("Home offers no line to search every task, though Recent lists fewer than the workspace holds", async () => {
   const { page } = mount();
   await settle();
@@ -326,6 +341,28 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
   const note = section?.querySelector(".sidebar-note");
   assert.equal(note?.textContent, "Nothing needs you");
   assert.equal(section?.querySelector("svg"), null);
+});
+
+test("a refused read of the task list says so under Recent, with Retry, which asks for the list again", async () => {
+  let retries = 0;
+  const { page } = mount({
+    plans: [],
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    listFailed: true,
+    onRetryList: () => {
+      retries += 1;
+    },
+  });
+  await settle();
+
+  const recent = page.querySelector('section[aria-labelledby="home-recent"]');
+  const said = recent?.querySelector('[role="alert"]')?.textContent;
+  act(() => button(page, "Retry").click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u, "the Inbox claims nothing");
+  assert.match(said ?? "", /^Your tasks could not be read\./u);
+  assert.equal(retries, 1);
 });
 
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
@@ -399,7 +436,7 @@ test("Home lists every open item of the listed plans, a teammate's agent's inclu
     listed: {
       plans: PLANS,
       archived: [],
-      inbox: [{ planId: INVITES.id, items: [waitingOf(EMAIL)] }],
+      inbox: [{ taskId: INVITES.id, items: [waitingOf(EMAIL)] }],
       inboxPlans: HOLDING.inboxPlans,
     },
   });
@@ -645,4 +682,19 @@ test("a recent task a teammate created wears their face before its time, and the
     return face === null ? [] : [[row.querySelector(".sidebar-plan-name")?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});
+
+test("a row whose title runs long keeps the task or repository it is about in sight: the title gives way, and what it is about keeps a floor", async () => {
+  const { page } = mount();
+  await settle();
+  const style = layContainersAt({});
+  const abouts = [...page.querySelectorAll(".home-row-context")];
+  assert.equal(abouts.length, 8, "both sections' rows say what they are about");
+  for (const about of abouts) {
+    const title =
+      about.parentElement?.querySelector(".sidebar-plan-name") ?? assert.fail("a title");
+    assert.notEqual(getComputedStyle(title).flexShrink, "0", "the title gives way");
+    assert.notEqual(getComputedStyle(about).minWidth, "0px", "what it is about keeps a floor");
+  }
+  style.remove();
 });

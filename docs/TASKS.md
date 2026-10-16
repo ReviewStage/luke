@@ -159,10 +159,11 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   address as a member or an admin and sees the invitations still pending,
   each with its accept link to copy and send and a Cancel, under the Mac's
   own Better Auth session; an owner or admin removes a member, and anyone but
-  an owner leaves. Its Integrations group holds the GitHub row: for an owner
-  or admin, Connect, or once connected, "Connected" with one Manage menu
-  holding "Choose repositories on GitHub" and Disconnect; a member reads it
-  alone. Every way into Settings at a place takes one typed link,
+  an owner leaves. Its Integrations group holds the GitHub row, with every
+  connected GitHub account inset under it, Connected or suspended: for an
+  owner or admin, Connect, or once connected, one "Manage on GitHub", which
+  opens the GitHub page where accounts are added and repositories chosen;
+  a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@luke/settings/settings-views`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
@@ -193,7 +194,9 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
   while any task is pinned, newest pinned first, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
-  same way, and leaves its place among the tasks.
+  same way, and leaves its place among the tasks. ⌘K offers Pin task or
+  Unpin task for the task on screen, through its row menu's own Pin, and
+  none for an archived task.
 - An archived task leaves the list. View options' **Archived tasks** turns
   the Tasks section to the archived tasks, grouped and ordered as the view
   says, the pins standing aside, with an Archived chip whose × goes back; it
@@ -358,7 +361,7 @@ both draw on. It shows in the side panel's Board tab, beside the document.
   sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
   text, and arrows between ids. It replaces his previous drawing and leaves
   what the developer drew. The service only stores it
-  (`packages/service/src/plans/board-tool.ts`). The voice hands a request to
+  (`packages/service/src/tasks/board-tool.ts`). The voice hands a request to
   draw to the backend, as it does any other request.
 - **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
   elements with Excalidraw's own converter, marks them as his, and puts them
@@ -396,7 +399,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   column beside the task's own ("Agent tabs" below). The Work tab, what Luke wrote
   and ran on the task's calls, is told live during a call and read back
   from the task's conversation when the task opens
-  (`GET /api/plans/{id}/work`, `packages/service/src/plans/plan-work-store.ts`), so a restart
+  (`GET /api/plans/{id}/work`, `packages/service/src/tasks/task-work-store.ts`), so a restart
   or a switch to another task and back loses neither it nor the code. The
   read answers twenty turns a page, the newest first; scrolling to the
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
@@ -410,10 +413,10 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   one per file, the snippet's lines lit; opening a file already open chooses
   its tab and moves the lit lines, and the "+" lists every file shown under
   Files. The file is read a window of 500 lines at a time as the tab scrolls
-  (`GET /api/plans/{id}/file`, `packages/service/src/plans/plan-file.ts`), from GitHub at the
+  (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`), from GitHub at the
   head of the default branch through the Luke GitHub App, since no checkout
   stands outside a call, under the rule `show_code` keeps
-  (`packages/service/src/plans/shown-file.ts`); a file changed since is drawn as it is now, and
+  (`packages/service/src/tasks/shown-file.ts`); a file changed since is drawn as it is now, and
   one not on that branch, or not read at all, says so over the lines Luke
   showed of it. A File tab opened from a code block of the task's Inbox is
   read at the commit the agent named instead. Over the first line of each
@@ -610,13 +613,13 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 ### The notetaker
 
 A task's plan is written during a call by a notetaker beside it
-(`packages/service/src/plans/plan-scribe.ts`), following GPT-Live's guidance to
+(`packages/service/src/tasks/plan-scribe.ts`), following GPT-Live's guidance to
 react to the transcript on a small model while speech goes on. It keeps both
 speakers' words from the call's sideband and Luke's replies as
 research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the plan's saved text and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
-the answer through `saveNotes` (`packages/service/src/plans/plan-notes.ts`). Its
+the answer through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`). Its
 runs never overlap, so no run of its own races another, and a run that fails
 moves nothing forward.
 
@@ -625,17 +628,25 @@ written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
-- `replace` corrects a phrase copied exactly from the text, standing once in
-  it and touching no heading, and `remove` strikes the line holding one.
+- `replace` is the one generic edit: it replaces text copied exactly from
+  the plan, standing once in it, from a phrase to whole sections, headings
+  included, with what it becomes; an empty replacement deletes, and a line
+  it leaves empty is taken out.
 
-A note naming a phrase the plan does not hold is passed over, reported, and
-never guessed into another; a note that does not read under the schema is
-passed over alone. The rest save.
+A note's words may open headings of their own, so the notes can rename,
+split, merge, move, and drop sections, a move being a deletion and a
+replacement or an addition. The notes of one answer save together or not
+at all: one naming text or a heading the plan does not hold exactly
+once, or one that does not read under the schema, is reported, never guessed
+into another, and saves nothing of the answer, whose lines the next run is
+handed again over the plan as it then stands.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into
 the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
-the instant, and the notes as taken; the agent is named at read time from its
+the instant, and the notes as taken, a deletion kept as a `remove` and a
+replaced text cut to 500 characters so the deployment before reads it; a call whose notes do not all land saves
+nothing and answers the plan as it stands, to retry from. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" Luke is handed both say what the row
 says now.
@@ -779,7 +790,7 @@ was opened.
 Restore this version asks first, in the window's dialog, and then puts the
 revision's text back through the plan's one locked save
 (`POST /api/plans/{id}/revisions/{seq}/restore`, `restoreRevision` in
-`packages/service/src/plans/plan-notes.ts`). The restore is a revision of the developer's
+`packages/service/src/tasks/plan-notes.ts`). The restore is a revision of the developer's
 ("You") naming the one it brought back, "Restored the version from Oct 11,
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed during a call. It takes
@@ -853,12 +864,19 @@ known by its heading's words (`planSections`). Who last changed each section
 is read off the plan's revisions by heading (`sectionWritersOf`,
 `sectionEdits` on the wire), each against the one before it, so a heading
 renamed with nothing beneath it changed is the same section under its new
-words. Luke's notes land under the
-developer's headings (`applyNotesToText` in `plan-template.ts`): an addition
-at the end of its section, or as a new section at the end of the text where
-the text has none; a correction or a strike names a phrase standing once in
-the whole text and touching no heading, since the headings are the
-developer's. Every plan the fixed template once kept as fields was carried
+words. Luke's notes, the notetaker's and a coding agent's alike, may land
+anywhere in the text (`applyNotesToText` in `plan-template.ts`): an addition
+at the end of the one section under its heading, or as a new section at the
+end of the text where the text has none; a replacement names text standing
+once in the whole text, headings and whole sections among it, so a heading
+is renamed, and a section moved or struck, by replacing it, an empty
+replacement deleting; and a note's words may open headings of their own. One answer's notes are taken together or not at all,
+under the plan's lock: where one names a phrase or a heading the text does
+not hold exactly once, the developer having rewritten it meanwhile among the
+reasons, nothing is saved, so a move never strikes without placing. The
+notetaker's next run is handed the same lines over the text as it then
+stands; a coding agent's `edit_plan` answers the text as it stands, to retry
+from. Every plan the fixed template once kept as fields was carried
 over to its text by a one-time backfill (34 plans and 32 revisions in
 production), each field's words under its heading.
 
@@ -925,7 +943,7 @@ comparative evaluation.
 - **Microphone button.** One press starts talking to Luke about the open task.
   The call opens if none stands, and the microphone opens. A call just
   opened is Luke's to begin: the voice service creates it with the opening
-  in its startup history (`planningOpeningHistory`), asking what to build on an untouched plan
+  in its startup history (`callOpeningHistory`), asking what to build on an untouched plan
   and the plan's next question on one under way, in its first turn and
   without waiting on the backend, while a call re-attached after a dropped
   socket opens nothing again. The call's seed says which the plan is: an
@@ -988,7 +1006,7 @@ repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
 as read.
 
-`show_code` (`packages/service/src/plans/show-code.ts`) reads from the same
+`show_code` (`packages/service/src/tasks/show-code.ts`) reads from the same
 checkout: the file named and a window of at most 200 lines around the lines
 pointed at, each line cut to 400 characters, with the path resolved inside
 the checkout root and a `.env` file never read. The call carries a note of
@@ -999,7 +1017,7 @@ note. The lines and the note are the call's answer, so they are journaled with t
 `code_shown` turn event once the call has answered, held until Luke next
 starts to speak, and sent to the Mac on the `plan.code` frame with the
 repository they came from; the Mac colours and draws them and reads nothing
-of its own (`packages/host/src/plan-code.ts`). Every answered call's lines
+of its own (`packages/host/src/task-code.ts`). Every answered call's lines
 are read back from the journals with the task's work when the task opens,
 picked by their parts in the statement and read by the same reading
 (`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
@@ -1282,7 +1300,7 @@ the exact shape.
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Luke and the plan | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/plans/plan-scribe.ts`). |
+| Luke and the plan | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/tasks/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 

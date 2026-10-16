@@ -13,7 +13,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
-import { readPlan } from "@luke/database/models/plan-store";
+import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import {
   type ConversationTarget,
@@ -83,7 +83,7 @@ import {
 import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
-import { accountInboxPast, agentInboxPast, planInboxPast } from "./coder-host/inbox-page.js";
+import { accountInboxPast, agentInboxPast, taskInboxPast } from "./coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
   type PublishedCache,
@@ -91,7 +91,12 @@ import {
   withPublishedCache,
 } from "./coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentPage, codingAgentSummary, pageAccounts } from "./coder-host/status.js";
+import {
+  codingAgentPage,
+  codingAgentSummary,
+  pageAccounts,
+  summaryAccounts,
+} from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
   type EveReach,
@@ -189,7 +194,7 @@ import {
 
 const AGENTS_PATH = {
   /** GET lists the plan's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's plan id into the `id` query. */
-  OF_PLAN: "/api/plans/agents",
+  OF_TASK: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
   /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, archives it, or pins it for the asking member; the rewrite moves the path's agent id into the `id` query. */
@@ -203,7 +208,7 @@ const AGENTS_PATH = {
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
-  INBOX_OF_PLAN: "/api/plans/inbox",
+  INBOX_OF_TASK: "/api/plans/inbox",
   /** GET reads one agent's inbox past `after`, an agent with no plan as much as one on a plan; the rewrite moves the path's agent id into the `id` query. */
   INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
@@ -363,7 +368,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   request: Request,
   userId: string,
-  planId: string,
+  taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
@@ -384,7 +389,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       : undefined;
   const { agent, created } = yield* choiceOrInvalid(
     startCodingAgent(eveFor(seams, request), userId, {
-      planId,
+      taskId,
       idempotencyKey,
       choice,
       prompt,
@@ -395,7 +400,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
-  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
       agent,
@@ -413,7 +418,7 @@ function listsArchived(request: Request): boolean {
 }
 
 /** GET lists the plan's agents with their status; POST starts one. */
-const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(function* (
+const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -421,20 +426,18 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const planId = yield* idOf(request);
+  const taskId = yield* idOf(request);
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.POST) {
-    return yield* startEndpoint(seams, request, userId, planId);
+    return yield* startEndpoint(seams, request, userId, taskId);
   }
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agents = yield* hostedStoreOrUnavailable(
-    listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
+    listCodingAgents(userId, taskId, { includeArchived: listsArchived(request) }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(
-    readAccountNames(agents.map((agent) => agent.userId)),
-  );
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
@@ -445,9 +448,11 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
 
 /**
  * GET lists a workspace's agents, on a plan or with none, newest started
- * first, the archived ones left out, narrowed to one repository where the
- * query names one, as the plan list answers them; a workspace the account
- * is not in is not found, as a plan is.
+ * first, the archived ones left out unless `archived=include` asks,
+ * narrowed to one repository where the query names one and to agents whose
+ * title or task's name holds the query's words where it names some, as the plan list
+ * answers them; a workspace the account is not in is not found, as a plan
+ * is.
  */
 const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -460,7 +465,13 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const query = new URL(request.url).searchParams;
   const workspaceId = query.get(CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID) ?? "";
   const repository = query.get(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY) ?? undefined;
-  if (workspaceId === "" || repository === "") {
+  const words = query.get(CODING_AGENT_WORKSPACE_QUERY.WORDS)?.trim();
+  if (
+    workspaceId === "" ||
+    repository === "" ||
+    words === "" ||
+    (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
+  ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const userId = yield* resolvedUserId(seams, request);
@@ -469,13 +480,13 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const agents = yield* hostedStoreOrUnavailable(
     listWorkspaceCodingAgents(userId, workspaceId, {
       ...(repository === undefined ? undefined : { repository }),
+      ...(words === undefined ? undefined : { words }),
+      includeArchived: listsArchived(request),
       limit: WORKSPACE_AGENTS_LIMIT,
     }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(
-    readAccountNames(agents.map((agent) => agent.userId)),
-  );
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
@@ -807,7 +818,7 @@ const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /** GET reads the plan's inbox past the cursor: every item its agents posted, held open while nothing changed. */
-const planInboxEndpoint = /* @__PURE__ */ Effect.fn("web/planInboxEndpoint")(function* (
+const taskInboxEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -816,11 +827,11 @@ const planInboxEndpoint = /* @__PURE__ */ Effect.fn("web/planInboxEndpoint")(fun
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const after = yield* inboxCursorOf(request);
-  const planId = yield* idOf(request);
+  const taskId = yield* idOf(request);
   const userId = yield* resolvedUserId(seams, request);
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const page = yield* hostedStoreOrUnavailable(planInboxPast(userId, planId, after));
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const page = yield* hostedStoreOrUnavailable(taskInboxPast(userId, taskId, after));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
@@ -1019,7 +1030,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
   return Layer.unwrap(
     withPublishedCache((published) =>
       Layer.mergeAll(
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_PLAN, hostedRefusing(planAgentsEndpoint(seams))),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_TASK, hostedRefusing(taskAgentsEndpoint(seams))),
         HttpRouter.add(
           ANY_METHOD,
           AGENTS_PATH.OF_WORKSPACE,
@@ -1049,8 +1060,8 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
         ),
         HttpRouter.add(
           ANY_METHOD,
-          AGENTS_PATH.INBOX_OF_PLAN,
-          hostedRefusing(planInboxEndpoint(seams)),
+          AGENTS_PATH.INBOX_OF_TASK,
+          hostedRefusing(taskInboxEndpoint(seams)),
         ),
         HttpRouter.add(
           ANY_METHOD,

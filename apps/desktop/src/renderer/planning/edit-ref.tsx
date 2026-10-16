@@ -1,5 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,

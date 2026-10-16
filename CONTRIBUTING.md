@@ -25,7 +25,41 @@ Command Line Tools.
 ./scripts/bootstrap.sh   # install pinned workspace dependencies
 ./scripts/run.sh         # launch against live sessions
 ./scripts/run.sh --fixture smoke   # launch against deterministic fixture data
+./scripts/run.sh --instance second # launch a named instance beside the running one
+./scripts/run.sh --preview         # launch against this branch's Vercel Preview, as its own instance
 ```
+
+### Running more than one Luke Dev
+
+A plain `./scripts/run.sh` is the plain development instance, "Luke Dev", and
+replaces its own earlier run (and a running test or release build). `--instance
+<name>` (lower-case letters, digits, and single hyphens) launches "Luke Dev
+<name>" beside it, replacing only that instance's earlier run. A `--preview` run
+is a named instance without asking: `preview-<branch>` for the Preview the script
+looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
+sign-in of its own and never touches the plain instance's.
+
+Each instance has its own profile under `~/Library/Application Support/Luke Dev
+<name>/` (sign-in, settings, window place, single-instance lock), its own
+`Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
+`.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
+says "Quit Luke Dev <name>". The system-wide talk and stop keys are held by
+one Luke only, so a named instance leaves them to the plain one and registers
+none (a call starts from the panel instead). No development run claims the
+`tryluke:` links, named or not.
+Agents' commands for this Mac go to whichever signed-in instance of the account
+reads them first, once each, and every instance runs them in the same login
+shell; turn "Let agents run commands" off in an instance that should not take
+them. A Preview instance is signed in to the Preview's own database, so it
+takes only that Preview's commands.
+
+A named instance signs in on its own: sign in from its panel as on a first
+launch. To start one over, quit it and delete its profile folder; to forget it
+for good, also delete its Keychain entry in Keychain Access.
+
+Two instances launched from one checkout share its build: a second launch
+rebuilds `apps/desktop/dist` under the first, which a running instance reads
+again only when it opens or reloads a window.
 
 ## Repository layout
 

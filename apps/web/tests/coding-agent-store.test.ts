@@ -20,19 +20,19 @@ import {
   takeCodingAgentMentionedServers,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
-import { listPlans } from "@luke/database/models/plan-store";
+import { listTasks } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { withPlanAgents } from "@luke/service/agents/plan-agents";
+import { withTaskAgents } from "@luke/service/agents/task-agents";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -58,7 +58,7 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan started. */
 const openPlan = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startTask(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 
@@ -74,7 +74,7 @@ function start(
   brief: CodingAgentBriefText = PLAN_BRIEF,
 ): NewCodingAgent {
   return {
-    planId,
+    taskId: planId,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -181,7 +181,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const agent = started(yield* createCodingAgent(userId, start(planId)));
         yield* archiveCodingAgent(userId, agent.id, true);
 
-        const [listed] = yield* withPlanAgents(userId, yield* listPlans(userId));
+        const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
         assert.ok(listed, "the plan is listed");
         assert.equal(listed.agents?.activityAt, agent.createdAt.getTime());
         assert.ok(
@@ -246,7 +246,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
       const agent = started(yield* createCodingAgent(userId, asked));
 
-      assert.equal(agent.planId, planId);
+      assert.equal(agent.taskId, planId);
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
       assert.equal(agent.planSnapshot, asked.planSnapshot);
@@ -280,7 +280,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const starter = yield* openUser;
         const teammate = yield* openUser;
         const stranger = yield* openUser;
-        const plan = yield* startPlan(starter, { name: "Teammate invitations" });
+        const plan = yield* startTask(starter, { name: "Teammate invitations" });
         yield* joinWorkspace(plan.workspaceId, teammate);
         const asked = start(plan.id);
         const agent = started(yield* createCodingAgent(starter, asked));

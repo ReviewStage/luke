@@ -6,11 +6,11 @@ import {
   type AvatarUnavailableFrame,
   type AvatarUnavailableReason,
   type LiveSessionCreated,
-  type PlanActivityFrame,
-  type PlanCallEndingFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
+  type TaskActivityFrame,
+  type TaskCallEndingFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
@@ -159,13 +159,13 @@ export interface LiveSessionHolderOptions {
    * planning call, on the same terms as `onPlanDraft`. A planning call's end
    * is told as a snapshot with nothing doing, so none outlives the call.
    */
-  onPlanActivity?: (activity: PlanActivityFrame) => void;
+  onTaskActivity?: (activity: TaskActivityFrame) => void;
   /** Luke put code on screen on the standing planning call, on the same terms as `onPlanDraft`. */
-  onPlanCode?: (code: PlanCodeFrame) => void;
+  onTaskCode?: (code: TaskCodeFrame) => void;
   /** A planning turn's work on the standing planning call changed, on the same terms as `onPlanDraft`. */
-  onPlanWork?: (work: PlanWorkFrame) => void;
+  onTaskWork?: (work: TaskWorkFrame) => void;
   /** The planning call about the plan named ended, so what it put on screen goes with it. */
-  onPlanCallEnded?: (planId: string) => void;
+  onTaskCallEnded?: (taskId: string) => void;
 }
 
 /**
@@ -175,7 +175,7 @@ export interface LiveSessionHolderOptions {
  */
 export const LIVE_SESSION_END_CAUSE = {
   /** The plan the call is about was deleted. */
-  PLAN_DELETED: "plan_deleted",
+  TASK_DELETED: "task_deleted",
   /** The account signed out. */
   SIGNED_OUT: "signed_out",
   /** The peer asked the host to hang up. */
@@ -201,7 +201,7 @@ export type LiveSessionEndCause =
 
 /** A creation under way: the plan it is about, and the end a delete or a sign-out asked for meanwhile. */
 interface Creating {
-  readonly planId: string;
+  readonly taskId: string;
   endedBy: LiveSessionEndCause | undefined;
 }
 
@@ -213,7 +213,7 @@ interface HeldSession {
   endCause: LiveSessionEndCause | undefined;
   peerReason: LivePeerEndReason | undefined;
   /** The plan the call is about, which the session is bound to for its life. */
-  readonly planId: string;
+  readonly taskId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -360,17 +360,17 @@ export class LiveSessionHolder {
    * or the account signed out. The panel opening another plan or leaving
    * this one ends nothing, because the call outlives the plan on screen.
    */
-  endPlanCall(planId: string | undefined): Effect.Effect<void> {
+  endTaskCall(taskId: string | undefined): Effect.Effect<void> {
     return Effect.suspend(() => {
       const cause =
-        planId === undefined
+        taskId === undefined
           ? LIVE_SESSION_END_CAUSE.SIGNED_OUT
-          : LIVE_SESSION_END_CAUSE.PLAN_DELETED;
-      const about = (candidate: string) => planId === undefined || candidate === planId;
+          : LIVE_SESSION_END_CAUSE.TASK_DELETED;
+      const about = (candidate: string) => taskId === undefined || candidate === taskId;
       const creating = this.#creating;
-      if (creating !== undefined && about(creating.planId)) creating.endedBy ??= cause;
+      if (creating !== undefined && about(creating.taskId)) creating.endedBy ??= cause;
       const session = this.#held;
-      if (session === undefined || !about(session.planId)) return Effect.void;
+      if (session === undefined || !about(session.taskId)) return Effect.void;
       return this.#end(session, cause);
     });
   }
@@ -384,10 +384,10 @@ export class LiveSessionHolder {
    * is opened before anything is created into it and closed again unless a
    * session came to stand there.
    */
-  createSession(sdpOffer: string, planId: string): Effect.Effect<LiveSessionCreated | undefined> {
+  createSession(sdpOffer: string, taskId: string): Effect.Effect<LiveSessionCreated | undefined> {
     // The creation is named from its first step to its last, so an end landing
     // anywhere in it (the prior session's end, the create, the attach) is heard.
-    const creating: Creating = { planId, endedBy: undefined };
+    const creating: Creating = { taskId, endedBy: undefined };
     return Effect.ensuring(
       Effect.suspend(() => {
         this.#creating = creating;
@@ -406,7 +406,7 @@ export class LiveSessionHolder {
       if (!source || creating.endedBy !== undefined) return undefined;
       const scope = yield* Scope.fork(this.#sessions, "sequential");
       const created = yield* Effect.onExit(
-        this.#stand(source, sdpOffer, creating.planId, scope),
+        this.#stand(source, sdpOffer, creating.taskId, scope),
         (exit) =>
           Exit.isSuccess(exit) && exit.value !== undefined
             ? Effect.void
@@ -426,11 +426,11 @@ export class LiveSessionHolder {
   #stand(
     source: LiveSessionSource,
     sdpOffer: string,
-    planId: string,
+    taskId: string,
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      const opened = yield* Scope.provide(source.create({ sdpOffer, planId }), scope);
+      const opened = yield* Scope.provide(source.create({ sdpOffer, taskId }), scope);
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* Scope.provide(opened.attach(), scope);
@@ -439,7 +439,7 @@ export class LiveSessionHolder {
         stoodAt: this.#clock.currentTimeMillisUnsafe(),
         endCause: undefined,
         peerReason: undefined,
-        planId,
+        taskId,
         sideband,
         opened,
         scope,
@@ -456,10 +456,10 @@ export class LiveSessionHolder {
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
-      opened.onPlanActivity?.((activity) => this.#activity(session, activity));
-      opened.onPlanCode?.((code) => this.#code(session, code));
-      opened.onPlanWork?.((work) => this.#work(session, work));
-      opened.onPlanCallEnding?.((ending) => this.#ending(session, ending));
+      opened.onTaskActivity?.((activity) => this.#activity(session, activity));
+      opened.onTaskCode?.((code) => this.#code(session, code));
+      opened.onTaskWork?.((work) => this.#work(session, work));
+      opened.onTaskCallEnding?.((ending) => this.#ending(session, ending));
       opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
       opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
@@ -753,26 +753,26 @@ export class LiveSessionHolder {
 
   /** A draft of the plan the session is bound to, passed on while the session stands. */
   #drafted(session: HeldSession, draft: PlanDraftFrame): void {
-    if (session.ended || draft.planId !== session.planId) return;
+    if (session.ended || draft.planId !== session.taskId) return;
     this.#options.onPlanDraft?.(draft);
   }
 
   /** The service's activity about the plan the session is bound to, passed on while the session stands. */
-  #activity(session: HeldSession, activity: PlanActivityFrame): void {
-    if (session.ended || activity.planId !== session.planId) return;
-    this.#options.onPlanActivity?.(activity);
+  #activity(session: HeldSession, activity: TaskActivityFrame): void {
+    if (session.ended || activity.planId !== session.taskId) return;
+    this.#options.onTaskActivity?.(activity);
   }
 
   /** Code Luke put on screen on the call about the plan the session is bound to, passed on while the session stands. */
-  #code(session: HeldSession, code: PlanCodeFrame): void {
-    if (session.ended || code.planId !== session.planId) return;
-    this.#options.onPlanCode?.(code);
+  #code(session: HeldSession, code: TaskCodeFrame): void {
+    if (session.ended || code.planId !== session.taskId) return;
+    this.#options.onTaskCode?.(code);
   }
 
   /** A planning turn's work on the call about the plan the session is bound to, passed on while the session stands. */
-  #work(session: HeldSession, work: PlanWorkFrame): void {
-    if (session.ended || work.planId !== session.planId) return;
-    this.#options.onPlanWork?.(work);
+  #work(session: HeldSession, work: TaskWorkFrame): void {
+    if (session.ended || work.planId !== session.taskId) return;
+    this.#options.onTaskWork?.(work);
   }
 
   /**
@@ -780,8 +780,8 @@ export class LiveSessionHolder {
    * peer while the session stands. The peer decides when, once his goodbye
    * has played, and hangs up through its own hang-up, so nothing ends here.
    */
-  #ending(session: HeldSession, ending: PlanCallEndingFrame): void {
-    if (session.ended || ending.planId !== session.planId) return;
+  #ending(session: HeldSession, ending: TaskCallEndingFrame): void {
+    if (session.ended || ending.planId !== session.taskId) return;
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.ENDING });
   }
 
@@ -853,12 +853,12 @@ export class LiveSessionHolder {
     if (this.#held === session) this.#held = undefined;
     // Note that we say a planning call's end as nothing doing, because the
     // service's own last word may never arrive once the socket is gone.
-    this.#options.onPlanActivity?.({
-      type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
-      planId: session.planId,
+    this.#options.onTaskActivity?.({
+      type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+      planId: session.taskId,
       notes: false,
     });
-    this.#options.onPlanCallEnded?.(session.planId);
+    this.#options.onTaskCallEnded?.(session.taskId);
     // The service closes the avatar with the call, so nothing is sent for it.
     this.#avatarEnded({ by: LIVE_AVATAR_END.CALL_ENDED });
     this.#releasing = session.released;

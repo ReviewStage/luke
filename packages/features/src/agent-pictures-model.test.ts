@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   calledPicturesOf,
-  planPictureLine,
   shownPicturesOf,
+  taskPictureLine,
   withoutPictureLine,
   withPictureLine,
 } from "./agent-pictures-model.js";
@@ -90,7 +90,7 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
 });
 
 test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
-  const line = planPictureLine(
+  const line = taskPictureLine(
     "Members [after]",
     "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
   );

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -69,6 +69,7 @@ async function openRoot(): Promise<{ host: CoderHost; edge: EdgeKit }> {
       reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
+    eveOrigin: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
     titleModel: () => undefined,
@@ -84,9 +85,9 @@ async function openAgent(host: CoderHost) {
   return database.run(
     Effect.gen(function* () {
       const userId = yield* openGithubUser();
-      const plan = yield* startPlan(userId, { name: "Invitations", repository: "acme/relay" });
+      const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
       const started = yield* createCodingAgent(userId, {
-        planId: plan.id,
+        taskId: task.id,
         idempotencyKey: `start-${mintSession()}`,
         model: "anthropic/claude-opus-5.5",
         effort: "high",

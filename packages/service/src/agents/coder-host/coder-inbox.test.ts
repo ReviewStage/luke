@@ -4,13 +4,13 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
-import { answerInboxItem, planInboxItems } from "../../inbox/inbox-store.js";
+import { answerInboxItem, taskInboxItems } from "../../inbox/inbox-store.js";
 import { closeInInbox, type PostingAgent, postToInbox } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
@@ -35,9 +35,9 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
+  const task = yield* startTask(userId, { name: "Teammate invitations" });
   const started = yield* createCodingAgent(userId, {
-    planId: plan.id,
+    taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -48,7 +48,7 @@ const openAgent = Effect.gen(function* () {
   assert.ok(Option.isSome(started));
   const agent = {
     userId,
-    planId: plan.id,
+    taskId: task.id,
     agentId: started.value.agent.id,
     repository: "acme/relay",
   } satisfies PostingAgent;
@@ -111,7 +111,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             },
           ],
         });
-        const [first] = yield* planInboxItems(agent.userId, agent.planId);
+        const [first] = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.ok(first);
         assert.equal(first.revision, 1);
         assert.equal(first.needsReply, true, "an item asks to be heard back unless it says not");
@@ -128,7 +128,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* post(agent, input({ ...QUEUE, title: "Which queue, now that Redis is gone?" }));
-        const items = yield* planInboxItems(agent.userId, agent.planId);
+        const items = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.equal(items.length, 1, "one item per key");
         assert.equal(items[0]?.id, first.id);
         assert.equal(items[0]?.revision, 2);
@@ -145,7 +145,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const agent = yield* openAgent;
         const other = yield* openUser;
         yield* post(agent, input(SETTINGS));
-        const [item] = yield* planInboxItems(agent.userId, agent.planId);
+        const [item] = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.ok(item);
         const done = { reply: INBOX_REPLY.DONE } as const;
         assert.ok(Option.isNone(yield* answerInboxItem(other, item.id, 1, done, randomUUID())));
@@ -157,7 +157,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           Option.isNone(yield* answerInboxItem(agent.userId, item.id, 2, done, randomUUID())),
           "a closed item takes no answer",
         );
-        assert.deepEqual(yield* planInboxItems(other, agent.planId), []);
+        assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
       }),
   );
 });

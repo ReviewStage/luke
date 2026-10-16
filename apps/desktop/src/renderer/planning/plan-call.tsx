@@ -1,7 +1,7 @@
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { PlanEditor } from "@luke/features/plan-wire";
-import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import type { PlanEditor } from "@luke/features/task-wire";
+import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CallIcon } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
@@ -188,7 +188,7 @@ function TurnWork({
   doors: WorkDoors;
 }): React.JSX.Element | null {
   const { message } = turn;
-  const ended = turn.moving || turn.state !== PLAN_WORK_STATE.FAILED ? undefined : turn.record;
+  const ended = turn.moving || turn.state !== TASK_WORK_STATE.FAILED ? undefined : turn.record;
   const mark = turn.key === doors.revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null;
   // A turn that only answered in words Luke said aloud has nothing left to draw but where a version's Open lands.
   const drawn = spoken ? hasWork(message) : message.parts.length > 0;
@@ -447,8 +447,8 @@ export function PlanCall({
       {video}
       {drawn ? (
         <Conversation>
-          {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-          <ConversationContent className="pt-0">
+          {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; lines fade beneath it. */}
+          <ConversationContent className="checkpoint-log scroll-fade pt-0">
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--section-gap)">

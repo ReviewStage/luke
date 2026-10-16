@@ -106,12 +106,12 @@ import {
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
-  planAgentsPath,
-  planInboxPath,
-  planMessagesPath,
-  planSubagentMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
+  taskAgentsPath,
+  taskInboxPath,
+  taskMessagesPath,
+  taskSubagentMessagesPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -162,7 +162,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
-  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
+  [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -184,7 +184,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
+  [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
@@ -441,19 +441,19 @@ export class HostedCodingAgentClient {
 
   /** One plan's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
   list(
-    planId: string,
+    taskId: string,
     includeArchived = false,
   ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
     const query = new URLSearchParams({
       [CODING_AGENT_LIST_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE,
     });
-    const path = includeArchived ? `${planAgentsPath(planId)}?${query}` : planAgentsPath(planId);
+    const path = includeArchived ? `${taskAgentsPath(taskId)}?${query}` : taskAgentsPath(taskId);
     return Effect.flatMap(this.#call.send({ method: HTTP_METHOD.GET, path }), (answer) =>
       readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
     );
   }
 
-  /** A workspace's agents, newest started first, narrowed to one repository where one is named. */
+  /** A workspace's agents, newest started first, narrowed to one repository where one is named and to the words given where some are, the archived ones among them where `includeArchived` asks. */
   listWorkspace(
     params: CodingAgentWorkspaceListParams,
   ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
@@ -462,6 +462,10 @@ export class HostedCodingAgentClient {
     });
     if (params.repository !== undefined) {
       query.set(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY, params.repository);
+    }
+    if (params.words !== undefined) query.set(CODING_AGENT_WORKSPACE_QUERY.WORDS, params.words);
+    if (params.includeArchived === true) {
+      query.set(CODING_AGENT_WORKSPACE_QUERY.ARCHIVED, CODING_AGENT_LIST_ARCHIVED.INCLUDE);
     }
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}?${query}` }),
@@ -475,7 +479,7 @@ export class HostedCodingAgentClient {
    * the service would refuse by shape is refused here without traveling.
    */
   start(
-    planId: string,
+    taskId: string,
     request: CodingAgentStartRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
@@ -483,7 +487,7 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.POST,
-        path: planAgentsPath(planId),
+        path: taskAgentsPath(taskId),
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, START_REFUSALS),
@@ -511,15 +515,15 @@ export class HostedCodingAgentClient {
    * cursor, held by the service while a turn or the worker runs; with no
    * cursor, its newest turns; with `before`, the turns before that one.
    */
-  planMessages(
-    planId: string,
+  taskMessages(
+    taskId: string,
     page: { after?: string; before?: string },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
     const path =
       callId === undefined
-        ? planMessagesPath(planId, page)
-        : planSubagentMessagesPath(planId, callId, page.after ?? CODING_AGENT_CURSOR_START);
+        ? taskMessagesPath(taskId, page)
+        : taskSubagentMessagesPath(taskId, callId, page.after ?? CODING_AGENT_CURSOR_START);
     return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
       readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
     );
@@ -666,11 +670,11 @@ export class HostedCodingAgentClient {
 
   /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
   inbox(
-    planId: string,
+    taskId: string,
     after: string,
   ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
+      this.#held.send({ method: HTTP_METHOD.GET, path: taskInboxPath(taskId, after) }),
       (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
     );
   }

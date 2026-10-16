@@ -24,10 +24,6 @@
     "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
   },
   {
-    "src": "/api/account/integrations/([^/]+)/primary",
-    "dest": "/api/default.js?route=account/integrations/primary&provider=$1"
-  },
-  {
     "src": "/api/plans/([^/]+)/board",
     "dest": "/api/default.js?route=plans/board&id=$1"
   },
@@ -286,6 +282,14 @@
   {
     "src": "/api/github/repositories",
     "dest": "/api/default.js?route=github/repositories"
+  },
+  {
+    "src": "/api/github/repositories/issue",
+    "dest": "/api/default.js?route=github/repositories/issue"
+  },
+  {
+    "src": "/api/github/repositories/pull-request",
+    "dest": "/api/default.js?route=github/repositories/pull-request"
   },
   {
     "src": "/api/github/repositories/skills",

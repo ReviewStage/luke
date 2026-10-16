@@ -58,13 +58,32 @@ if [[ ${1:-} == --paths ]]; then
     exit 0
 fi
 
+# Fetches the commit `$1` from origin within thirty seconds, by a watchdog of
+# the shell's own rather than coreutils' `timeout`, which macOS lacks. Note
+# that job control (`set -m`) starts the fetch and the watchdog each in a
+# process group of its own, so the kill that ends either one ends everything
+# it started: the fetch's remote helper and the watchdog's `sleep` alike.
+# Neither writes to the step's output.
+fetch_previous() {
+    set -m
+    GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1 &
+    local fetching=$!
+    (sleep 30 && kill -TERM -- "-$fetching") >/dev/null 2>&1 &
+    local watchdog=$!
+    set +m
+    wait "$fetching"
+    local fetched=$?
+    kill -TERM -- "-$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    return "$fetched"
+}
+
 previous=${VERCEL_GIT_PREVIOUS_SHA:-}
 if [[ -z $previous ]]; then
     printf 'vercel-ignore: building (no deployment of this branch has succeeded yet)\n'
     exit 1
 fi
-if ! git cat-file -e "$previous^{commit}" 2>/dev/null &&
-    ! GIT_TERMINAL_PROMPT=0 timeout 30 git fetch --quiet --depth=1 origin "$previous" 2>/dev/null; then
+if ! git cat-file -e "$previous^{commit}" 2>/dev/null && ! fetch_previous "$previous"; then
     printf 'vercel-ignore: building (the last deployment, %s, could not be fetched)\n' "$previous"
     exit 1
 fi

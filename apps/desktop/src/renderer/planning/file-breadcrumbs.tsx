@@ -1,10 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MENU_DROP } from "../desktop/action-menu";
 import type { ReadFolder } from "../file-tree/contract";
+import { Tooltip } from "../tooltip";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 
 /**
@@ -23,7 +24,24 @@ import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
  * so a folder it has open asks nothing. Every name here is the
  * repository's, so the tree is left out of the screen recording
  * (`ph-no-capture`), as the pane's is.
+ *
+ * The path gives way in the stylesheet alone, so the bar measures nothing:
+ * every crumb narrows, cut short at its end, the repository and the folders
+ * first, the file's own name last; on a bar narrower than 520px the folders
+ * between the repository and the file's own folder stand as one "…" crumb,
+ * and on one narrower than 300px the repository and every folder do, the
+ * file alone after it; the "…" names what it stands for in its pill and
+ * hangs the tree the last of them would (`planning.css`'s `@container
+ * file-bar`). Both "…" are drawn, and the stylesheet shows the one the bar's
+ * width asks for.
  */
+
+/** What the "…" crumb is called, before the folders it stands for. */
+const FOLDED_LABEL = "Folders";
+
+/** Where a "…" crumb's tree is marked open, apart from every crumb's own place in the path. */
+const FOLDED_MIDDLE = -1;
+const FOLDED_ALL = -2;
 
 /** A row of the tree as the compact density draws it, which the box's height is counted in. */
 const ROW_HEIGHT = 24;
@@ -129,10 +147,22 @@ function CrumbTree({
       latest.current.onClose(false);
     };
     const leave = () => latest.current.onClose(false);
+    // The bar resized, its panel dragged, may fold the crumb the tree hangs
+    // from out of sight (planning.css), so the tree goes, as it does when the
+    // window resizes. Note that it watches only while a tree stands, and
+    // reads nothing of the layout.
+    const bar = opener.closest(".file-view-bar");
+    let first = true;
+    const folded = new ResizeObserver(() => {
+      if (first) first = false;
+      else leave();
+    });
+    if (bar !== null) folded.observe(bar);
     document.addEventListener("pointerdown", pressed, true);
     window.addEventListener("blur", leave);
     window.addEventListener("resize", leave);
     return () => {
+      folded.disconnect();
       document.removeEventListener("pointerdown", pressed, true);
       window.removeEventListener("blur", leave);
       window.removeEventListener("resize", leave);
@@ -167,6 +197,57 @@ function CrumbTree({
   );
 }
 
+/** The chevron before every crumb but the first: the path's punctuation and nothing more. */
+function CrumbChevron(): React.JSX.Element {
+  return (
+    <span className="file-breadcrumb-separator" aria-hidden="true">
+      <ChevronRightIcon />
+    </span>
+  );
+}
+
+/** How much of the path a "…" stands for: the folders between the repository and the file's own folder, or the repository and every folder. */
+const FOLD = { MIDDLE: "middle", ALL: "all" } as const;
+
+type Fold = (typeof FOLD)[keyof typeof FOLD];
+
+/**
+ * A "…" standing for crumbs a narrow bar leaves out, which names them in its
+ * pill and hangs the tree the last of them would. It is drawn only on a bar
+ * narrow enough to ask for it, in their place (planning.css).
+ */
+function FoldedCrumb({
+  fold,
+  folded,
+  expanded,
+  onOpen,
+}: {
+  fold: Fold;
+  /** The names it stands for, in the path's order. */
+  folded: readonly string[];
+  expanded: boolean;
+  onOpen: (opener: HTMLElement) => void;
+}): React.JSX.Element {
+  const names = folded.join("/");
+  return (
+    <li data-folded-crumb={fold}>
+      {fold === FOLD.ALL ? null : <CrumbChevron />}
+      <Tooltip label={names}>
+        <button
+          type="button"
+          className="file-breadcrumb"
+          aria-label={`${FOLDED_LABEL}: ${names}`}
+          aria-haspopup="dialog"
+          aria-expanded={expanded}
+          onClick={(event) => onOpen(event.currentTarget)}
+        >
+          …
+        </button>
+      </Tooltip>
+    </li>
+  );
+}
+
 export function FileBreadcrumbs({
   repository,
   path,
@@ -191,47 +272,65 @@ export function FileBreadcrumbs({
     setOpened(undefined);
   };
 
-  const crumbs = [repository, ...segments];
+  // The repository roots its tree at the root; any other crumb at the folder it stands in.
+  const open = (at: number, opener: HTMLElement, mark = at) => {
+    if (opened?.opener === opener) return close(false);
+    const depth = Math.max(0, at - 1);
+    setOpened({
+      path,
+      at: mark,
+      folder: folderOf(segments, depth),
+      file: segments.slice(depth).join("/"),
+      opener,
+    });
+  };
+
+  // The folders between the repository and the file's own folder, which a narrow bar draws as the "…".
+  const folders = segments.length - 1;
+  const middle = Math.max(0, folders - 1);
+  const crumb = (name: string, at: number) => (
+    // Note that a crumb is keyed by the path it ends, since a name may stand twice in one.
+    <li
+      key={folderOf(segments, at)}
+      data-crumb={at}
+      data-middle={String(at >= 1 && at <= middle && middle > 1)}
+      data-folder={String(at < segments.length && folders > 0)}
+    >
+      {at === 0 ? null : <CrumbChevron />}
+      <button
+        type="button"
+        className="file-breadcrumb"
+        aria-current={at === segments.length ? "page" : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={opened?.at === at}
+        onClick={(event) => open(at, event.currentTarget)}
+      >
+        {name}
+      </button>
+    </li>
+  );
+
   return (
     <nav className="file-breadcrumbs" aria-label="Path">
       <ol>
-        {crumbs.map((name, at) => {
-          const last = at === crumbs.length - 1;
-          // The repository roots its tree at the root; any other crumb at the folder it stands in.
-          const depth = Math.max(0, at - 1);
-          return (
-            // Note that a crumb is keyed by the path it ends, since a name may stand twice in one.
-            <Fragment key={folderOf(segments, at)}>
-              {at === 0 ? null : (
-                <li className="file-breadcrumb-separator" aria-hidden="true">
-                  <ChevronRightIcon />
-                </li>
-              )}
-              <li>
-                <button
-                  type="button"
-                  className="file-breadcrumb"
-                  aria-current={last ? "page" : undefined}
-                  aria-haspopup="dialog"
-                  aria-expanded={opened?.at === at}
-                  onClick={(event) => {
-                    const opener = event.currentTarget;
-                    if (opened?.opener === opener) return close(false);
-                    setOpened({
-                      path,
-                      at,
-                      folder: folderOf(segments, depth),
-                      file: segments.slice(depth).join("/"),
-                      opener,
-                    });
-                  }}
-                >
-                  {name}
-                </button>
-              </li>
-            </Fragment>
-          );
-        })}
+        {folders > 0 ? (
+          <FoldedCrumb
+            fold={FOLD.ALL}
+            folded={[repository, ...segments.slice(0, folders)]}
+            expanded={opened?.at === FOLDED_ALL}
+            onOpen={(opener) => open(folders, opener, FOLDED_ALL)}
+          />
+        ) : null}
+        {crumb(repository, 0)}
+        {middle > 1 ? (
+          <FoldedCrumb
+            fold={FOLD.MIDDLE}
+            folded={segments.slice(0, middle)}
+            expanded={opened?.at === FOLDED_MIDDLE}
+            onOpen={(opener) => open(middle, opener, FOLDED_MIDDLE)}
+          />
+        ) : null}
+        {segments.map((name, index) => crumb(name, index + 1))}
       </ol>
       {opened === undefined ? null : (
         <CrumbTree

@@ -15,13 +15,16 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPage,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -34,6 +37,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
@@ -135,6 +140,8 @@ let told: Act[] = [];
 let published: CodingAgentPullRequestAnswer | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
+/** What the workspace's list of agents answers, whatever it was asked. */
+let workspace: readonly CodingAgentSummary[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -147,6 +154,7 @@ beforeEach(() => {
   published = undefined;
   openedOnGitHub = [];
   copied = [];
+  workspace = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -154,7 +162,7 @@ beforeEach(() => {
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
         told.push(request);
-        if (request.kind === ACT_KIND.PLANNING_SKILLS) {
+        if (request.kind === ACT_KIND.TASKS_SKILLS) {
           const value = {
             skills: {
               repository: "acme/relay",
@@ -202,6 +210,9 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
           copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
@@ -498,6 +509,31 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
 });
 
+test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {
+  pages = [
+    {
+      agent: {
+        ...PAGE,
+        archivedAt: 2,
+        archivedBy: {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          member: { userId: "user-dean", name: "Dean Stratakos" },
+          agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
+          reason: "Its pull request merged.",
+        },
+      },
+    },
+  ];
+  const page = mount();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".archived-composer-by")?.textContent,
+    "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+  );
+  assert.ok([...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"));
+});
+
 test("an Unarchive the service refuses says why, and the agent stays archived", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   archiveRefused = true;
@@ -674,6 +710,35 @@ test("a GitHub event's run names its pull request beside the automation, which o
   assert.deepEqual(openedOnGitHub, [url]);
 });
 
+test("too narrow for the line naming who sent it, it breaks between the automation, the pull request, and who ran it, never cutting all three to their first letters", async () => {
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: {
+          prompt: "Review it.",
+          subject: { number: 2905, title: "View commands" },
+          runBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const styles = layContainersAt({});
+  const page = mount(plansControl({ me: "user-dean" }));
+  await settle();
+
+  const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
+  const wraps = getComputedStyle(line).flexWrap;
+  styles.remove();
+
+  assert.equal(wraps, "wrap");
+  assert.deepEqual(
+    [...line.children].map((part) => words(part)),
+    ["Flaky-test sweep", " · #2905 View commands", " · Run by you"],
+  );
+});
+
 test("a webhook's body stands folded inside the card under the prompt, and nowhere in the line naming who sent it", async () => {
   const body = '{"release":"v2.4.0"}';
   pages = [{ agent: { ...RUN_PAGE, origin: { prompt: "Write the notes.", body } } }];
@@ -725,4 +790,46 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  installScrollIntoView();
+  const billing: Task = {
+    id: "2b2b2b2b-0000-4000-8000-000000000000",
+    workspaceId: PAGE.workspaceId,
+    name: "Billing",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    document: { body: "", assumptions: [] },
+  };
+  workspace = [
+    {
+      id: "3c3c3c3c-0000-4000-8000-000000000000",
+      planId: billing.id,
+      model: PAGE.model,
+      effort: PAGE.effort,
+      title: "Bill by seat",
+      createdAt: 1,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      turnId: null,
+      archivedAt: 3,
+    },
+  ];
+  const page = mount(plansControl({ archived: [billing] }));
+  await settle();
+
+  typeInComposer(page, "Ask @billing");
+  await settle();
+
+  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => [
+      row.querySelector(".plan-compose-menu-name")?.textContent,
+      row.querySelector(".mention-row-detail")?.textContent,
+    ]),
+    [["Bill by seat", "Billing · Archived"]],
+  );
 });

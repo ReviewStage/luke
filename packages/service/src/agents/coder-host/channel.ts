@@ -30,8 +30,9 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * agent is started, messaged, and stopped by routes still holding the
  * developer's own bearer, which reach eve as that developer; what the
  * deployment does here is carry the two things the voice brain does for the
- * developer in a planning call (`agents/coding-agent-tools.ts`), since the
- * planning session holds no bearer of the account's: a message it sends an
+ * developer in a planning call, and a coding agent does for the member who
+ * started it (`agents/coding-agent-tools.ts`), since neither session holds
+ * a bearer of the account's: a message it sends an
  * agent, admitted only on a session the named account's agent recorded, and
  * the opening that starts an agent, admitted only on a conversation the
  * named account owns, as every other caller is. The channel's policy for a message that
@@ -64,10 +65,11 @@ const UPLOAD_POLICY = {
 /**
  * The two rows the deployment is admitted for here, each the typed line
  * alone, because a coding agent has no spoken turn. The follow-up is a
- * message the voice brain sends an agent, delivered exactly as one the
+ * message the voice brain or another coding agent sends an agent
+ * (`coding-agent-tools.ts`'s `message_agent`), delivered exactly as one the
  * developer typed in the message box, on a session the named account's
- * agent recorded. The opening is the start of an agent the voice brain
- * makes for the developer (`coding-agent-tools.ts`'s `start_coding_agent`),
+ * agent recorded. The opening is the start of an agent the voice brain or
+ * another coding agent makes for the member (`start_agent`),
  * on the one path a Start takes (`coder-host/start.ts`): the row the Start
  * made stands before eve is asked, so the door's ownership check bounds the
  * opening to a conversation the named account owns, as it bounds every

@@ -268,14 +268,15 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
     },
     { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
     { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+    { kind: "replace", find: "## Assumptions\n\n- Invites expire.", text: "" },
   ];
   const view = toolCallView({
     tool: "edit_plan",
     input: { notes },
-    output: { status: "accepted", taken: 3, missed: [] },
+    output: { status: "accepted", taken: 4 },
   });
   assert.equal(view.kind, CALL_KIND.EDIT_PLAN);
-  assert.equal(view.subject, "2 added, 1 corrected");
+  assert.equal(view.subject, "2 added, 1 corrected, 1 struck");
   const pictured = toolCallView({
     tool: "edit_plan",
     input: {
@@ -452,6 +453,63 @@ test("a look at one of the plan's pictures says it looked and opens the plan, an
   assert.equal(shown?.kind, TOOL_BLOCK.JSON);
   assert.ok(shown?.text.includes(refused.output.reason));
   assert.equal(toolTarget(refused), undefined);
+});
+
+test("an agent a call starts, reads, or messages opens its tab while it is on the call's own task, and nothing once its answer says it is on another, which this task's column has no tab for", () => {
+  const agent = (onYourTask?: boolean) => ({
+    id: "agent-2",
+    ...(onYourTask === undefined ? undefined : { onYourTask }),
+  });
+  const call = (tool: string, onYourTask?: boolean) => ({
+    tool,
+    callId: "call-1",
+    input: { agentId: "agent-2", text: "Rebase on main." },
+    output: { status: "accepted", agent: agent(onYourTask) },
+  });
+  for (const tool of ["start_agent", "read_agent", "message_agent"]) {
+    const opened = { kind: TOOL_TARGET.AGENT, agent: "agent-2" };
+    assert.deepEqual(toolTarget(call(tool, true)), opened, tool);
+    assert.deepEqual(toolTarget(call(tool)), opened, `${tool}, answered before the service said`);
+    assert.equal(toolTarget(call(tool, false)), undefined, tool);
+  }
+});
+
+test("an archive names the agent its answer titles and opens nothing, its tab being gone, and an unarchive opens the agent it brought back", () => {
+  const call = (tool: string) => ({
+    tool,
+    callId: "call-1",
+    input: { agentId: "agent-2", reason: "Its pull request merged." },
+    output: {
+      status: "accepted",
+      agent: { id: "agent-2", title: "Bill by seat", onYourTask: true },
+      archived: tool === "archive_agent",
+      already: false,
+    },
+  });
+
+  const archived = toolCallView(call("archive_agent"));
+  assert.deepEqual([archived.kind, archived.subject], [CALL_KIND.ARCHIVE_AGENT, "Bill by seat"]);
+  assert.equal(toolTarget(call("archive_agent")), undefined);
+  const back = toolCallView(call("unarchive_agent"));
+  assert.deepEqual([back.kind, back.subject], [CALL_KIND.UNARCHIVE_AGENT, "Bill by seat"]);
+  assert.deepEqual(toolTarget(call("unarchive_agent")), {
+    kind: TOOL_TARGET.AGENT,
+    agent: "agent-2",
+  });
+});
+
+test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
+  const call = (isYourTask: boolean) => ({
+    tool: "read_page",
+    callId: "call-1",
+    input: { pageId: "page-1" },
+    output: { status: "accepted", page: { id: "page-1", title: "Seats by month", isYourTask } },
+  });
+
+  const view = toolCallView(call(true));
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.READ_PAGE, "Seats by month"]);
+  assert.deepEqual(toolTarget(call(true)), { kind: TOOL_TARGET.PAGE, page: "page-1" });
+  assert.equal(toolTarget(call(false)), undefined);
 });
 
 test("a pause names how long it waits, and its answer how long it waited or that a message ended it early", () => {
