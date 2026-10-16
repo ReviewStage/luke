@@ -519,14 +519,20 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   max-height: 320px;
 }
 
+/* A row's detail gives way first, and a name too long for the row even
+   then, a pull request's title, is cut as a searchable menu cuts one. */
 .mention-menu .plan-compose-menu-name {
-  flex: none;
+  flex: 0 1 auto;
 }
 
 .mention-row-detail {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mention-menu .mention-row-detail {
+  flex-shrink: 1000;
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page

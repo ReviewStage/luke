@@ -37,6 +37,7 @@ import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
 import {
+  mentionablePullRequests,
   PlanMentions,
   type PlanMentionsValue,
   useMentionAgentsReader,
@@ -585,6 +586,7 @@ function PlanDocument({
       return { id: agent.id, name, actor: agentActor(agent, name) };
     }),
     readAgents: readMentionAgents,
+    pullRequests: mentionablePullRequests(agents),
     doors: {
       planId: plan.id,
       place: { workspace, repository: plan.repository },

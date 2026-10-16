@@ -16,7 +16,13 @@ import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
 import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
-import type { MentionAgentsReader, MentionableAgent, MentionablePage } from "./mention-picker";
+import type {
+  MentionAgentsReader,
+  MentionableAgent,
+  MentionablePage,
+  MentionablePullRequest,
+} from "./mention-picker";
+import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenPlan } from "./use-open-link";
 
 /**
@@ -60,6 +66,8 @@ export interface PlanMentionsValue {
   readonly agents?: readonly MentionableAgent[] | undefined;
   /** Reads the workspace's coding agents, which an `@` offers after the plan's own. */
   readonly readAgents?: MentionAgentsReader | undefined;
+  /** The pull requests the plan's agents published, which an `@` offers; none off a plan. */
+  readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
   readonly doors: MentionDoors;
 }
 
@@ -152,6 +160,26 @@ export function planlessMentions(
 
 /** The agents of no read. */
 const NO_AGENTS: readonly MentionableAgent[] = [];
+
+/**
+ * The task's pull requests as an `@` list offers them: each its agents
+ * published, as far as the window has read them, in the order the agents
+ * were started, an archived agent's among them, labelled by its agent's
+ * tab's name; a pull request two agents published is offered once, under
+ * the first.
+ */
+export function mentionablePullRequests(
+  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "pullRequests">,
+): readonly MentionablePullRequest[] {
+  const held = [...(agents.agents ?? []), ...(agents.archived ?? [])];
+  const offered = new Set<string>();
+  return held.flatMap((agent) => {
+    const pullRequest = agents.pullRequests.get(agent.id);
+    if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
+    offered.add(pullRequest.url);
+    return [{ ...pullRequest, agent: agentTabLabel(agent, agents.models) }];
+  });
+}
 
 /**
  * Reads the workspace's coding agents as an `@` list offers them: the
