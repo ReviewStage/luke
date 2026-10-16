@@ -29,11 +29,12 @@
 # so without this step every push of a desktop-only branch built all three
 # services and woke its branch's Neon compute (2026-10-15).
 #
-# The base is `VERCEL_GIT_PREVIOUS_SHA`, the commit of this branch's last
-# deployment that succeeded, when the clone holds it, so every commit pushed
-# since then counts and not the head's alone; otherwise, on a new branch or
-# one rebased past it, the head's parent. Every doubt builds: a base git
-# cannot read, or a diff that errors, exits 1. Note that the script sets no
+# The comparison is with `VERCEL_GIT_PREVIOUS_SHA`, the commit of this
+# branch's last deployment that succeeded, fetched by its sha where the
+# shallow clone lacks it (a rebased branch's), so the verdict is that the
+# deployed tree is the one already deployed, whatever the commits between.
+# Every doubt builds: a branch with no deployment yet, a commit that cannot
+# be fetched, or a diff that errors exits 1. Note that the script sets no
 # `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`.
 
 DEPLOYED_PATHS=(
@@ -57,17 +58,22 @@ if [[ ${1:-} == --paths ]]; then
     exit 0
 fi
 
-base=HEAD^
 previous=${VERCEL_GIT_PREVIOUS_SHA:-}
-if [[ -n $previous ]] && git cat-file -e "$previous^{commit}" 2>/dev/null; then
-    base=$previous
+if [[ -z $previous ]]; then
+    printf 'vercel-ignore: building (no deployment of this branch has succeeded yet)\n'
+    exit 1
+fi
+if ! git cat-file -e "$previous^{commit}" 2>/dev/null &&
+    ! GIT_TERMINAL_PROMPT=0 timeout 30 git fetch --quiet --depth=1 origin "$previous" 2>/dev/null; then
+    printf 'vercel-ignore: building (the last deployment, %s, could not be fetched)\n' "$previous"
+    exit 1
 fi
 
-git diff --quiet "$base" HEAD -- "${DEPLOYED_PATHS[@]}"
+git diff --quiet "$previous" HEAD -- "${DEPLOYED_PATHS[@]}"
 status=$?
 if ((status == 0)); then
-    printf 'vercel-ignore: nothing deployed changed since %s; skipping\n' "$base"
+    printf 'vercel-ignore: nothing deployed changed since %s; skipping\n' "$previous"
     exit 0
 fi
-printf 'vercel-ignore: building (git diff against %s exited %s)\n' "$base" "$status"
+printf 'vercel-ignore: building (git diff against %s exited %s)\n' "$previous" "$status"
 exit 1

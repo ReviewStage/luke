@@ -21,7 +21,7 @@ const IGNORED_BUILD_STEP =
 const VERDICT = { SKIP: "skip", BUILD: "build", FAIL: "fail" } as const;
 type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
-/** A commit Vercel's clone does not hold, as a rebased branch's last deployment is. */
+/** A commit no remote holds, so the step cannot fetch it. */
 const UNKNOWN_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 function git(root: string, ...args: string[]): string {
@@ -59,11 +59,11 @@ async function repository(t: TestContext, withScript = true): Promise<string> {
 
 let edits = 0;
 
-/** Commits a change to one file and answers the commit. */
-function commit(root: string, path: string): string {
+/** Commits a change to one file, to `content` where given, and answers the commit. */
+function commit(root: string, path: string, content?: string): string {
   edits += 1;
   mkdirSync(dirname(join(root, path)), { recursive: true });
-  writeFileSync(join(root, path), `${path}, edit ${edits}\n`);
+  writeFileSync(join(root, path), content ?? `${path}, edit ${edits}\n`);
   git(root, "add", "--all");
   git(root, "commit", "-q", "-m", `change ${path}`);
   return git(root, "rev-parse", "HEAD");
@@ -86,20 +86,20 @@ function decide(root: string, previous?: string): Verdict {
   return ran.status === 1 ? VERDICT.BUILD : VERDICT.FAIL;
 }
 
-test("a push that changes only the desktop app or the docs is skipped", async (t) => {
+test("a push that changes only the desktop app or the docs since the last deployment is skipped", async (t) => {
   const root = await repository(t);
-  commit(root, "apps/web/package.json");
+  const deployed = commit(root, "apps/web/package.json");
   commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root), VERDICT.SKIP);
+  assert.equal(decide(root, deployed), VERDICT.SKIP);
   commit(root, "docs/proposals/factory/index.html");
-  assert.equal(decide(root), VERDICT.SKIP);
+  assert.equal(decide(root, deployed), VERDICT.SKIP);
 });
 
 test("a branch that predates the script is built rather than failed", async (t) => {
   const root = await repository(t, false);
-  commit(root, "README.md");
+  const deployed = commit(root, "README.md");
   commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root), VERDICT.BUILD);
+  assert.equal(decide(root, deployed), VERDICT.BUILD);
 });
 
 test("a push that changes anything a service installs or builds from is built", async (t) => {
@@ -114,9 +114,9 @@ test("a push that changes anything a service installs or builds from is built", 
     "vercel.json",
   ]) {
     const root = await repository(t);
-    commit(root, "README.md");
+    const deployed = commit(root, "README.md");
     commit(root, path);
-    assert.equal(decide(root), VERDICT.BUILD, path);
+    assert.equal(decide(root, deployed), VERDICT.BUILD, path);
   }
 });
 
@@ -129,17 +129,30 @@ test("every commit since the branch's last successful deployment counts, not the
   assert.equal(decide(root, service), VERDICT.SKIP);
 });
 
-test("a last deployment the clone does not hold falls back to the head's own change", async (t) => {
+test("a branch with no successful deployment yet is built, whatever its last commit changed", async (t) => {
   const root = await repository(t);
-  commit(root, "packages/service/src/index.ts");
+  commit(root, "apps/web/src/main.tsx");
   commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root, UNKNOWN_COMMIT), VERDICT.SKIP);
-  commit(root, "packages/database/src/index.ts");
+  assert.equal(decide(root), VERDICT.BUILD);
+});
+
+test("a last deployment that cannot be fetched is built against", async (t) => {
+  const root = await repository(t);
+  commit(root, "README.md");
+  commit(root, "apps/desktop/src/main/main.ts");
   assert.equal(decide(root, UNKNOWN_COMMIT), VERDICT.BUILD);
 });
 
-test("a commit with nothing to compare it against is built", async (t) => {
-  const root = await repository(t);
-  commit(root, "apps/desktop/src/main/main.ts");
-  assert.equal(decide(root), VERDICT.BUILD);
+test("a rebased branch whose deployed tree is the one already deployed is skipped, its last deployment fetched by sha", async (t) => {
+  const origin = await repository(t);
+  commit(origin, "README.md");
+  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  git(clone, "clone", "-q", `file://${origin}`, ".");
+  // Note that the deployment is pushed to the origin after the clone, so the clone does not hold it.
+  const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
+  commit(clone, "apps/desktop/src/main/main.ts");
+  commit(clone, "apps/web/src/main.tsx", "web v1\n");
+  assert.equal(decide(clone, deployed), VERDICT.SKIP);
+  commit(clone, "apps/web/src/main.tsx", "web v2\n");
+  assert.equal(decide(clone, deployed), VERDICT.BUILD);
 });

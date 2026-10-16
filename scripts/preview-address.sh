@@ -17,8 +17,9 @@ set -euo pipefail
 # earlier one, so the lookup walks back along first parents to the nearest
 # commit whose deployed tree matches the head's and that has a record of its
 # own: a commit pushed under a later one has none and is passed over rather
-# than waited on. The walk exits NOT_AFFECTED once the deployed tree differs,
-# since then no preview was ever built from what this commit would serve. That address is then asked
+# than waited on, and so is one whose deployed tree differs. The walk exits
+# NOT_AFFECTED when no ancestor within reach built what this commit would
+# serve. That address is then asked
 # for one page, because a preview behind Vercel Authentication redirects every
 # stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
 # session, so such a preview is PROTECTED and useless to point a build at.
@@ -202,21 +203,28 @@ done <<<"$deployed"
 
 head=$sha
 is_head=true
-for ((walked = 0; ; walked++)); do
+walked=0
+while true; do
     read_preview "$is_head"
-    if ! parent=$(git rev-parse --verify --quiet "$sha^"); then
-        printf 'NOT_AFFECTED: %s has no parent to find a preview on\n' "$sha" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    if ! git diff --quiet "$parent" "$head" -- "${deployed_paths[@]}"; then
-        printf 'NOT_AFFECTED: no preview was built from the deployed tree of %s; run without --preview, or pass --preview URL\n' "$head" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    if ((walked >= ancestors)); then
-        printf 'NOT_AFFECTED: no preview within %s commits of %s\n' "$ancestors" "$head" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    printf 'preview: %s deploys what %s does; looking there\n' "$parent" "$head" >&2
-    sha=$parent
+    # Note that the walk passes over an ancestor whose deployed tree differs
+    # from the head's rather than stopping there, because the ignore step
+    # skips against the branch's last deployment, which a push that changes
+    # a service and then restores it leaves further back than the parent.
+    while true; do
+        if ((walked >= ancestors)); then
+            printf 'NOT_AFFECTED: no preview of the deployed tree of %s within %s commits; run without --preview, or pass --preview URL\n' "$head" "$ancestors" >&2
+            exit "$EXIT_NOT_AFFECTED"
+        fi
+        if ! parent=$(git rev-parse --verify --quiet "$sha^"); then
+            printf 'NOT_AFFECTED: %s has no parent to find a preview on\n' "$sha" >&2
+            exit "$EXIT_NOT_AFFECTED"
+        fi
+        sha=$parent
+        walked=$((walked + 1))
+        if git diff --quiet "$sha" "$head" -- "${deployed_paths[@]}"; then
+            break
+        fi
+    done
+    printf 'preview: %s deploys what %s does; looking there\n' "$sha" "$head" >&2
     is_head=false
 done
