@@ -16,7 +16,7 @@ import {
   planCommentStartRequestSchema,
   planCommentsCursorSchema,
 } from "@luke/features/plan-comment-wire";
-import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
@@ -72,7 +72,7 @@ const QUERY = {
 
 /** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds. */
 const MAXIMUM_START_BODY_BYTES =
-  (PLAN_BOUNDS.MAX_BODY_CHARS +
+  (TASK_BOUNDS.MAX_BODY_CHARS +
     PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS +
     PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) *
     6 +
@@ -127,16 +127,16 @@ const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The plan's threads as they stand, held while its cursor is still the reader's; nothing where the account reaches no such plan. */
 function planCommentsPast(
   userId: string,
-  planId: string,
+  taskId: string,
   after: string,
 ): Effect.Effect<Option.Option<PlanCommentsAnswer>, StoreFailure, DatabaseServices> {
   return heldUntilMoved(
-    planCommentStamps(userId, planId),
+    planCommentStamps(userId, taskId),
     after,
     CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
   ).pipe(
-    Effect.andThen(readPlanCommentThreads(userId, planId)),
+    Effect.andThen(readPlanCommentThreads(userId, taskId)),
     Effect.map(Option.map((threads) => ({ threads, cursor: cursorOf(threads) }))),
   );
 }
@@ -160,23 +160,23 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   if (incoming.method === HTTP_METHOD.GET) {
-    const planId = yield* idOf(request, QUERY.PLAN);
+    const taskId = yield* idOf(request, QUERY.PLAN);
     const userId = yield* resolvedUserId(seams, request);
     const after = yield* cursorQueryOf(request);
-    const read = yield* hostedStoreOrUnavailable(planCommentsPast(userId, planId, after));
+    const read = yield* hostedStoreOrUnavailable(planCommentsPast(userId, taskId, after));
     if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, read.value);
   }
   if (incoming.method !== HTTP_METHOD.POST)
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  const planId = yield* idOf(request, QUERY.PLAN);
+  const taskId = yield* idOf(request, QUERY.PLAN);
   const userId = yield* resolvedUserId(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const start = readEither(planCommentStartRequestSchema)(body);
   if (Result.isFailure(start)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
   const outcome = yield* hostedStoreOrUnavailable(
-    startPlanCommentThread(writer, planId, start.success),
+    startPlanCommentThread(writer, taskId, start.success),
   );
   return yield* outcomeAnswer(outcome, true);
 });
@@ -189,7 +189,7 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
   if (incoming.method !== HTTP_METHOD.POST)
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const planId = yield* idOf(request, QUERY.PLAN);
+  const taskId = yield* idOf(request, QUERY.PLAN);
   const threadId = yield* idOf(request, QUERY.THREAD);
   const userId = yield* resolvedUserId(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_ACTION_BODY_BYTES);
@@ -197,7 +197,7 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
   if (Result.isFailure(action)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
   const outcome = yield* hostedStoreOrUnavailable(
-    actOnPlanCommentThread(writer, planId, threadId, action.success),
+    actOnPlanCommentThread(writer, taskId, threadId, action.success),
   );
   return yield* outcomeAnswer(outcome, false);
 });

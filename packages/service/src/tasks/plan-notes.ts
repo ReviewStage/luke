@@ -228,7 +228,7 @@ function savedUnderLock<T extends TextTaken, F>(
       });
     }
     if (moved || taken.anchors !== undefined) {
-      yield* movePlanCommentAnchors(binding.planId, before, after, taken.anchors);
+      yield* movePlanCommentAnchors(binding.taskId, before, after, taken.anchors);
     }
     const saved = yield* savePlanText(
       binding.userId,

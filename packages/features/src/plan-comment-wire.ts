@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
-import { PLAN_BOUNDS } from "./plan-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { TASK_BOUNDS } from "./task-wire.js";
 
 /**
  * plan-comment-wire.ts -- comments on a task's plan on the wire: a thread anchored to words of the plan, its comments and what happened to it, and what a member sends to start, answer, resolve, and reopen one.
@@ -167,7 +167,7 @@ export const planCommentsAnswerSchema = EffectSchema.Struct({
 export type PlanCommentsAnswer = typeof planCommentsAnswerSchema.Type;
 
 /** A plan's text as a thread's anchor is measured in. */
-const ANCHOR_TEXT = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS));
+const ANCHOR_TEXT = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS));
 
 /**
  * A thread started (POST `/api/plans/{id}/comments`): its first comment, the

@@ -24,18 +24,18 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect } from "./plan-store.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
+import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
  * plan-comments.ts -- a plan's comment threads: read them, start one, answer, edit, resolve, reopen, and delete, and move every anchor with its words as the plan's text is saved.
  *
  * Every member of the plan's workspace reads and writes every thread, and
  * every agent on the task writes as the member whose turn it is; an account
- * outside the workspace reads no plan here, exactly as in `plan-store.ts`.
+ * outside the workspace reads no plan here, exactly as in `task-store.ts`.
  * Each write takes the plan row's lock first, as the plan's own save does,
  * so a thread started while the text is saved lands on the text as saved,
  * and an archived plan, which no editor is drawn on, takes none. A comment
@@ -142,42 +142,42 @@ const ENTRY_COLUMNS = {
 
 /** The plan's text under its row's lock, where the account reaches the plan and it is not archived; nothing otherwise. */
 const lockOpenPlanText = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ text: Schema.String }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ text: plan.document })
-        .from(plan)
-        .where(and(reachablePlan(userId, planId), isNull(plan.archivedAt)))
+        .select({ text: task.document })
+        .from(task)
+        .where(and(reachableTask(userId, taskId), isNull(task.archivedAt)))
         .for("update"),
     ),
 });
 
 /** The plan's id, where the account reaches it. */
 const findReachablePlan = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
-      db.select({ id: plan.id }).from(plan).where(reachablePlan(userId, planId)),
+      db.select({ id: task.id }).from(task).where(reachableTask(userId, taskId)),
     ),
 });
 
 const findThreads = SqlSchema.findAll({
   Request: Schema.Struct({
-    planId: Schema.String,
+    taskId: Schema.String,
     ids: Schema.optional(Schema.Array(Schema.String)),
   }),
   Result: ThreadRowSchema,
-  execute: ({ planId, ids }) =>
+  execute: ({ taskId, ids }) =>
     Database.use((db) =>
       db
         .select(THREAD_COLUMNS)
         .from(planCommentThread)
         .where(
           and(
-            eq(planCommentThread.planId, planId),
+            eq(planCommentThread.taskId, taskId),
             ids === undefined ? undefined : inArray(planCommentThread.id, [...ids]),
           ),
         )
@@ -186,28 +186,28 @@ const findThreads = SqlSchema.findAll({
 });
 
 const findEntries = SqlSchema.findAll({
-  Request: Schema.Struct({ planId: Schema.String, threadIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({ taskId: Schema.String, threadIds: Schema.Array(Schema.String) }),
   Result: EntryRowSchema,
-  execute: ({ planId, threadIds }) =>
+  execute: ({ taskId, threadIds }) =>
     Database.use((db) =>
       db
         .select(ENTRY_COLUMNS)
         .from(planComment)
         .leftJoin(user, eq(user.id, planComment.userId))
-        .where(and(eq(planComment.planId, planId), inArray(planComment.threadId, [...threadIds])))
+        .where(and(eq(planComment.taskId, taskId), inArray(planComment.threadId, [...threadIds])))
         .orderBy(asc(planComment.threadId), asc(planComment.seq)),
     ),
 });
 
 const findStamps = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({
     id: Schema.String,
     revision: Schema.Number,
     status: Schema.String,
     updatedAt: InstantColumnSchema,
   }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select({
@@ -217,32 +217,32 @@ const findStamps = SqlSchema.findAll({
           updatedAt: planCommentThread.updatedAt,
         })
         .from(planCommentThread)
-        .innerJoin(plan, eq(plan.id, planCommentThread.planId))
-        .where(and(eq(planCommentThread.planId, planId), planReachableBy(userId))),
+        .innerJoin(task, eq(task.id, planCommentThread.taskId))
+        .where(and(eq(planCommentThread.taskId, taskId), taskReachableBy(userId))),
     ),
 });
 
 const countThreads = SqlSchema.findOne({
-  Request: Schema.Struct({ planId: Schema.String }),
+  Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ count: Schema.Number }),
-  execute: ({ planId }) =>
+  execute: ({ taskId }) =>
     Database.use((db) =>
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(planCommentThread)
-        .where(eq(planCommentThread.planId, planId)),
+        .where(eq(planCommentThread.taskId, taskId)),
     ),
 });
 
 const findKeyedThread = SqlSchema.findOneOption({
-  Request: Schema.Struct({ planId: Schema.String, clientKey: Schema.String }),
+  Request: Schema.Struct({ taskId: Schema.String, clientKey: Schema.String }),
   Result: Schema.Struct({ threadId: Schema.String }),
-  execute: ({ planId, clientKey }) =>
+  execute: ({ taskId, clientKey }) =>
     Database.use((db) =>
       db
         .select({ threadId: planComment.threadId })
         .from(planComment)
-        .where(and(eq(planComment.planId, planId), eq(planComment.clientKey, clientKey))),
+        .where(and(eq(planComment.taskId, taskId), eq(planComment.clientKey, clientKey))),
     ),
 });
 
@@ -291,11 +291,11 @@ function threadOf(row: ThreadRow, entries: readonly EntryRow[]): PlanCommentThre
 }
 
 /** The plan's threads, or the ones named, with their entries. */
-function threadsOf(planId: string, ids?: readonly string[]): PlanStoreEffect<PlanCommentThread[]> {
+function threadsOf(taskId: string, ids?: readonly string[]): TaskStoreEffect<PlanCommentThread[]> {
   return Effect.gen(function* () {
-    const rows = yield* findThreads(ids === undefined ? { planId } : { planId, ids });
+    const rows = yield* findThreads(ids === undefined ? { taskId } : { taskId, ids });
     if (rows.length === 0) return [];
-    const entries = yield* findEntries({ planId, threadIds: rows.map((row) => row.id) });
+    const entries = yield* findEntries({ taskId, threadIds: rows.map((row) => row.id) });
     return rows.map((row) => threadOf(row, entries));
   });
 }
@@ -316,7 +316,7 @@ function writerColumns(writer: PlanCommentWriterRef) {
 
 /** One entry written to a thread, and the thread moved on, so every reader's cursor moves. */
 function writeEntry(
-  planId: string,
+  taskId: string,
   threadId: string,
   writer: PlanCommentWriterRef,
   entry: {
@@ -326,14 +326,14 @@ function writeEntry(
     readonly asked?: PlanCommentAsked;
   },
   now: Date,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return Effect.gen(function* () {
     const seq = yield* movedOn(threadId, now);
     yield* Database.use((db) =>
       db.insert(planComment).values({
         id: randomUUID(),
         threadId,
-        planId,
+        taskId,
         seq,
         kind: entry.kind,
         ...writerColumns(writer),
@@ -352,7 +352,7 @@ function movedOn(
   threadId: string,
   now: Date,
   set: Partial<typeof planCommentThread.$inferInsert> = {},
-): PlanStoreEffect<number> {
+): TaskStoreEffect<number> {
   return Effect.flatMap(
     Database.use((db) =>
       db
@@ -370,8 +370,8 @@ function movedOn(
 }
 
 /** The thread answered as it now stands. */
-function answered(planId: string, threadId: string): PlanStoreEffect<PlanCommentOutcome> {
-  return Effect.map(threadsOf(planId, [threadId]), ([thread]) =>
+function answered(taskId: string, threadId: string): TaskStoreEffect<PlanCommentOutcome> {
+  return Effect.map(threadsOf(taskId, [threadId]), ([thread]) =>
     thread === undefined
       ? { status: PLAN_COMMENT_OUTCOME.NO_THREAD }
       : { status: PLAN_COMMENT_OUTCOME.DONE, answer: { thread } },
@@ -392,21 +392,21 @@ function writtenBy(row: EntryRow, writer: PlanCommentWriterRef): boolean {
 /** The plan's threads, oldest first, each with its entries; nothing where the account reaches no such plan. */
 export function readPlanCommentThreads(
   userId: string,
-  planId: string,
-): PlanStoreEffect<Option.Option<readonly PlanCommentThread[]>> {
+  taskId: string,
+): TaskStoreEffect<Option.Option<readonly PlanCommentThread[]>> {
   return Effect.gen(function* () {
-    const reached = yield* findReachablePlan({ userId, planId });
+    const reached = yield* findReachablePlan({ userId, taskId });
     if (Option.isNone(reached)) return Option.none();
-    return Option.some(yield* threadsOf(planId));
+    return Option.some(yield* threadsOf(taskId));
   });
 }
 
 /** Where each of the plan's threads stands, read without its words; none where the account reaches no such plan. */
 export function planCommentStamps(
   userId: string,
-  planId: string,
-): PlanStoreEffect<readonly PlanCommentStamp[]> {
-  return Effect.map(findStamps({ userId, planId }), (rows) =>
+  taskId: string,
+): TaskStoreEffect<readonly PlanCommentStamp[]> {
+  return Effect.map(findStamps({ userId, taskId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }
@@ -420,16 +420,16 @@ export function planCommentStamps(
  */
 export function startPlanCommentThread(
   writer: PlanCommentWriterRef,
-  planId: string,
+  taskId: string,
   request: PlanCommentStartRequest,
-): PlanStoreEffect<PlanCommentOutcome> {
+): TaskStoreEffect<PlanCommentOutcome> {
   return inTransaction(
     Effect.gen(function* () {
-      const locked = yield* lockOpenPlanText({ userId: writer.userId, planId });
+      const locked = yield* lockOpenPlanText({ userId: writer.userId, taskId });
       if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_PLAN } as const;
-      const taken = yield* findKeyedThread({ planId, clientKey: request.clientKey });
-      if (Option.isSome(taken)) return yield* answered(planId, taken.value.threadId);
-      const { count } = yield* countThreads({ planId }).pipe(
+      const taken = yield* findKeyedThread({ taskId, clientKey: request.clientKey });
+      if (Option.isSome(taken)) return yield* answered(taskId, taken.value.threadId);
+      const { count } = yield* countThreads({ taskId }).pipe(
         Effect.catchTag("NoSuchElementError", Effect.die),
       );
       if (count >= PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN) {
@@ -445,7 +445,7 @@ export function startPlanCommentThread(
       yield* Database.use((db) =>
         db.insert(planCommentThread).values({
           id,
-          planId,
+          taskId,
           scope: request.scope,
           quote: request.quote,
           anchorFrom: anchor.from,
@@ -462,8 +462,8 @@ export function startPlanCommentThread(
         words: request.words,
         clientKey: request.clientKey,
       };
-      yield* writeEntry(planId, id, writer, first, now);
-      return yield* answered(planId, id);
+      yield* writeEntry(taskId, id, writer, first, now);
+      return yield* answered(taskId, id);
     }),
   );
 }
@@ -479,19 +479,19 @@ function entryIn(
 
 /** A reply to the thread, taken once under its key; refused where the thread holds its bound of entries. */
 function replied(
-  planId: string,
+  taskId: string,
   thread: PlanCommentThread,
   writer: PlanCommentWriterRef,
   reply: { readonly words: string; readonly clientKey?: string },
   now: Date,
-): PlanStoreEffect<PlanCommentOutcome> {
+): TaskStoreEffect<PlanCommentOutcome> {
   return Effect.gen(function* () {
     if (reply.clientKey !== undefined) {
-      const taken = yield* findKeyedThread({ planId, clientKey: reply.clientKey });
+      const taken = yield* findKeyedThread({ taskId, clientKey: reply.clientKey });
       if (Option.isSome(taken) && taken.value.threadId !== thread.id) {
         return refused(PLAN_COMMENT_REFUSAL.KEY_TAKEN);
       }
-      if (Option.isSome(taken)) return yield* answered(planId, thread.id);
+      if (Option.isSome(taken)) return yield* answered(taskId, thread.id);
     }
     const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
     if (comments.length >= PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {
@@ -502,13 +502,13 @@ function replied(
       words: reply.words,
       ...(reply.clientKey === undefined ? undefined : { clientKey: reply.clientKey }),
     };
-    yield* writeEntry(planId, thread.id, writer, entry, now);
-    return yield* answered(planId, thread.id);
+    yield* writeEntry(taskId, thread.id, writer, entry, now);
+    return yield* answered(taskId, thread.id);
   });
 }
 
 /** The thread deleted, its entries with it. */
-function deletedThread(threadId: string): PlanStoreEffect<PlanCommentOutcome> {
+function deletedThread(threadId: string): TaskStoreEffect<PlanCommentOutcome> {
   return Effect.as(
     Database.use((db) => db.delete(planCommentThread).where(eq(planCommentThread.id, threadId))),
     { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: threadId } } as const,
@@ -517,14 +517,14 @@ function deletedThread(threadId: string): PlanStoreEffect<PlanCommentOutcome> {
 
 /** The thread set resolved or open, with the line saying who did it; a thread already so answers as it stands. */
 function settled(
-  planId: string,
+  taskId: string,
   thread: PlanCommentThread,
   writer: PlanCommentWriterRef,
   status: typeof PLAN_COMMENT_STATUS.OPEN | typeof PLAN_COMMENT_STATUS.RESOLVED,
   now: Date,
-): PlanStoreEffect<PlanCommentOutcome> {
+): TaskStoreEffect<PlanCommentOutcome> {
   return Effect.gen(function* () {
-    if (thread.status === status) return yield* answered(planId, thread.id);
+    if (thread.status === status) return yield* answered(taskId, thread.id);
     yield* movedOn(thread.id, now, { status });
     // Note that past the bound the change is made and goes unsaid, because a resolve must never be refused, and its lines must not grow a thread without end.
     const lines = thread.entries.filter((entry) => entry.kind !== PLAN_COMMENT_ENTRY.COMMENT);
@@ -533,9 +533,9 @@ function settled(
         status === PLAN_COMMENT_STATUS.RESOLVED
           ? PLAN_COMMENT_ENTRY.RESOLVED
           : PLAN_COMMENT_ENTRY.REOPENED;
-      yield* writeEntry(planId, thread.id, writer, { kind }, now);
+      yield* writeEntry(taskId, thread.id, writer, { kind }, now);
     }
-    return yield* answered(planId, thread.id);
+    return yield* answered(taskId, thread.id);
   });
 }
 
@@ -547,26 +547,26 @@ function settled(
  */
 export function actOnPlanCommentThread(
   writer: PlanCommentWriterRef,
-  planId: string,
+  taskId: string,
   threadId: string,
   request: PlanCommentActionRequest,
-): PlanStoreEffect<PlanCommentOutcome> {
+): TaskStoreEffect<PlanCommentOutcome> {
   return inTransaction(
     Effect.gen(function* () {
-      const locked = yield* lockOpenPlanText({ userId: writer.userId, planId });
+      const locked = yield* lockOpenPlanText({ userId: writer.userId, taskId });
       if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_PLAN } as const;
-      const [row] = yield* findThreads({ planId, ids: [threadId] });
+      const [row] = yield* findThreads({ taskId, ids: [threadId] });
       if (row === undefined) return { status: PLAN_COMMENT_OUTCOME.NO_THREAD } as const;
-      const entries = yield* findEntries({ planId, threadIds: [threadId] });
+      const entries = yield* findEntries({ taskId, threadIds: [threadId] });
       const thread = threadOf(row, entries);
       const now = yield* DateTime.nowAsDate;
       switch (request.action) {
         case PLAN_COMMENT_ACTION.REPLY:
-          return yield* replied(planId, thread, writer, request, now);
+          return yield* replied(taskId, thread, writer, request, now);
         case PLAN_COMMENT_ACTION.RESOLVE:
-          return yield* settled(planId, thread, writer, PLAN_COMMENT_STATUS.RESOLVED, now);
+          return yield* settled(taskId, thread, writer, PLAN_COMMENT_STATUS.RESOLVED, now);
         case PLAN_COMMENT_ACTION.REOPEN:
-          return yield* settled(planId, thread, writer, PLAN_COMMENT_STATUS.OPEN, now);
+          return yield* settled(taskId, thread, writer, PLAN_COMMENT_STATUS.OPEN, now);
         case PLAN_COMMENT_ACTION.DELETE_THREAD:
           return yield* deletedThread(threadId);
         case PLAN_COMMENT_ACTION.EDIT:
@@ -584,13 +584,13 @@ export function actOnPlanCommentThread(
                 .where(eq(planComment.id, entry.id)),
             );
             yield* movedOn(threadId, now);
-            return yield* answered(planId, threadId);
+            return yield* answered(taskId, threadId);
           }
           const first = entries.find((each) => each.kind === PLAN_COMMENT_ENTRY.COMMENT);
           if (first?.id === entry.id) return yield* deletedThread(threadId);
           yield* Database.use((db) => db.delete(planComment).where(eq(planComment.id, entry.id)));
           yield* movedOn(threadId, now);
-          return yield* answered(planId, threadId);
+          return yield* answered(taskId, threadId);
         }
       }
     }),
@@ -614,13 +614,13 @@ export interface ReportedAnchors {
  * undo. Run inside the save's own transaction, under the plan's lock.
  */
 export function movePlanCommentAnchors(
-  planId: string,
+  taskId: string,
   before: string,
   after: string,
   reported?: ReportedAnchors,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return Effect.gen(function* () {
-    const rows = yield* findThreads({ planId });
+    const rows = yield* findThreads({ taskId });
     if (rows.length === 0) return;
     const change = textChange(before, after);
     const fromReport = reported === undefined ? undefined : textChange(reported.text, after);
@@ -653,6 +653,6 @@ export function movePlanCommentAnchors(
 }
 
 /** One write over the plan's comments, whole or not at all. */
-function inTransaction<A>(write: PlanStoreEffect<A>): PlanStoreEffect<A> {
+function inTransaction<A>(write: TaskStoreEffect<A>): TaskStoreEffect<A> {
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(write));
 }

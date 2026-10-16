@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createPlan, savePlanText } from "@luke/database/models/plan-store";
+import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import {
   fakeWorkspaceSeams,
@@ -23,9 +23,9 @@ import {
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { planCommentsApp } from "@luke/service/plans/plan-comments-app";
-import { plansApp } from "@luke/service/plans/plans-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
+import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -92,7 +92,7 @@ const answer = (routes: "comments" | "plans", request: Request) =>
     const app =
       routes === "comments"
         ? planCommentsApp({ resolveUserId })
-        : plansApp({
+        : tasksApp({
             resolveUserId,
             workspaces: yield* fakeWorkspaceSeams,
             eveOrigin: () => undefined,
@@ -148,9 +148,9 @@ const openSharedPlan = Effect.gen(function* () {
   const outsider = yield* openAccount("Someone Else");
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const { id: planId } = yield* createPlan(owner, { organizationId: workspace, name: "Invites" });
-  yield* savePlanText(owner, planId, PLAN_TEXT);
-  return { owner, teammate, outsider, planId };
+  const { id: taskId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
+  yield* savePlanText(owner, taskId, PLAN_TEXT);
+  return { owner, teammate, outsider, taskId };
 });
 
 /** A start of a thread on the sentence above. */
@@ -171,18 +171,18 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
     "a thread a member started reads for every member past a stale cursor, and as nothing for an outsider",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId } = yield* openSharedPlan;
+        const { owner, teammate, outsider, taskId } = yield* openSharedPlan;
 
         const started = yield* answer(
           "comments",
-          request(COMMENTS, teammate, { id: planId }, startBody("Is withdrawing in v1?")),
+          request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
         );
         assert.equal(started.status, HOSTED_HTTP_STATUS.CREATED);
         const thread = threadIn(started);
 
         const read = yield* answer(
           "comments",
-          request(COMMENTS, owner, { id: planId, after: PLAN_COMMENTS_CURSOR_START }),
+          request(COMMENTS, owner, { id: taskId, after: PLAN_COMMENTS_CURSOR_START }),
         );
         assert.equal(read.status, HOSTED_HTTP_STATUS.OK);
         const threads = threadsIn(read);
@@ -191,17 +191,17 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           [[thread.id, "Approach", "Charles Pan"]],
         );
 
-        const outsiderRead = yield* answer("comments", request(COMMENTS, outsider, { id: planId }));
+        const outsiderRead = yield* answer("comments", request(COMMENTS, outsider, { id: taskId }));
         const outsiderStart = yield* answer(
           "comments",
-          request(COMMENTS, outsider, { id: planId }, startBody("Hello")),
+          request(COMMENTS, outsider, { id: taskId }, startBody("Hello")),
         );
         const outsiderResolve = yield* answer(
           "comments",
           request(
             THREAD,
             outsider,
-            { id: planId, thread: thread.id },
+            { id: taskId, thread: thread.id },
             { action: PLAN_COMMENT_ACTION.RESOLVE },
           ),
         );
@@ -213,9 +213,9 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
   it.effect("any member resolves a teammate's thread, and it reads resolved", () =>
     Effect.gen(function* () {
-      const { owner, teammate, planId } = yield* openSharedPlan;
+      const { owner, teammate, taskId } = yield* openSharedPlan;
       const thread = threadIn(
-        yield* answer("comments", request(COMMENTS, teammate, { id: planId }, startBody("v1?"))),
+        yield* answer("comments", request(COMMENTS, teammate, { id: taskId }, startBody("v1?"))),
       );
 
       const resolved = threadIn(
@@ -224,7 +224,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           request(
             THREAD,
             owner,
-            { id: planId, thread: thread.id },
+            { id: taskId, thread: thread.id },
             { action: PLAN_COMMENT_ACTION.RESOLVE },
           ),
         ),
@@ -238,9 +238,9 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
     "an edit deleting the anchored words leaves the thread its quote, and the edit undo sends anchors it again",
     () =>
       Effect.gen(function* () {
-        const { owner, planId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedPlan;
         const thread = threadIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: planId }, startBody("v1?"))),
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
         );
         const deleted = PLAN_TEXT.replace(`${WORDS} `, "");
 
@@ -249,7 +249,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           request(
             EDIT,
             owner,
-            { id: planId },
+            { id: taskId },
             {
               document: { base: PLAN_TEXT, value: deleted },
               comments: { anchors: [], carried: [thread.id] },
@@ -258,7 +258,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
         );
         assert.equal(deleting.status, HOSTED_HTTP_STATUS.OK);
         const afterDelete = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: planId })),
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
         )[0];
         assert.equal(afterDelete?.anchor, undefined);
         assert.equal(afterDelete?.quote, WORDS);
@@ -269,7 +269,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           request(
             EDIT,
             owner,
-            { id: planId },
+            { id: taskId },
             {
               document: { base: deleted, value: PLAN_TEXT },
               comments: {
@@ -280,7 +280,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           ),
         );
         const afterUndo = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: planId })),
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
         )[0];
         assert.deepEqual(afterUndo?.anchor, { from, to: from + WORDS.length });
       }),

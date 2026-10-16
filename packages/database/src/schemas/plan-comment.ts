@@ -9,13 +9,13 @@ import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * plan-comment.ts -- comments on a task's plan: a thread anchored to words of the plan's text, and each of its entries.
  *
  * A thread's anchor is kept here as offsets into the plan's Markdown
- * (`plan.document`) rather than written into the text, so every reader of the
+ * (`task.document`) rather than written into the text, so every reader of the
  * text reads none of it; the plan's one save moves every anchor with its
  * words (`@luke/features/plan-comment-anchor`), and nulls both offsets of an
  * anchor whose every word it deleted, the thread keeping its quote. The
@@ -35,9 +35,9 @@ export const planCommentThread = pgTable(
   "plan_comment_thread",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
+    taskId: uuid("plan_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => task.id, { onDelete: "cascade" }),
     scope: text("scope").$type<PlanCommentScope>().notNull(),
     /** The words the thread was anchored to, as they stood when it was started. */
     quote: text("quote").notNull(),
@@ -52,7 +52,7 @@ export const planCommentThread = pgTable(
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },
-  (table) => [index("plan_comment_thread_plan_created").on(table.planId, table.createdAt)],
+  (table) => [index("plan_comment_thread_plan_created").on(table.taskId, table.createdAt)],
 );
 
 export const planComment = pgTable(
@@ -63,9 +63,9 @@ export const planComment = pgTable(
       .notNull()
       .references(() => planCommentThread.id, { onDelete: "cascade" }),
     /** The thread's plan, kept on the row so a plan's entries are read by one index. */
-    planId: uuid("plan_id")
+    taskId: uuid("plan_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => task.id, { onDelete: "cascade" }),
     /** Where the entry stands in its thread: the thread's revision its write moved it to. */
     seq: integer("seq").notNull(),
     kind: text("kind").$type<PlanCommentEntryKind>().notNull(),
@@ -89,9 +89,9 @@ export const planComment = pgTable(
   },
   (table) => [
     index("plan_comment_thread_seq").on(table.threadId, table.seq),
-    index("plan_comment_plan").on(table.planId),
+    index("plan_comment_plan").on(table.taskId),
     uniqueIndex("plan_comment_client_key")
-      .on(table.planId, table.clientKey)
+      .on(table.taskId, table.clientKey)
       .where(sql`${table.clientKey} is not null`),
   ],
 );
