@@ -407,6 +407,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
     agent: {
       id: teammates.id,
       title: OPUS,
+      model: OPUS,
       status: CODING_AGENT_STATUS.RUNNING,
       onYourTask: false,
     },
@@ -711,6 +712,7 @@ test("archive_agent archives a teammate's idle agent on another task for the cal
     agent: {
       id: agents.teammates.id,
       title: OPUS,
+      model: OPUS,
       task: { id: plans.billing, name: "Billing", archived: false },
       onYourTask: false,
     },

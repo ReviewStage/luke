@@ -948,6 +948,7 @@ export function runMessageAgent(
         agent: {
           id: agent.id,
           title: agentName(agent),
+          model: agent.model,
           status: CODING_AGENT_STATUS.RUNNING,
           onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
         },
@@ -1055,6 +1056,7 @@ function archiveAnswer(
     agent: {
       id: agent.id,
       title: agentName(agent),
+      model: agent.model,
       task: task.task === null ? null : { ...task.task },
       onYourTask: task.onYourTask,
     },

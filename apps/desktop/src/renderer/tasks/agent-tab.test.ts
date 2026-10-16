@@ -492,7 +492,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
 });
 
-test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, a chip that is no target of its own inside the row", () => {
+test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that is no target of its own inside the row", () => {
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
@@ -511,7 +511,15 @@ test("a call about an agent names it by its chip in the place of the words, as i
     toolPart(
       "archive_agent",
       { agentId: "agent-8" },
-      { status: "accepted", agent: { id: "agent-8", title: "Retry audit", onYourTask: false } },
+      {
+        status: "accepted",
+        agent: {
+          id: "agent-8",
+          title: "Retry audit",
+          model: "openai/gpt-6.1-sol",
+          onYourTask: false,
+        },
+      },
     ),
     toolPart("start_agent", { prompt: "Ship the invoice export" }),
   ]);
@@ -540,6 +548,10 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(said("message_agent"), "Messaged Invoice export Rebase on main");
   assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
   assert.equal(said("archive_agent"), "Archived Retry audit");
+  assert.ok(
+    line("archive_agent")?.querySelector(".tool-agent-chip img.harness-mark"),
+    "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
+  );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
   assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
   const row = line("message_agent");

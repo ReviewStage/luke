@@ -888,16 +888,17 @@ const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   RETIRED_TOOL.START_CODING_AGENT,
 ]);
 
-/** The agent a call about one names: its id, and the title its answer gives it, either missing where neither the call nor its answer says it. */
+/** The agent a call about one names: its id, the title its answer gives it, either missing where neither the call nor its answer says it, and the model its answer says it runs on, where it says one. */
 export interface CalledAgent {
   readonly id: string | undefined;
   readonly title: string | undefined;
+  readonly model?: string | undefined;
 }
 
 /**
  * The agent a call about one names, which its row draws as the agent's
  * chip: the id its answer names, else the one its input does, and the
- * title its answer gives; nothing for any other call, or for one that
+ * title and the model its answer gives; nothing for any other call, or for one that
  * names no agent yet, as a start does until it has answered. Note that a
  * refused call still names the agent its input asked for, because the row
  * still says what it tried.
@@ -907,7 +908,9 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   const answer = isRecord(call.output) ? call.output.agent : undefined;
   const id = stringAt(answer, "id") ?? stringAt(call.input, "agentId");
   const title = stringAt(answer, "title");
-  return id === undefined && title === undefined ? undefined : { id, title };
+  const model = stringAt(answer, "model");
+  if (id === undefined && title === undefined) return undefined;
+  return model === undefined ? { id, title } : { id, title, model };
 }
 
 /** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */

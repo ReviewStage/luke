@@ -324,6 +324,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
     agent: {
       id: agent.id,
       title: "anthropic/claude-opus-5.5",
+      model: "anthropic/claude-opus-5.5",
       status: CODING_AGENT_STATUS.RUNNING,
       onYourTask: true,
     },
