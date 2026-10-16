@@ -7115,6 +7115,42 @@ button.automation-run:hover {
   font-size: 11px;
 }
 
+/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
+   name beside a dot of the colour GitHub gives it, a size under the notes,
+   wrapping where they run past the card's width. The dot carries the
+   colour rather than the words, since a label may be any colour, a dark one
+   the card's words could not be read in. */
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 6px; /* off-scale */
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px; /* off-scale */
+  overflow-wrap: anywhere;
+}
+
+.card-label-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
 .card-rule {
   width: 100%;
   height: 1px;

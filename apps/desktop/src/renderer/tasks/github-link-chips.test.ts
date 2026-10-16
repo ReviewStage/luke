@@ -35,6 +35,7 @@ const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
 const UNREACHED = "https://github.com/acme/secret/pull/7";
+const OLDER_SERVICE = "https://github.com/acme/relay/pull/44";
 const OPEN_ISSUE = "https://github.com/acme/relay/issues/7";
 const SHELVED_ISSUE = "https://github.com/acme/relay/issues/9";
 const UNREACHED_ISSUE = "https://github.com/acme/secret/issues/3";
@@ -58,6 +59,48 @@ const RELAY_ISSUES = new Map([
       title: "Invite by phone number",
       url: SHELVED_ISSUE,
       state: ISSUE_STATE.NOT_PLANNED,
+    },
+  ],
+]);
+
+/** How long ago, before the test runs, the merged pull request was opened and merged. */
+const HOUR = 60 * 60 * 1000;
+const OPENED_AT = Date.now() - 50 * HOUR;
+const MERGED_AT = Date.now() - 2 * HOUR - 60_000;
+
+/** The pull requests `acme/relay` holds, as the App answers them: one whole, and one as an older service answers it, with no more than its number, title, page, and state. */
+const RELAY_PULLS = new Map([
+  [
+    42,
+    {
+      number: 42,
+      title: "Expire old invitations",
+      url: MERGED,
+      state: PULL_REQUEST_STATE.MERGED,
+      author: "octo-dev",
+      additions: 120,
+      deletions: 30,
+      changedFiles: 4,
+      openedAt: OPENED_AT,
+      mergedAt: MERGED_AT,
+      closedAt: MERGED_AT,
+      baseRef: "main",
+      headRef: "invite-expiry",
+      labels: [
+        { name: "service", color: "4fd18b" },
+        { name: "not a colour", color: "url(x)" },
+      ],
+      comments: 7,
+      commits: 1,
+    },
+  ],
+  [
+    44,
+    {
+      number: 44,
+      title: "Batch the invitation emails",
+      url: OLDER_SERVICE,
+      state: PULL_REQUEST_STATE.OPEN,
     },
   ],
 ]);
@@ -138,27 +181,12 @@ async function drawn(text: string, workspace: Workspace) {
           const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
         }
-        const reached =
-          request.kind === ACT_KIND.TASKS_PULL_REQUEST &&
-          request.payload.repository === "acme/relay";
-        return Promise.resolve(
-          request.kind === ACT_KIND.TASKS_PULL_REQUEST
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: reached
-                  ? {
-                      number: 42,
-                      title: "Expire old invitations",
-                      url: MERGED,
-                      state: PULL_REQUEST_STATE.MERGED,
-                      author: "octo-dev",
-                      additions: 120,
-                      deletions: 30,
-                    }
-                  : null,
-              }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
+        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+          const { repository, number } = request.payload;
+          const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
+        }
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
       },
     },
   });
@@ -291,8 +319,47 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   );
   const [pullRequest, opened, shelved, unreached] = container.querySelectorAll(".mention-chip");
 
-  assert.deepEqual(cardNotes(pullRequest), ["relay#42 · Merged · +120 −30", "Opened by octo-dev"]);
+  assert.deepEqual(cardNotes(pullRequest), [
+    "relay#42 · Merged · +120 −30 in 4 files",
+    "Opened by octo-dev · merged 2h ago",
+    "main ← invite-expiry",
+    "7 comments · 1 commit",
+  ]);
   assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev"]);
   assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned"]);
   assert.deepEqual(cardNotes(unreached), [UNREACHED]);
+});
+
+/** Each label a chip's card names: its name, and the colour its dot is painted, where GitHub's colour is six hex digits. */
+function cardLabels(chip: Element | undefined): [string | null, string][] {
+  assert.ok(chip, "the link is drawn as its chip");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
+    (label): [string | null, string] => [
+      label.textContent,
+      label.querySelector<HTMLElement>(".card-label-dot")?.style.background ?? "",
+    ],
+  );
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  return labels;
+}
+
+test("a pull request's card names its labels, each with a dot of its own colour where GitHub's is one, and one read from an older service says its key and state alone", async () => {
+  const { container } = await drawn(
+    `Lands after ${MERGED} and ${OLDER_SERVICE}.`,
+    ACME_WITH_GITHUB,
+  );
+  const [whole, older] = container.querySelectorAll(".mention-chip");
+
+  assert.deepEqual(cardLabels(whole), [
+    ["service", "rgb(79, 209, 139)"],
+    ["not a colour", ""],
+  ]);
+  assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
+  assert.deepEqual(cardLabels(older), []);
 });
