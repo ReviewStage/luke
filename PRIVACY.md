@@ -181,6 +181,19 @@ plan ever showed, pasted and undone, is deleted a day after it was sent.
 Deleting the task deletes its pictures; deleting your account leaves the
 pictures you added to a task that stays, as it leaves the words you wrote.
 
+**A plan's comments.** When you comment on a task's plan, our service keeps
+the comment in our database beside the task, under the task rather than your
+account: your words, which member wrote them and when, the words of the plan
+the thread is on as they stood when it was started, where those words stand
+in the plan now, and the section they stand in. It keeps the same of each
+reply, edit, resolve, and reopen, and of every comment Luke or a coding agent
+on the task writes, naming the member whose turn it ran on. Every member of
+the workspace sees every comment, as they see the plan. Comments are stored
+as written and readable by our own operators, like the plan. Deleting a
+comment or a thread deletes it at once; deleting the task deletes all of its
+comments; deleting your account leaves the comments you wrote on a task that
+stays, naming nobody, as it leaves the words you wrote.
+
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
 template (up to 20,000 characters; a built-in one until you do), sent as you
