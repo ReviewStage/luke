@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -10,7 +11,10 @@ import { countedNumber } from "./service-wire.js";
  * GitHub last saw it change, with whether the developer has installed the
  * App anywhere at all and where to send them to install it. A repository is
  * named everywhere by its full name, `owner/name` as GitHub spells it, which
- * is the one form a plan stores and a coding agent checks out.
+ * is the one form a plan stores and a coding agent checks out. One pull
+ * request of such a repository is read the same way, by its number, and
+ * travels as no more than a link to it draws: its number, title, page, and
+ * where it stands.
  */
 
 const GITHUB_REPOSITORY_BOUNDS = {
@@ -54,12 +58,14 @@ export type GitHubRepository = typeof githubRepositorySchema.Type;
 /**
  * The queries a repositories read names: the workspace a listing is for,
  * since a workspace of a GitHub App installation lists only that
- * installation's repositories, and, for a read of one repository's tree or
- * skills, the repository, `owner/name`.
+ * installation's repositories; for a read of one repository's tree, skills,
+ * or pull request, the repository, `owner/name`; and for the pull request's,
+ * its number.
  */
 export const GITHUB_REPOSITORIES_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
+  NUMBER: "number",
 } as const;
 
 /** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
@@ -72,3 +78,75 @@ export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
 });
 
 export type GitHubRepositoriesAnswer = typeof githubRepositoriesAnswerSchema.Type;
+
+/** A pull request's number as the wire takes it: GitHub numbers a repository's issues and pull requests from one. */
+export const githubPullRequestNumberSchema = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(1),
+);
+
+/**
+ * One pull request of a repository as a link to it is drawn: its number,
+ * its title, its own page on GitHub, and where it stands, merged before
+ * closed and draft before open, as an agent's pill reads it.
+ */
+export const githubPullRequestSummarySchema = EffectSchema.Struct({
+  number: githubPullRequestNumberSchema,
+  title: EffectSchema.String,
+  /** The pull request's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+});
+
+export type GitHubPullRequestSummary = typeof githubPullRequestSummarySchema.Type;
+
+/**
+ * One pull request of a repository a workspace's installation reaches
+ * (GET), by its number: null where the repository holds none of that
+ * number, or where the installation does not reach the repository, which
+ * the answer does not tell apart, since a link to either draws the same.
+ */
+export const githubRepositoryPullRequestAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(githubPullRequestSummarySchema),
+});
+
+export type GitHubRepositoryPullRequestAnswer = typeof githubRepositoryPullRequestAnswerSchema.Type;
+
+/** GitHub's own host, whose `/<owner>/<name>/pull/<number>` pages are its pull requests. */
+const GITHUB_HOST = "github.com";
+
+/** The step before a pull request's number in its page's path. */
+const PULL_STEP = "pull";
+
+/** A pull request's number as its page's path spells it: whole, from one. */
+const PULL_NUMBER = /^[1-9]\d{0,8}$/u;
+
+/** A pull request a page's address names: its repository, `owner/name`, and its number. */
+export interface PullRequestAddress {
+  readonly repository: string;
+  readonly number: number;
+}
+
+/**
+ * The pull request a page of GitHub's is, `acme/relay` and `42` from
+ * `https://github.com/acme/relay/pull/42` or any page under it, its Files
+ * tab say; nothing for any other address, another of GitHub's pages among
+ * them.
+ */
+export function pullRequestAddressOf(href: string): PullRequestAddress | undefined {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname !== GITHUB_HOST) return undefined;
+  const [first, owner, name, step, number] = url.pathname.split("/");
+  if (first !== "" || owner === undefined || name === undefined || step !== PULL_STEP) {
+    return undefined;
+  }
+  if (number === undefined || !PULL_NUMBER.test(number)) return undefined;
+  const repository = `${owner}/${name}`;
+  return EffectSchema.is(githubRepositoryFullNameSchema)(repository)
+    ? { repository, number: Number(number) }
+    : undefined;
+}

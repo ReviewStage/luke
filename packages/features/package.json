@@ -27,6 +27,7 @@
     "./desktop-session-wire": "./src/desktop-session-wire.js",
     "./dictation-wire": "./src/dictation-wire.js",
     "./github-connection-wire": "./src/github-connection-wire.js",
+    "./github-repositories-wire": "./src/github-repositories-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./linear-wire": "./src/linear-wire.js",

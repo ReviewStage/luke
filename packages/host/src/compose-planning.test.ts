@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryPullRequestAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
@@ -18,6 +19,7 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
   type PlanlessAgent,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -147,6 +149,8 @@ interface FakeService extends PlanningClient {
     string,
     Record<string, { folders: Record<string, PlanTreeAnswer>; skills: PlanSkillsAnswer }>
   >;
+  /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
+  pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -264,6 +268,7 @@ function fakeService(plans: Plan[]): FakeService {
     folders: {},
     skills: {},
     places: {},
+    pullRequests: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -582,6 +587,8 @@ function fakeService(plans: Plan[]): FakeService {
       ),
     readRepositorySkills: (place) =>
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
+    readRepositoryPullRequest: (place, number) =>
+      Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -2160,6 +2167,65 @@ it.effect(
         skills("review"),
       );
     }),
+);
+
+it.effect(
+  "a pull request is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, and a number off the wire is refused before the service",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const merged: GitHubRepositoryPullRequestAnswer = {
+        pullRequest: {
+          number: 42,
+          title: "Send invitations in batches",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.MERGED,
+        },
+      };
+      service.pullRequests[ACME.id] = {
+        "acme/relay": new Map([
+          [42, merged],
+          [43, { pullRequest: null }],
+        ]),
+      };
+      const { call, told } = yield* subject(service);
+      const asked = (number: number) =>
+        call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          number,
+        });
+
+      const read = yield* asked(42);
+      const none = yield* asked(43);
+      const unanswered = yield* asked(44);
+      const offTheWire = yield* Effect.exit(asked(0));
+
+      assert.deepEqual(read, merged);
+      assert.deepEqual(none, { pullRequest: null });
+      assert.deepEqual(unanswered, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      assert.ok(Exit.isFailure(offTheWire), "a pull request is numbered from one");
+      assert.equal(told.length, 0, "a pull request is never told in the view");
+    }),
+);
+
+it.effect("behind a closed account gate a pull request's read does not reach the service", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.pullRequests[ACME.id] = {
+      "acme/relay": new Map([[42, { pullRequest: null }]]),
+    };
+    const { call } = yield* subject(service, { signedIn: false });
+
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+        workspaceId: ACME.id,
+        repository: "acme/relay",
+        number: 42,
+      }),
+      { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    );
+  }),
 );
 
 it.effect("the repository chip's read names the workspace it is for to the service", () =>

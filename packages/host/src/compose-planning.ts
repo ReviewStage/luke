@@ -40,6 +40,7 @@ import {
   type PlanningPageAnswer,
   type PlanningPictureAnswer,
   type PlanningPictureKeepAnswer,
+  type PlanningPullRequestAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -69,6 +70,7 @@ import {
   planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
+  planningPullRequestParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesParamsSchema,
   planningRevisionParamsSchema,
@@ -288,6 +290,7 @@ export type PlanningClient = Pick<
   | "readSkills"
   | "readRepositoryTree"
   | "readRepositorySkills"
+  | "readRepositoryPullRequest"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -1216,6 +1219,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           FetchHttpClient.layer,
         );
         return carried<PlanningSkillsAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      }),
+    // A pull request is answered to the link that asked and held nowhere:
+    // its title and where it stands are read again on the next ask.
+    [GATEWAY_METHOD.PLANNING_PULL_REQUEST]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPullRequestParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a pull request names a workspace, its repository, and the pull request's number",
+          );
+        }
+        if (!gate()) {
+          return carried<PlanningPullRequestAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { number, ...place } = read.success;
+        const answer = yield* Effect.provide(
+          client.readRepositoryPullRequest(place, number),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPullRequestAnswer>(
+          answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+        );
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps

@@ -18,7 +18,9 @@ import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.j
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryPullRequestAnswer,
   githubRepositoriesAnswerSchema,
+  githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
 import { imageBodyOf } from "./image-body.js";
 import {
@@ -100,6 +102,7 @@ import {
   planTreePath,
   planWorkPath,
   type RepositoryPlace,
+  repositoryPullRequestPath,
   repositorySkillsPath,
   repositoryTreePath,
 } from "./service-paths.js";
@@ -473,6 +476,17 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
       planSkillsAnswerSchema,
+    );
+  }
+
+  /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
+  readRepositoryPullRequest(
+    place: RepositoryPlace,
+    number: number,
+  ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
+      githubRepositoryPullRequestAnswerSchema,
     );
   }
 

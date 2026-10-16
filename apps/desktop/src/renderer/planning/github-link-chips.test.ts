@@ -1,0 +1,188 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, test } from "vitest";
+import { signedInAs } from "#testing/app-state";
+import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TranscriptWords } from "./transcript-blocks";
+
+/**
+ * github-link-chips.test.ts -- a pull request's link in a plan's words says
+ * what the workspace's GitHub App answers for it: a bare link is called by
+ * the repository's name, the number, and the title, a labelled one keeps its
+ * label, and each wears the pull request's mark for where it stands and says
+ * it in words. The pull request is read by repository and number through the
+ * plan's workspace, nothing is asked where that workspace has no active
+ * installation, and one the App answers nothing for stays as its address
+ * says. Synthetic workspace, plan, and pull requests.
+ */
+
+const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const AT = 1_792_000_000_000;
+const MERGED = "https://github.com/acme/relay/pull/42";
+const UNREACHED = "https://github.com/acme/secret/pull/7";
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+/** Acme, no GitHub installation. */
+const ACME: Workspace = {
+  id: "workspace-acme",
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+  memberCount: 2,
+};
+
+/** Acme with its GitHub App installed. */
+const ACME_WITH_GITHUB: Workspace = { ...ACME, github: { login: "acme", active: true } };
+
+const TASK: PlanSummary = {
+  id: PLAN,
+  workspaceId: "workspace-acme",
+  name: "Teammate invitations",
+  createdAt: AT,
+  updatedAt: AT,
+  repository: "acme/relay",
+};
+
+/** Main's document holding the plan in Acme. */
+function stateWith(workspace: Workspace): AppStateSnapshot {
+  const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
+  return {
+    ...snapshot,
+    planning: { ...IDLE_PLANNING_VIEW, plans: [TASK], workspaces: [workspace] },
+  };
+}
+
+/** The plan's page, as its words' chips stand on it. */
+const PAGE: PlanMentionsValue = {
+  planId: PLAN,
+  planName: TASK.name,
+  workspace: "acme",
+  workspaceId: "workspace-acme",
+  repository: "acme/relay",
+  text: () => "",
+  doors: {
+    planId: PLAN,
+    place: { workspace: "acme", repository: "acme/relay" },
+    anchors: new Set(),
+    onOpenPlan: () => undefined,
+    onOpenFile: undefined,
+  },
+};
+
+let root: Root | undefined;
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+});
+
+/** The words drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
+async function drawn(text: string, workspace: Workspace) {
+  const asked: Act[] = [];
+  const state = stateWith(workspace);
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(state),
+      act: (request: Act): Promise<ActOutcome> => {
+        asked.push(request);
+        const reached =
+          request.kind === ACT_KIND.PLANNING_PULL_REQUEST &&
+          request.payload.repository === "acme/relay";
+        return Promise.resolve(
+          request.kind === ACT_KIND.PLANNING_PULL_REQUEST
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: reached
+                  ? {
+                      number: 42,
+                      title: "Expire old invitations",
+                      url: MERGED,
+                      state: PULL_REQUEST_STATE.MERGED,
+                    }
+                  : null,
+              }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+        );
+      },
+    },
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlanMentions, {
+          value: PAGE,
+          children: createElement(TranscriptWords, { text }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  return { container, asked };
+}
+
+/** Each chip drawn: the name it says, the state after it, and the pull request's mark it wears, if any. */
+function chips(container: HTMLElement): [string | null, string | null, string | undefined][] {
+  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
+    chip.querySelector(".mention-chip-label")?.textContent ?? null,
+    chip.querySelector(".mention-chip-state")?.textContent ?? null,
+    chip.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
+  ]);
+}
+
+test("a pull request's link says its repository, number, title, and state, wearing its mark, as the plan's workspace's GitHub App answers them", async () => {
+  const { container, asked } = await drawn(
+    `Lands after ${MERGED}, [the expiry change](${MERGED}), and ${UNREACHED}.`,
+    ACME_WITH_GITHUB,
+  );
+
+  assert.deepEqual(chips(container), [
+    ["relay#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["the expiry change", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["secret/pull/7", null, undefined],
+  ]);
+  assert.deepEqual(
+    asked
+      .filter((each) => each.kind === ACT_KIND.PLANNING_PULL_REQUEST)
+      .map((each) => each.payload),
+    [
+      { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
+      { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
+      { workspaceId: "workspace-acme", repository: "acme/secret", number: 7 },
+    ],
+  );
+});
+
+test("where the workspace has no GitHub App installed, nothing is asked and the chip says what the address says", async () => {
+  const { container, asked } = await drawn(`See ${MERGED}.`, ACME);
+
+  assert.deepEqual(chips(container), [["relay/pull/42", null, undefined]]);
+  assert.deepEqual(
+    asked.filter((each) => each.kind === ACT_KIND.PLANNING_PULL_REQUEST),
+    [],
+  );
+});

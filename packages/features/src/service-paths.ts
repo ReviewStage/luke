@@ -112,6 +112,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
   /**
+   * One pull request of a repository a workspace's installation reaches, as
+   * GitHub holds it now (GET), named as `GITHUB_REPOSITORY_TREE` names the
+   * repository and by its number (`GITHUB_REPOSITORIES_QUERY`), for a link
+   * to it to draw its title and where it stands; the answer is
+   * `github-repositories-wire.ts`'s, null where there is none to draw.
+   */
+  GITHUB_REPOSITORY_PULL_REQUEST: "/api/github/repositories/pull-request",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
@@ -390,6 +398,13 @@ export function repositoryTreePath(
 /** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
 export function repositorySkillsPath(place: RepositoryPlace): string {
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
+}
+
+/** One pull request of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
+export function repositoryPullRequestPath(place: RepositoryPlace, number: number): string {
+  const query = repositoryPlaceQuery(place);
+  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

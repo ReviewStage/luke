@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "number": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "open",
+        "draft",
+        "merged",
+        "closed"
+      ]
+    }
+  },
+  "required": [
+    "number",
+    "title",
+    "url",
+    "state"
+  ],
+  "additionalProperties": false
+}

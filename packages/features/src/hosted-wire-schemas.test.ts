@@ -175,6 +175,10 @@ const EFFECT_MODULE_SCHEMAS = {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
     githubRepositoriesAnswerSchema: githubRepositoriesWire.githubRepositoriesAnswerSchema,
+    githubPullRequestNumberSchema: githubRepositoriesWire.githubPullRequestNumberSchema,
+    githubPullRequestSummarySchema: githubRepositoriesWire.githubPullRequestSummarySchema,
+    githubRepositoryPullRequestAnswerSchema:
+      githubRepositoriesWire.githubRepositoryPullRequestAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,

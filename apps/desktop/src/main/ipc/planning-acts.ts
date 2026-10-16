@@ -24,6 +24,8 @@ import type {
   PlanningPictureParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
+  PlanningPullRequestAnswer,
+  PlanningPullRequestParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
   PlanningRepositoriesParams,
@@ -107,6 +109,9 @@ export interface PlanningActsDependencies {
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
     planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
     planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
+    planningPullRequest(
+      params: PlanningPullRequestParams,
+    ): Effect.Effect<PlanningPullRequestAnswer>;
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
@@ -207,6 +212,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_FILE
   | typeof ACT_KIND.PLANNING_TREE
   | typeof ACT_KIND.PLANNING_SKILLS
+  | typeof ACT_KIND.PLANNING_PULL_REQUEST
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
@@ -457,6 +463,16 @@ export function planningActRows(
     [ACT_KIND.PLANNING_SKILLS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SKILLS, sender);
       return host.planningSkills(params);
+    },
+    // A service that did not answer is refused, so a link draws what it holds
+    // rather than reading the silence as no pull request.
+    [ACT_KIND.PLANNING_PULL_REQUEST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PULL_REQUEST, sender);
+      return Effect.flatMap(host.planningPullRequest(params), (answer) =>
+        "pullRequest" in answer
+          ? Effect.succeed(answer.pullRequest)
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.PLANNING_PULL_REQUEST].refusal })),
+      );
     },
     [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);
