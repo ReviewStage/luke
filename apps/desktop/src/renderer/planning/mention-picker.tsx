@@ -1,4 +1,5 @@
-import type { IntegrationProvider } from "@luke/features/integration-wire";
+import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -16,7 +17,13 @@ import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
-import { AppWindowIcon, BookOpenIcon, FolderIcon, HashIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  BookOpenIcon,
+  FolderIcon,
+  GitPullRequestIcon,
+  HashIcon,
+} from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
@@ -24,6 +31,7 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
 import { NO_PLAN } from "./plan-mentions";
+import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 
 /**
@@ -51,7 +59,9 @@ import { AgentMark } from "./tab-look";
  *
  * On a plan's page the list offers what the plan holds beside its words
  * too: the pages agents showed on it, each by its title and its tab's
- * glyph. And wherever the words go, it offers the coding agents of the
+ * glyph, and the pull requests its agents published, each by its number
+ * and title and its mark, a pick written as the pull request's GitHub
+ * address, the link mention a pasted one becomes. And wherever the words go, it offers the coding agents of the
  * whole workspace, each by its tab's name and its harness's mark, labelled
  * by its task: the plan's own agents first, then the workspace's others,
  * on another task or on none, as the place reads them the first time the
@@ -88,6 +98,7 @@ const MENTION_GROUP = {
   PLAN: "Plan",
   PAGES: "Pages",
   AGENTS: "Agents",
+  PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
   FROM: "Mention from",
@@ -99,6 +110,7 @@ const MENTION_FROM = {
   PLAN: "plan",
   PAGES: "pages",
   AGENTS: "agents",
+  PULL_REQUESTS: "prs",
   SKILLS: "skills",
   SERVER: "server",
 } as const;
@@ -136,6 +148,9 @@ const AGENT_DETAIL = {
 
 /** What stands between an agent's task and its being archived in its row's detail. */
 const DETAIL_JOIN = " · ";
+
+/** What a pull request's row says beside its name where no agent is named for it. */
+const PULL_REQUEST_DETAIL = "Pull request";
 
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
@@ -209,6 +224,8 @@ type MentionRow = {
   readonly terms: string;
   /** An agent's tile, which its row wears as its tab does; none for any other row. */
   readonly actor?: Actor | undefined;
+  /** A pull request, whose mark its row wears for where it stands; none for any other row. */
+  readonly pullRequest?: MentionablePullRequest | undefined;
 } & ({ readonly mention: Mention } | { readonly skill: string } | { readonly from: MentionKind });
 
 interface MentionGroup {
@@ -430,6 +447,34 @@ function agentRows(
   return rows;
 }
 
+/**
+ * Each of the task's pull requests' rows, by its number and title, wearing
+ * its mark, labelled by the agent that published it: a pick writes its
+ * GitHub address, as a pull request's link pasted is written; none where
+ * no plan stands.
+ */
+function pullRequestRows(
+  planId: string,
+  pullRequests: readonly MentionablePullRequest[],
+): MentionRow[] {
+  if (planId === NO_PLAN) return [];
+  return pullRequests.map((pullRequest) => {
+    const name = `#${pullRequest.number} ${pullRequest.title}`;
+    const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
+    return {
+      mention: {
+        kind: MENTION_KIND.LINK,
+        provider: INTEGRATION_PROVIDER.GITHUB,
+        url: pullRequest.url,
+      },
+      name,
+      detail,
+      terms: `${name} ${detail} ${PULL_REQUEST_DETAIL}`,
+      pullRequest,
+    };
+  });
+}
+
 /** Each connected server's row, and where asked each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
 function serverRows(
   servers: readonly NamedServer[],
@@ -513,6 +558,7 @@ interface KindRows {
   readonly plan: readonly MentionRow[];
   readonly pages: readonly MentionRow[];
   readonly agents: readonly MentionRow[];
+  readonly pullRequests: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
   /** The connected servers' rows, or the one server's the list is narrowed to. */
   readonly servers: readonly MentionRow[];
@@ -535,6 +581,8 @@ function narrowedRows(
       return best(rows.pages, term, PER_KIND);
     case MENTION_FROM.AGENTS:
       return best(rows.agents, term, PER_KIND);
+    case MENTION_FROM.PULL_REQUESTS:
+      return best(rows.pullRequests, term, PER_KIND);
     case MENTION_FROM.SKILLS:
       return best(rows.skills, term, PER_KIND);
     case MENTION_FROM.SERVER:
@@ -572,6 +620,7 @@ function groupsFor(
     { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
+    { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
     { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, term, PER_GROUP) },
     { label: MENTION_GROUP.FROM, rows: bare ? kinds.map(kindRow) : [] },
@@ -589,6 +638,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_FROM.AGENTS:
       return <AgentMark provider={undefined} />;
+    case MENTION_FROM.PULL_REQUESTS:
+      return <GitPullRequestIcon aria-hidden="true" />;
     case MENTION_FROM.SKILLS:
       return <BookOpenIcon aria-hidden="true" />;
     case MENTION_FROM.SERVER:
@@ -600,6 +651,7 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
+  if (row.pullRequest !== undefined) return <PullRequestMark pullRequest={row.pullRequest} />;
   const { mention } = row;
   switch (mention.kind) {
     case MENTION_KIND.FILE:
@@ -781,6 +833,12 @@ export interface MentionableAgent {
   readonly archived?: boolean | undefined;
 }
 
+/** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
+export interface MentionablePullRequest
+  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks"> {
+  readonly agent: string | undefined;
+}
+
 /**
  * Reads the workspace's coding agents: the newest where no words are given,
  * or, found by the service, those whose title or task's name holds the
@@ -794,6 +852,7 @@ export type MentionAgentsReader = (
 /** The pages and agents of a place that offers none. */
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
+const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
 export interface MentionSource {
@@ -812,6 +871,8 @@ export interface MentionSource {
   readonly agents?: readonly MentionableAgent[] | undefined;
   /** Reads the workspace's coding agents, which the list offers after the plan's own; none where the place offers none. */
   readonly readAgents?: MentionAgentsReader | undefined;
+  /** The pull requests the plan's agents published, as its page holds them now; none where the place offers none. */
+  readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
@@ -828,8 +889,9 @@ function treeKey(
 /**
  * The kinds the place offers, in the list's order: its repository's files
  * and folders where it names one, the plan and its pages where a plan
- * stands, the workspace's agents where it reads them, the repository's
- * skills where the words go to an agent, and each connected server, the
+ * stands, the workspace's agents where it reads them, the pull requests
+ * the plan's agents published, the repository's skills where the words go
+ * to an agent, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
  */
 function kindsOf(
@@ -840,6 +902,7 @@ function kindsOf(
 ): readonly MentionKind[] {
   const { planId, repository } = source;
   const pages = planId === NO_PLAN ? 0 : (source.pages ?? NO_PAGES).length;
+  const pullRequests = planId === NO_PLAN ? 0 : (source.pullRequests ?? NO_PULL_REQUESTS).length;
   const agents =
     source.readAgents !== undefined ||
     (planId !== NO_PLAN && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
@@ -875,6 +938,15 @@ function kindsOf(
           },
         ]
       : []),
+    ...(pullRequests === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PULL_REQUESTS,
+            name: MENTION_GROUP.PULL_REQUESTS,
+            detail: counted(pullRequests, "pull request", "pull requests"),
+          },
+        ]),
     ...(known.length === 0
       ? []
       : [
@@ -1046,6 +1118,7 @@ export function useMentionPicker({
               self,
               term,
             ),
+            pullRequests: pullRequestRows(planId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             // A list narrowed to one server offers its tools before a word is typed.
             servers:

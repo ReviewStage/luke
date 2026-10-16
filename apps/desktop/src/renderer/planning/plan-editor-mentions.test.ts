@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
@@ -365,4 +366,45 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
   assert.equal(crumb(plan.container), "Plan");
   assert.deepEqual(all, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
   assert.deepEqual(listed(plan.container), [["Plan", ["Rollout"]]]);
+});
+
+test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    pullRequests: [
+      {
+        number: 3059,
+        title: "feat(billing): bill by seat",
+        url: "https://github.com/acme/relay/pull/3059",
+        state: PULL_REQUEST_STATE.OPEN,
+        checks: CHECK_SUMMARY.PENDING,
+        agent: "Bill by seat",
+      },
+    ],
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" See @seat");
+  const offered = listed(plan.container);
+  plan.press("Enter");
+  await act(async () => undefined);
+
+  assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
+  assert.deepEqual(
+    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+      (chip) => chip.textContent,
+    ),
+    ["#3059 feat(billing): bill by seat"],
+  );
 });

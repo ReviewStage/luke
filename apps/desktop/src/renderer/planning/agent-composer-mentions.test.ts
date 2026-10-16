@@ -5,7 +5,13 @@ import type {
   CodingAgentAgentAnswer,
   CodingAgentWorkspaceListParams,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -44,6 +50,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import {
+  mentionablePullRequests,
   PlanMentions,
   type PlanMentionsValue,
   planlessMentions,
@@ -1133,4 +1140,112 @@ test("typing a server's provider and a colon narrows the list to that server, it
 
   assert.equal(crumb(container), "Linear");
   assert.deepEqual(listed(container), ["Linear", "Linear · list_issues", "Linear · get_issue"]);
+});
+
+/** A pull request an agent of the task published, as GitHub holds it now. */
+function pullRequest(
+  number: number,
+  title: string,
+  state: CodingAgentPullRequest["state"],
+): CodingAgentPullRequest {
+  return {
+    number,
+    title,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    state,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+  };
+}
+
+const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STATE.OPEN);
+const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
+
+/** The task's page whose agents published two pull requests, one of them by an archived agent, and whose third agent published none. */
+function publishedPage(): PlanMentionsValue {
+  return {
+    ...taskPage(),
+    pullRequests: mentionablePullRequests({
+      agents: [BILLING_AGENT, LEDGER],
+      archived: [OLD_AGENT],
+      models: undefined,
+      pullRequests: new Map([
+        [OLD_AGENT.id, SWEEP],
+        [BILLING_AGENT.id, SEATS],
+      ]),
+    }),
+  };
+}
+
+/** The Pull requests group's rows, each by its name, its detail, and where its mark says it stands. */
+function pullRequestsListed(container: HTMLElement): [string, string, string | null][] {
+  return [
+    ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
+  ].map((row) => [
+    row.querySelector(".plan-compose-menu-name")?.textContent ?? "",
+    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
+  ]);
+}
+
+test("an @ on a task's page offers the pull requests its agents published, each by its number and title, labelled by its agent", async () => {
+  const { container } = await box(publishedPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+
+  assert.deepEqual(pullRequestsListed(container), [
+    ["#3059 feat(billing): bill by seat", "Bill by seat", PULL_REQUEST_STATE.OPEN],
+    ["#3061 test: sweep flaky tests", "Old invoices", PULL_REQUEST_STATE.MERGED],
+  ]);
+});
+
+test("a pull request picked from the @ list is drawn as its link's chip and sent as its GitHub address", async () => {
+  const { container, sent } = await box(publishedPage());
+
+  typeInComposer(container, "Review @3059");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["#3059 feat(billing): bill by seat"],
+  );
+  assert.deepEqual(sent, [
+    `Review ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.GITHUB, url: SEATS.url }, "#3059 feat(billing): bill by seat", PLACE)}`,
+  ]);
+  assert.equal(
+    sent[0],
+    "Review [@#3059 feat(billing): bill by seat](https://github.com/acme/relay/pull/3059)",
+  );
+});
+
+test("the task's pull requests are a kind of their own, narrowed to by their row or by @prs:", async () => {
+  const { container } = await box(publishedPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  const kind = kindsListed(container).find(([name]) => name === "Pull requests");
+  highlightRow(container, "Mention from", "Pull requests");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const opened = [crumb(container), listed(container)];
+  typeInComposer(container, " and @prs:sweep");
+  await settle();
+
+  assert.deepEqual(kind, ["Pull requests", "2 pull requests"]);
+  assert.deepEqual(opened, [
+    "Pull requests",
+    ["#3059 feat(billing): bill by seat", "#3061 test: sweep flaky tests"],
+  ]);
+  assert.deepEqual(
+    [crumb(container), listed(container)],
+    ["Pull requests", ["#3061 test: sweep flaky tests"]],
+  );
 });
