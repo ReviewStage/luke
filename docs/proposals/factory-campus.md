@@ -24,7 +24,7 @@ version's architecture:
 
 These sit with trees and lamplit roads, at night or by day. The work shows in
 a few legible cues on that scene. Exact numbers wait in the inspector for a
-click, or for Luke to walk up.
+click.
 
 ## The data it draws, and nothing more
 
