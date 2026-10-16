@@ -278,3 +278,10 @@ body {
 .catalog-grow {
   flex: 1;
 }
+
+/* A dialog's long words, which give way and scroll in a short window so the
+   answers under them stay on the card. */
+.catalog-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}

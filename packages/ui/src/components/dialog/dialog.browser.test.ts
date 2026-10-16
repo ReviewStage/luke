@@ -89,6 +89,32 @@ test("it opens on its field, keeps Tab and Shift-Tab among its controls, and Esc
   await expect.element(opener).toHaveFocus();
 });
 
+test("a link or a select at either end of the card is one of its controls, so Tab wraps from it", async () => {
+  await mount(
+    createElement(Dialog, {
+      labelledBy: "title",
+      onDismiss: () => undefined,
+      children: [
+        createElement("h2", { key: "title", id: "title" }, "Invite"),
+        createElement(
+          "select",
+          { key: "role", "aria-label": "Role" },
+          createElement("option", null, "Member"),
+        ),
+        createElement("button", { key: "send", type: "button" }, "Send"),
+        createElement("a", { key: "help", href: "#roles" }, "About roles"),
+      ],
+    }),
+  );
+  const link = page.getByRole("link", { name: "About roles" });
+  const select = page.getByRole("combobox", { name: "Role" });
+  link.element().focus();
+  await userEvent.keyboard("{Tab}");
+  await expect.element(select).toHaveFocus();
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  await expect.element(link).toHaveFocus();
+});
+
 test("an input method's Escape and Return are its own, and the dialog hears its keys only once it is done", async () => {
   const { heard, dialog } = await opened();
   const field = page.getByRole("textbox", { name: "Name" }).element();

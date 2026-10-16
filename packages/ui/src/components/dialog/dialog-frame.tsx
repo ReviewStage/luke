@@ -16,11 +16,14 @@ export const DIALOG_ROLE = {
 
 export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 
-/** What Tab may land on inside the card: its enabled controls, and never a hidden one nor one taken out of the Tab order, as a menu's rows are. */
+/** What Tab may land on inside the card: its enabled controls and links, and never a hidden one nor one taken out of the Tab order, as a menu's rows are. */
 const FOCUSABLE = [
+  'a[href]:not([tabindex="-1"])',
   'button:not([disabled]):not([tabindex="-1"])',
   'textarea:not([disabled]):not([tabindex="-1"])',
+  'select:not([disabled]):not([tabindex="-1"])',
   'input:not([disabled]):not([hidden]):not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"]):not(:disabled)',
 ].join(", ");
 
 /** The `data-` attributes a caller still draws its card with, for its own styles. */

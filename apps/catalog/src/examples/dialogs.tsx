@@ -21,7 +21,8 @@ import { CatalogSection } from "../section";
 /**
  * dialogs.tsx -- a dialog holding a field, and a question that must be
  * answered, a long one, each opened from its button and put away by its
- * answers, Escape, or a press on the dimmed window.
+ * answers, Escape, or a press on the dimmed window. The question's words
+ * scroll inside the card in a short window, so its answers stay on screen.
  */
 
 /** A dialog that renames a plan, its field taking focus as it opens. */
@@ -75,10 +76,12 @@ function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
       <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
         Delete “Quarterly planning for the platform team’s migration”?
       </Text>
-      <Text tone={TEXT_TONE.MUTED} id={bodyId}>
-        The plan, its tasks, and every agent’s transcript under it go for good. Anyone in the
-        workspace who opened it sees it gone the next time they look.
-      </Text>
+      <div className="catalog-dialog-scroll">
+        <Text tone={TEXT_TONE.MUTED} id={bodyId}>
+          The plan, its tasks, and every agent’s transcript under it go for good. Anyone in the
+          workspace who opened it sees it gone the next time they look.
+        </Text>
+      </div>
       <Inline justify={JUSTIFY.END}>
         <Button ref={cancel} variant={BUTTON_VARIANT.OUTLINE} onClick={onClose}>
           Cancel
