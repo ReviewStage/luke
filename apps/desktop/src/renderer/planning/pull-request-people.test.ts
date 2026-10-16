@@ -272,35 +272,6 @@ test("a pull request the agent opened as its developer names them and Luke among
   );
 });
 
-test("the reviews that said something fold under their count, each by its reviewer, where it left them, and the start of its words", async () => {
-  const tab = await draw(
-    createElement(AgentChangesTab, {
-      agentId: AGENT.id,
-      control,
-      shown: true,
-      repository: "acme/relay",
-      tree: { open: false, onToggle: () => undefined },
-    }),
-  );
-  const folded =
-    tab.querySelector<HTMLDetailsElement>("details.changes-comments") ??
-    assert.fail("the comments fold");
-  assert.equal(folded.open, false);
-  assert.equal(folded.querySelector("summary")?.textContent, "Review comments 2");
-  assert.deepEqual(
-    [...folded.querySelectorAll(".changes-comment")].map((comment) => [
-      comment.querySelector(".actor-ref")?.getAttribute("data-kind"),
-      comment.querySelector(".actor-ref-name")?.textContent,
-      comment.querySelector(".changes-comment-state")?.textContent,
-      comment.querySelector(".changes-comment-words")?.textContent,
-    ]),
-    [
-      ["github", "devin-ai-integration", "Commented", "Found 1 potential issue."],
-      ["person", "Charles Pan", "Approved", "Ship it."],
-    ],
-  );
-});
-
 test("a Changes card says who opened the pull request and its reviewers once its tab has read them, and neither before", async () => {
   const subject = agentSubject(control, AGENT.id, NOTHING_HELD, false);
   const card = (people: CodingAgentChangesPeople | undefined) =>
@@ -324,7 +295,7 @@ test("a Changes card says who opened the pull request and its reviewers once its
   assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 3);
 });
 
-test("a pull request that changes no file still says who it names and its review comments, over the line saying it changes nothing", async () => {
+test("a pull request that changes no file still says who it names, over the line saying it changes nothing", async () => {
   const tab = await draw(
     createElement(AgentChangesTab, {
       agentId: AGENT.id,
@@ -341,7 +312,6 @@ test("a pull request that changes no file still says who it names and its review
     }),
   );
   assert.ok(tab.querySelector(".changes-people"), "the people stand");
-  assert.ok(tab.querySelector("details.changes-comments"), "the comments stand");
   assert.match(tab.textContent ?? "", /This pull request changes no files\./u);
 });
 

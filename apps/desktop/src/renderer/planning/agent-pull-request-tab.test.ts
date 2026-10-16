@@ -4,19 +4,21 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
+  CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
   type CodingAgentOverview,
   type CodingAgentSummary,
   MERGE_STATE,
   PULL_REQUEST_STATE,
+  type PullRequestState,
   REVIEW_STATE,
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
@@ -25,6 +27,7 @@ import { codingAgentsControl } from "#testing/plans-control";
 import { MemberDirectory } from "../member-directory";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**
  * agent-pull-request-tab.test.ts -- an agent's Pull request tab draws its
@@ -137,18 +140,60 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's agents, the one whose pull request it is among them, its read answering as given. */
-function controlAnswering(read: CodingAgentsControl["readOverview"]): CodingAgentsControl {
+/** The pull request as what the agent published names it, which the tab's bar wears. */
+function published(state: PullRequestState) {
+  return {
+    number: OVERVIEW.number,
+    title: OVERVIEW.title,
+    url: PAGE,
+    state,
+    checks: CHECK_SUMMARY.FAILING,
+    additions: 4,
+    deletions: 1,
+    changedFiles: 1,
+  };
+}
+
+/** The plan's agents, the one whose pull request it is among them, its reads answering as given. */
+function controlAnswering(
+  read: CodingAgentsControl["readOverview"],
+  state: PullRequestState = PULL_REQUEST_STATE.OPEN,
+  readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } }),
+): CodingAgentsControl {
   return codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
+    pullRequests: new Map([[AGENT.id, published(state)]]),
     readOverview: read,
+    readChanges,
+  });
+}
+
+/** The tab, holding the view its switch chooses as the side panel does. */
+function Switching({ control }: { control: CodingAgentsControl }) {
+  const [view, setView] = useState<PullRequestView>(PULL_REQUEST_VIEW.OVERVIEW);
+  return createElement(AgentPullRequestTab, {
+    agentId: AGENT.id,
+    control,
+    shown: true,
+    repository: "acme/relay",
+    tree: { open: false, onToggle: () => undefined },
+    view,
+    onView: setView,
+  });
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
 /** Draws the agent's tab inside the workspace's member directory, its reads landed. */
-async function draw(control: CodingAgentsControl, onOpenChanges = () => undefined) {
+async function draw(control: CodingAgentsControl) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -158,20 +203,22 @@ async function draw(control: CodingAgentsControl, onOpenChanges = () => undefine
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 2 },
           readerId: "user-dana",
-          children: createElement(AgentPullRequestTab, {
-            agentId: AGENT.id,
-            control,
-            shown: true,
-            onOpenChanges,
-          }),
+          children: createElement(Switching, { control }),
         }),
       ),
     ),
   );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  await settle();
   return container;
+}
+
+/** The switch's option of the words given. */
+function option(tab: HTMLElement, words: string): HTMLButtonElement {
+  return (
+    [...tab.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      (each) => each.textContent === words,
+    ) ?? assert.fail(`the switch offers ${words}`)
+  );
 }
 
 /** The words of every element the selector names, in order. */
@@ -180,13 +227,7 @@ function words(container: HTMLElement, selector: string): string[] {
 }
 
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
-  let changes = 0;
-  const tab = await draw(
-    controlAnswering(() => Promise.resolve({ pullRequest: OVERVIEW })),
-    () => {
-      changes += 1;
-    },
-  );
+  const tab = await draw(controlAnswering(() => Promise.resolve({ pullRequest: OVERVIEW })));
 
   assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
@@ -222,12 +263,41 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     assert.fail("a cut comment sends the reader to GitHub");
   await act(async () => more.click());
   assert.deepEqual(opened, [`${PAGE}#issuecomment-2`]);
+});
 
-  const show =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Show changes"]') ??
-    assert.fail("the bar opens the agent's changes");
-  act(() => show.click());
-  assert.equal(changes, 1);
+test("the switch shows the files, read only once shown, and back on the overview draws it as it was, reading neither again", async () => {
+  let overviews = 0;
+  let files = 0;
+  const tab = await draw(
+    controlAnswering(
+      () => {
+        overviews += 1;
+        return Promise.resolve({ pullRequest: OVERVIEW });
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () => {
+        files += 1;
+        return Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
+      },
+    ),
+  );
+  const [overview, changed] = [...tab.querySelectorAll<HTMLElement>(".pull-request-view")];
+  assert.equal(option(tab, "Overview").getAttribute("aria-checked"), "true");
+  assert.deepEqual([overviews, files], [1, 0], "the files are not read before they are shown");
+  assert.equal(changed?.hidden, true);
+
+  act(() => option(tab, "Files changed").click());
+  await settle();
+  assert.deepEqual([overviews, files], [1, 1]);
+  assert.equal(overview?.hidden, true);
+  assert.equal(changed?.hidden, false);
+  assert.match(changed?.textContent ?? "", /This pull request changes no files\./u);
+
+  act(() => option(tab, "Overview").click());
+  await settle();
+  assert.deepEqual([overviews, files], [1, 1], "switching back reads nothing again");
+  assert.equal(overview?.hidden, false);
+  assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
 });
 
 test("a merged pull request says nothing of merging, and one with no description, checks, or comments says so", async () => {
@@ -239,7 +309,9 @@ test("a merged pull request says nothing of merging, and one with no description
     checks: [],
     conversation: [],
   };
-  const tab = await draw(controlAnswering(() => Promise.resolve({ pullRequest: merged })));
+  const tab = await draw(
+    controlAnswering(() => Promise.resolve({ pullRequest: merged }), PULL_REQUEST_STATE.MERGED),
+  );
   assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
   assert.deepEqual(words(tab, ".pull-request-none"), [

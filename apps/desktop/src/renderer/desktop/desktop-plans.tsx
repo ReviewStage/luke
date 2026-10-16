@@ -49,7 +49,7 @@ import { useOpenLink } from "../planning/use-open-link";
 import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
 import { type PlanLooks, useReadMarks } from "../planning/use-plan-looks";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
@@ -66,8 +66,8 @@ import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from ".
 import {
   COLUMN,
   changesTabOf,
+  showPullRequest,
   planCards,
-  pullRequestTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
   useColumnFocus,
@@ -499,10 +499,10 @@ function PlanDocument({
   // An agent's Changes chip opens its pull request's changes in the side panel, beside its
   // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
   const openChanges = (agentId: string) =>
-    sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
-  // Its pull request's chip opens the pull request itself there, under the same agent.
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
+  // Its pull request's chip opens the same tab on the pull request's overview.
   const openPullRequest = (agentId: string) =>
-    sidePanel.onChoose(pullRequestTabOf(agents, agentId, sidePanel.pullRequests));
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.OVERVIEW);
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.

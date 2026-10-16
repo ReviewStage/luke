@@ -134,34 +134,6 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("an agent's Pull request tab opens once beside its Changes tab, stands only on its agent's plan, closes on its own, and is kept across no launch", () => {
-  const first = launch({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
-  act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onChoose({ pullRequest: AGENT }));
-  act(() => first.control().onChoose({ pullRequest: AGENT }));
-  assert.deepEqual(first.control().pullRequests, [{ pullRequest: AGENT }], "opened once");
-  assert.deepEqual(first.control().strip.slice(-2), [{ changes: AGENT }, { pullRequest: AGENT }]);
-  assert.deepEqual(first.control().tab, { pullRequest: AGENT });
-
-  // Another plan never draws it.
-  first.render({ plan: OTHER_PLAN, planAgents: [] });
-  assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "pullRequest" in tab));
-
-  // Back on its plan, closing it leaves the agent's Changes tab standing and chosen.
-  first.render({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
-  assert.deepEqual(first.control().tab, { pullRequest: AGENT });
-  act(() => first.control().onClose({ pullRequest: AGENT }));
-  assert.deepEqual(first.control().pullRequests, []);
-  assert.deepEqual(first.control().changes, [{ changes: AGENT }]);
-  assert.deepEqual(first.control().tab, { changes: AGENT });
-  act(() => first.control().onChoose({ pullRequest: OTHER_AGENT }));
-  first.quit();
-
-  const second = launch({ plan: PLAN, planAgents: [AGENT, OTHER_AGENT] });
-  assert.deepEqual(second.control().pullRequests, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
-});
-
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
   const first = launch({ plan: PLAN, planAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));

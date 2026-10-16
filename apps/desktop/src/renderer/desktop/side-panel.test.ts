@@ -17,13 +17,7 @@ import { plansControl } from "#testing/plans-control";
 import { ChangesCard } from "../planning/agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import {
-  ADD_SECTION,
-  changesOffers,
-  changesTabOf,
-  panelEntries,
-  pullRequestTabOf,
-} from "./side-panel";
+import { changesOffers, changesTabOf } from "./side-panel";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -87,62 +81,6 @@ test('an agent\'s Changes chip opens the one tab the "+" offers for its pull req
   assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []), {
     changes: SECOND.id,
   });
-});
-
-test('the "+" offers each pull request once as a Pull request tab, under the agent its Changes tab stands for, found by its title and number', () => {
-  const control = agents();
-  const panel = plansControl().sidePanel;
-  const chosen: unknown[] = [];
-  const entries = panelEntries({
-    panel: { ...panel, onChoose: (tab) => chosen.push(tab) },
-    kinds: [],
-    workers: [],
-    files: [],
-    changes: changesOffers(control),
-  }).filter((entry) => entry.row.section === ADD_SECTION.PULL_REQUESTS);
-  assert.deepEqual(
-    entries.map((entry) => [entry.row.label, entry.row.detail, entry.row.terms]),
-    [
-      [
-        "Pull request: Invite flow",
-        "#41",
-        ["Pull request: Invite flow", "Teammate invitations", "#41"],
-      ],
-      [
-        "Pull request: Expiry job",
-        "#42",
-        ["Pull request: Expiry job", "Expire invitations", "#42"],
-      ],
-    ],
-  );
-  for (const entry of entries) entry.onPick();
-  assert.deepEqual(chosen, [{ pullRequest: FIRST.id }, { pullRequest: THIRD.id }]);
-});
-
-test("a shared pull request's Pull request tab stands under the agent it was opened under, whichever agent's Changes tab is open", () => {
-  const control = agents();
-  const panel = { ...plansControl().sidePanel, pullRequests: [{ pullRequest: FIRST.id }] };
-  const openChanges = [{ changes: SECOND.id }];
-  const chosen: unknown[] = [];
-  const [row] = panelEntries({
-    panel: { ...panel, onChoose: (tab) => chosen.push(tab) },
-    kinds: [],
-    workers: [],
-    files: [],
-    changes: changesOffers(control, openChanges),
-  }).filter((entry) => entry.row.section === ADD_SECTION.PULL_REQUESTS);
-  assert.equal(
-    row?.row.label,
-    "Pull request: Invite flow",
-    "the row names the agent whose tab it opens",
-  );
-  row?.onPick();
-  assert.deepEqual(chosen, [{ pullRequest: FIRST.id }], "the + chooses the tab already open");
-  assert.deepEqual(
-    [FIRST, SECOND].map((each) => pullRequestTabOf(control, each.id, panel.pullRequests)),
-    [{ pullRequest: FIRST.id }, { pullRequest: FIRST.id }],
-    "either agent's chip chooses it too",
-  );
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {

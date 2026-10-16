@@ -42,11 +42,11 @@ import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
-import { OpenedBy, PullRequestPeople, ReviewComments, ReviewersLine } from "./pull-request-people";
+import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
 
 /**
- * agent-changes-tab.tsx -- one agent's Changes tab in the side panel: its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
+ * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
  *
  * The files are read from GitHub afresh by the service on each ask, so
  * nothing here reads on a clock: the tab asks as it first comes on screen,
@@ -58,9 +58,10 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * panel keys the tab by its agent, so one agent's answer is never drawn in
  * another's tab.
  *
- * Under its bar the tab says who the pull request names, who opened it,
- * its reviewers, who authored its commits, and its review comments folded
- * under their count (`pull-request-people.tsx`).
+ * Under its bar the view says who the pull request names, who opened it,
+ * its reviewers, and who authored its commits (`pull-request-people.tsx`);
+ * what the reviews said stands in the tab's overview, whole, in its
+ * conversation.
  *
  * Otherwise the tab is a File view (`file-view.tsx`) over the diff: its bar
  * names the chosen file as breadcrumbs, whose trees list only the changed
@@ -400,7 +401,6 @@ export function AgentChangesTab({
     return (
       <div className="file-view ph-no-capture">
         <PullRequestPeople people={pullRequest} agent={named} />
-        <ReviewComments comments={pullRequest.comments} agent={named} />
         <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
       </div>
     );
@@ -429,7 +429,6 @@ export function AgentChangesTab({
         tree={room.toggles}
       />
       <PullRequestPeople people={pullRequest} agent={named} />
-      <ReviewComments comments={pullRequest.comments} agent={named} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>

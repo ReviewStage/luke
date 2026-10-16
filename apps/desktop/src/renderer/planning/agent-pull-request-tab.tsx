@@ -9,6 +9,7 @@ import {
   type CheckSummary,
   CODING_AGENT_STATUS,
   type CodingAgentOverview,
+  type CodingAgentPullRequest,
   type ConversationEntry,
   MERGE_STATE,
   type MergeState,
@@ -23,7 +24,6 @@ import {
   CircleDotIcon,
   CircleSlashIcon,
   EllipsisIcon,
-  FileDiffIcon,
   GitPullRequestIcon,
   RotateCwIcon,
   XIcon,
@@ -34,9 +34,10 @@ import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { EmptyState } from "../empty-state";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
-import { useAgentRead } from "./agent-changes-tab";
+import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { useMinute } from "./plan-time";
@@ -52,6 +53,7 @@ import { RelativeTime } from "./relative-time";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenLink } from "./use-open-link";
+import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, read top to bottom as a page: where it stands, whether it would merge, its checks one by one, its description, and its conversation.
@@ -219,58 +221,59 @@ function PullRequestMenu({
   );
 }
 
-/** The bar over the page: the mark and the word for where it stands, its branches, and its doors. */
+/** The words the bar's switch says for each view. */
+const VIEW_OPTIONS = [
+  { value: PULL_REQUEST_VIEW.OVERVIEW, label: "Overview" },
+  { value: PULL_REQUEST_VIEW.FILES, label: "Files changed" },
+] as const;
+
+/**
+ * The bar across the tab: the pill saying where the pull request stands,
+ * in its colour, as last read of what the agent published, then the switch
+ * between its overview and its files; on the overview, GitHub's page and the
+ * ⋯ at its end, where the files' own bar stands under it otherwise.
+ */
 function PullRequestBar({
-  pullRequest,
-  checks,
-  reading,
-  onRefresh,
-  onOpenChanges,
+  published,
+  view,
+  onView,
+  overview,
 }: {
-  pullRequest: CodingAgentOverview;
-  checks: CheckSummary;
-  reading: boolean;
-  onRefresh: () => void;
-  onOpenChanges: () => void;
+  published: CodingAgentPullRequest | undefined;
+  view: PullRequestView;
+  onView: (view: PullRequestView) => void;
+  /** The overview's doors, drawn while it is the view shown and the agent has a pull request. */
+  overview: { readonly reading: boolean; readonly onRefresh: () => void } | undefined;
 }): React.JSX.Element {
   const { tell } = useAct();
-  const { state, base, head } = pullRequest;
   return (
     <header className="file-view-bar pull-request-bar">
-      <span className="pull-request-state" data-pull-request-state={state}>
-        <PullRequestMark pullRequest={{ number: pullRequest.number, state, checks }} />
-        {STATE_WORDS[state]}
-      </span>
-      <Tooltip label={`${head} into ${base}`}>
-        <span className="pull-request-branches">
-          <bdi>{base}</bdi>
-          {" ← "}
-          <bdi>{head}</bdi>
+      {published === undefined ? null : (
+        <span className="pull-request-state" data-pull-request-state={published.state}>
+          <PullRequestMark pullRequest={published} />
+          {STATE_WORDS[published.state]}
         </span>
-      </Tooltip>
-      <div className="file-view-actions">
-        <Tooltip label="Show changes">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Show changes"
-            onClick={onOpenChanges}
-          >
-            <FileDiffIcon aria-hidden="true" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Open on GitHub">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Open on GitHub"
-            onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: pullRequest.url })}
-          >
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          </button>
-        </Tooltip>
-        <PullRequestMenu url={pullRequest.url} reading={reading} onRefresh={onRefresh} />
-      </div>
+      )}
+      <Segmented legend="Pull request view" options={VIEW_OPTIONS} value={view} onChange={onView} />
+      {published === undefined || overview === undefined ? null : (
+        <div className="file-view-actions">
+          <Tooltip label="Open on GitHub">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Open on GitHub"
+              onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: published.url })}
+            >
+              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+            </button>
+          </Tooltip>
+          <PullRequestMenu
+            url={published.url}
+            reading={overview.reading}
+            onRefresh={overview.onRefresh}
+          />
+        </div>
+      )}
     </header>
   );
 }
@@ -417,6 +420,13 @@ function PullRequestPage({
         {pullRequest.title}{" "}
         <span className="pull-request-number">{pullRequestNumberLabel(pullRequest)}</span>
       </h2>
+      <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
+        <p className="pull-request-branches">
+          <bdi>{pullRequest.base}</bdi>
+          {" ← "}
+          <bdi>{pullRequest.head}</bdi>
+        </p>
+      </Tooltip>
       <div className="changes-people pull-request-people">
         {author === undefined ? null : (
           <OpenedBy person={author} writtenAs={pullRequest.writtenAs} agent={agent} />
@@ -461,33 +471,19 @@ function PullRequestPage({
   );
 }
 
-export function AgentPullRequestTab({
-  agentId,
-  control,
-  shown,
-  onOpenChanges,
+/** The overview read and drawn: a wait, a failure with its retry, no pull request yet, or the page. */
+function OverviewView({
+  read,
+  agent,
 }: {
-  agentId: string;
-  control: CodingAgentsControl;
-  /** Whether the panel is on screen, which is when the tab reads. */
-  shown: boolean;
-  /** Opens the agent's Changes tab, its pull request's files. */
-  onOpenChanges: () => void;
-}): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  const { answer, out, ask } = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    control.readOverview,
-    UNANSWERED,
-  );
-  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
-  const agent = {
-    subject: agentSubject(control, agentId, NOTHING_HELD, false),
-    models: control.models,
+  read: {
+    readonly answer: CodingAgentOverviewAnswerView | undefined;
+    readonly out: boolean;
+    readonly ask: () => void;
   };
+  agent: PullRequestAgent;
+}): React.JSX.Element {
+  const { answer, out, ask } = read;
   // A failure gives way to the wait as soon as it is asked again; a page drawn stands until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />;
@@ -503,22 +499,69 @@ export function AgentPullRequestTab({
       </div>
     );
   }
-  const { pullRequest } = answer;
-  if (pullRequest === null) {
+  if (answer.pullRequest === null) {
     return (
       <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
     );
   }
+  return <PullRequestPage pullRequest={answer.pullRequest} agent={agent} />;
+}
+
+/**
+ * One agent's Pull request tab: the bar, then the view it shows, the
+ * overview or the files (`AgentChangesTab`). Both stand once shown, the one
+ * not shown hidden, so switching back and forth draws what each last read
+ * rather than asking GitHub again; each reads first as it is first shown.
+ */
+export function AgentPullRequestTab({
+  agentId,
+  control,
+  shown,
+  repository,
+  tree,
+  view,
+  onView,
+}: {
+  agentId: string;
+  control: CodingAgentsControl;
+  /** Whether the panel is on screen, which is when the tab reads. */
+  shown: boolean;
+  /** The plan's repository, which the files' breadcrumbs name; none names the path plain. */
+  repository: string | null;
+  /** Whether the tree beside File tabs and the files is open, and its toggle. */
+  tree: { readonly open: boolean; readonly onToggle: () => void };
+  view: PullRequestView;
+  onView: (view: PullRequestView) => void;
+}): React.JSX.Element {
+  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const onOverview = view === PULL_REQUEST_VIEW.OVERVIEW;
+  const read = useAgentRead(agentId, shown && onOverview, ended, control.readOverview, UNANSWERED);
+  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
+  const agent = {
+    subject: agentSubject(control, agentId, NOTHING_HELD, false),
+    models: control.models,
+  };
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
-        pullRequest={pullRequest}
-        checks={checksSummaryOf(pullRequest.checks)}
-        reading={out}
-        onRefresh={ask}
-        onOpenChanges={onOpenChanges}
+        published={control.pullRequests.get(agentId)}
+        view={view}
+        onView={onView}
+        overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}
       />
-      <PullRequestPage pullRequest={pullRequest} agent={agent} />
+      <div className="pull-request-view" hidden={!onOverview}>
+        <OverviewView read={read} agent={agent} />
+      </div>
+      <div className="pull-request-view" hidden={onOverview}>
+        <AgentChangesTab
+          agentId={agentId}
+          control={control}
+          shown={shown && !onOverview}
+          repository={repository}
+          tree={tree}
+        />
+      </div>
     </div>
   );
 }

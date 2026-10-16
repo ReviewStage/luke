@@ -23,6 +23,7 @@ import { SkillFiles } from "../planning/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
+import { PULL_REQUEST_VIEW } from "../planning/use-side-panel";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -33,8 +34,8 @@ import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
   changesTabOf,
+  showPullRequest,
   planCards,
-  pullRequestTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
   useColumnFocus,
@@ -233,9 +234,9 @@ export function DesktopAgentPage({
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
   const openChanges = (changed: string) =>
-    sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
+    showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
-    sidePanel.onChoose(pullRequestTabOf(control, published, sidePanel.pullRequests));
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.OVERVIEW);
   const shown = plans.shown && !sidePanel.fullScreen;
   const cards = planCards({
     agents: control,

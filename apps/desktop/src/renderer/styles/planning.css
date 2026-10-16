@@ -1496,34 +1496,6 @@ button.file-ref:hover .file-ref-path {
   color: var(--review-tone);
 }
 
-/* The reviews that said something, folded under their count until opened. */
-.changes-comments {
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.changes-comments > summary {
-  padding: var(--space-6) var(--space-12);
-  cursor: default;
-}
-
-.changes-comments-count {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.changes-comments > ul {
-  display: flex;
-  max-height: 40vh;
-  flex-direction: column;
-  gap: var(--space-8);
-  margin: 0;
-  padding: 0 var(--space-12) var(--space-8);
-  overflow-y: auto;
-  list-style: none;
-}
-
 .changes-comment-head {
   display: flex;
   min-width: 0;
@@ -1548,16 +1520,6 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
-/* A review's words, cut at two lines and faded where they run on. */
-.changes-comment-words {
-  display: -webkit-box;
-  margin: var(--space-2) 0 0;
-  padding-left: 21px; /* off-scale: past an inline actor's 16px mark and its 5px gap */
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  user-select: text;
-}
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
    bar, wearing the pull request's standing as a pill in its own colour and
