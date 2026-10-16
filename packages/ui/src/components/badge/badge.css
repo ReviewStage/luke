@@ -26,7 +26,7 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-weight-medium);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   .luke-badge svg {
