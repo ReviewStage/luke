@@ -489,8 +489,8 @@ export interface SidePanelControl {
   width: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
-  /** Hides the panel where it was shown, leaving full screen too, as a task just started asks. */
-  onHide: () => void;
+  /** Shows or hides the panel as asked, as a task being started does; hiding it leaves full screen too. */
+  onSetOpen: (open: boolean) => void;
   onToggleFullScreen: () => void;
   /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -1472,11 +1472,15 @@ export function useSidePanel(
     setFullScreen(false);
     setNewTabAsked(false);
   }, [update]);
-  const onHide = useCallback(() => {
-    update((held) => (held.open ? { ...held, open: false } : held));
-    setFullScreen(false);
-    setNewTabAsked(false);
-  }, [update]);
+  const onSetOpen = useCallback(
+    (open: boolean) => {
+      update((held) => (held.open === open ? held : { ...held, open }));
+      if (open) return;
+      setFullScreen(false);
+      setNewTabAsked(false);
+    },
+    [update],
+  );
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
@@ -1631,7 +1635,7 @@ export function useSidePanel(
     fullScreen: state.open && fullScreen,
     newTabAsked: state.open && newTabAsked,
     onToggle,
-    onHide,
+    onSetOpen,
     onToggleFullScreen,
     onNewTab,
     onNewTabAnswered,
