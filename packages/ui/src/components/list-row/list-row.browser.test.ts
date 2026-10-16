@@ -134,3 +134,15 @@ for (const profile of Object.values(PROFILE)) {
     expect(acts.map((box) => box.left)).toEqual(acts.map(() => acts[0]?.left));
   });
 }
+
+test("a row that opens nothing is still announced as current", async () => {
+  const { container } = await mount(
+    createElement(List, {
+      label: "Runs",
+      children: createElement(ListRow, { title: "Running review", current: true }),
+    }),
+  );
+  const row = page.getByText("Running review").element().closest("[aria-current]");
+  expect(row?.getAttribute("aria-current")).toBe("true");
+  expect(await accessibilityViolations(container)).toEqual([]);
+});

@@ -24,7 +24,9 @@
     transition: background-color var(--duration-hover) ease;
   }
 
-  .luke-list-row:has(> button.luke-list-row-main):hover {
+  /* The pointer lights a row that opens something, never past the open
+     row's own stronger fill. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
     background: var(--luke-color-fill-hover);
   }
 

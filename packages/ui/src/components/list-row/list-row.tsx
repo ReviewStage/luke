@@ -91,7 +91,9 @@ export function ListRow({
           {face}
         </button>
       ) : (
-        <div className="luke-list-row-main">{face}</div>
+        <div className="luke-list-row-main" aria-current={current === true ? "true" : undefined}>
+          {face}
+        </div>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </li>
