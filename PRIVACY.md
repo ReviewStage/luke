@@ -853,8 +853,8 @@ only when you press Send.
   and hands the session's one-time pass to your Mac, where only Luke's main
   window holds it. That window then sends Keyframe Luke's synthesized voice as
   he speaks, which carries what he says about your plan, and plays back the
-  video, at the top of the plan's Call tab, and the audio Keyframe renders
-  from it. Your microphone never reaches
+  video, at the top of the plan's Call tab and on the call card, and the
+  audio Keyframe renders from it. Your microphone never reaches
   Keyframe, nor does anything else on your Mac or in your account: the voice it
   receives is Luke's alone. Our service logs only whether a session started, the
   Keyframe server it opened on, and, when one could not, why, and keeps, with
