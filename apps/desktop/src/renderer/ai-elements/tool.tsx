@@ -136,6 +136,8 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   label: string | undefined;
   /** What the call was done to, in the muted ink after the label; none for a call that has no one input a reader looks for first. */
   subject: string | undefined;
+  /** Who the call was about, as a chip after the label and before the subject, as a call about one coding agent names the agent; none for the rest. */
+  chip?: ReactNode | undefined;
   /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
   /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
@@ -163,18 +165,25 @@ export const TOOL_LINE_CLASS =
  */
 const SUBJECT_FADE = "[mask-image:linear-gradient(to_left,transparent,#000_var(--label-fade))]";
 
-/** What a call's line says: its icon, what it did, and where it stands. */
+/**
+ * What a call's line says: its icon, what it did, who it was about where it
+ * names someone by their chip, and where it stands. Note that the chip
+ * gives way before the label does, since a name cut at its end still reads,
+ * and that the subject after it takes only what is left.
+ */
 export function ToolLine({
   state,
   icon,
   label,
   subject,
+  chip,
   subjectIsCode = true,
   place,
 }: Pick<
   ToolHeaderProps,
-  "state" | "icon" | "label" | "subject" | "subjectIsCode" | "place"
+  "state" | "icon" | "label" | "subject" | "chip" | "subjectIsCode" | "place"
 >): ReactNode {
+  const trailing = subject !== undefined || chip !== undefined;
   return (
     <>
       <span
@@ -186,8 +195,16 @@ export function ToolLine({
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
       <span className="flex min-w-0 flex-1 items-baseline gap-1">
         {label === undefined ? null : (
-          <span className="min-w-0 truncate text-foreground">
-            {subject === undefined ? label : `${label} `}
+          <span
+            className={cn("min-w-0 truncate text-foreground", chip !== undefined && "shrink-0")}
+          >
+            {trailing ? `${label} ` : label}
+          </span>
+        )}
+        {chip === undefined ? null : (
+          <span className="min-w-0 whitespace-nowrap">
+            {chip}
+            {subject === undefined ? null : " "}
           </span>
         )}
         {subject === undefined ? null : (
@@ -219,6 +236,7 @@ export function ToolHeader({
   icon,
   label,
   subject,
+  chip,
   subjectIsCode = true,
   subjectInBody = false,
   place,
@@ -233,6 +251,7 @@ export function ToolHeader({
         icon={icon}
         label={label}
         subject={subjectInBody && drawn ? undefined : subject}
+        chip={chip}
         subjectIsCode={subjectIsCode}
         place={place}
       />

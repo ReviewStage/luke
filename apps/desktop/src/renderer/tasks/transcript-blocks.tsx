@@ -8,17 +8,20 @@ import { readLink } from "@luke/features/luke-link";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
+  agentCallLine,
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  type CallLine,
   callLine,
   callPlace,
+  isAgentCallKind,
   isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { cn, ProviderMark } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { type Actor, actorName } from "@luke/ui/actor-model";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
@@ -55,7 +58,7 @@ import {
 } from "lucide-react";
 import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
 import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
-import { ActorLine, ActorRef } from "../actor-ref";
+import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
@@ -473,6 +476,45 @@ const CALL_ICON = {
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
+/**
+ * The coding agent a call about one names, drawn on its row in the place of
+ * "the coding agent" as its mention's chip is drawn in words: its tile and
+ * its name on the chip's raised fill. It is no target of its own, because
+ * the row it stands on is already the one that opens the agent and hangs
+ * its card, and a second press or card inside it would be two targets for
+ * one thing; so it takes the row's pointer and lifts with the row's hover
+ * as a chip lifts with its own (tasks.css).
+ */
+function AgentCallChip({ agent }: { agent: Actor }): ReactNode {
+  return (
+    <span className="mention-chip tool-agent-chip" data-kind="agent">
+      <span className="mention-chip-glyph">
+        <ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />
+      </span>
+      <span className="mention-chip-label">{actorName(agent)}</span>
+    </span>
+  );
+}
+
+/** A call's line, and the chip after its verb where it names its agent by one. */
+interface ChippedLine {
+  readonly line: CallLine;
+  readonly chip: ReactNode | undefined;
+}
+
+/** A call's line and the chip it names its agent by: the agent's chip after the verb alone, for a call about one coding agent whose agent is known, and the call's own words otherwise. */
+function chippedLine(
+  kind: CallKind,
+  subject: string | undefined,
+  description: string | undefined,
+  agent: Actor | undefined,
+): ChippedLine {
+  if (agent === undefined || !isAgentCallKind(kind)) {
+    return { line: callLine(kind, subject, description), chip: undefined };
+  }
+  return { line: agentCallLine(kind, subject), chip: <AgentCallChip agent={agent} /> };
+}
+
 /** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
 const MacOwnerContext = createContext<Actor | undefined>(undefined);
 
@@ -486,6 +528,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     provider?: IntegrationProvider | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
+    /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
+    agent?: Actor | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
@@ -505,13 +549,14 @@ export function TranscriptTool({
   provider,
   subject,
   description,
+  agent,
   input,
   output,
   errorText,
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
-  const line = callLine(kind, subject, description);
+  const { line, chip } = chippedLine(kind, subject, description, agent);
   const command = isCommandKind(kind);
   const macOwner = useContext(MacOwnerContext);
   return (
@@ -527,6 +572,7 @@ export function TranscriptTool({
         }
         label={line.verb}
         subject={line.subject}
+        chip={chip}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
         place={
@@ -555,12 +601,15 @@ export function TranscriptTool({
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
  * input and answer open in place, its hover saying what it opens, or
- * hanging the card that tab hangs, an agent's, where it is given one.
+ * hanging the card that tab hangs, an agent's, where it is given one. A
+ * call about one coding agent names the agent by its chip, which the row's
+ * press and card are for (`AgentCallChip`).
  */
 export function TranscriptOpeningCall({
   callId,
   kind,
   subject,
+  agent,
   state,
   hint,
   card,
@@ -569,6 +618,8 @@ export function TranscriptOpeningCall({
   callId: string;
   kind: CallKind;
   subject: string | undefined;
+  /** For a call about one coding agent, the agent, whose chip the row names it by; none where the agent is not known. */
+  agent?: Actor | undefined;
   state: ToolState;
   /** What the hover says the row opens. */
   hint: string;
@@ -577,7 +628,7 @@ export function TranscriptOpeningCall({
   onOpen: () => void;
 }): ReactNode {
   const Icon = CALL_ICON[kind];
-  const words = CALL_WORDS[kind];
+  const { line, chip } = chippedLine(kind, subject, undefined, agent);
   return (
     <Tooltip label={hint} card={card ?? undefined}>
       <button
@@ -590,9 +641,10 @@ export function TranscriptOpeningCall({
         <ToolLine
           state={state}
           icon={<Icon aria-hidden="true" />}
-          label={words.verb}
-          subject={subject}
-          subjectIsCode={words.code}
+          label={line.verb}
+          subject={line.subject}
+          chip={chip}
+          subjectIsCode={line.code}
         />
       </button>
     </Tooltip>

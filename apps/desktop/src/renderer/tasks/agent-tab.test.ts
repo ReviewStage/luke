@@ -492,6 +492,63 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
 });
 
+test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, a chip that is no target of its own inside the row", () => {
+  const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
+  const cards = taskCards({
+    agents,
+    workRows: [],
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+  });
+  const opened: ToolTarget[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart("message_agent", { agentId: "agent-7", text: "Rebase on main" }, ACCEPTED),
+    toolPart(
+      "archive_agent",
+      { agentId: "agent-8" },
+      { status: "accepted", agent: { id: "agent-8", title: "Retry audit", onYourTask: false } },
+    ),
+    toolPart("start_agent", { prompt: "Ship the invoice export" }),
+  ]);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message,
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: true,
+        delegation: {
+          models: [],
+          onOpenTarget: (target) => opened.push(target),
+          cards: cards.call,
+        },
+      }),
+    ),
+  );
+  const line = (callId: string) =>
+    container.querySelector<HTMLElement>(
+      `button[data-call-id="call-${callId}"], [data-call-id="call-${callId}"] summary`,
+    );
+  const chip = (callId: string) => line(callId)?.querySelector(".tool-agent-chip")?.textContent;
+  const said = (callId: string) => line(callId)?.textContent?.replace(/\s+/gu, " ").trim();
+  assert.equal(chip("message_agent"), "Invoice export", "a listed agent is named as its tab is");
+  assert.equal(said("message_agent"), "Messaged Invoice export Rebase on main");
+  assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
+  assert.equal(said("archive_agent"), "Archived Retry audit");
+  assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
+  assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
+  const row = line("message_agent");
+  assert.ok(row, "the message's row is drawn");
+  assert.equal(row.querySelector("button, a"), null, "the chip is no target inside the row");
+  act(() => row.querySelector<HTMLElement>(".tool-agent-chip")?.click());
+  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
+});
+
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
 const LINEAR_RUN = [
   toolPart(

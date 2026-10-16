@@ -1074,7 +1074,9 @@ export interface TaskCards {
  * subagent's row its worker's, read as its tab reads its own, `chosen`
  * telling whether that tab is the one shown, whose transcript follows the
  * run. A worker the plan's work no longer holds hangs none. An agent's
- * transcript also names the task whose plan it was handed, by `task`.
+ * transcript also names the task whose plan it was handed, by `task`, and
+ * every transcript names an agent a call is about by its tab's tile and
+ * name, by `agent`.
  */
 export function taskCards(input: {
   agents: CodingAgentsControl;
@@ -1097,6 +1099,11 @@ export function taskCards(input: {
     const subject = agentSubject(agents, opened.agent, held, chosen(tab));
     return <AgentCard subject={subject} models={agents.models} />;
   };
+  // An agent the plan lists is named on a call's row as its tab wears it; one it does not is left to the call's answer.
+  const agent = (agentId: string) => {
+    const subject = agentSubject(agents, agentId, held, false);
+    return subject.agent === undefined ? undefined : subject.tile;
+  };
   const card = (drawn: DrawnSubagent | undefined) =>
     drawn && (
       <AgentTabCard
@@ -1109,11 +1116,13 @@ export function taskCards(input: {
   return {
     call: {
       target,
+      agent,
       worker: ({ callId, status }) =>
         card(drawnSubagent({ subagent: callId }, workRows, status, held)),
     },
     agent: (agentId) => ({
       target,
+      agent,
       task,
       worker: ({ callId, task, status }) =>
         card(

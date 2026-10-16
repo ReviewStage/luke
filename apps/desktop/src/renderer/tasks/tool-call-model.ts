@@ -876,6 +876,40 @@ export function toolTarget(call: TargetedCall): ToolTarget | undefined {
   return TOOL_TARGETS.get(call.tool)?.(call);
 }
 
+/** The tools whose call is about one coding agent, under every name one was made under, which a row names by the agent's chip. */
+const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.READ_AGENT,
+  AGENT_TOOL.MESSAGE_AGENT,
+  AGENT_TOOL.START_AGENT,
+  AGENT_TOOL.ARCHIVE_AGENT,
+  AGENT_TOOL.UNARCHIVE_AGENT,
+  RETIRED_TOOL.READ_CODING_AGENT,
+  RETIRED_TOOL.MESSAGE_CODING_AGENT,
+  RETIRED_TOOL.START_CODING_AGENT,
+]);
+
+/** The agent a call about one names: its id, and the title its answer gives it, either missing where neither the call nor its answer says it. */
+export interface CalledAgent {
+  readonly id: string | undefined;
+  readonly title: string | undefined;
+}
+
+/**
+ * The agent a call about one names, which its row draws as the agent's
+ * chip: the id its answer names, else the one its input does, and the
+ * title its answer gives; nothing for any other call, or for one that
+ * names no agent yet, as a start does until it has answered. Note that a
+ * refused call still names the agent its input asked for, because the row
+ * still says what it tried.
+ */
+export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | undefined {
+  if (!AGENT_CALL_TOOLS.has(call.tool)) return undefined;
+  const answer = isRecord(call.output) ? call.output.agent : undefined;
+  const id = stringAt(answer, "id") ?? stringAt(call.input, "agentId");
+  const title = stringAt(answer, "title");
+  return id === undefined && title === undefined ? undefined : { id, title };
+}
+
 /** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
