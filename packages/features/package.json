@@ -15,6 +15,7 @@
     "./issue-wire": "./src/issue-wire.js",
     "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./live-wire": "./src/live-wire.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",

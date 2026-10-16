@@ -41,6 +41,7 @@ import {
 } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -1021,6 +1022,47 @@ const findOwnFailedRuns = SqlSchema.findAll({
         ),
     ),
 });
+
+/**
+ * The newest failed run of each of the account's own automations, written for
+ * Neon Realtime as `findOwnFailedRuns` reads them, each column under the key
+ * `account-inbox-wire.ts` reads it by. Note that it names no window, because
+ * a live read measures nothing from the clock: the reader keeps the runs of
+ * its own last week. None where the statement names a value Realtime cannot
+ * carry.
+ */
+export function ownFailedRunsLiveStatement(userId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .selectDistinctOn(
+        [automationRun.automationId],
+        liveSelection(
+          {
+            id: automationRun.id,
+            automationId: automationRun.automationId,
+            automationName: automation.name,
+            workspaceId: AUTOMATION_WORKSPACE,
+            reason: automationRun.reason,
+          },
+          { failedAt: automationRun.settledAt },
+        ),
+      )
+      .from(automationRun)
+      .innerJoin(automation, eq(automation.id, automationRun.automationId))
+      .where(
+        and(
+          eq(automation.userId, userId),
+          memberOfAutomationWorkspace(userId),
+          eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+        ),
+      )
+      .orderBy(
+        asc(automationRun.automationId),
+        desc(automationRun.settledAt),
+        desc(automationRun.id),
+      ),
+  );
+}
 
 /** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<Automation>> {

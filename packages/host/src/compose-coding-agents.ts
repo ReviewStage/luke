@@ -1,7 +1,6 @@
 import type { HostedCodingAgentClient } from "@luke/features";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -15,7 +14,6 @@ import {
   type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
-  codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
@@ -48,20 +46,28 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
 } from "@luke/features/coding-agent-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, Result, type Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
+import { followAccountInbox, type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
  * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
  *
- * Nothing is held here. The window holds the agents it draws and the
+ * Nothing is held here but the account inbox's follower. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
@@ -69,8 +75,10 @@ import type { RunMode } from "./run-mode.js";
  * and the inbox read another, held while nothing in it changed, so each of
  * the window's loops is one held read after another rather than a clock of
  * its own, and a loop ends when the window stops asking. What waits across
- * the account is held the same way, and asked by main's own loop rather
- * than a window's (`agent-notices.ts`). Behind a
+ * the account is followed rather than asked: main follows it while an
+ * account is signed in (`agent-notices.ts`), and it is heard as events,
+ * over Neon Realtime where the service seals it (`account-inbox-follow.ts`),
+ * whose sealed statements stay here beside the bearer. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -111,28 +119,37 @@ export type CodingAgentClient = Pick<
   | "inbox"
   | "answerInbox"
   | "accountInbox"
+  | "accountInboxLive"
   | "inboxAttachment"
   | "agentPicture"
 >;
 
 export interface CodingAgentsDependencies {
-  kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
+  /** Realtime's client at an address, which the account inbox is followed over; Realtime's own outside a test. */
+  openLive?: (url: string) => LiveClient;
 }
 
-export type CodingAgentsComposer = Composer;
+export interface CodingAgentsComposer extends Composer {
+  /** The account inbox let go, as a sign-out lets it go, whoever followed it. */
+  readonly reset: Effect.Effect<void>;
+}
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 export function composeCodingAgents(
   dependencies: CodingAgentsDependencies,
 ): Effect.Effect<CodingAgentsComposer, never, Scope.Scope> {
-  return Effect.sync(() => composed(dependencies));
+  return Effect.map(FiberHandle.make<never>(), (follower) => composed(dependencies, follower));
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer {
+/** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it. */
+function composed(
+  dependencies: CodingAgentsDependencies,
+  follower: FiberHandle.FiberHandle<never>,
+): CodingAgentsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -458,17 +475,23 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.answerInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX]: (params) =>
-      Effect.gen(function* () {
-        const { after } = yield* read(
-          codingAgentAccountInboxParamsSchema,
-          params,
-          "reading what waits across the account names a cursor",
-        );
-        const answer = yield* asked(client.accountInbox(after));
-        return carried<CodingAgentAccountInboxAnswerView>(answer);
-      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
+      Effect.map(
+        FiberHandle.run(
+          follower,
+          followAccountInbox({
+            live: () => asked(client.accountInboxLive()),
+            held: (after) => asked(client.accountInbox(after)),
+            openLive: dependencies.openLive ?? openRealtimeClient,
+            now: kernel.now,
+            publish: (answer) => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)),
+          }),
+        ),
+        () => ({}),
+      ),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
+      Effect.as(FiberHandle.clear(follower), {}),
   };
 
-  return { methods, lifetime: Effect.void };
+  return { methods, lifetime: Effect.void, reset: FiberHandle.clear(follower) };
 }

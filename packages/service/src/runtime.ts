@@ -16,6 +16,7 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
 /**
@@ -57,6 +58,11 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
  * place the workspace Linear connector's UID is.
  *
+ * `LiveSealing` is the one place Neon Realtime's address and secret are read,
+ * so a live read is sealed under the same secret on every route
+ * (`live/realtime.ts`); without both it stands as none, and every live read
+ * answers unavailable.
+ *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
  * once an hour for every route that offers or checks a model.
@@ -76,6 +82,7 @@ export const webServices = Layer.mergeAll(
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,
+  liveSealingFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));
 

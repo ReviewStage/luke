@@ -22,6 +22,7 @@ import * as issueView from "./issue-view.js";
 import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
+import * as liveWire from "./live-wire.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
 import * as pinOrder from "./pin-order.js";
@@ -57,6 +58,10 @@ const EFFECT_MODULE_SCHEMAS = {
     accountFailedRunSchema: accountInboxWire.accountFailedRunSchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
+  "live-wire": {
+    sealedLiveQuerySchema: liveWire.sealedLiveQuerySchema,
+    accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,
@@ -196,7 +201,6 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
-    codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
     codingAgentAccountInboxAnswerViewSchema:
       codingAgentView.codingAgentAccountInboxAnswerViewSchema,
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,

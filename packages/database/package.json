@@ -5,6 +5,7 @@
   "description": "The hosted store's Drizzle schema, queries, and migrations, and the test databases",
   "exports": {
     "./core/effect-migration-folders": "./src/core/effect-migration-folders.js",
+    "./core/live-statement": "./src/core/live-statement.js",
     "./core/migrator": "./src/core/migrator.js",
     "./core/neon-compute-limit": "./src/core/neon-compute-limit.js",
     "./core/query": "./src/core/query.js",

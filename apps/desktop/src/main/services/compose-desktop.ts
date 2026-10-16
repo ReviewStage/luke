@@ -272,7 +272,9 @@ export function composeDesktop(
         onTaskAgentsMoved: () => {
           void run(operator.host.tasksRefresh());
         },
-        readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
+        followAccountInbox: () => operator.host.codingAgentAccountInboxFollow(),
+        unfollowAccountInbox: () => operator.host.codingAgentAccountInboxUnfollow(),
+        onAccountInboxChanged: operator.host.onAccountInboxChanged,
         accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
         onInboxChanged: (inbox) => state.update({ inbox }),
         openInbox: (taskId) => {
