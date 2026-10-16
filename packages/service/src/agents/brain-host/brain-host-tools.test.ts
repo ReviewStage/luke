@@ -310,6 +310,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
       id: agent.id,
       title: "anthropic/claude-opus-5.5",
       status: CODING_AGENT_STATUS.RUNNING,
+      onYourTask: true,
     },
   });
   assert.equal(eve.sent.length, 1);

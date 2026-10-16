@@ -346,7 +346,12 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   assert.deepEqual(sent, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     delivery: STEER_OUTCOME.SENT,
-    agent: { id: teammates.id, title: OPUS, status: CODING_AGENT_STATUS.RUNNING },
+    agent: {
+      id: teammates.id,
+      title: OPUS,
+      status: CODING_AGENT_STATUS.RUNNING,
+      onYourTask: false,
+    },
   });
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
@@ -491,6 +496,20 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
     ],
   );
 
+  // Narrowed by words of a name, whatever their case, and paged by an offset.
+  const billing = await call(CODER_TOOL.LIST_TASKS, { nameContains: "BILL" });
+  assert.deepEqual(
+    Array.isArray(billing.tasks) ? billing.tasks.map((task) => isRecord(task) && task.id) : [],
+    [plans.billing],
+  );
+  assert.equal(billing.nextOffset, null);
+  const paged = await call(CODER_TOOL.LIST_TASKS, { offset: 1 });
+  assert.equal(Array.isArray(paged.tasks) ? paged.tasks.length : -1, 1);
+  assert.deepEqual(await call(CODER_TOOL.LIST_TASKS, { offset: -1 }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
+  });
+
   const started = await call(
     CODER_TOOL.START_AGENT,
     { taskId: plans.billing, prompt: "Add the invoice export." },
@@ -502,6 +521,7 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
     await database.run(readCodingAgent(caller.userId, started.agent.id)),
   );
   assert.equal(stored.planId, plans.billing);
+  assert.equal(started.agent.onYourTask, false, "an agent started on another task is said to be");
   assert.equal(eve.sent.length, 1);
   // The same call run again answers the agent it made, and starts nothing.
   const again = await call(

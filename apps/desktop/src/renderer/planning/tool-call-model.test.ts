@@ -455,6 +455,25 @@ test("a look at one of the plan's pictures says it looked and opens the plan, an
   assert.equal(toolTarget(refused), undefined);
 });
 
+test("an agent a call starts, reads, or messages opens its tab while it is on the call's own task, and nothing once its answer says it is on another, which this task's column has no tab for", () => {
+  const agent = (onYourTask?: boolean) => ({
+    id: "agent-2",
+    ...(onYourTask === undefined ? undefined : { onYourTask }),
+  });
+  const call = (tool: string, onYourTask?: boolean) => ({
+    tool,
+    callId: "call-1",
+    input: { agentId: "agent-2", text: "Rebase on main." },
+    output: { status: "accepted", agent: agent(onYourTask) },
+  });
+  for (const tool of ["start_agent", "read_agent", "message_agent"]) {
+    const opened = { kind: TOOL_TARGET.AGENT, agent: "agent-2" };
+    assert.deepEqual(toolTarget(call(tool, true)), opened, tool);
+    assert.deepEqual(toolTarget(call(tool)), opened, `${tool}, answered before the service said`);
+    assert.equal(toolTarget(call(tool, false)), undefined, tool);
+  }
+});
+
 test("a pause names how long it waits, and its answer how long it waited or that a message ended it early", () => {
   const paused = (seconds: number, output?: Record<string, number | boolean>) =>
     toolCallView({ tool: "sleep", input: { seconds }, output });

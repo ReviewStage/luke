@@ -749,14 +749,27 @@ const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
   const agent = stringAt(call.input, "agentId");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
+}
+
+/**
+ * Whether a call's answer says its agent is on another task than the one
+ * the call was made on, which opens nothing here: a task's column draws
+ * its own agents' tabs alone, so such an agent's row folds open in place.
+ * An answer from before the service said so is read as this task's.
+ */
+function onAnotherTask(call: TargetedCall): boolean {
+  const answer = isRecord(call.output) ? call.output.agent : undefined;
+  return isRecord(answer) && answer.onYourTask === false;
 }
 
 /** The agent a start began, which its answer names once it has. */
 function startedAgent(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.agent : undefined;
   const agent = stringAt(answer, "id");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
 }
 
 /** The page a write made or moved on, which its answer names once it has. */

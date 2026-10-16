@@ -133,6 +133,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a message as text of at ` +
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
+  UNREADABLE_TASKS:
+    "Not run: narrow the tasks by words of their name, and page them by an offset of 0 or more.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
@@ -349,15 +351,35 @@ export const START_AGENT_TOOL = {
   inputSchema: START_AGENT_INPUT,
 } as const;
 
+/** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
+const LIST_TASKS_INPUT = Schema.Struct({
+  nameContains: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(200)),
+      "Only the tasks whose name holds these words, whatever their case; leave it out for all.",
+    ),
+  ),
+  offset: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      "How many of the matching tasks to pass over, newest first: the nextOffset an earlier list " +
+        "answered, to read the next page; leave it out for the first.",
+    ),
+  ),
+});
+
+const readTasksAsked = Schema.decodeUnknownResult(LIST_TASKS_INPUT);
+
 export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
     "List the open tasks of your workspace, started by any member: each with its id, its name, " +
     "the repository its agents work in (null for none yet), who started it, and whether it is " +
-    `the task you work on, the newest first and at most ${TASKS_LIST_LIMIT}. Call it to find ` +
-    `the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to narrow ` +
-    `${AGENT_TOOL.LIST_AGENTS} to one.`,
-  inputSchema: Schema.Struct({}),
+    `the task you work on, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "nextOffset where more stand. Narrow it by words of a task's name with nameContains. Call it " +
+    `to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to ` +
+    `narrow ${AGENT_TOOL.LIST_AGENTS} to one.`,
+  inputSchema: LIST_TASKS_INPUT,
 } as const;
 
 /** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
@@ -627,14 +649,19 @@ function startedByNote(starter: CodingAgent, note: string | undefined): string {
   return note === undefined ? lead : `${lead}\n\n${note}`;
 }
 
-/** The agent as a start answers it: its id, what it runs on, and where it stands now. */
-const startedReading = (agent: CodingAgent, offered: readonly OfferedModel[]) =>
+/** The agent as a start answers it: its id, what it runs on, where it stands now, and whether it is on the caller's own task, which a window that opens the caller's task alone reads to link it or not. */
+const startedReading = (
+  agent: CodingAgent,
+  offered: readonly OfferedModel[],
+  ownTask: string | null,
+) =>
   Effect.map(standingsOf([agent]), (standing) => ({
     id: agent.id,
     model: agent.model,
     modelName: modelLabel(agent.model, offered),
     effort: agent.effort,
     status: standing(agent).status,
+    onYourTask: agent.planId !== null && agent.planId === ownTask,
   }));
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
@@ -760,7 +787,12 @@ export function runMessageAgent(
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         delivery: sent.success,
-        agent: { id: agent.id, title: agentName(agent), status: CODING_AGENT_STATUS.RUNNING },
+        agent: {
+          id: agent.id,
+          title: agentName(agent),
+          status: CODING_AGENT_STATUS.RUNNING,
+          onYourTask: agent.planId !== null && agent.planId === callerTask(caller),
+        },
       };
     }),
   );
@@ -805,7 +837,7 @@ export function runStartAgent(
           if (!ours) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
           return {
             status: ACTION_RESULT_STATUS.ACCEPTED,
-            agent: yield* startedReading(made.value, yield* offeredModels),
+            agent: yield* startedReading(made.value, yield* offeredModels, callerTask(caller)),
           };
         }
         const reached = yield* taskOfCallerWorkspace(caller, named);
@@ -828,7 +860,11 @@ export function runStartAgent(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        agent: yield* startedReading(started.success.agent, yield* offeredModels),
+        agent: yield* startedReading(
+          started.success.agent,
+          yield* offeredModels,
+          callerTask(caller),
+        ),
       };
     }),
   );
@@ -837,9 +873,15 @@ export function runStartAgent(
 /** One call of `list_tasks`: the open tasks of the caller's workspace, newest first. */
 export function runListTasks(
   call: CodingAgentCall,
-  _input: UnparsedWireValue,
+  input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   const { caller } = call;
+  const asked = readTasksAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
+  }
+  const words = asked.success.nameContains?.toLowerCase();
+  const offset = asked.success.offset ?? 0;
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
@@ -848,17 +890,24 @@ export function runListTasks(
       }
       const ownTask = callerTask(caller);
       const plans = yield* listPlans(callerUserId(caller));
-      const tasks = plans
-        .filter((plan) => plan.workspaceId === workspace.value)
-        .slice(0, TASKS_LIST_LIMIT)
-        .map((plan) => ({
-          id: plan.id,
-          name: plan.name,
-          repository: plan.repository ?? null,
-          startedBy: plan.createdBy?.name ?? null,
-          isYourTask: plan.id === ownTask,
-        }));
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, tasks };
+      const matching = plans.filter(
+        (plan) =>
+          plan.workspaceId === workspace.value &&
+          (words === undefined || plan.name.toLowerCase().includes(words)),
+      );
+      const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        repository: plan.repository ?? null,
+        startedBy: plan.createdBy?.name ?? null,
+        isYourTask: plan.id === ownTask,
+      }));
+      const next = offset + TASKS_LIST_LIMIT;
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        tasks,
+        nextOffset: next < matching.length ? next : null,
+      };
     }),
   );
 }
