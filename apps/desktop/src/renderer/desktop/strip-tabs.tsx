@@ -268,7 +268,7 @@ export function DoorsTab({
   look: TabLook;
   doors: TabDoors;
   editor?: React.ReactNode;
-  tabRef?: React.Ref<HTMLButtonElement> | undefined;
+  tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const content = contentActionGroups(doors);

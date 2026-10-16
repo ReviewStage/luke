@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 /** The bar summoned in a tab `width` pixels wide, and its field's well. */
-function summonedAt(width: number): { bar: HTMLElement; well: HTMLElement } {
+function summonedAt(width: number) {
   layContainersAt({ "find-scope": width });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

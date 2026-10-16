@@ -1,5 +1,5 @@
 import { ChevronDownIcon, CloseIcon } from "@luke/ui";
-import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -478,14 +478,15 @@ export function TabStrip({
 /**
  * Writes a tab into its strip's list (`StripTabs`) as it last drew itself,
  * by its button, and takes it out when the button goes. Answers the ref the
- * button takes, which hands the button on to `forward` as well.
+ * button takes: the owner's `given`, where it hands one, or one of its own.
  */
 function useListedTab(
   tab: ListedTab,
-  forward: React.Ref<HTMLButtonElement> | undefined,
-): (element: HTMLButtonElement | null) => void {
+  given: React.RefObject<HTMLButtonElement | null> | undefined,
+): React.RefObject<HTMLButtonElement | null> {
   const listed = useContext(StripTabs);
-  const own = useRef<HTMLButtonElement | null>(null);
+  const fallback = useRef<HTMLButtonElement | null>(null);
+  const own = given ?? fallback;
   useLayoutEffect(() => {
     const button = own.current;
     if (listed === undefined || button === null) return;
@@ -494,14 +495,7 @@ function useListedTab(
       listed.delete(button);
     };
   });
-  return useCallback(
-    (element: HTMLButtonElement | null) => {
-      own.current = element;
-      if (typeof forward === "function") forward(element);
-      else if (forward !== null && forward !== undefined) forward.current = element;
-    },
-    [forward],
-  );
+  return own;
 }
 
 /**
@@ -555,7 +549,7 @@ export function Tab({
   card?: React.ReactNode;
   keyshortcuts?: string | undefined;
   editor?: React.ReactNode;
-  tabRef?: React.Ref<HTMLButtonElement> | undefined;
+  tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   quiet?: boolean;
   anchored?: boolean;
   onSelect: () => void;
