@@ -46,7 +46,7 @@ import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../tasks/coding-agent-model";
-import { useSidePanel } from "../tasks/use-side-panel";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
@@ -301,6 +301,9 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
 });
 
 /** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
+/** The side panel the page last drew, whose toggle the shell's button presses. */
+let drawnPanel: SidePanelControl | undefined;
+
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
@@ -312,6 +315,7 @@ function PanelPage(): React.JSX.Element {
     [],
     agents,
   );
+  drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
     tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
@@ -383,7 +387,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("with its last tab closed, the panel offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+test("its last tab closed shuts the panel, and shown again it offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -441,8 +445,12 @@ test("with its last tab closed, the panel offers in place every row its + offers
   assert.ok(close, "the worker's tab closes");
   act(() => close.click());
   await settle();
+  assert.equal(container.querySelector("aside.side-panel"), null, "the panel shuts");
 
-  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  act(() => drawnPanel?.onToggle());
+  await settle();
+  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the toggle shows it");
+  const well = shown.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
   const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
   assert.deepEqual(
     rows.map((each) => each.textContent),
@@ -458,7 +466,7 @@ test("with its last tab closed, the panel offers in place every row its + offers
   act(() => changes.click());
   await settle();
   assert.ok(
-    [...panel.querySelectorAll("[role='tab']")].some((tab) =>
+    [...shown.querySelectorAll("[role='tab']")].some((tab) =>
       (tab.textContent ?? "").includes("Changes"),
     ),
     "the Changes tab stands in the panel",
