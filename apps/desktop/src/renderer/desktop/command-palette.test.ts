@@ -433,6 +433,53 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });
 
+test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
+  const shown: string[] = [];
+  const agent = (id: string, title: string) => ({
+    id,
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  });
+  const base = tasksControl();
+  openPalette(
+    tasksControl({
+      activeTaskId: "plan-1",
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+        },
+      ],
+      agents: codingAgentsControl({
+        agents: [agent("agent-7", "Invoice export")],
+        archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
+        agentIds: ["agent-7"],
+      }),
+      agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
+    }),
+  );
+  chooseFilter("Agents");
+  assert.deepEqual(rows(), [
+    "Inbox · Billing usage alerts",
+    "Invoice export · Billing usage alerts",
+    "Refund export · Archived · Billing usage alerts",
+  ]);
+
+  type("refund");
+  assert.deepEqual(rows(), ["Refund export · Archived · Billing usage alerts"]);
+  press("Refund export · Archived · Billing usage alerts");
+  assert.deepEqual(shown, ["agent-8"]);
+});
+
 test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window while the experiment is on, and none read while it is off", async () => {
   const automation = {
     id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
