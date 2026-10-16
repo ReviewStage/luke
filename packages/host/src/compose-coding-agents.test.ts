@@ -237,6 +237,11 @@ function fakeService() {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
         return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
       }),
+    pin: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`pin:${agentId}:${String(request.pinned)}`);
+        return { agent: AGENT };
+      }),
     agent: (agentId) =>
       Effect.sync(() => {
         asked.push(`page:${agentId}`);
@@ -465,6 +470,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
+      { agent: AGENT },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
       agent: PAGE,
     });
@@ -545,6 +554,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
+      `pin:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,

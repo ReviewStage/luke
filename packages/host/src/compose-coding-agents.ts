@@ -26,6 +26,7 @@ import {
   codingAgentMessagesParamsSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
+  codingAgentPinParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -87,6 +88,7 @@ export type CodingAgentClient = Pick<
   | "rename"
   | "switchServers"
   | "archive"
+  | "pin"
   | "stop"
   | "agent"
   | "agentInbox"
@@ -329,6 +331,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "archiving an agent names the agent and whether it is archived",
         );
         const answer = yield* asked(client.archive(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentPinParamsSchema,
+          params,
+          "pinning an agent names the agent and whether it is pinned",
+        );
+        const answer = yield* asked(client.pin(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

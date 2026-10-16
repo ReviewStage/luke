@@ -14,20 +14,24 @@ import {
   TURN_STATUS,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { Clock, DateTime, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {
+  archiveCodingAgent,
   archiveUnmovedCodingAgent,
   delegationsOf,
   lineSendersOf,
   listCodingAgentsOnPullRequest,
   listPlanlessCodingAgents,
   listWorkspaceCodingAgents,
+  pinCodingAgent,
   readCodingAgent,
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
@@ -51,6 +55,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
  * And who an agent writes as on GitHub, settled once by its first session.
+ * And an agent's pin, which is its reader's own, as a plan's is.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -559,5 +564,117 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
         assert.equal((yield* listCodingAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
         assert.deepEqual(yield* listCodingAgentsOnPullRequest("acme/api", 99, 10), []);
       }),
+  );
+});
+
+/** Dean's workspace with Charles a member of it, and an agent an automation of Dean's started there with no plan. */
+const openSharedAgent = Effect.gen(function* () {
+  const dean = yield* openAccount;
+  const charles = yield* openAccount;
+  const workspace = yield* openWorkspace(dean);
+  yield* joinWorkspace(workspace, charles);
+  const { agentId } = yield* planlessAgent(dean, workspace);
+  return { dean, charles, agentId };
+});
+
+/** The agent's pin as the account's list reads it, archived agents among the rest; none where the list holds no pin of it. */
+const pinReadBy = (userId: string, agentId: string) =>
+  Effect.map(listPlanlessCodingAgents(userId, { includeArchived: true }), (agents) =>
+    agents.find(({ id }) => id === agentId)?.pinnedAt?.getTime(),
+  );
+
+const pinnedOnes = (agentId: string) =>
+  Database.use((db) =>
+    db
+      .select({ userId: agentPin.userId })
+      .from(agentPin)
+      .where(eq(agentPin.codingAgentId, agentId)),
+  );
+
+it.layer(getTestDB())("an agent's pin", (it) => {
+  it.effect("a member's pin of an agent with no plan reads pinned for them alone", () =>
+    Effect.gen(function* () {
+      const { dean, charles, agentId } = yield* openSharedAgent;
+      const pinnedAt = yield* Clock.currentTimeMillis;
+
+      const answered = yield* pinCodingAgent(charles, agentId, true);
+
+      assert.equal(Option.getOrUndefined(answered)?.id, agentId);
+      assert.equal(yield* pinReadBy(charles, agentId), pinnedAt);
+      assert.equal(yield* pinReadBy(dean, agentId), undefined);
+    }),
+  );
+
+  it.effect("unpinning takes away only the account's own pin", () =>
+    Effect.gen(function* () {
+      const { dean, charles, agentId } = yield* openSharedAgent;
+      yield* pinCodingAgent(dean, agentId, true);
+      yield* TestClock.adjust("1 minute");
+      const charlesPinnedAt = yield* Clock.currentTimeMillis;
+      yield* pinCodingAgent(charles, agentId, true);
+
+      yield* pinCodingAgent(dean, agentId, false);
+
+      assert.equal(yield* pinReadBy(dean, agentId), undefined);
+      assert.equal(yield* pinReadBy(charles, agentId), charlesPinnedAt);
+    }),
+  );
+
+  it.effect(
+    "an agent pinned again keeps its first instant, and an archive and its return leave the pin standing",
+    () =>
+      Effect.gen(function* () {
+        const { dean, agentId } = yield* openSharedAgent;
+        const pinnedAt = yield* Clock.currentTimeMillis;
+        yield* pinCodingAgent(dean, agentId, true);
+        yield* TestClock.adjust("1 minute");
+
+        yield* pinCodingAgent(dean, agentId, true);
+        assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
+        yield* archiveCodingAgent(dean, agentId, true);
+        assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
+        yield* archiveCodingAgent(dean, agentId, false);
+        assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
+      }),
+  );
+
+  it.effect("an account outside the workspace can neither pin the agent nor read a pin of it", () =>
+    Effect.gen(function* () {
+      const { dean, agentId } = yield* openSharedAgent;
+      const outsider = yield* openAccount;
+      yield* pinCodingAgent(dean, agentId, true);
+
+      assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, true)));
+      assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, false)));
+      assert.deepEqual(yield* listPlanlessCodingAgents(outsider, { includeArchived: true }), []);
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: dean }]);
+    }),
+  );
+
+  it.effect(
+    "an agent on a plan is not pinned, since only an agent with no plan stands in the sidebar",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const workspace = yield* openWorkspace(dean);
+        const task = yield* createPlan(dean, { organizationId: workspace, name: "Billing" });
+        const { agentId } = yield* planlessAgent(dean, workspace, { planId: task.id });
+
+        assert.ok(Option.isNone(yield* pinCodingAgent(dean, agentId, true)));
+        assert.deepEqual(yield* pinnedOnes(agentId), []);
+      }),
+  );
+
+  it.effect("an agent's pins go with the agent, and an account's with the account", () =>
+    Effect.gen(function* () {
+      const { dean, charles, agentId } = yield* openSharedAgent;
+      yield* pinCodingAgent(dean, agentId, true);
+      yield* pinCodingAgent(charles, agentId, true);
+
+      yield* Database.use((db) => db.delete(user).where(eq(user.id, charles)));
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: dean }]);
+      yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agentId)));
+      assert.deepEqual(yield* pinnedOnes(agentId), []);
+    }),
   );
 });

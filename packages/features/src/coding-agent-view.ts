@@ -7,6 +7,7 @@ import {
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
@@ -271,6 +272,14 @@ export const codingAgentArchiveParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentArchiveParams = typeof codingAgentArchiveParamsSchema.Type;
+
+/** One agent pinned or unpinned, as the window asks it: the agent and which. */
+export const codingAgentPinParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentPinRequestSchema.fields,
+});
+
+export type CodingAgentPinParams = typeof codingAgentPinParamsSchema.Type;
 
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({

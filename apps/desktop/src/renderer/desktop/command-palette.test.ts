@@ -1115,3 +1115,44 @@ test("People lists the listed workspace's members by name and role, the reader a
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
 });
+
+test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it is pinned, and nothing for an archived agent", () => {
+  const asked: string[] = [];
+  const agent = {
+    id: "agent-9",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Triage overnight issues",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: "acme/relay",
+    activityAt: 2,
+  };
+  /** The rows ⌘K lists for "pin" over the agent's page, standing as given. */
+  const pinRows = (standing: readonly (typeof agent & { pinnedAt?: number })[], archived = []) => {
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+    openPalette(
+      plansControl({
+        agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
+        listedAgents: { standing, archived },
+        onPinAgent: (agentId, pinned) => asked.push(`${agentId}:${String(pinned)}`),
+      }),
+    );
+    type("pin");
+    return rows().filter((row) => /^(Pin|Unpin) agent$/u.test(row));
+  };
+
+  assert.deepEqual(pinRows([agent]), ["Pin agent"]);
+  press("Pin agent");
+  assert.deepEqual(pinRows([{ ...agent, pinnedAt: 3 }]), ["Unpin agent"]);
+  press("Unpin agent");
+  assert.deepEqual(pinRows([]), []);
+  assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
+});

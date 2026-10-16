@@ -5,6 +5,7 @@ import {
   type CodingAgent,
   listCodingAgents,
   listWorkspaceCodingAgents,
+  pinCodingAgent,
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
@@ -33,6 +34,7 @@ import {
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
+  codingAgentPinRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
@@ -157,7 +159,9 @@ import {
  * can name yet, still starting or with a line awaiting its turn, which the
  * desktop tries again; an archived agent takes no message; the list leaves an archived agent out unless
  * `archived=include` asks for it, while its transcript and what it
- * published still read by its id. A Stop
+ * published still read by its id. The same PATCH carrying `pinned` pins
+ * the agent for the asking member alone, or unpins it, as a plan's pin is
+ * its reader's own (`agent-pin.ts`). A Stop
  * (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
@@ -188,7 +192,7 @@ const AGENTS_PATH = {
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
-  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, or archives it; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, archives it, or pins it for the asking member; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -256,7 +260,7 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
 
-/** A change names a model, an effort, and a window, a title, or an archive, at most, so a body past this is no change. */
+/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
@@ -591,7 +595,9 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
  * against the catalog as a Start checks its own,
  * written on the row the steps read; the account's default is untouched.
  * A body naming `archived` archives the agent, stopping a turn still
- * running first as a Stop does, or brings it back. A body naming
+ * running first as a Stop does, or brings it back. A body naming `pinned`
+ * pins the agent for the asking member alone, or unpins it, which the plan
+ * list's agents with no plan then carry as that member's. A body naming
  * `disabledServers` replaces the list of MCP servers switched off for the
  * agent, which its next turn reads as it starts.
  */
@@ -628,6 +634,16 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       agent: yield* summaryOf(changed.value),
+    });
+  }
+  const pin = readEither(codingAgentPinRequestSchema)(body);
+  if (Result.isSuccess(pin)) {
+    const pinned = yield* hostedStoreOrUnavailable(
+      pinCodingAgent(userId, agent.id, pin.success.pinned),
+    );
+    if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(pinned.value),
     });
   }
   const servers = readEither(codingAgentServersRequestSchema)(body);

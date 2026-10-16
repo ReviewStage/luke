@@ -47,7 +47,7 @@ import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/featu
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
-import { GearIcon, SearchIcon } from "@luke/ui";
+import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
 import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
@@ -617,6 +617,31 @@ function readMarkRows(
   ];
 }
 
+/**
+ * Pin agent, or Unpin agent once it is pinned, for the agent whose page
+ * stands, as its sidebar row's menu offers it: the reader's own pin. None
+ * while no agent's page stands, nor for an archived agent, which offers no
+ * pin, as an archived task's row offers none.
+ */
+function agentPinRows(
+  plans: PlansControl,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const { agentId } = plans.agentView;
+  const agent = plans.listedAgents.standing.find((each) => each.id === agentId);
+  if (agent === undefined) return [];
+  const pinned = agent.pinnedAt !== undefined;
+  const label = pinned ? "Unpin agent" : "Pin agent";
+  return [
+    {
+      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      label,
+      terms: [label],
+      onChoose: () => choose(() => plans.onPinAgent(agent.id, !pinned)),
+    },
+  ];
+}
+
 /** Every Settings page, in the sidebar's order, under its own glyph and name. */
 function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
   return SETTINGS_PAGE_LIST.map((page) => {
@@ -967,6 +992,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
         ...readMarkRows(plans, reads, choose),
+        ...agentPinRows(plans, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],

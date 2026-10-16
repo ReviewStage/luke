@@ -130,6 +130,10 @@
     "activityAt": {
       "type": "number",
       "minimum": 0
+    },
+    "pinnedAt": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [
