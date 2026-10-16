@@ -937,8 +937,8 @@ button.sidebar-section-head-name:hover {
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
    picture or their letter on a hue; Luke, an agent, or an automation by its
-   glyph alone in a rounded square's box, on a solid tile in a facepile;
-   someone the window cannot name on a quiet outline.
+   glyph alone in a rounded square's box, on a solid tile where a facepile
+   overlaps it; someone the window cannot name on a quiet outline.
    One size per place, so a byline, a facepile, and a row read level whoever
    is in them. A square's corner is rounder than a workspace tile's of its
    size, and it never holds a letter, so the two never read as one. */
@@ -994,8 +994,9 @@ button.sidebar-section-head-name:hover {
 
 /* Note that a square outside a facepile stands bare, its glyph alone on the
    ground beneath it as a tab's is, in the same box, so the rows and lines it
-   stands in keep their alignment; a facepile tiles its squares instead
-   (`ActorStack`), so a face never shows through the one overlapping it. */
+   stands in keep their alignment; a facepile whose faces overlap tiles its
+   squares instead (`ActorStack`), so a face never shows through the one
+   overlapping it. */
 .actor-mark:is(
   [data-kind="luke"],
   [data-kind="agent"],
@@ -1213,6 +1214,19 @@ ul.actor-stack {
 
 .actor-stack-face > .actor-mark {
   box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+/* Note that a square no face overlaps stands bare in the pile as in a line,
+   without the ring too, because a ring of a ground it does not stand on
+   would frame it. */
+.actor-stack
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+):not([data-tiled="true"]) {
+  box-shadow: none;
 }
 
 /* Note that the badge stands over the next face, which overlaps this one's corner. */

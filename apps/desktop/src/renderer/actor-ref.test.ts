@@ -191,6 +191,35 @@ test("a facepile stands each square on its solid tile, so the face it overlaps n
   assert.equal(groundOf(named), "none");
 });
 
+test("a facepile's square overlapping nothing stands bare: a pile's lone face, and faces the pile stands apart for their badges", () => {
+  const view = draw(
+    createElement(
+      "div",
+      null,
+      SQUARES.map((actor, index) =>
+        createElement(ActorStack, { key: index, actors: [actor, DANA, SAM], drawn: 1 }),
+      ),
+      createElement(ActorStack, {
+        actors: SQUARES,
+        drawn: SQUARES.length,
+        faces: SQUARES.map(() => ({ badge: createElement("svg") })),
+        label: "Reviewers",
+      }),
+    ),
+  );
+  const piled = [...view.querySelectorAll(".actor-stack .actor-mark")];
+
+  assert.equal(piled.length, SQUARES.length * 2);
+  assert.ok(
+    piled.every((mark) => groundOf(mark) === "none"),
+    "no square overlapping nothing is tiled",
+  );
+  assert.ok(
+    piled.every((mark) => getComputedStyle(mark).getPropertyValue("box-shadow") === "none"),
+    "no square overlapping nothing is ringed",
+  );
+});
+
 /** The words of the card an actor named in a line hangs once the pointer rests on its name. */
 function cardOf(actor: Actor): Element {
   const view = draw(createElement(ActorRef, { actor }));
