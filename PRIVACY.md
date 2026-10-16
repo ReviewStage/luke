@@ -349,7 +349,10 @@ GitHub with a token the Luke GitHub App mints for that one repository on the
 workspace's installation: each file's name and patch, for up to 300
 files, leaving out a patch over 100,000 characters. It stores none of it, and
 Luke holds it in memory while the tab is open, never on disk, except that
-downloading the patch writes it where you save it.
+downloading the patch writes it where you save it. Wherever Luke names
+someone on GitHub, as the tab does who opened and reviewed the pull request,
+it draws them by their GitHub avatar, which your Mac loads straight from
+GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.

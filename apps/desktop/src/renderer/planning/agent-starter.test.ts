@@ -45,7 +45,7 @@ import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks";
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/7";
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 
 /** The workspace's members as the service's read lists them. */
 const MEMBERS: readonly WorkspaceMember[] = [
@@ -393,7 +393,7 @@ test("a starter or sender who left keeps their picture and their account's name 
     {
       userId: "user-lee",
       name: "Lee Chen",
-      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+      pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
     },
   ];
   const left = {
@@ -401,7 +401,7 @@ test("a starter or sender who left keeps their picture and their account's name 
     reason: SOMEONE_REASON.FORMER,
     name: "Lee Chen",
     userId: "user-lee",
-    pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
   };
 
   assert.deepEqual(macOwnerOf(lee, MEMBERS, "user-dean", former), left);

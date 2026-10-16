@@ -138,7 +138,7 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
 
 /** The teammate who started Invitations' agent, and the workspace's members as a read of them answers. */
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/1?v=4";
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-1";
 const MEMBERS: readonly WorkspaceMember[] = [
   {
     userId: "user-dean",

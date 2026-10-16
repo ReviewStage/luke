@@ -81,7 +81,7 @@ const AUTOMATIONS = [
   automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
 ];
 
-const PRIYA_PICTURE = "https://avatars.githubusercontent.com/u/11";
+const PRIYA_PICTURE = "https://lh3.googleusercontent.com/a/photo-11";
 /** Someone who left having only revised a task, whom no task or agent names. */
 const OLA = { userId: "user-ola", name: "Ola Berg" };
 const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }, OLA];
