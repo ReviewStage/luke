@@ -14,7 +14,8 @@ import {
   pastedLinkMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { placeChipLook } from "@luke/features/place-chip-model";
+import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
+import { planSections } from "@luke/features/plan-document";
 import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
@@ -329,7 +330,7 @@ function bareName(
   mention: Mention,
   written: string,
   bare: boolean,
-  known: ReturnType<typeof useKnownNames>,
+  known: KnownNames,
   standing: LinkStanding | undefined,
 ): string {
   if (!bare) return written;
@@ -537,12 +538,42 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label) => linkChip(href, label, doors);
 }
 
-/** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */
-export function pastedMentionNode(words: string, place: MentionPlace): MentionNode | undefined {
+/** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
+export interface PastedNames {
+  readonly known: KnownNames;
+  readonly planId: string;
+  /** The plan's text as the place holds it. */
+  readonly text: () => string;
+}
+
+/** What a pasted address's chip is called: a section of the plan pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
+function pastedName(mention: Mention, said: string, names: PastedNames): string {
+  if (mention.kind !== MENTION_KIND.SECTION)
+    return bareName(mention, said, true, names.known, undefined);
+  if (mention.taskId !== names.planId) return said;
+  const headings = planSections(names.text()).map((section) => section.heading);
+  return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
+}
+
+/**
+ * The mention node words pasted whole stand for: an address of Luke's own,
+ * a plan's, a section's, a page's, or an agent's, by the scheme of the web
+ * or the app's own, named as its bare link's chip is (`pastedName`); or a
+ * page of an integration's, named by its address's readable form; nothing
+ * for any other words, a file of the plan's repository among them.
+ */
+export function pastedMentionNode(
+  words: string,
+  place: MentionPlace,
+  names: PastedNames,
+): MentionNode | undefined {
   const link = pastedLinkMention(words, place.repository);
   return link === undefined
     ? undefined
-    : { name: link.name, target: encodeMention(link.mention, place) };
+    : {
+        name: pastedName(link.mention, link.name, names),
+        target: encodeMention(link.mention, place),
+      };
 }
 
 /** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */

@@ -30,6 +30,7 @@ import {
 } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { usePlanMentions } from "./plan-mentions";
+import { useKnownNames } from "./use-known-names";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
@@ -594,6 +595,8 @@ export function PlanDocumentEditor({
   const text = () => handle.current?.markdown() ?? editor.draft;
   // The plan's pages and agents are offered as the page's agents' boxes offer them.
   const page = usePlanMentions();
+  // A Luke address pasted whole is called by the name the window holds for what it names.
+  const known = useKnownNames();
   const picker = useMentionPicker({
     source: {
       planId: plan.id,
@@ -639,7 +642,8 @@ export function PlanDocumentEditor({
             drawMention: chips.draw,
             retarget: (target, change) =>
               retargetedMention(plan.id, mentions.place, target, change),
-            pasted: (words) => pastedMentionNode(words, mentions.place),
+            pasted: (words) =>
+              pastedMentionNode(words, mentions.place, { known, planId: plan.id, text }),
             namesMention: (target) =>
               decodeMention(target, mentions.place.repository) !== undefined,
           },

@@ -2,10 +2,11 @@ import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
+  handedMentionsIn,
+  linkMention,
   MENTION_KIND,
   type Mention,
   mentionName,
-  mentionsIn,
   type PlanMention,
   type ServerMention,
   sectionAnchors,
@@ -20,7 +21,10 @@ import type { Task } from "@luke/features/task-wire";
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
  *
  * A message names things as links whose label starts with `@`
- * (`@luke/features/mention-link`). The words go to the model as written,
+ * (`@luke/features/mention-link`), or as the bare address of a plan, one of
+ * its sections, a page, or an agent, which the window draws as the same chip
+ * and which is handed as the same mention (`handedMentionsIn`); a bare
+ * address of anything else is words. The words go to the model as written,
  * links and all. A file or a folder is the agent's to read from its own
  * checkout, on its own branch, so nothing of it is added here, but for a
  * file's lines the developer picked (`file.ts:12–20`): those are pinned to
@@ -348,7 +352,7 @@ export interface MentionedIds {
 export function mentionedIds(words: string, plan: Task | undefined): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
-  for (const { mention } of mentionsIn(words, plan?.repository ?? null)) {
+  for (const { mention } of handedMentionsIn(words, plan?.repository ?? null)) {
     if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
@@ -359,7 +363,7 @@ export function mentionedIds(words: string, plan: Task | undefined): MentionedId
 /** The MCP servers the words mention, by connection name, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
 export function mentionedServers(words: string, repository: string | null): readonly string[] {
   // Note that the plan's repository is handed, so a page that is a file of it brings in no server.
-  const connections = mentionsIn(words, repository).flatMap(({ mention }) => {
+  const connections = handedMentionsIn(words, repository).flatMap(({ mention }) => {
     if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
       return [mention.connection ?? mention.provider];
     }
@@ -383,11 +387,14 @@ export function mentionedContext(
   reads: MentionedReads = NO_MENTIONED_READS,
 ): string | undefined {
   const named: HandedMention[] = [];
-  for (const { mention, label } of mentionsIn(words, task?.repository ?? null)) {
+  const repository = task?.repository ?? null;
+  for (const { mention, label, target } of handedMentionsIn(words, repository)) {
     const handed = handedMention(mention, task);
     if (handed === undefined) continue;
+    // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
+    const name = linkMention(label, target, repository)?.name ?? mentionName(label);
     if (!named.some((each) => sameMention(each.mention, handed))) {
-      named.push({ mention: handed, name: mentionName(label) });
+      named.push({ mention: handed, name });
     }
   }
   if (named.length === 0) return undefined;
