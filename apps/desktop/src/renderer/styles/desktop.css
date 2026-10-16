@@ -4594,7 +4594,13 @@ body:has(.app-stage[data-capture="true"])
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
 .automation-row-controls > .settings-input,
-.settings-row > /* The servers left on, by their marks, beside the servers button. */
+.settings-row > .automation-cron {
+  height: var(--control-height);
+  padding-block: 0;
+  border-radius: var(--control-radius);
+}
+
+/* The servers left on, by their marks, beside the servers button. */
 .automation-servers {
   align-items: center;
   gap: var(--space-6);
@@ -4603,12 +4609,6 @@ body:has(.app-stage[data-capture="true"])
 .automation-servers > .provider-mark {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
-}
-
-.automation-cron {
-  height: var(--control-height);
-  padding-block: 0;
-  border-radius: var(--control-radius);
 }
 
 /* Note that the time's own clock is hidden, because what it opens is the
