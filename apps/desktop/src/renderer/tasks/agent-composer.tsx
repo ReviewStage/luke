@@ -389,13 +389,21 @@ export function AgentComposer({
   // Note that a held box gives up the caret, because a field that takes no
   // words, and a Send disabled under the press, can hold none; a send made
   // from the box hands it back as the box opens again, unless the caret went
-  // somewhere outside the box meanwhile.
+  // somewhere else meanwhile: to another field, or to a press or a menu in
+  // the box's own foot, such as the model chip's search.
   const refocus = useRef(false);
   useEffect(() => {
     if (held || !refocus.current) return;
     refocus.current = false;
     const active = document.activeElement;
-    if (active === null || active === document.body || card.current?.contains(active) === true) {
+    const dropped =
+      active === null ||
+      active === document.body ||
+      room.current?.contains(active) === true ||
+      (active instanceof HTMLButtonElement &&
+        active.type === "submit" &&
+        card.current?.contains(active) === true);
+    if (dropped) {
       editor.current?.focus();
     }
   }, [held]);

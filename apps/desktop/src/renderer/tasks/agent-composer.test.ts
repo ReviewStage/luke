@@ -209,7 +209,6 @@ test("a message sent with Send hands the caret to the box as it opens again", as
   send.focus();
   act(() => send.click());
   await settle();
-  act(() => send.blur());
 
   box.answer(TAKEN);
   await settle();
@@ -228,6 +227,20 @@ test("a box that opens again after a send leaves the caret where the developer w
   box.answer(TAKEN);
   await settle();
   assert.equal(document.activeElement === elsewhere, true);
+});
+
+test("a box that opens again after a send leaves the caret on a press of its own foot the developer went to meanwhile", async () => {
+  const box = await answeredLater();
+  typeInComposer(box.container, "Fix the bug");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  const servers = box.container.querySelector<HTMLButtonElement>(".agent-servers-button");
+  assert.ok(servers);
+  servers.focus();
+
+  box.answer(TAKEN);
+  await settle();
+  assert.equal(document.activeElement === servers, true);
 });
 
 test("an Enter an input method is composing sends nothing, and Shift+Enter is a new line", async () => {
