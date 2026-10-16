@@ -15,13 +15,14 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { callCardVideoStatus, callTabVideoStatus } from "@luke/ui/call-card-model";
+import { callTabVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useAct } from "../act";
 import { useAppState, useExperiment } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
+import { avatarViewShareAtom } from "./avatar-view";
 import {
   type CallAvatarTracks,
   callAvatarAtom,
@@ -29,7 +30,7 @@ import {
   callAvatarPlaybackAtom,
   NO_AVATAR_TRACKS,
 } from "./call-avatar";
-import type { CallCardVideo } from "./call-card";
+import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile";
 
 /** The avatar's tracks as published so far, none before a session stands. */
@@ -37,9 +38,14 @@ function useAvatarTracks(): CallAvatarTracks {
   return Option.getOrElse(AsyncResult.value(useAtomValue(callAvatarAtom)), () => NO_AVATAR_TRACKS);
 }
 
-/** The avatar's voice, mounted once at the panel's root and played for as long as its track stands. */
+/**
+ * The avatar's voice, mounted once at the panel's root and played for as
+ * long as its track stands, and beside it the panel's end of the call
+ * window's view of the video, which only the call window offers.
+ */
 export function PanelAvatarVoice(): React.JSX.Element {
   useAtomMount(callAvatarPlaybackAtom);
+  useAtomMount(avatarViewShareAtom);
   const { view } = useVoiceView();
   const setAudioElement = useAtomSet(callAvatarAudioElementAtom);
   return (
@@ -74,21 +80,11 @@ export function CallTabVideo({ planId }: { planId: string }): React.JSX.Element 
 }
 
 /**
- * The avatar as the panel's call card draws it (`callCardVideoStatus`), on
- * the same track, status, and toggle as the Call tab, or nothing while the
- * card has no video to offer.
+ * The avatar as the panel's call card draws it, on the same track, status,
+ * and toggle as the Call tab, or nothing while the card has no video to
+ * offer.
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
   const { tell } = useAct();
-  const state = useAppState();
-  const { view } = useVoiceView();
-  const track = useAvatarTracks().video;
-  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
-  const status = callCardVideoStatus({
-    view,
-    avatar: state?.voice.avatar ?? AVATAR_OFF,
-    videoCalls,
-  });
-  if (status === undefined) return undefined;
-  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
+  return cardVideo(useCardVideoStatus(), useAvatarTracks().video, tell);
 }

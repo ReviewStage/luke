@@ -478,7 +478,7 @@ export const ACT_KIND = {
   CALL_SHOW_PLAN: "call.showPlan",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
-  /** The video tile's Video off and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel alone. */
+  /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
   VOICE_SET_VIDEO: "voice.setVideo",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,

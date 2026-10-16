@@ -4,13 +4,17 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@luke/host";
+import type { AvatarViewSignal } from "@luke/voice/avatar-view";
+import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import {
-  CALL_WINDOW_BOUNDS,
+  type CallWindowArea,
   type CallWindowPoint,
   type CallWindowSurface,
+  callWindowCard,
+  callWindowFrame,
   callWindowPosition,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
@@ -39,6 +43,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
   return Option.getOrUndefined(decodePlacement(text));
 }
 
+/** Every display's work area, the screen less the menu bar and the Dock. */
+function workAreas(): readonly CallWindowArea[] {
+  return screen.getAllDisplays().map((display) => display.workArea);
+}
+
 /**
  * The one floating window that draws the standing call while no Luke window
  * has the keyboard. It loads the same renderer bundle as the panels from a
@@ -52,6 +61,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
  * that comes and goes with every switch of app would reload its renderer
  * each time. A renderer that dies is let go of, and the next show opens a fresh
  * one. Like the voice window it never counts toward the app's lifetime.
+ *
+ * On a video call it grows upward by the avatar's tile while the avatar
+ * stands and shrinks back once it is down (`callWindowFrame`), its card's
+ * controls staying where the developer left them. The place kept between
+ * launches is the card's alone, whatever the window's height when it moved.
  */
 export class CallWindow implements CallWindowSurface {
   readonly #options: CallWindowOptions;
@@ -60,6 +74,8 @@ export class CallWindow implements CallWindowSurface {
   #ready = false;
   #wanted = false;
   #closedForGood = false;
+  /** Whether the window holds the avatar's tile above the card, as the presence last fitted it. */
+  #video = false;
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
@@ -77,19 +93,38 @@ export class CallWindow implements CallWindowSurface {
     this.current()?.hide();
   }
 
+  fitVideo(video: boolean): void {
+    this.#video = video;
+    const window = this.current();
+    if (!window) return;
+    const card = callWindowCard(window.getBounds());
+    window.setBounds(callWindowFrame({ card, video, workAreas: workAreas() }));
+  }
+
+  /** The panel's answer to the window's view of the avatar's video. */
+  signalAvatarView(signal: AvatarViewSignal): void {
+    // SAFETY: the signal is the structured-clone value `avatarViewSignalFromWire` admitted.
+    this.current()?.webContents.send(channels.onAvatarViewSignal, signal as UnparsedWireValue);
+  }
+
   #open(): BrowserWindow {
-    const { x, y } = callWindowPosition({
+    const card = callWindowPosition({
       saved: readPlacement(this.#options.placementPath),
-      workAreas: screen.getAllDisplays().map((display) => display.workArea),
+      workAreas: workAreas(),
       primary: screen.getPrimaryDisplay().workArea,
+    });
+    const { x, y, width, height } = callWindowFrame({
+      card,
+      video: this.#video,
+      workAreas: workAreas(),
     });
     const window = new BrowserWindow({
       title: "Luke call",
       show: false,
       x,
       y,
-      width: CALL_WINDOW_BOUNDS.WIDTH,
-      height: CALL_WINDOW_BOUNDS.HEIGHT,
+      width,
+      height,
       type: "panel",
       frame: false,
       transparent: true,
@@ -138,9 +173,9 @@ export class CallWindow implements CallWindowSurface {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
     window.on("moved", () => {
-      const [left, top] = window.getPosition();
+      const kept = callWindowCard(window.getBounds());
       try {
-        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify(kept));
       } catch {
         // Note that a place that cannot be kept is let go of, because the
         // card opening at its corner next time costs nothing, and a throw

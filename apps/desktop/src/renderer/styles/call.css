@@ -121,6 +121,17 @@ html.call-window #root {
   -webkit-app-region: drag;
 }
 
+/* The avatar's tile in the floating window, picture-in-picture over the
+   card, at a height of its own rather than its aspect's: main grows the
+   window by exactly this and the card's gap under it (`CALL_WINDOW_BOUNDS`
+   in `call-window-presence.ts`), so the two must move together. 125px is
+   16:9 at the card's 222px inside. The tile is held by too, as the rest of
+   the card is, and its Video off answers its own press. */
+.call-card[data-surface="window"] .call-video-tile {
+  height: 125px;
+  aspect-ratio: auto;
+}
+
 /* The plan's name, and the way back to it beside the name. */
 .call-card-head {
   display: flex;

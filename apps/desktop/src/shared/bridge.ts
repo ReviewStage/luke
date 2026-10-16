@@ -14,6 +14,7 @@ import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/a
 import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
 import { liveExchangeActive } from "@luke/live";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
+import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
 import {
   isVoiceCommand,
   isVoiceView,
@@ -154,6 +155,19 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:feed-avatar",
     args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
+  }),
+  /**
+   * One signal of the call window's view of Luke's avatar: the call window's
+   * offer and close, which main relays to the panel, or the panel's answer,
+   * which main relays to the call window. A send rather than an act: it is
+   * a relay between two windows, and nothing reads an answer.
+   */
+  signalAvatarView: entry({
+    kind: "send",
+    channel: "app:signal-avatar-view",
+    args: args<[AvatarViewSignal]>(
+      (v) => v.length === 1 && avatarViewSignalFromWire(v[0]) !== undefined,
+    ),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({
@@ -341,6 +355,18 @@ export const BRIDGE = {
     channel: "app:avatar-feed",
     args: noArgs,
     result: result<AvatarFeed>((value) => avatarFeedFromWire(value) !== undefined),
+  }),
+  /**
+   * One signal of the call window's view of Luke's avatar, relayed from the
+   * other end: the call window's offer or close to the panel, the panel's
+   * answer to the call window. An event, as the feed is, because a signal is
+   * read once and never bootstrapped from.
+   */
+  onAvatarViewSignal: entry({
+    kind: "subscribe",
+    channel: "app:avatar-view-signal",
+    args: noArgs,
+    result: result<AvatarViewSignal>((value) => avatarViewSignalFromWire(value) !== undefined),
   }),
   /**
    * The call card's way back pressed, in the floating window or a panel's

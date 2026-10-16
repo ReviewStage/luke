@@ -13,18 +13,20 @@
 
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { ReturnIcon } from "@luke/ui";
-import { type CallCardModel, callCard } from "@luke/ui/call-card-model";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import { type CallCardModel, callCard, callCardVideoStatus } from "@luke/ui/call-card-model";
+import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
 import { Tooltip } from "../tooltip";
-import { useAppState } from "../use-app-state";
+import { useAppState, useExperiment } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
+import { useAvatarView } from "./avatar-view";
 import { CallVideoTile, VideoToggle } from "./call-video-tile";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
@@ -73,6 +75,28 @@ export interface CallCardInput {
   controls: CallControls;
   /** Absent on a call with no video to offer, which draws the card alone. */
   video?: CallCardVideo | undefined;
+}
+
+/** What a card draws of the avatar on this window's document (`callCardVideoStatus`). */
+export function useCardVideoStatus(): AvatarStatus | undefined {
+  const state = useAppState();
+  const { view } = useVoiceView();
+  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
+  return callCardVideoStatus({ view, avatar: state?.voice.avatar ?? AVATAR_OFF, videoCalls });
+}
+
+/**
+ * The card's video from its status and the track the window holds for it,
+ * its Video off and Video on asking main as the Call tab's do, or nothing
+ * while the card has no video to offer.
+ */
+export function cardVideo(
+  status: AvatarStatus | undefined,
+  track: MediaStreamTrack | undefined,
+  tell: ActHandle["tell"],
+): CallCardVideo | undefined {
+  if (status === undefined) return undefined;
+  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }
 
 /**
@@ -241,18 +265,26 @@ export function ColumnFoot({
   );
 }
 
-/** The floating window's root: the card over the document it is handed. */
+/**
+ * The floating window's root: the card over the document it is handed. On
+ * a video call it views the avatar's video from the panel, which runs the
+ * avatar (`avatar-view.ts`), while its card draws the avatar live; main
+ * grows the window to hold the tile on the same document.
+ */
 export function CallWindowCard(): React.JSX.Element {
   useKeyboardModality();
   useStaleHoverAfterMove();
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
+  const videoStatus = useCardVideoStatus();
+  const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
   return (
     <CallCard
       card={callCard({ view, planning: state?.planning ?? IDLE_PLANNING_VIEW })}
       speakerMuted={view.speakerMuted}
       controls={callControls(tell, view.speakerMuted)}
+      video={cardVideo(videoStatus, track, tell)}
       surface={CALL_CARD_SURFACE.WINDOW}
     />
   );
