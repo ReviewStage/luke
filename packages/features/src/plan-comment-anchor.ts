@@ -124,15 +124,33 @@ function keptFinely(
   return kept;
 }
 
-/** The runs of `before` that still stand in `after`, in order. */
+/** A stretch a change took out or wrote in whole, where it stood. */
+interface Changed {
+  readonly text: string;
+  readonly at: number;
+}
+
+/**
+ * The runs of `before` that still stand in `after`. Note that a block the
+ * change took out in one place and wrote in, word for word, in another is
+ * kept where it went, because a line diff aligns the blocks a move passes
+ * over and sees the moved one as two changes, which would take its anchors
+ * with it. A block counts as moved only where its words were taken out once
+ * and written in once, so two copies are never told apart by guess.
+ */
 function keptRuns(before: string, after: string): readonly KeptRun[] {
   const kept: KeptRun[] = [];
+  const removedWhole: Changed[] = [];
+  const addedWhole: Changed[] = [];
   let at = 0;
   let to = 0;
   let removed = "";
   let added = "";
   const settle = () => {
-    kept.push(...keptFinely(removed, added, at, to));
+    const finely = keptFinely(removed, added, at, to);
+    kept.push(...finely);
+    if (finely.length === 0 && removed.trim() !== "") removedWhole.push({ text: removed, at });
+    if (finely.length === 0 && added.trim() !== "") addedWhole.push({ text: added, at: to });
     at += removed.length;
     to += added.length;
     removed = "";
@@ -149,6 +167,16 @@ function keptRuns(before: string, after: string): readonly KeptRun[] {
     }
   }
   settle();
+  // Note that the blank lines a move carries with a block differ by where it lands, so blocks are matched without their trailing space.
+  const words = (changed: Changed) => changed.text.trimEnd();
+  for (const gone of removedWhole) {
+    const same = addedWhole.filter((written) => words(written) === words(gone));
+    const twice = removedWhole.filter((other) => words(other) === words(gone)).length > 1;
+    const [moved] = same;
+    if (moved !== undefined && same.length === 1 && !twice) {
+      kept.push({ before: gone.at, after: moved.at, length: words(gone).length });
+    }
+  }
   return kept;
 }
 
@@ -170,8 +198,8 @@ export function textChange(
       const start = Math.max(span.from, run.before);
       const end = Math.min(span.to, run.before + run.length);
       if (start >= end) continue;
-      from ??= run.after + (start - run.before);
-      to = run.after + (end - run.before);
+      from = Math.min(from ?? Number.POSITIVE_INFINITY, run.after + (start - run.before));
+      to = Math.max(to ?? 0, run.after + (end - run.before));
     }
     return from === undefined || to === undefined ? undefined : { from, to };
   };

@@ -203,7 +203,8 @@
             "too-many",
             "no-words",
             "not-yours",
-            "no-entry"
+            "no-entry",
+            "key-taken"
           ]
         }
       },

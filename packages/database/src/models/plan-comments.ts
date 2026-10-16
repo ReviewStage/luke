@@ -488,9 +488,13 @@ function replied(
   return Effect.gen(function* () {
     if (reply.clientKey !== undefined) {
       const taken = yield* findKeyedThread({ planId, clientKey: reply.clientKey });
-      if (Option.isSome(taken)) return yield* answered(planId, taken.value.threadId);
+      if (Option.isSome(taken) && taken.value.threadId !== thread.id) {
+        return refused(PLAN_COMMENT_REFUSAL.KEY_TAKEN);
+      }
+      if (Option.isSome(taken)) return yield* answered(planId, thread.id);
     }
-    if (thread.entries.length >= PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {
+    const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
+    if (comments.length >= PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {
       return refused(PLAN_COMMENT_REFUSAL.TOO_MANY);
     }
     const entry = {
@@ -522,11 +526,15 @@ function settled(
   return Effect.gen(function* () {
     if (thread.status === status) return yield* answered(planId, thread.id);
     yield* movedOn(thread.id, now, { status });
-    const kind =
-      status === PLAN_COMMENT_STATUS.RESOLVED
-        ? PLAN_COMMENT_ENTRY.RESOLVED
-        : PLAN_COMMENT_ENTRY.REOPENED;
-    yield* writeEntry(planId, thread.id, writer, { kind }, now);
+    // Note that past the bound the change is made and goes unsaid, because a resolve must never be refused, and its lines must not grow a thread without end.
+    const lines = thread.entries.filter((entry) => entry.kind !== PLAN_COMMENT_ENTRY.COMMENT);
+    if (lines.length < PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD) {
+      const kind =
+        status === PLAN_COMMENT_STATUS.RESOLVED
+          ? PLAN_COMMENT_ENTRY.RESOLVED
+          : PLAN_COMMENT_ENTRY.REOPENED;
+      yield* writeEntry(planId, thread.id, writer, { kind }, now);
+    }
     return yield* answered(planId, thread.id);
   });
 }
@@ -633,11 +641,12 @@ export function movePlanCommentAnchors(
       } else if (was !== undefined) {
         moved = change(was);
       } else continue;
-      if (moved?.from === was?.from && moved?.to === was?.to) continue;
+      const section = moved === undefined ? row.section : sectionAt(after, moved.from);
+      if (moved?.from === was?.from && moved?.to === was?.to && section === row.section) continue;
       yield* movedOn(row.id, now, {
         anchorFrom: moved?.from ?? null,
         anchorTo: moved?.to ?? null,
-        ...(moved === undefined ? undefined : { section: sectionAt(after, moved.from) }),
+        section,
       });
     }
   });

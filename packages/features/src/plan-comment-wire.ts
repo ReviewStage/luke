@@ -29,7 +29,7 @@ export const PLAN_COMMENT_BOUNDS = {
   MAX_QUOTE_CHARS: 2_000,
   /** The most threads one plan may hold, resolved ones among them. */
   MAX_THREADS_PER_PLAN: 500,
-  /** The most entries one thread may hold. */
+  /** The most comments one thread may hold, and the most lines of what happened to it it says. */
   MAX_ENTRIES_PER_THREAD: 200,
   /** The longest key a client sends a write under. */
   MAX_CLIENT_KEY_CHARS: 200,
@@ -220,7 +220,7 @@ export type PlanCommentActionRequest = typeof planCommentActionRequestSchema.Typ
 
 /** Why a write to a thread took nothing, answered in band. */
 export const PLAN_COMMENT_REFUSAL = {
-  /** The plan already holds `PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN` threads, or the thread its bound of entries. */
+  /** The plan already holds `PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN` threads, or the thread its bound of comments. */
   TOO_MANY: "too-many",
   /** The anchor names no words of the text it was measured in, or none of them stand in the plan now. */
   NO_WORDS: "no-words",
@@ -228,6 +228,8 @@ export const PLAN_COMMENT_REFUSAL = {
   NOT_YOURS: "not-yours",
   /** The comment named is not one of the thread's. */
   NO_ENTRY: "no-entry",
+  /** The key the reply was sent under already wrote to another thread of the plan. */
+  KEY_TAKEN: "key-taken",
 } as const;
 
 export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN_COMMENT_REFUSAL];

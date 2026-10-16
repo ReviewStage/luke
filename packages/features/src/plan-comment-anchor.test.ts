@@ -69,6 +69,16 @@ test("an anchored word keeps its anchor through a typo fixed inside it", () => {
   assert.equal(wordsAt(after, textChange(typo, after)(spanOf(typo, "temate"))), "teammate");
 });
 
+test("an anchor moves with its section when a change moves the section below another", () => {
+  const goal = PLAN.slice(0, PLAN.indexOf("## Approach"));
+  const approach = PLAN.slice(PLAN.indexOf("## Approach"));
+  const after = `${approach}\n${goal}`;
+  const change = textChange(PLAN, after);
+
+  assert.equal(wordsAt(after, change(spanOf(PLAN, "single-use link"))), "single-use link");
+  assert.equal(wordsAt(after, change(spanOf(PLAN, "the mock Lee shared"))), "the mock Lee shared");
+});
+
 test("a change that moves nothing leaves every anchor where it was", () => {
   const span = spanOf(PLAN, "teammate");
 

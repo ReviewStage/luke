@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
@@ -292,6 +293,84 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         );
         assert.equal(edited.entries[0]?.words, "Or a link, too?");
         assert.ok(edited.entries[0]?.editedAt !== undefined);
+      }),
+  );
+
+  it.effect(
+    "a heading renamed over an anchor that did not move names the thread's new section",
+    () =>
+      Effect.gen(function* () {
+        const { owner, planId } = yield* openSharedPlan;
+        yield* startPlanCommentThread(
+          member(owner),
+          planId,
+          startOn(PLAN_TEXT, "seven days", "Why?"),
+        );
+        const renamed = PLAN_TEXT.replace("## Goal", "## Plan");
+
+        yield* movePlanCommentAnchors(planId, PLAN_TEXT, renamed);
+
+        const read = yield* readOne(owner, planId);
+        assert.equal(read?.section, "Plan");
+        assert.equal(anchoredIn(renamed, read), "seven days");
+      }),
+  );
+
+  it.effect(
+    "a reply under a key another thread was written under is refused, and the thread is unchanged",
+    () =>
+      Effect.gen(function* () {
+        const { owner, planId } = yield* openSharedPlan;
+        const first = threadOf(
+          yield* startPlanCommentThread(member(owner), planId, startOn(PLAN_TEXT, "email", "One")),
+        );
+        const second = threadOf(
+          yield* startPlanCommentThread(member(owner), planId, startOn(PLAN_TEXT, "invite", "Two")),
+        );
+        const clientKey = randomUUID();
+        const reply = { action: PLAN_COMMENT_ACTION.REPLY, clientKey, words: "Again" } as const;
+        yield* actOnPlanCommentThread(member(owner), planId, first.id, reply);
+
+        assert.deepEqual(yield* actOnPlanCommentThread(member(owner), planId, second.id, reply), {
+          status: PLAN_COMMENT_OUTCOME.DONE,
+          answer: { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN },
+        });
+        assert.equal(
+          threadOf(yield* actOnPlanCommentThread(member(owner), planId, first.id, reply)).entries
+            .length,
+          2,
+        );
+      }),
+  );
+
+  it.effect(
+    "resolving and reopening past the bound still settles the thread, and says no more lines of it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, planId } = yield* openSharedPlan;
+        const started = threadOf(
+          yield* startPlanCommentThread(
+            member(owner),
+            planId,
+            startOn(PLAN_TEXT, "email", "Toggle"),
+          ),
+        );
+        let last = started;
+        for (let turn = 0; turn < PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD + 2; turn += 1) {
+          const action = turn % 2 === 0 ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN;
+          last = threadOf(
+            yield* actOnPlanCommentThread(member(owner), planId, started.id, { action }),
+          );
+        }
+
+        assert.equal(last.status, PLAN_COMMENT_STATUS.OPEN);
+        assert.equal(last.entries.length, PLAN_COMMENT_BOUNDS.MAX_ENTRIES_PER_THREAD + 1);
+        const replied = yield* actOnPlanCommentThread(member(owner), planId, started.id, {
+          action: PLAN_COMMENT_ACTION.REPLY,
+          clientKey: randomUUID(),
+          words: "Still taken",
+        });
+        assert.equal(threadOf(replied).entries.at(-1)?.words, "Still taken");
       }),
   );
 
