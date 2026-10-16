@@ -4,6 +4,8 @@ import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { test } from "vitest";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { toolsOf } from "../agent-runtime/tools.js";
 import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -185,4 +187,19 @@ test("an agent writing as its developer is told to end every commit on the trail
       );
     }
   }
+});
+
+test("an agent whose credential reads its checks waits on them with sleep, which it is offered and its read-only worker is not", () => {
+  const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    assert.ok(coderInstructions("Acme/Relay", brief, true).includes(WAIT), brief);
+    assert.ok(!coderInstructions("Acme/Relay", brief, false).includes(WAIT), brief);
+  }
+  assert.deepEqual(
+    [
+      toolsOf(AGENT_ROLE.CODER).has(CODER_TOOL.SLEEP),
+      toolsOf(AGENT_ROLE.CODER_WORKER).has(CODER_TOOL.SLEEP),
+    ],
+    [true, false],
+  );
 });

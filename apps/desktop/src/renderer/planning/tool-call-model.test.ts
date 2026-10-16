@@ -453,3 +453,29 @@ test("a look at one of the plan's pictures says it looked and opens the plan, an
   assert.ok(shown?.text.includes(refused.output.reason));
   assert.equal(toolTarget(refused), undefined);
 });
+
+test("a pause names how long it waits, and its answer how long it waited or that a message ended it early", () => {
+  const paused = (seconds: number, output?: Record<string, number | boolean>) =>
+    toolCallView({ tool: "sleep", input: { seconds }, output });
+  assert.deepEqual(
+    [paused(45), paused(300), paused(5_400), paused(3_600)].map((view) => [
+      view.kind,
+      view.subject,
+    ]),
+    [
+      [CALL_KIND.SLEEP, "45 seconds"],
+      [CALL_KIND.SLEEP, "5 minutes"],
+      [CALL_KIND.SLEEP, "1 hour 30 minutes"],
+      [CALL_KIND.SLEEP, "1 hour"],
+    ],
+  );
+  assert.equal(paused(300).output, undefined, "a pause still under way has no answer yet");
+  assert.deepEqual(paused(300, { waitedSeconds: 300 }).output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Waited 5 minutes.",
+  });
+  assert.deepEqual(paused(300, { interrupted: true }).output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Stopped early: a message arrived.",
+  });
+});

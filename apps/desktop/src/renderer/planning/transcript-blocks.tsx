@@ -45,6 +45,7 @@ import {
   SearchIcon,
   SendIcon,
   TerminalIcon,
+  TimerIcon,
   WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -442,6 +443,7 @@ const CALL_ICON = {
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
+  [CALL_KIND.SLEEP]: TimerIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
