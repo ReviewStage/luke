@@ -1,3 +1,4 @@
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
@@ -317,6 +318,41 @@ const markFound =
     for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
   };
 
+/** Whether a node is a link the place draws itself, a mention's chip say. */
+function isDrawnLink(node: HastElementChild, link: LinkDrawer): boolean {
+  if (node.type !== "element" || node.tagName !== "a") return false;
+  const href = node.properties.href;
+  return isWireString(href) && link(href, labelOf(node)) !== undefined;
+}
+
+/** An element's children, and theirs, with each link the place draws itself held with the punctuation written against it (`link-glue.ts`). */
+function gluedChildren(element: HastElement, link: LinkDrawer): HastElementChild[] {
+  for (const child of element.children) {
+    if (child.type === "element" && !isDrawnLink(child, link))
+      child.children = gluedChildren(child, link);
+  }
+  return gluedRun<HastElementChild>(
+    element.children,
+    (child) => isDrawnLink(child, link),
+    (value) => ({ type: "text", value }),
+    (inside) => ({
+      type: "element",
+      tagName: "span",
+      properties: { className: [LINK_GLUE.CLASS] },
+      children: inside,
+    }),
+  );
+}
+
+/** The rehype step that holds every drawn link with the punctuation written against it, so a comma never starts a line alone after a chip. */
+const glueDrawnLinks =
+  (link: LinkDrawer) =>
+  (tree: HastParent): void => {
+    for (const child of tree.children) {
+      if (child.type === "element") child.children = gluedChildren(child, link);
+    }
+  };
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -567,6 +603,7 @@ export function MarkdownMessage({
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
   if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
+  if (link !== undefined) rehypePlugins.push([glueDrawnLinks, link]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
