@@ -1,6 +1,7 @@
 import {
   ISSUE_CALL_FAILURE,
   type IssueCallFailure,
+  type IssueChangeParams,
   type IssueCreateParams,
   type IssueView,
 } from "@luke/features/issue-view";
@@ -11,17 +12,23 @@ import { useAct } from "../act";
 import { useMinute } from "../tasks/task-time";
 
 /**
- * use-issues.ts -- the Issues page's list: one workspace's issues, read when the page opens and each minute after, and the write that files one.
+ * use-issues.ts -- the Issues pages' list and one issue: one workspace's issues, read when the pages open and each minute after, one issue read as its page opens, and the writes that file and change them.
  *
  * Nothing is held past the page. The list is read again each minute it
  * stands, so what a teammate filed or moved shows without a press. A write
  * answers the issue as the service then holds it, which takes its place in
- * the list at once, and the list is read again once the write settles, so
+ * the list at once, or leaves it where it was archived, and the list is read again once the write settles, so
  * what changed elsewhere while it was out is not lost to it. A refresh that
  * fails keeps the list it would have replaced; only a first read that fails
  * is said as one. A failure is kept to be said rather than thrown, since
  * every caller does the same with one: says it, and offers to try again.
  */
+
+/** What a change names: any of an issue's fields, and whether it is archived. */
+export type IssueChange = IssueChangeParams["change"];
+
+/** One issue as its page draws it: read, failed, or not yet read. */
+export type IssueRead = IssueView | undefined;
 
 /** The list as the page draws it: read, failed, or not yet read. */
 export type IssuesRead =
@@ -31,9 +38,12 @@ export type IssuesRead =
 
 const UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
 
-/** One issue put in the place of the one it replaces, or first where it is new, the rest as they stood. */
+/** One issue put in the place of the one it replaces, or first where it is new, or taken out where it was archived; the rest as they stood. */
 function replaced(read: IssuesRead, issue: Issue): IssuesRead {
   if (read === undefined || "failure" in read) return read;
+  if (issue.archivedAt !== null) {
+    return { issues: read.issues.filter((each) => each.id !== issue.id) };
+  }
   const known = read.issues.some((each) => each.id === issue.id);
   return {
     issues: known
@@ -110,6 +120,48 @@ export function useIssues(workspaceId: string | undefined) {
     (params: IssueCreateParams) => written(act(ACT_KIND.ISSUES_CREATE, params)),
     [act, written],
   );
+  const change = useCallback(
+    (params: IssueChangeParams) => written(act(ACT_KIND.ISSUES_CHANGE, params)),
+    [act, written],
+  );
   const read = held?.workspaceId === workspaceId ? held?.read : undefined;
-  return { read, reload, create };
+  return { read, reload, create, change };
+}
+
+/**
+ * One issue, read once as its page opens, and its change: sent through the
+ * list's own, so the list takes the answer too, and the answer drawn here
+ * in its place where the service kept it.
+ */
+export function useIssue(
+  issueId: string,
+  changeListed: (params: IssueChangeParams) => Promise<IssueView>,
+) {
+  const { act } = useAct();
+  const [held, setHeld] = useState<{ readonly issueId: string; readonly read: IssueRead }>();
+  // Note that a read for another issue, or one answered after a change landed, draws nothing over it.
+  const generation = useRef(0);
+  const reload = useCallback(() => {
+    generation.current += 1;
+    const asked = generation.current;
+    const taken = (read: IssueView) => {
+      if (asked === generation.current) setHeld({ issueId, read });
+    };
+    act(ACT_KIND.ISSUES_READ, { issueId }).then(taken, () => taken(UNANSWERED));
+  }, [act, issueId]);
+  useEffect(reload, [reload]);
+  // Note that only the newest change's answer is drawn, so an older one answered after it puts back nothing it changed.
+  const change = useCallback(
+    (params: IssueChange) => {
+      generation.current += 1;
+      const asked = generation.current;
+      return changeListed({ issueId, change: params }).then((answer) => {
+        if ("issue" in answer && asked === generation.current) setHeld({ issueId, read: answer });
+        return answer;
+      });
+    },
+    [changeListed, issueId],
+  );
+  const read = held?.issueId === issueId ? held.read : undefined;
+  return { read, reload, change };
 }

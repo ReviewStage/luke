@@ -119,3 +119,58 @@
 .issue-priority-mark[data-priority="urgent"] {
   color: var(--state-attention);
 }
+
+/* One issue's page: its title, its two chips, and its description, at the
+   window's reading width. */
+.issue-crumb {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-detail {
+  display: flex;
+  max-width: var(--reading-width);
+  flex-direction: column;
+  gap: var(--space-12);
+  padding-top: var(--space-8);
+}
+
+.issue-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* The title is a press away from its field, drawn as the words themselves. */
+.issue-title-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  cursor: text;
+  font: inherit;
+  text-align: left;
+}
+
+.issue-title-field {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.issue-properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.issue-description-empty {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}

@@ -4,26 +4,10 @@ import {
   issueGroups,
   issueIdentifier,
 } from "@luke/features/issue-list-model";
-import {
-  ISSUE_PRIORITY,
-  ISSUE_STATUS,
-  type Issue,
-  type IssuePriority,
-  type IssueStatus,
-} from "@luke/features/issue-wire";
-import {
-  CircleAlertIcon,
-  CircleCheckIcon,
-  CircleDashedIcon,
-  CircleDotIcon,
-  CircleIcon,
-  CircleXIcon,
-  SignalHighIcon,
-  SignalLowIcon,
-  SignalMediumIcon,
-} from "lucide-react";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
+import type { Issue } from "@luke/features/issue-wire";
+import { useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
+import { PRIORITY_GLYPH, StatusGlyph } from "./issue-pickers";
 
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
@@ -34,49 +18,28 @@ import { RelativeTime } from "../tasks/relative-time";
  * here.
  */
 
-/** Each status's glyph, as its group's heading and its rows wear it. */
-const STATUS_GLYPH = {
-  [ISSUE_STATUS.BACKLOG]: <CircleDashedIcon />,
-  [ISSUE_STATUS.TODO]: <CircleIcon />,
-  [ISSUE_STATUS.IN_PROGRESS]: <CircleDotIcon />,
-  [ISSUE_STATUS.DONE]: <CircleCheckIcon />,
-  [ISSUE_STATUS.CANCELED]: <CircleXIcon />,
-} as const satisfies Record<IssueStatus, React.ReactNode>;
-
-/** Each priority's mark; an unweighed issue wears none. */
-const PRIORITY_GLYPH = {
-  [ISSUE_PRIORITY.NONE]: null,
-  [ISSUE_PRIORITY.URGENT]: <CircleAlertIcon />,
-  [ISSUE_PRIORITY.HIGH]: <SignalHighIcon />,
-  [ISSUE_PRIORITY.MEDIUM]: <SignalMediumIcon />,
-  [ISSUE_PRIORITY.LOW]: <SignalLowIcon />,
-} as const satisfies Record<IssuePriority, React.ReactNode>;
-
-/** A status's glyph, coloured by the status it stands for. */
-function StatusGlyph({ status }: { status: IssueStatus }): React.JSX.Element {
-  return (
-    <span className="issue-status-glyph" data-status={status}>
-      <StateGlyph glyph={STATUS_GLYPH[status]} state={GLYPH_STATE.REST} />
-    </span>
-  );
-}
-
-/** One issue's row: one press that opens it. */
+/** One issue's row: one press that opens it, holding the keyboard as it is drawn where it is the issue the page came back from. */
 function IssueRow({
   issue,
   workspaceName,
   now,
+  focused,
   onOpen,
 }: {
   issue: Issue;
   workspaceName: string;
   now: number;
+  focused: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const priority = PRIORITY_GLYPH[issue.priority];
+  const row = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (focused) row.current?.focus();
+  }, [focused]);
   return (
     <li className="sidebar-task-item home-row issue-row" data-issue-id={issue.id}>
-      <button type="button" className="sidebar-task" onClick={onOpen}>
+      <button ref={row} type="button" className="sidebar-task" onClick={onOpen}>
         <span className="sidebar-task-line">
           <span className="home-row-picture">
             <StatusGlyph status={issue.status} />
@@ -107,11 +70,14 @@ export function IssueList({
   issues,
   workspaceName,
   now,
+  focused,
   onOpen,
 }: {
   issues: readonly Issue[];
   workspaceName: string;
   now: number;
+  /** The issue whose row takes the keyboard as the list is drawn: the one the page came back from. */
+  focused: string | undefined;
   onOpen: (issue: Issue) => void;
 }): React.JSX.Element {
   return (
@@ -134,6 +100,7 @@ export function IssueList({
                 issue={issue}
                 workspaceName={workspaceName}
                 now={now}
+                focused={issue.id === focused}
                 onOpen={() => onOpen(issue)}
               />
             ))}

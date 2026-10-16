@@ -6,11 +6,12 @@ import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-w
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
 import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
@@ -62,8 +63,15 @@ let createRefused = false;
 let opened: (IssuesPlace | undefined)[] = [];
 /** How many times the page asked to close. */
 let closed = 0;
+/** Every issue read on its own, by its id. */
+let reads: string[] = [];
+/** Every change asked, as the act carried it. */
+let changes: unknown[] = [];
+/** The changes held unanswered, each answered by its resolver, where changes are held at all. */
+let heldChanges: (() => void)[] | undefined;
 
 beforeEach(() => {
+  installScrollIntoView();
   standing = [];
   lists = [];
   listed = [];
@@ -71,6 +79,9 @@ beforeEach(() => {
   createRefused = false;
   opened = [];
   closed = 0;
+  reads = [];
+  changes = [];
+  heldChanges = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -79,7 +90,9 @@ beforeEach(() => {
       act: (request: Act) => {
         if (request.kind === ACT_KIND.ISSUES_LIST) {
           listed.push(request.payload.workspaceId);
-          const value = lists.shift() ?? { issues: standing };
+          const value = lists.shift() ?? {
+            issues: standing.filter((each) => each.archivedAt === null),
+          };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.ISSUES_CREATE) {
@@ -95,6 +108,34 @@ beforeEach(() => {
           standing = [made, ...standing];
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } });
         }
+        if (request.kind === ACT_KIND.ISSUES_READ) {
+          reads.push(request.payload.issueId);
+          const found = standing.find((each) => each.id === request.payload.issueId);
+          const value =
+            found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.ISSUES_CHANGE) {
+          changes.push(request.payload);
+          const { issueId, change } = request.payload;
+          const was = standing.find((each) => each.id === issueId);
+          if (was === undefined) {
+            const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+          }
+          const { archived, ...fields } = change;
+          const changed: Issue = {
+            ...was,
+            ...fields,
+            archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+            updatedAt: was.updatedAt + 1,
+          };
+          standing = standing.map((each) => (each.id === issueId ? changed : each));
+          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+          const held = heldChanges;
+          if (held === undefined) return Promise.resolve(done);
+          return new Promise((resolve) => held.push(() => resolve(done)));
+        }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
     },
@@ -108,6 +149,34 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The registry every render of one mount shares, so a render again is the same window. */
+let registry = AtomRegistry.make();
+
+/** The Issues pages over the workspace given, standing on the page each press opens. */
+function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const [place, setPlace] = useState<IssuesPlace>({ kind: ISSUES_PAGE.LIST });
+  const control = tasksControl({ workspace });
+  const plans = tasksControl({
+    workspace,
+    issuesView: {
+      ...control.issuesView,
+      open: true,
+      place,
+      onOpen: (to = { kind: ISSUES_PAGE.LIST }) => {
+        opened.push(to);
+        setPlace(to);
+      },
+      onClose: () => (closed += 1),
+    },
+  });
+  return createElement(
+    Fragment,
+    null,
+    createElement(IssuesPage, { tasks: plans }),
+    createElement(ToastHost),
+  );
+}
+
 /** The Issues page, standing in the plan's place over the workspace listed. */
 function mount(): HTMLElement {
   const container = document.createElement("div");
@@ -118,34 +187,9 @@ function mount(): HTMLElement {
   return container;
 }
 
-/** The registry every render of one mount shares, so a render again is the same window. */
-let registry = AtomRegistry.make();
-
-/** The page drawn again in place, listing the workspace given. */
+/** The pages drawn again in place, listing the workspace given. */
 function list(workspace: Workspace): void {
-  const control = tasksControl({ workspace });
-  const plans = tasksControl({
-    workspace,
-    issuesView: {
-      ...control.issuesView,
-      open: true,
-      onOpen: (place) => opened.push(place),
-      onClose: () => (closed += 1),
-    },
-  });
-  act(() =>
-    root?.render(
-      onRegistry(
-        registry,
-        createElement(
-          Fragment,
-          null,
-          createElement(IssuesPage, { tasks: plans }),
-          createElement(ToastHost),
-        ),
-      ),
-    ),
-  );
+  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace }))));
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -164,6 +208,77 @@ function groups(page: HTMLElement): [string, string[]][] {
         `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
     ),
   ]);
+}
+
+/** The page opened on one issue, its own read answered. */
+async function openIssue(issueId: string): Promise<HTMLElement> {
+  const page = mount();
+  await settle();
+  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] button`);
+  assert.ok(row, `no row for ${issueId}`);
+  act(() => row.click());
+  await settle();
+  return page;
+}
+
+/** The issue's title as its page draws it. */
+function titleOf(page: HTMLElement): string | undefined {
+  return page.querySelector(".issue-title")?.textContent ?? undefined;
+}
+
+/** The button whose words or name are `name`, wherever it is drawn. */
+function button(name: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === name || each.getAttribute("aria-label") === name,
+  );
+  assert.ok(found, `no button ${name}`);
+  return found;
+}
+
+/** The item of the menu standing open whose words are `name`. */
+function menuItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="menu"]:not([data-leaving]) [role="menuitem"]',
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no menu item ${name}`);
+  return found;
+}
+
+/** The dialog's button whose words are `name`. */
+function dialogButton(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      "[role=dialog] button, [role=alertdialog] button",
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no dialog button ${name}`);
+  return found;
+}
+
+/** The chip of the picker named. */
+function picker(page: HTMLElement, label: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`button[aria-label^="${label}: "]`);
+  assert.ok(found, `no picker ${label}`);
+  return found;
+}
+
+/** What the picker named says it holds now. */
+function picked(page: HTMLElement, label: string): string | undefined {
+  return picker(page, label)
+    .getAttribute("aria-label")
+    ?.slice(label.length + 2);
+}
+
+/** Opens the picker named and picks the option. */
+function pick(page: HTMLElement, label: string, option: string): void {
+  act(() => picker(page, label).click());
+  const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
+    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+  );
+  assert.ok(row, `no ${option} in ${label}`);
+  act(() => row.click());
 }
 
 /** Types into the new issue's field and presses Return. */
@@ -232,23 +347,101 @@ test("a filing the service refused keeps the title typed and says so", async () 
   assert.match(document.body.textContent ?? "", /Couldn't create the issue/u);
 });
 
-test("↓ from the window reaches the first row and Return opens that issue; Escape closes the page", async () => {
-  standing = [issue(1), issue(2, { status: ISSUE_STATUS.IN_PROGRESS })];
+test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" })];
   const page = mount();
   await settle();
 
   act(() => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
   });
-  const focused = document.activeElement;
-  assert.ok(focused instanceof HTMLButtonElement && page.contains(focused));
-  act(() => focused.click());
+  const reached = document.activeElement;
+  assert.ok(reached instanceof HTMLButtonElement && page.contains(reached));
+  act(() => reached.click());
+  await settle();
+
+  assert.deepEqual(reads, [issue(2).id]);
+  assert.equal(titleOf(page), "Fix login");
+  assert.equal(picked(page, "Status"), "In Progress");
+
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  const back = document.activeElement;
+  assert.equal(back?.closest(".issue-row")?.getAttribute("data-issue-id"), issue(2).id);
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
 
-  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(2).id }]);
+  assert.deepEqual(opened, [
+    { kind: ISSUES_PAGE.ISSUE, issueId: issue(2).id },
+    { kind: ISSUES_PAGE.LIST },
+  ]);
   assert.equal(closed, 1);
+});
+
+test("a status picked on an issue's page is sent, its chip names it, and the list it goes back to holds the issue under its new status", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = await openIssue(issue(1).id);
+
+  pick(page, "Status", "Done");
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.equal(picked(page, "Status"), "Done");
+  act(() => button("Issues").click());
+  await settle();
+  assert.deepEqual(groups(page), [
+    ["Todo1", ["ACME-2 Issue 2"]],
+    ["Done1", ["ACME-1 Fix login"]],
+  ]);
+});
+
+test("a priority picked on an issue's page is sent, and its chip names it", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  pick(page, "Priority", "Urgent");
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
+  ]);
+  assert.equal(picked(page, "Priority"), "Urgent");
+});
+
+test("the title pressed opens its field, and Return sends the new title and draws it", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  act(() => button("Fix login").click());
+  const field = page.querySelector<HTMLInputElement>("input[aria-label='Issue title']");
+  assert.ok(field, "the title's field opens");
+  act(() => {
+    field.value = "Fix the login redirect";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { title: "Fix the login redirect" } },
+  ]);
+  assert.equal(titleOf(page), "Fix the login redirect");
+});
+
+test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Archive").click());
+  assert.deepEqual(changes, [], "nothing is sent before the answer");
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
 });
 
 test("a read that did not land is said with a retry, which asks again and draws the list", async () => {
@@ -309,4 +502,32 @@ test("while a filing is out the title's field takes no typing, so the title it e
   assert.ok(lockedWhileOut, "the field takes no typing while the filing is out");
   assert.equal(field.readOnly, false);
   assert.equal(field.value, "");
+});
+
+test("an issue's page whose workspace is no longer the one listed says the issue is not in this workspace", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+  await settle();
+
+  assert.equal(page.querySelector("[aria-label='Issue title']"), null);
+  assert.match(page.textContent ?? "", /not in this workspace/u);
+});
+
+test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  pick(page, "Status", "Done");
+  pick(page, "Priority", "Urgent");
+  act(() => held[1]?.());
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(picked(page, "Status"), "Done");
+  assert.equal(picked(page, "Priority"), "Urgent");
 });
