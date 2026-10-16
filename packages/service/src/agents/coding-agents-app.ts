@@ -862,9 +862,11 @@ const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(
 /**
  * GET reads one image the agent's pull request's overview names, by the
  * address GitHub's rendering spelled (`src`): an upload re-signed on a token
- * minted for the agent's repository, or a public image on GitHub's image
- * proxy (`github/github-images.ts`); refused as invalid for any address that
- * is neither, and not found where GitHub answers no image the window draws.
+ * minted for the agent's repository, a file of that repository read through
+ * its contents on the same token, or a public image on GitHub's image proxy
+ * (`github/github-images.ts`); refused as invalid for any address that is
+ * none of them, and not found where GitHub answers no image the window
+ * draws, a file of any other repository among them.
  */
 const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpoint")(function* (
   seams: CodingAgentsAppSeams,
