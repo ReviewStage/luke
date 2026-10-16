@@ -2785,17 +2785,73 @@ ul.actor-stack {
   height: 12px;
 }
 
+/* A notice about a plan (`banner.tsx`): a glyph, its words, and the presses
+   that answer it on one row, in any of its three looks. Each strip is a
+   container of its own, so it answers its own width rather than the
+   window's: the same strip stands in a 280px column beside a wide side panel
+   and across a whole window. */
+.banner {
+  --banner-gap: var(--space-8);
+  container: banner / inline-size;
+}
+
+.banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--banner-gap);
+}
+
+.banner-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.banner-words p {
+  margin: 0;
+}
+
+.banner-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* Narrow, the presses leave the words' line for one of their own beneath
+   it, each as wide as the line allows, and the words wrap at their own
+   width rather than being squeezed past it or cut short. */
+@container banner (max-width: 479px) {
+  .banner-row {
+    flex-wrap: wrap;
+  }
+
+  .banner-actions {
+    flex: 1 0 100%;
+  }
+
+  .banner .banner-actions > * {
+    max-width: none;
+    flex: 1 1 0%;
+  }
+
+  .banner .plan-banner-words {
+    white-space: normal;
+  }
+}
+
 /* A notice about the whole plan (`plan-banner.tsx`): one slim line across
    the plan's column under its toolbar, or under the side panel's bar while
    the panel fills the window, on a faint attention tint with a hairline of
-   it beneath. Its words are cut short rather than wrapped, so the line keeps
-   its height at any width, and its one press stands at its end, a quiet
-   bordered button as a devtool's notice draws one. */
+   it beneath. Its words are cut short rather than wrapped while the line is
+   wide enough to read them, so the line keeps its height, and its one press
+   stands at its end, a quiet bordered button as a devtool's notice draws
+   one. */
 .plan-banner {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-8);
   min-height: 32px; /* off-scale: a 22px press and its inset */
   padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
   border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
@@ -2804,10 +2860,11 @@ ul.actor-stack {
   font-size: 12.5px;
 }
 
+.plan-banner .banner-row {
+  min-height: 24px; /* off-scale: the line's height less its inset */
+}
+
 .plan-banner-words {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2819,9 +2876,10 @@ ul.actor-stack {
   font-weight: 560;
 }
 
-/* The press gives way too, its words cut short at the end rather than the
-   press pushed out of a narrow column, and never takes more than half the
-   line; the whole of them stays its text, which a reader hears. */
+/* The press gives way too while it shares the line, its words cut short at
+   the end rather than the press pushed out of the column, and never takes
+   more than half the line; the whole of them stays its text, which a
+   reader hears. */
 .plan-banner-action {
   min-width: 0;
   max-width: 50%;
@@ -2840,8 +2898,18 @@ ul.actor-stack {
   transition: background-color var(--duration-hover) ease;
 }
 
+.plan-banner .banner-actions {
+  max-width: 50%;
+}
+
 .plan-banner-action:hover {
   background: var(--raised);
+}
+
+@container banner (max-width: 479px) {
+  .plan-banner .banner-actions {
+    max-width: none;
+  }
 }
 
 /* The document ------------------------------------------------------------- */
@@ -2849,13 +2917,11 @@ ul.actor-stack {
 /* A banner over a document: a card on the document's own reading width, so
    what it says is the first thing read. An archived plan's says so with the
    one action the plan takes, the way Notion marks a page in the trash, and
-   the plan template's says what the template is for, with its reset. */
+   the plan template's says what the template is for. */
 .document-banner {
-  display: flex;
+  --banner-gap: var(--space-12);
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
-  align-items: center;
-  gap: var(--space-12);
   margin: var(--space-16) auto 0;
   padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
   border: 1px solid var(--hairline-strong);
@@ -2877,18 +2943,6 @@ ul.actor-stack {
 .document-banner-glyph svg {
   width: 16px;
   height: 16px;
-}
-
-.document-banner-words {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.document-banner-words p {
-  margin: 0;
 }
 
 .document-banner-title {

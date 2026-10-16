@@ -1,5 +1,6 @@
 import { ArchiveIcon } from "@luke/ui";
 import { useState } from "react";
+import { BANNER_LOOK, Banner } from "../banner";
 import { BusyLabel } from "../spinner";
 
 /**
@@ -24,17 +25,22 @@ const ARCHIVED_PLAN_COPY = {
 /** The banner across the top of an archived plan's document, with Unarchive as its primary button. */
 export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): React.JSX.Element {
   return (
-    <section className="document-banner archived-banner" aria-label={ARCHIVED_PLAN_COPY.TITLE}>
-      <span className="document-banner-glyph" aria-hidden="true">
-        <ArchiveIcon />
-      </span>
-      <div className="document-banner-words">
-        <p className="document-banner-title">{ARCHIVED_PLAN_COPY.TITLE}</p>
-      </div>
-      <button type="button" className="primary-button" onClick={onUnarchive}>
-        {ARCHIVED_PLAN_COPY.UNARCHIVE}
-      </button>
-    </section>
+    <Banner
+      look={BANNER_LOOK.CARD}
+      className="archived-banner"
+      glyph={
+        <span className="document-banner-glyph" aria-hidden="true">
+          <ArchiveIcon />
+        </span>
+      }
+      actions={
+        <button type="button" className="primary-button" onClick={onUnarchive}>
+          {ARCHIVED_PLAN_COPY.UNARCHIVE}
+        </button>
+      }
+    >
+      <p className="document-banner-title">{ARCHIVED_PLAN_COPY.TITLE}</p>
+    </Banner>
   );
 }
 
@@ -57,26 +63,30 @@ export function ArchivedComposerNote({
     run().finally(() => setStopping(false));
   };
   return (
-    <div className="agent-composer archived-composer">
-      <p className="archived-composer-line">
-        <ArchiveIcon />
-        <span>{ARCHIVED_PLAN_COPY.COMPOSER}</span>
-      </p>
-      {stop === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={stopping}
-          onClick={() => pressStop(stop)}
-        >
-          <BusyLabel busy={stopping} label="Stopping">
-            Stop
-          </BusyLabel>
-        </button>
-      )}
-      <button type="button" className="primary-button" onClick={onUnarchive}>
-        {ARCHIVED_PLAN_COPY.UNARCHIVE}
-      </button>
-    </div>
+    <Banner
+      look={BANNER_LOOK.COMPOSER}
+      glyph={<ArchiveIcon />}
+      actions={
+        <>
+          {stop === undefined ? null : (
+            <button
+              type="button"
+              className="toolbar-button"
+              disabled={stopping}
+              onClick={() => pressStop(stop)}
+            >
+              <BusyLabel busy={stopping} label="Stopping">
+                Stop
+              </BusyLabel>
+            </button>
+          )}
+          <button type="button" className="primary-button" onClick={onUnarchive}>
+            {ARCHIVED_PLAN_COPY.UNARCHIVE}
+          </button>
+        </>
+      }
+    >
+      <p className="archived-composer-line">{ARCHIVED_PLAN_COPY.COMPOSER}</p>
+    </Banner>
   );
 }

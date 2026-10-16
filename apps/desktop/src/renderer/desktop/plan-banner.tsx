@@ -1,5 +1,6 @@
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 import { AttentionMark } from "../attention-mark";
+import { BANNER_LOOK, Banner } from "../banner";
 
 /**
  * plan-banner.tsx -- a notice about the whole plan: one slim line under the plan's toolbar, over every tab of it, which only mending what it says takes away.
@@ -15,7 +16,9 @@ import { AttentionMark } from "../attention-mark";
  * notice rather than a card: the attention mark, one line of words, and the
  * one press that mends it, on a faint attention tint. It has no close: it
  * goes once what it says no longer holds. Its words are text, never an
- * attribute, because the session recording masks text and nothing else.
+ * attribute, because the session recording masks text and nothing else. Where
+ * the column is narrow it gives way as every banner does (`banner.tsx`):
+ * the words wrap and the press takes a line of its own beneath them.
  */
 
 /** The press that mends what a banner says: its words, and what it does. */
@@ -33,16 +36,17 @@ export function PlanBanner({
   children: ReactNode;
   action: PlanBannerAction;
 }): React.JSX.Element {
-  const wordsId = useId();
   return (
-    <section className="plan-banner" aria-labelledby={wordsId}>
-      <AttentionMark />
-      <p id={wordsId} className="plan-banner-words">
-        {children}
-      </p>
-      <button type="button" className="plan-banner-action" onClick={action.onPress}>
-        {action.label}
-      </button>
-    </section>
+    <Banner
+      look={BANNER_LOOK.LINE}
+      glyph={<AttentionMark />}
+      actions={
+        <button type="button" className="plan-banner-action" onClick={action.onPress}>
+          {action.label}
+        </button>
+      }
+    >
+      <p className="plan-banner-words">{children}</p>
+    </Banner>
   );
 }
