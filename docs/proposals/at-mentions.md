@@ -146,10 +146,10 @@ sorted each:
   since that suite runs a scripted model, so the correction guard
   `keepsMentions` (`packages/features/src/plan-template.ts`) is the check
   (§5.4).
-- **Still deferred:** voice and calls; people beyond what #3170 shipped,
-  such as telling the person mentioned (decision 6); past calls;
-  per-integration search (decision 14); servers in the plan; and inlining
-  files (decision 2).
+- **Still deferred:** voice and calls; notifying the person a mention
+  names (person mentions themselves shipped in #3170, superseding decision
+  6); past calls; per-integration search (decision 14); servers in the
+  plan; and inlining files (decision 2).
 
 ## Still open
 

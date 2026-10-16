@@ -589,12 +589,13 @@ change whatever your Linear account can, through Linear's own MCP server,
 without asking you first, and so can every coding agent and its workers,
 unless you switch Linear off for that agent in its message box's MCP menu,
 which takes effect from its next turn and is stored with the agent. A
-message to the agent from a member of the workspace, Luke, or an automation
+message to the agent from a member of the workspace or Luke, or an
+automation's own prompt (never a webhook body or a GitHub event's words),
 that mentions Linear, one of its tools, or one of its pages hands it Linear
 for the turn that message opens, or, sent while a turn is under way, for its
 next one, even while Linear is switched off for that agent, and leaves the
-switch as it is; a message from another coding agent, or one bringing a
-GitHub reviewer's words, hands it none. The workers are told to change
+switch as it is; a message from another coding agent or a reviewer hands it
+none. The workers are told to change
 something only when their subagent task asks for
 it. What Linear answers goes to the model that made the call, and each call,
 with its input and everything Linear answered, is written to the task's conversation
