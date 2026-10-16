@@ -106,6 +106,7 @@ import {
   type PlanningPageSourceAnswer,
   type PlanningPictureAnswer,
   type PlanningPictureKeepAnswer,
+  type PlanningPullRequest,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -132,6 +133,8 @@ import {
   planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
+  planningPullRequestParamsSchema,
+  planningPullRequestSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
   planningRepositoriesParamsSchema,
@@ -320,6 +323,8 @@ export const ACT_KIND = {
   PLANNING_TREE: "planning.tree",
   /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
   PLANNING_SKILLS: "planning.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  PLANNING_PULL_REQUEST: "planning.pullRequest",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -998,6 +1003,11 @@ export const ACT = {
     payload: actSchema(planningSkillsParamsSchema),
     result: wireResult<PlanningSkillsAnswer>(isReadable(planningSkillsAnswerSchema)),
     refusal: "Could not read this repository's skills on this system.",
+  },
+  [ACT_KIND.PLANNING_PULL_REQUEST]: {
+    payload: actSchema(planningPullRequestParamsSchema),
+    result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
+    refusal: "Could not read that pull request on this system.",
   },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     payload: record({

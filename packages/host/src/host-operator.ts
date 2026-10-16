@@ -121,6 +121,8 @@ import {
   type PlanningPictureParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
+  type PlanningPullRequestAnswer,
+  type PlanningPullRequestParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
   type PlanningRepositoriesParams,
@@ -165,6 +167,7 @@ import {
   planningPageAnswerSchema,
   planningPictureAnswerSchema,
   planningPictureKeepAnswerSchema,
+  planningPullRequestAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -351,6 +354,8 @@ export interface HostOperator {
   planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
   /** The skills a developer may choose of a plan's repository; or why they are not read. */
   planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
+  /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
+  planningPullRequest(params: PlanningPullRequestParams): Effect.Effect<PlanningPullRequestAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -975,6 +980,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPullRequest: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          number: params.number,
+        }),
+        (answer): PlanningPullRequestAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

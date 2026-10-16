@@ -13,8 +13,10 @@ import {
 import {
   GITHUB_REPOSITORIES_QUERY,
   githubRepositoriesAnswerSchema,
+  githubRepositoryPullRequestAnswerSchema,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   PLAN_FILE_REFUSAL,
   PLAN_TREE_ENTRY,
@@ -46,6 +48,35 @@ import { githubRepositoriesApp } from "./github-repositories-app.js";
  */
 
 const ORIGIN = "https://luke.test";
+
+/** A pull request of `acme/relay` as GitHub's API names it by number. */
+const PULL_PATH = /^\/repos\/acme\/relay\/pulls\/(\d+)$/u;
+
+/** One pull request of `acme/relay` as GitHub records it, whole: more than a link draws. */
+function pullRecord(
+  number: number,
+  title: string,
+  standing: { readonly merged: boolean; readonly draft: boolean },
+) {
+  return {
+    number,
+    title,
+    html_url: `https://github.com/acme/relay/pull/${number}`,
+    state: standing.merged ? "closed" : "open",
+    draft: standing.draft,
+    merged: standing.merged,
+    additions: 12,
+    deletions: 3,
+    changed_files: 2,
+    head: { ref: `invites-${number}`, sha: `sha-${number}` },
+  };
+}
+
+/** The pull requests `acme/relay` holds: one open, one merged. */
+const RELAY_PULLS = new Map([
+  [42, pullRecord(42, "Send invitations in batches", { merged: false, draft: false })],
+  [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false })],
+]);
 
 interface Answer {
   readonly status: number;
@@ -391,6 +422,142 @@ it.layer(getTestDB())("the repositories route", (it) => {
             yield* read(owner, path, [[GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, mine]]),
             refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
             path,
+          );
+        }
+        assert.equal(github.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, and state and nothing more, a merged one as merged",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7801, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const pulled = PULL_PATH.exec(new URL(sent.url).pathname);
+            const record = pulled === null ? undefined : RELAY_PULLS.get(Number(pulled[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7801,
+          accountId: 9801,
+          accountLogin: "acme",
+        });
+        const pullRequest = (number: number) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+          ]);
+
+        const open = yield* pullRequest(42);
+        const merged = yield* pullRequest(43);
+
+        assert.deepEqual(open, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            pullRequest: {
+              number: 42,
+              title: "Send invitations in batches",
+              url: "https://github.com/acme/relay/pull/42",
+              state: PULL_REQUEST_STATE.OPEN,
+            },
+          },
+        });
+        assert.deepEqual(readOf(githubRepositoryPullRequestAnswerSchema, merged), {
+          pullRequest: {
+            number: 43,
+            title: "Retry a bounced invitation",
+            url: "https://github.com/acme/relay/pull/43",
+            state: PULL_REQUEST_STATE.MERGED,
+          },
+        });
+      }),
+  );
+
+  it.effect(
+    "a pull request of a repository the installation does not reach, or of a number the repository holds none under, answers none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7802, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/repos/acme/ledger/pulls/42"
+              ? Response.json(pullRecord(42, "Settle the ledger", { merged: false, draft: false }))
+              : undefined,
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7802,
+          accountId: 9802,
+          accountLogin: "acme",
+        });
+        const pullRequest = (repository: string, number: number) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            [GITHUB_REPOSITORIES_QUERY.NUMBER, String(number)],
+          ]);
+
+        const unreached = yield* pullRequest("acme/ledger", 42);
+        const missing = yield* pullRequest("acme/relay", 99);
+
+        const none = { status: HOSTED_HTTP_STATUS.OK, body: { pullRequest: null } };
+        assert.deepEqual(unreached, none);
+        assert.deepEqual(missing, none);
+      }),
+  );
+
+  it.effect(
+    "a pull request's read in a workspace the account is not in is not found, and one naming no number, or one that is not a pull request's, is invalid, before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7803, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ]);
+        const { owner, other, read } = yield* openAccounts(github);
+        const theirs = yield* openInstallationWorkspace(owner, {
+          installationId: 7803,
+          accountId: 9803,
+          accountLogin: "acme",
+        });
+        const place = [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+        ] as const;
+        const numbered = (...numbers: string[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+            ...place,
+            ...numbers.map((number) => [GITHUB_REPOSITORIES_QUERY.NUMBER, number] as const),
+          ]);
+
+        const stranger = yield* read(other, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, [
+          ...place,
+          [GITHUB_REPOSITORIES_QUERY.NUMBER, "42"],
+        ]);
+        const unnumbered = [
+          yield* numbered(),
+          yield* numbered("0"),
+          yield* numbered("4.2"),
+          yield* numbered("forty-two"),
+          yield* numbered("42", "43"),
+        ];
+
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        for (const answered of unnumbered) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           );
         }
         assert.equal(github.sent.length, 0);

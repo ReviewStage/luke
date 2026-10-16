@@ -9,8 +9,11 @@ import {
   turnRecordFields,
 } from "./coding-agent-wire.js";
 import {
+  githubPullRequestNumberSchema,
+  githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
+  githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
@@ -722,6 +725,27 @@ export const planningSkillsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningSkillsAnswer = typeof planningSkillsAnswerSchema.Type;
+
+/** One pull request of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the pull request's number. */
+export const planningPullRequestParamsSchema = EffectSchema.Struct({
+  ...repositoryPlaceFields,
+  number: githubPullRequestNumberSchema,
+});
+
+export type PlanningPullRequestParams = typeof planningPullRequestParamsSchema.Type;
+
+/** The read of one pull request, as the window hears it: the pull request, null where there is none to draw, or that the service did not answer. */
+export const planningPullRequestAnswerSchema = EffectSchema.Union([
+  githubRepositoryPullRequestAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningPullRequestAnswer = typeof planningPullRequestAnswerSchema.Type;
+
+/** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
+export const planningPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
+
+export type PlanningPullRequest = typeof planningPullRequestSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { PLAN_FILE_REFUSAL } from "@luke/features/plan-wire";
 import {
@@ -70,6 +71,14 @@ const LINEAR_ISSUE = {
   title: "Start a plan from Linear",
   url: "https://linear.app/acme/issue/ENG-1",
 };
+/** The one pull request the fake host's service holds; it holds none numbered `PULL_REQUEST_NONE`, and answers nothing for any other number. */
+const PULL_REQUEST = {
+  number: 42,
+  title: "Send invitations in batches",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+};
+const PULL_REQUEST_NONE = 43;
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -202,6 +211,13 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`skills:${"planId" in params ? params.planId : params.repository}`);
           return { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY } as const;
+        }),
+      planningPullRequest: (params) =>
+        Effect.sync(() => {
+          asked.push(`pullRequest:${params.repository}:${params.number}`);
+          if (params.number === PULL_REQUEST.number) return { pullRequest: PULL_REQUEST };
+          if (params.number === PULL_REQUEST_NONE) return { pullRequest: null };
+          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
         }),
       planningRevisions: (params) =>
         Effect.sync(() => {
@@ -826,6 +842,38 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: LINEAR_UNAVAILABLE_REFUSAL,
       });
+    }),
+);
+
+it.effect(
+  "a pull request is answered to a panel as the host read it, or as none, a service that did not answer is refused in its kind's own words, and the voice window is refused before the host is asked",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const ask = (number: number) =>
+        ({
+          kind: ACT_KIND.PLANNING_PULL_REQUEST,
+          payload: { workspaceId: ACME.id, repository: "acme/relay", number },
+        }) as const;
+
+      const fromVoice = yield* f.router.performAct(ask(PULL_REQUEST.number), VOICE);
+      const read = yield* f.router.performAct(ask(PULL_REQUEST.number), PANEL);
+      const none = yield* f.router.performAct(ask(PULL_REQUEST_NONE), PANEL);
+      const unanswered = yield* f.router.performAct(ask(44), PANEL);
+
+      const refused = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_PULL_REQUEST].refusal,
+      };
+      assert.deepEqual(fromVoice, refused);
+      assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: PULL_REQUEST });
+      assert.deepEqual(none, { status: ACT_OUTCOME_STATUS.DONE, value: null });
+      assert.deepEqual(unanswered, refused);
+      assert.deepEqual(f.asked, [
+        `pullRequest:acme/relay:${PULL_REQUEST.number}`,
+        `pullRequest:acme/relay:${PULL_REQUEST_NONE}`,
+        "pullRequest:acme/relay:44",
+      ]);
     }),
 );
 

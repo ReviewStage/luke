@@ -38,10 +38,15 @@ export {
 } from "./github-install-wire.js";
 export {
   GITHUB_REPOSITORIES_QUERY,
+  type GitHubPullRequestSummary,
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
+  type GitHubRepositoryPullRequestAnswer,
+  githubPullRequestNumberSchema,
+  githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
+  githubRepositoryPullRequestAnswerSchema,
   githubRepositorySchema,
 } from "./github-repositories-wire.js";
 export {

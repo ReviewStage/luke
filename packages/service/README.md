@@ -155,6 +155,12 @@ name it, each exactly once, and the answer is a task's own tree or skills
 read (`src/plans/plan-tree.ts`, `src/plans/plan-skills.ts`), through the
 same reach, to a member of the workspace; a repository the installation does
 not reach is refused as `not-reachable`, as a task's is.
+`GET /api/github/repositories/pull-request` reads one pull request of such a
+repository by the `number` query beside those two, for a link to it to draw:
+its number, title, page, and state (`src/github/pull-requests.ts`), on a
+token minted for that one repository; a repository the installation does not
+reach and a number it holds no pull request under both answer
+`{ pullRequest: null }`.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.

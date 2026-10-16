@@ -50,6 +50,8 @@ export const GATEWAY_METHOD = {
   PLANNING_TREE: "planning.tree",
   /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   PLANNING_SKILLS: "planning.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  PLANNING_PULL_REQUEST: "planning.pullRequest",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISIONS: "planning.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
