@@ -28,7 +28,9 @@ import { Tooltip } from "../tooltip";
  * column, so every text part asked for the whole column and the parts
  * beside it were shrunk to slivers. The content stacks as blocks here, and
  * `apps/desktop/src/renderer/planning/transcript-layout.test.ts` holds the
- * rule.
+ * rule. And one more: the registry's content clips with `overflow-hidden`,
+ * which cut the keyboard's ring off every fold, tool line, picture, and chip
+ * a reply holds, so it clips past the ring instead (base.css's room).
  */
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -54,7 +56,7 @@ export function MessageContent({ children, className, ...props }: MessageContent
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-hidden text-[13px] leading-relaxed text-foreground",
+        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--focus-ring-room)] text-[13px] leading-relaxed text-foreground",
         "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
         className,
       )}

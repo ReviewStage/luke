@@ -60,14 +60,22 @@
   --pressed: rgba(255, 255, 255, 0.26);
   /* The keyboard's ring around whatever control it is on, in the system's
      own default accent, and how thick it is and how far it stands off the
-     control's edge. A control that clips what it holds sets the offset to
-     less the width, so the ring is drawn inside it. The reach is how far the
-     ring stands past the control's edge: a scroller pads by it, so the ring
-     of a row laid edge to edge in it is not clipped. */
+     control's edge. The reach is how far the ring stands past the control's
+     edge: a scroller pads by it, so the ring of a row laid edge to edge in
+     it is not clipped. A box that clips what it holds keeps the ring whole
+     one of two ways. One whose clip is only there to hold in what runs long
+     clips past the ring, `overflow: clip` with `overflow-clip-margin` the
+     room; note that the room names its box, because Chromium drops a bare
+     `calc()` there and clips at the edge after all. One whose clip is an
+     edge it draws, a card, sets the offset to the inset for everything in
+     it, so the ring is drawn inside the control, on the card's side of the
+     edge. */
   --focus-ring: var(--message-sent);
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
+  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
   --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
+  --focus-ring-room: padding-box var(--focus-ring-reach);
   --hairline: rgba(255, 255, 255, 0.08);
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */

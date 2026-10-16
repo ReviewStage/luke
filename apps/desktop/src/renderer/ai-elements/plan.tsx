@@ -22,8 +22,8 @@ import {
  * docs/TASKS.md's rule for an agent's transcript asks: the plan is
  * there to be read, never in the way of the agent's own words. The card
  * clips what it holds to its rounded corners, so the header's hover fill
- * follows the card's radius; the header's focus ring is drawn inside it
- * for the same reason.
+ * follows the card's radius, and what is in it rings inside itself
+ * (base.css's inset), on a header rounded as the card is.
  */
 
 export type PlanProps = FoldProps;
@@ -32,7 +32,7 @@ export function Plan({ className, children, ...props }: PlanProps): ReactNode {
   return (
     <Fold
       className={cn(
-        "overflow-clip rounded-lg border border-border bg-muted text-[12.5px]",
+        "overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]",
         className,
       )}
       {...props}
@@ -49,7 +49,7 @@ export function PlanHeader({ className, children, ...props }: PlanHeaderProps): 
   return (
     <FoldSummary
       className={cn(
-        "flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]",
+        "flex h-8 items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none",
         className,
       )}
       {...props}

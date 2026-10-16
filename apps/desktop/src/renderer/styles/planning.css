@@ -350,7 +350,7 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   min-width: 0;
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
-  overflow-clip-margin: 3px;
+  overflow-clip-margin: var(--focus-ring-room);
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.4;
@@ -926,11 +926,13 @@ button.file-ref:hover .file-ref-path {
 
 /* The bar's path as breadcrumbs: each crumb a press that lists where it
    stands, the chevrons between plain. The crumbs give way from the left,
-   so the file's own name stays in sight. */
+   so the file's own name stays in sight, clipped past the keyboard's ring
+   on a crumb, which stands as tall as the path. */
 .file-breadcrumbs {
   min-width: 0;
   flex: 0 1 auto;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 .file-breadcrumbs ol {
@@ -1181,7 +1183,7 @@ button.file-ref:hover .file-ref-path {
   --trees-border-color-override: var(--hairline);
   --trees-focus-ring-color-override: var(--focus-ring);
   --trees-focus-ring-width-override: var(--focus-ring-width);
-  --trees-focus-ring-offset-override: calc(var(--focus-ring-width) * -1);
+  --trees-focus-ring-offset-override: var(--focus-ring-inset);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
   --trees-git-added-color-override: var(--state-complete);
@@ -1384,7 +1386,7 @@ button.file-ref:hover .file-ref-path {
 
 /* The edges run the lines' whole width, so their ring is drawn inside them. */
 .file-tab-edge:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -1441,7 +1443,7 @@ button.file-ref:hover .file-ref-path {
 
 /* The note's card clips what it holds, so its fold's ring is drawn inside. */
 .file-note-fold:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
 }
 
 .file-note-fold > svg:first-child {

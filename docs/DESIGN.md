@@ -149,8 +149,13 @@ which brightens without a fill.
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
 `--focus-ring-offset` off its edge, and only once the keyboard has moved focus
-(`keyboard-modality.ts`), so a press never rings a control. One that clips what
-it holds sets the offset to less the width, so the ring is drawn inside it. A
+(`keyboard-modality.ts`), so a press never rings a control. A box that clips
+what it holds keeps the ring whole one of two ways: one that clips only to hold
+in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
+`overflow-clip-margin: var(--focus-ring-room)`, which names its box because
+Chromium drops a bare `calc()` there), and a card whose clip is its own edge
+sets `--focus-ring-offset` to `--focus-ring-inset` for what it holds, so the
+ring is drawn inside, on a header rounded as the card is. A
 scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill

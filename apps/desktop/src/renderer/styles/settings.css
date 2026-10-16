@@ -357,7 +357,7 @@
 .segment {
   /* Note that a segment draws the ring inside itself, because its trough
      leaves it no room for one outside. */
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  --focus-ring-offset: var(--focus-ring-inset);
   height: calc(var(--control-height) - 2 * var(--space-2));
   padding: 0 var(--space-12);
   border-radius: calc(var(--control-radius) - var(--space-2));
