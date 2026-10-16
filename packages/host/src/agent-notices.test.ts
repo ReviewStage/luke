@@ -469,6 +469,21 @@ it.effect(
     }),
 );
 it.effect(
+  "an untitled automation's agent is named by its automation, as its tab names it, not by its model",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
+      yield* Effect.yieldNow;
+
+      assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: `${AUTOMATION_NAME} failed` }]);
+    }),
+);
+it.effect(
   "a teammate's agent with no plan on the plan list is not held, so its end is announced to its starter alone",
   () =>
     Effect.gen(function* () {

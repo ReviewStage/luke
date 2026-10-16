@@ -21,7 +21,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { linkLabels } from "@luke/features/mention-link";
-import { modelLabel } from "@luke/features/model-label";
+import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import { scheduleOnce } from "@luke/runtime/effect";
@@ -256,6 +256,8 @@ interface HeldAgent {
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
+  /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
+  automationName?: string | undefined;
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
@@ -313,8 +315,8 @@ function samePublished(
 
 /**
  * What the notification says, built in one place: the plan's name, or the
- * automation's for an agent with no plan, over the agent's title, or its
- * model's name until it has one, and the word for how the turn ended, or the
+ * automation's for an agent with no plan, over the agent as its tab names it
+ * (`agentTabLabel`), and the word for how the turn ended, or the
  * pull request it opened once a reader of the agent's pull request hands one
  * in. Nothing for a status that is not a turn's end, or for a Stop.
  */
@@ -322,6 +324,7 @@ function noticeText(input: {
   subject: string | undefined;
   model: string;
   title: string | null;
+  automationName?: string | undefined;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
   pullRequest?: number;
@@ -330,7 +333,7 @@ function noticeText(input: {
   if (status !== CODING_AGENT_STATUS.COMPLETED && status !== CODING_AGENT_STATUS.FAILED) {
     return undefined;
   }
-  const name = input.title ?? modelLabel(input.model, input.models);
+  const name = agentTabLabel(input, input.models);
   const ended =
     input.pullRequest !== undefined && status === CODING_AGENT_STATUS.COMPLETED
       ? `opened #${input.pullRequest}`
@@ -576,6 +579,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             : planName(end.agent.planId),
         model: end.agent.model,
         title: end.agent.title,
+        automationName: end.agent.automationName,
         status: end.agent.status,
         models,
         ...(pullRequest === undefined ? undefined : { pullRequest }),
@@ -815,12 +819,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** The agent as the ledger holds it, on a plan or with none. */
     function heldOf(
-      agent: Pick<CodingAgentSummary, "planId" | "model" | "title" | "status" | "turnId">,
+      agent: Pick<
+        CodingAgentSummary,
+        "planId" | "model" | "title" | "automationName" | "status" | "turnId"
+      >,
     ): HeldAgent {
       return {
         planId: agent.planId,
         model: agent.model,
         title: agent.title,
+        automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,
         awaiting: false,
