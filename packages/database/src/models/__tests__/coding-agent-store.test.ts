@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_AUTHOR } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_AUTHOR,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -21,10 +25,12 @@ import {
   archiveUnmovedCodingAgent,
   delegationsOf,
   lineSendersOf,
+  listCodingAgentsOnPullRequest,
   listPlanlessCodingAgents,
   listWorkspaceCodingAgents,
   readCodingAgent,
   recordCodingAgentAuthor,
+  recordCodingAgentPublished,
   recordTurnFastRefused,
   settleCodingAgentAuthor,
   turnUsagesOf,
@@ -154,6 +160,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           kind: MESSAGE_SENDER.AUTOMATION,
           name: "Nightly triage",
         });
+        const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
         // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
           .insert(messages)
@@ -168,7 +175,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
-        const ids = [byTeammate, byLuke, byAutomation, earlier?.id ?? ""];
+        const ids = [byTeammate, byLuke, byAutomation, byGitHub, earlier?.id ?? ""];
 
         const senders = yield* lineSendersOf(target, ids);
         assert.deepEqual(
@@ -177,6 +184,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             { kind: MESSAGE_SENDER.MEMBER, member: { userId: teammate, name: "Charles Pan" } },
             { kind: MESSAGE_SENDER.LUKE },
             { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
+            { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
             undefined,
           ],
         );
@@ -504,6 +512,52 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
           [newest.agentId, archived.agentId, oldest.agentId],
         );
         assert.deepEqual(ids(yield* listPlanlessCodingAgents(outsider)), [outside.agentId]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents by their pull request", (it) => {
+  it.effect(
+    "a delivery about a repository's pull request finds the agents of any account that published it, newest first, whatever case it spells the repository in, and none that published another or the same number in another repository",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const charles = yield* openAccount;
+        const deans = yield* openWorkspace(dean);
+        const charless = yield* openWorkspace(charles);
+        const pullRequest = (number: number) => ({
+          number,
+          title: "Invite flow",
+          url: `https://github.com/acme/relay/pull/${number}`,
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 1,
+          deletions: 0,
+          changedFiles: 1,
+        });
+        const author = yield* planlessAgent(dean, deans, { createdAt: new Date(1_000) });
+        const reviewer = yield* planlessAgent(charles, charless, { createdAt: new Date(2_000) });
+        const other = yield* planlessAgent(dean, deans);
+        const elsewhere = yield* planlessAgent(dean, deans, { repository: "acme/web" });
+        // An agent that published nothing yet is found by no pull request.
+        yield* planlessAgent(dean, deans);
+        yield* recordCodingAgentPublished(dean, author.agentId, pullRequest(12));
+        yield* recordCodingAgentPublished(charles, reviewer.agentId, pullRequest(12));
+        yield* recordCodingAgentPublished(dean, other.agentId, pullRequest(13));
+        yield* recordCodingAgentPublished(dean, elsewhere.agentId, pullRequest(12));
+
+        const found = yield* listCodingAgentsOnPullRequest("acme/api", 12, 10);
+        assert.deepEqual(
+          found.map(({ userId, agent }) => [userId, agent.id]),
+          [
+            [charles, reviewer.agentId],
+            [dean, author.agentId],
+          ],
+        );
+        assert.equal((yield* listCodingAgentsOnPullRequest("acme/api", 12, 1)).length, 1);
+        // GitHub may spell the repository in another case than the agent's row does.
+        assert.equal((yield* listCodingAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
+        assert.deepEqual(yield* listCodingAgentsOnPullRequest("acme/api", 99, 10), []);
       }),
   );
 });

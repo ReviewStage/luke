@@ -10,13 +10,15 @@ export const CONVERSATION_KIND = {
 
 /**
  * What sent one of the developer's lines to a coding agent: a member, from
- * the message box or an Inbox answer; Luke, from a call; or an automation's
- * run, on its creator's behalf.
+ * the message box or an Inbox answer; Luke, from a call; an automation's
+ * run, on its creator's behalf; or GitHub, telling the agent of a review, a
+ * comment, or a failed check on its pull request, by who caused it there.
  */
 export const MESSAGE_SENDER = {
   MEMBER: "member",
   LUKE: "luke",
   AUTOMATION: "automation",
+  GITHUB: "github",
 } as const;
 
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];

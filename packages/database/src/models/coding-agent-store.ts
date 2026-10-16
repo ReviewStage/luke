@@ -833,6 +833,29 @@ const findAgentsOnBranches = SqlSchema.findAll({
     ),
 });
 
+const findAgentsOnPullRequest = SqlSchema.findAll({
+  Request: Schema.Struct({
+    repository: Schema.String,
+    number: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ repository, number, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+            eq(sql`(${codingAgent.published}->>'number')::int`, number),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -1050,6 +1073,23 @@ export function listCodingAgentsOnBranches(
 ): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
   if (branches.length === 0) return Effect.succeed([]);
   return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
+    rows.map((agent) => ({ userId: agent.userId, agent })),
+  );
+}
+
+/**
+ * The agents of any account whose pull request, as GitHub last answered it,
+ * is the repository's one numbered, newest started first and at most
+ * `limit` of them: what a delivery about a pull request finds them by where
+ * it names no branch, as a comment's does. Like the read by branches, it
+ * names no account.
+ */
+export function listCodingAgentsOnPullRequest(
+  repository: string,
+  number: number,
+  limit: number,
+): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+  return Effect.map(findAgentsOnPullRequest({ repository, number, limit }), (rows) =>
     rows.map((agent) => ({ userId: agent.userId, agent })),
   );
 }
@@ -1438,7 +1478,8 @@ export function delegationStartsOf(
 /**
  * What sent one of the developer's lines to an agent, as a reader names it:
  * a member by their account's id and the name it holds now, or nobody where
- * their account is gone; Luke; or an automation by the name its run kept.
+ * their account is gone; Luke; an automation by the name its run kept; or
+ * GitHub by the login the line kept.
  */
 export type LineSent =
   | {
@@ -1446,7 +1487,8 @@ export type LineSent =
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string };
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1487,7 +1529,7 @@ const findLineSenders = SqlSchema.findAll({
     ),
 });
 
-/** A sender's row as a reader names it; an automation's that kept no name names nothing. */
+/** A sender's row as a reader names it; an automation's or GitHub's that kept no name names nothing. */
 function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined {
   switch (row.sender) {
     case MESSAGE_SENDER.MEMBER:
@@ -1504,6 +1546,10 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
       return row.senderName === null
         ? undefined
         : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+    case MESSAGE_SENDER.GITHUB:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.GITHUB, login: row.senderName };
   }
 }
 

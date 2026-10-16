@@ -904,12 +904,13 @@ const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
 
-/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, or an automation's run. */
+/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
   LUKE: "luke",
   AUTOMATION: "automation",
+  GITHUB: "github",
 } as const;
 
 /**
@@ -918,8 +919,8 @@ export const CODING_AGENT_SENDER = {
  * holds now, a member who has left among them, and with no id what sent it
  * in a member's place or a member whose account is gone, each named as the
  * service words it, and what kind of sender it is, so the window draws Luke
- * as Luke and an automation as one; the kind is absent from a service older
- * than it. The window names nobody over the reader's own.
+ * as Luke, an automation as one, and GitHub as the login named; the kind is
+ * absent from a service older than it. The window names nobody over the reader's own.
  */
 const codingAgentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,

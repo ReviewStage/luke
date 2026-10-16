@@ -304,12 +304,26 @@ type UserMessageWriteResult = Result.Result<
 
 /**
  * What sent a line to a coding agent, as its row keeps it: the member by
- * their account, Luke, or an automation by its name as it stands at the send.
+ * their account, Luke, an automation by its name as it stands at the send,
+ * or GitHub by the login of who caused what it tells of.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string };
+
+/** The name a line's row keeps beside its sender's kind: an automation's, or the GitHub login; none for any other. */
+function senderNameOf(sender: LineSender | undefined): string | null {
+  switch (sender?.kind) {
+    case MESSAGE_SENDER.AUTOMATION:
+      return sender.name;
+    case MESSAGE_SENDER.GITHUB:
+      return sender.login;
+    default:
+      return null;
+  }
+}
 
 /** The developer's line to a coding agent as the message route and the queue's drain write it: its words, the files attached to it, the client's key for the send, and what sent it. */
 interface AwaitingLineWrite {
@@ -1187,7 +1201,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     finishedAt: nullable(row.finishedAt),
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
-    senderName: row.sender?.kind === MESSAGE_SENDER.AUTOMATION ? row.sender.name : null,
+    senderName: senderNameOf(row.sender),
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };

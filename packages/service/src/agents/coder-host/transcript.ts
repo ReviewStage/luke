@@ -227,7 +227,7 @@ const SENDER_NAME = {
   FORMER_MEMBER: "Former member",
 } as const;
 
-/** What sent a line, as the page names it and by its kind, so the window draws Luke and an automation as themselves. */
+/** What sent a line, as the page names it and by its kind, so the window draws Luke, an automation, and GitHub's login as themselves. */
 function senderOf(sent: LineSent): CodingAgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
@@ -238,6 +238,8 @@ function senderOf(sent: LineSent): CodingAgentSender {
       return { name: SENDER_NAME.LUKE, kind: CODING_AGENT_SENDER.LUKE };
     case MESSAGE_SENDER.AUTOMATION:
       return { name: sent.name, kind: CODING_AGENT_SENDER.AUTOMATION };
+    case MESSAGE_SENDER.GITHUB:
+      return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
   }
 }
 

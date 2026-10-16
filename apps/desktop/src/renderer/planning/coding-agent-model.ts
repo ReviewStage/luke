@@ -46,6 +46,7 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  isBotLogin,
   LUKE_ACTOR,
   personActor,
   SOMEONE_REASON,
@@ -183,7 +184,9 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Luke, or an automation; none for the reader's own,
+ * face, a former member, Luke, an automation, or the GitHub login GitHub
+ * told the agent of, a person's circle or an App's bot's square by whether
+ * the login is a bot's; none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
  * id, for the reason `teammateStarter` gives. A service older than the
  * sender's kind names Luke, an automation, and a former member alike by a
@@ -205,6 +208,8 @@ export function lineSender(
       return LUKE_ACTOR;
     case CODING_AGENT_SENDER.AUTOMATION:
       return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+    case CODING_AGENT_SENDER.GITHUB:
+      return { kind: ACTOR_KIND.GITHUB, login: sentBy.name, bot: isBotLogin(sentBy.name) };
     case CODING_AGENT_SENDER.FORMER:
       return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
     case CODING_AGENT_SENDER.MEMBER:

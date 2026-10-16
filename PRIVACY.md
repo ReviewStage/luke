@@ -918,7 +918,16 @@ only when you press Send.
   the App mints on the workspace's installation the pull request's number,
   title, link, state, checks,
   and size of change, and the branch's latest commit, and keeps them with the
-  agent until the task is deleted. Our service also reads from GitHub, through
+  agent until the task is deleted. When someone reviews or comments on an
+  agent's pull request, or a check fails on an agent's branch, GitHub tells
+  our service the same way; our service reads who did it by their GitHub
+  login, the pull request's number and branch, the link to the review,
+  comment, or failed commit, a review's verdict, and when, never what the
+  review or comment says, and sends that to the agents on that pull request
+  as a message, which their transcript keeps under that login until the
+  task is deleted. The agent then reads the review or comment itself with
+  the App's token, and what it reads lands in its transcript like any other
+  command's output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
   open, a pull request's changed files for the Changes tab, and a repository's
   skills.

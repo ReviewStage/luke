@@ -221,3 +221,13 @@ test("one pause is held inside what is left of the GitHub credential its backgro
   );
   assert.ok(SLEEP_TOOL.description?.includes("to wait longer, wait again"));
 });
+
+test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const ciReadable of [true, false]) {
+      const instructions = coderInstructions("Acme/Relay", brief, ciReadable);
+      assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
+      assert.ok(instructions.includes("before you end a turn on an open pull request"), brief);
+    }
+  }
+});

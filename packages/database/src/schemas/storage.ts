@@ -145,7 +145,8 @@ export const messages = pgTable(
     /** The member who sent the line, where a member did; set null with their account, which then reads as a former member's. */
     senderUserId: text("sender_user_id").references(() => user.id, { onDelete: "set null" }),
     /**
-     * The automation whose run sent the line, by its name as it stood then;
+     * The automation whose run sent the line, by its name as it stood then,
+     * or the GitHub login of who caused what a line GitHub sent tells of;
      * null on every other row. Note that the name is kept rather than a
      * reference, because an automation is deleted outright and a reference
      * would have every delete look through every message for its lines.

@@ -163,9 +163,14 @@ export function identityLetter(name: string): string {
 /** The suffix GitHub gives an App's bot's login, which its name drops since its square says it is one. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
+/** Whether a GitHub login is an App's bot's, which GitHub spells with its suffix. */
+export function isBotLogin(login: string): boolean {
+  return login.endsWith(BOT_LOGIN_SUFFIX);
+}
+
 /** What a GitHub account is called: its login, an App's bot's without the suffix GitHub gives it. */
 function githubName(actor: GitHubActor): string {
-  return actor.bot && actor.login.endsWith(BOT_LOGIN_SUFFIX)
+  return actor.bot && isBotLogin(actor.login)
     ? actor.login.slice(0, -BOT_LOGIN_SUFFIX.length)
     : actor.login;
 }
