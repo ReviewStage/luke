@@ -1,3 +1,4 @@
+import { logRouteFailure } from "@luke/service/observability/error-reports";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { Effect } from "effect";
@@ -21,14 +22,19 @@ type WebHandler = (request: Request) => Promise<Response>;
  *
  * The router's own request logger is disabled: a function's request line is
  * already the platform's to record, and a URL Luke wrote to its own output is
- * a place a token in a query could land.
+ * a place a token in a query could land. What it would have said of a
+ * route that failed or died is logged at Error instead, with the cause and
+ * not the URL, which is what files it with Sentry.
  */
 export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
   let building: Promise<WebHandler> | undefined;
   return {
     async fetch(request: Request): Promise<Response> {
       building ??= runWeb(Effect.context<WebServices>()).then((context) => {
-        const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
+        const { handler } = HttpRouter.toWebHandler(routes, {
+          disableLogger: true,
+          middleware: logRouteFailure,
+        });
         return (incoming: Request) => handler(incoming, context);
       });
       const attempt = building;

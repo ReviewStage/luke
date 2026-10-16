@@ -7,6 +7,7 @@
  * (`@luke/service/runtime`) rather than reaching into the website's.
  */
 
+import { logDefect } from "@luke/service/observability/error-reports";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
 import { type Effect, ManagedRuntime } from "effect";
 
@@ -17,8 +18,12 @@ import { type Effect, ManagedRuntime } from "effect";
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
-/** The one place this eve root runs an effect, which is what makes this the edge. */
+/**
+ * The one place this eve root runs an effect, which is what makes this the
+ * edge. A defect is logged on the way out, since eve, the promise's caller,
+ * is not Effect and would not.
+ */
 export function runAgent<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   standing ??= ManagedRuntime.make(webServices);
-  return standing.runPromise(effect);
+  return standing.runPromise(logDefect(effect));
 }

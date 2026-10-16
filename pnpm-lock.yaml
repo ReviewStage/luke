@@ -906,6 +906,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@sentry/core':
+        specifier: 10.73.0
+        version: 10.73.0
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(ai@7.0.135)(better-auth@1.7.7)(eve@0.74.0)

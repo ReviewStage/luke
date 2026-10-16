@@ -691,6 +691,31 @@ seconds of audio in the row's `dictation_seconds`, beside the voice seconds
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 
+## Error reports
+
+Every function and both eve roots send their errors to Sentry's `luke-web`
+project, through the logger set `webServices` builds
+(`packages/service/src/observability/error-reports.ts`). A line logged at
+Error or Fatal becomes an issue, with the error it was handed, or its own
+words when it was handed none. A route that fails or dies is logged at Error
+by `route-effect.ts`'s middleware before the router answers 500. A defect at
+an eve root's `runAgent` is logged the same way before its promise rejects.
+`runWeb` logs none of its own: past the route adaptor its only callers are the
+voice service and the terminal relay, whose logs keep to failure kinds and
+never an error's own words (`PRIVACY.md`), so what they report they log
+themselves. Each
+run of the scheduled sweep checks in to the `maintenance-sweep` monitor, which
+Sentry creates from the first check-in and which opens an issue after three
+missed or failed minutes in a row.
+
+It needs `SENTRY_DSN`, the `luke-web` project's DSN, set for Production and
+Preview; without it nothing is reported. `VERCEL_ENV` names each report's
+environment and `VERCEL_GIT_COMMIT_SHA` its release, both from Vercel itself.
+A report carries no request, account, or breadcrumb. Its words, and its
+error's, pass through `redactCredentials` first, which is the same text the
+Vercel log line beside it holds. Alert rules (a new issue, a regression, a
+spike) are set in Sentry, not here.
+
 ## Hosted voice service
 
 ### Deploying

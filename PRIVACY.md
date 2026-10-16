@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 13 October 2026
+Last updated: 16 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -813,6 +813,16 @@ identity, and does not enable PII collection, tracing, Sentry Replay,
 screenshots, profiling, or manual reports of handled errors. Fixture and
 evidence runs send no crash reports.
 
+**Error reports from our service.** When our service or Luke's agents fail in
+a way the code did not expect, our service sends Sentry a report of it: the
+error's type, its message, the line of code it came from, the log line that
+reported it, the deployment, and the release. Any part of those words shaped
+like a key, a token, or a secret is replaced before the report leaves. Our
+service attaches no request and does not attach your account to a report,
+and our voice service and terminal relay send none, so nothing said on a
+call and no Terminal tab's bytes reach Sentry from them. Each minute's run of the scheduled sweep also tells Sentry whether
+it ran, so a missed run is noticed.
+
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your coding agent sessions, kept a notebook, and pushed briefings to
 a phone; this version does none of that. On 13 October 2026 we deleted what
@@ -915,7 +925,8 @@ only when you press Send.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash
-  reports described above.
+  reports from the Mac app, and the error reports from our service,
+  described above.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1095,7 +1106,7 @@ keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
-reports by Sentry.
+and error reports by Sentry.
 
 ## Your choices
 

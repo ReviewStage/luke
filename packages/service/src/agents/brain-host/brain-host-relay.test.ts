@@ -24,12 +24,13 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../../core.js";
+import { redactCredentials } from "../../observability/redact-credentials.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
-import { memoryRelayState, type RelayStanding, redactCredentials, StreamRelay } from "./relay.js";
+import { memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
 
 /**
  * The relay from eve's stream into the store writer, over the real

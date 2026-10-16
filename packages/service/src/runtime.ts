@@ -16,6 +16,7 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { errorReportsLayer, errorReportsLogger } from "./observability/error-reports.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
 /**
@@ -36,9 +37,14 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * handed rendered as fields rather than folded into the message. v4 states the
  * whole active set of loggers rather than swapping one out of it, so the
  * tracer's logger is named beside the JSON one: it is what puts a line on the
- * span it was written under, the one trace surface the service keeps.
+ * span it was written under, the one trace surface the service keeps. The
+ * third files every line at Error or above with Sentry, where the deployment
+ * names a DSN (`observability/error-reports.ts`).
  */
-const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
+const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, errorReportsLogger]);
+
+/** The error reports the logger files through, which the sweep's check-ins share. */
+const webErrorReports = errorReportsLayer();
 
 /**
  * The services every web function's and every agent's effects run against. A
@@ -75,7 +81,7 @@ export const webServices = Layer.mergeAll(
   githubAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
-  webLogger,
+  Layer.provideMerge(webLogger, webErrorReports),
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));
 
