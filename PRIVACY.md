@@ -264,8 +264,10 @@ has a handle our service makes once and keeps: yours is spelled from your
 account's name. A message is stored with its words, any links, references to
 lines of a repository (a path, the lines, and the commit, never the lines
 themselves), the members it mentions, who posted it, where, and when; it may
-also ask for an answer, with the answer and who gave it stored beside it.
-Every message is stored under the workspace and readable by our own
+also ask for an answer, with the answer and who gave it stored beside it. A
+message may carry a picture an agent took in its sandbox, which our service
+reads from the sandbox and keeps beside the message, up to 1.5 MB. Every
+message is stored under the workspace and readable by our own
 operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own

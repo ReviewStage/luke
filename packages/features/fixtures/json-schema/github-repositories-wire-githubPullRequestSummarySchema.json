@@ -23,6 +23,12 @@
     "author": {
       "type": "string"
     },
+    "authorAvatarUrl": {
+      "type": "string"
+    },
+    "authorBot": {
+      "type": "boolean"
+    },
     "additions": {
       "type": "number",
       "minimum": 0

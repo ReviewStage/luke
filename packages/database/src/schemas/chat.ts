@@ -1,9 +1,11 @@
 import {
   type AskStatus,
   CHANNEL_KIND,
+  CHAT_BOUNDS,
   type ChannelKind,
   type ChatAsk,
   type ChatBlock,
+  type ChatImageType,
   type ChatReply,
   MEMBER_KIND,
   type MemberKind,
@@ -12,6 +14,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -252,6 +255,48 @@ export const chatMessage = pgTable(
       sql`(${table.askKey} is null) = (${table.ask} is null)
         and (${table.askKey} is null) = (${table.askRevision} is null)
         and (${table.askKey} is null) = (${table.askStatus} is null)`,
+    ),
+  ],
+);
+
+/** A column of raw bytes, read and written as they stand. */
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+});
+
+/**
+ * One picture of a chat message's: the bytes of an image block, kept beside
+ * the message it belongs to, as an inbox item's are (`inbox-attachment.ts`).
+ * An agent posts an image by the path of a file in its sandbox; the service
+ * reads the file and keeps it here, so the message's block names a row of
+ * this table rather than anything the agent wrote, and a reader fetches it
+ * under the account. The bytes stand in the row, bounded by a check on the
+ * column at the image bound, and the media type is what the service sniffed
+ * them to be. The row goes with its message and its workspace.
+ */
+export const chatAttachment = pgTable(
+  "chat_attachment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessage.id, { onDelete: "cascade" }),
+    /** The media type the bytes were sniffed to be, which they are served under. */
+    contentType: text("content_type").$type<ChatImageType>().notNull(),
+    /** How many bytes the picture is, read off the row without the bytes. */
+    byteCount: integer("byte_count").notNull(),
+    bytes: bytea("bytes").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    // A message's attachments are read and deleted by the message.
+    index("chat_attachment_message").on(table.messageId),
+    check(
+      "chat_attachment_bytes_bound",
+      sql`octet_length(${table.bytes}) <= ${sql.raw(String(CHAT_BOUNDS.MAX_IMAGE_BYTES))}`,
     ),
   ],
 );

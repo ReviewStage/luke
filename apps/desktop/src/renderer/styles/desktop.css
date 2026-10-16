@@ -7606,6 +7606,51 @@ button.automation-run:hover {
   font-size: 11px;
 }
 
+/* A pull request's branches on its card stand as inline code does in words
+   (`.markdown code`): mono on a tint, rounded. */
+.card-note .card-code {
+  padding: 0.08em 0.36em;
+  border-radius: 0.36em;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Who opened a pull request on its card, and how long ago it moved after
+   them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
+   as one piece where a long login leaves it no room, so the name is never
+   cut for it, as an agent's origin line wraps. Only the line holding that
+   time wraps, so every other card's line naming an actor, a one-line
+   starter's among them, keeps to its one row. */
+.card-note .actor-words:has(> .card-when) {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.card-when {
+  white-space: pre;
+}
+
+/* A pull request's comment and commit counts, each its glyph and its
+   number, apart as a row of stats. */
+.card-counts {
+  display: flex;
+  gap: var(--space-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.card-count > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
 /* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
    name beside a dot of the colour GitHub gives it, a size under the notes,
    wrapping where they run past the card's width. The dot carries the
