@@ -159,7 +159,9 @@ blockquote.markdown-quote > * + * {
 
 /* A cell keeps each word whole, so a table too wide for the column scrolls
    rather than splitting its words into letters. Note that it outranks
-   `.markdown p`, which an editor's cell holds its words in. */
+   `.markdown p`, which an editor's cell holds its words in, and a list item
+   around the table, whose words break anywhere. */
+.markdown :is(th, td),
 .markdown :is(th, td) > p {
   overflow-wrap: normal;
 }

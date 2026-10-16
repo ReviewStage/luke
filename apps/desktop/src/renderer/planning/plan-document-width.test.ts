@@ -17,6 +17,7 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
+import { MarkdownMessage } from "../markdown-message";
 import { MemberDirectory } from "../member-directory";
 import type { PlanEditorHandle } from "../plan-editor/contract";
 import { mountPlanEditor } from "../plan-editor/plan-editor";
@@ -271,4 +272,21 @@ test("a table, in the plan or in an agent's transcript, fades the edges it hides
     assert.match(style.getPropertyValue("mask-image"), /--table-fade-end/u);
   }
   act(() => transcriptRoot.unmount());
+});
+
+test("a table inside a list item keeps its cells' words whole, though the item's own words break anywhere", () => {
+  layContainersAt({ "plan-document": COLUMN.NARROWEST });
+  const host = document.body.appendChild(document.createElement("div"));
+  root = createRoot(host);
+  const words = [
+    "- Paths touched:",
+    "",
+    "  | Path |",
+    "  | --- |",
+    "  | `src/members/remove-member-from-workspace-and-revoke-every-session.ts` |",
+  ].join("\n");
+  act(() => root?.render(createElement(MarkdownMessage, { words })));
+
+  assert.equal(getComputedStyle(find(host, ".markdown li")).overflowWrap, "anywhere");
+  assert.equal(getComputedStyle(find(host, ".markdown li td")).overflowWrap, "normal");
 });
