@@ -95,8 +95,11 @@ import { MAIN_TAB } from "./use-main-tabs";
  * does, kept with the plan's other choices so it holds across a launch;
  * only where none does, its neighbour (`replacementOf`). Closing the last
  * shuts the panel too, as an editor's secondary side bar goes once its last
- * view closes, and leaves full screen with it; the toggle shows it again,
- * empty, offering the tabs closed in place.
+ * view closes, and leaves full screen with it. Whether the panel is open is
+ * the window's, but it is drawn only while the strip beside it holds a tab,
+ * so a plan with none shows no panel and the next plan that holds one shows
+ * it again. Shown on purpose with none, by ⌘T or the toggle, it stands
+ * empty, offering the tabs closed in place, until it is hidden.
  *
  * A tab of any kind is dragged or moved from the keyboard to any place in
  * the strip, among tabs of every kind, as an editor's are. The plan keeps
@@ -461,6 +464,7 @@ const FIRST_LAUNCH: SidePanelState = {
 
 /** What the panel and its toggle draw, and their presses. */
 export interface SidePanelControl {
+  /** Whether the panel is drawn: open, and its strip holding a tab or it asked for with none. */
   open: boolean;
   /** Whether the open panel fills the work column in the document's place. */
   fullScreen: boolean;
@@ -1438,12 +1442,15 @@ export function useSidePanel(
   const [moved, setMoved] = useState<HeldState | undefined>(undefined);
   const [fullScreen, setFullScreen] = useState(false);
   const [newTabAsked, setNewTabAsked] = useState(false);
+  // The plan, or the agent's page, the panel was shown on with no tab, by ⌘T or the toggle.
+  const [emptyShownOn, setEmptyShownOn] = useState<string | undefined>(undefined);
   const [seen, setSeen] = useState<OpenTask>(task);
   // The tab a pin or a notification asked for, while it is still the one chosen.
   const [asked, setAsked] = useState<{ task: string; tab: SidePanelTab } | undefined>(undefined);
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
+<<<<<<< HEAD
   // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
   const { tell } = useAct();
   const heldMacTerminals = useRef(kept.macTerminals);
@@ -1461,6 +1468,8 @@ export function useSidePanel(
     setFullScreen(false);
     setNewTabAsked(false);
   }
+=======
+>>>>>>> a0308ba02 (feat(desktop): a plan with no tab open shows no side panel, and Show panel there opens the tab last closed)
   // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>
@@ -1535,25 +1544,49 @@ export function useSidePanel(
     }
   }, [staged, kept]);
 
-  const onToggle = useCallback(() => {
-    update((held) => ({ ...held, open: !held.open }));
+  const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
+  // Open is the window's, so a plan whose strip is empty hides the panel
+  // without forgetting it was open, and the next plan with a tab shows it.
+  const shown = state.open && (strip.length > 0 || emptyShownOn === taskId);
+  // A panel shut, by its toggle or by its last tab closing, or hidden by a
+  // plan with no tab, shows again beside the document and with no ask of
+  // its "+" standing; one shut is shown empty only when asked again.
+  if (!shown && (fullScreen || newTabAsked)) {
     setFullScreen(false);
     setNewTabAsked(false);
-  }, [update]);
+  }
+  if (!state.open && emptyShownOn !== undefined) setEmptyShownOn(undefined);
+
+  // Note that showing a strip with no tab shows the panel empty, offering
+  // in place what its "+" does, since there is nothing of the plan's to
+  // show: the plan's page chooses a tab first (`useTasksTab`).
+  const onToggle = useCallback(() => {
+    setFullScreen(false);
+    setNewTabAsked(false);
+    if (shown) {
+      update((held) => ({ ...held, open: false }));
+      setEmptyShownOn(undefined);
+      return;
+    }
+    update((held) => (held.open ? held : { ...held, open: true }));
+    if (strip.length === 0) setEmptyShownOn(taskId);
+  }, [update, shown, strip.length, taskId]);
   const onSetOpen = useCallback(
     (open: boolean) => {
       update((held) => (held.open === open ? held : { ...held, open }));
       if (open) return;
       setFullScreen(false);
       setNewTabAsked(false);
+      setEmptyShownOn(undefined);
     },
     [update],
   );
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
+    setEmptyShownOn(taskId);
     setNewTabAsked(true);
-  }, [update]);
+  }, [update, taskId]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
@@ -1688,9 +1721,8 @@ export function useSidePanel(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
   );
-  const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   return {
-    open: state.open,
+    open: shown,
     tabs,
     strip,
     order: orderOn(state, taskId),
@@ -1705,8 +1737,8 @@ export function useSidePanel(
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,
-    fullScreen: state.open && fullScreen,
-    newTabAsked: state.open && newTabAsked,
+    fullScreen: shown && fullScreen,
+    newTabAsked: shown && newTabAsked,
     onToggle,
     onSetOpen,
     onToggleFullScreen,

@@ -701,6 +701,35 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
 });
 
+test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else Call", () => {
+  const tab = mount({ shown: true, tasks: OPEN });
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+
+  act(() => panel().onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE }, "as ⇧⌘T opens it");
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.CODE]);
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+
+  // A launch keeps no tab closed to open again, but keeps the kinds closed on the plan.
+  const launched = mount({ shown: true, tasks: OPEN });
+  assert.equal(launched.control().onReopenClosedTab, undefined);
+  assert.equal(launched.control().sidePanel.open, false);
+  act(() => launched.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.CODE });
+
+  window.localStorage.clear();
+  const fresh = mount({ shown: true, tasks: OPEN });
+  assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan holds nothing yet");
+  assert.equal(fresh.control().sidePanel.open, false);
+  act(() => fresh.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
