@@ -1,13 +1,13 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "renderer/renderer.js": 723877,
+    "renderer/renderer.js": 762646,
     "renderer/whiteboard.js": 468605,
     "renderer/file-tree.js": 71587,
-    "renderer/plan-editor.js": 167125,
+    "renderer/plan-editor.js": 168870,
     "renderer/session-recorder.js": 61872,
-    "renderer/terminal.js": 146170,
-    "renderer/pcm-tee-worklet.js": 430,
+    "renderer/terminal.js": 146187,
+    "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 148920,
     "renderer/diagram.js": 195262
   }
