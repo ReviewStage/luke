@@ -29,14 +29,20 @@ import { workspaceLinearApp } from "./workspace-linear-app.js";
  * return connects the workspace, any member then reads the issues it
  * reaches through the workspace's grant, and a Disconnect ends every read.
  * The store is the real one over the migrations on PGlite; Vercel Connect is
- * the production read of a deployment naming a Linear connector, over a
+ * the production read of a deployment naming the accounts' Linear connector
+ * and the workspace Linear connector beside it, over a
  * Connect that grants every subject a token naming it; Linear's GraphQL API
  * is the one network double, which records every bearer and query it was
  * asked with.
  */
 
 const ORIGIN = "https://luke.test";
-const LINEAR_CONNECTOR = { LINEAR_CONNECTOR_UID: "oauth/linear" } as const;
+/** The accounts' Linear connector alone, as a deployment named it before workspaces had a connector of their own. */
+const ACCOUNT_LINEAR_CONNECTOR = { LINEAR_CONNECTOR_UID: "mcp.linear.app/linear" } as const;
+const LINEAR_CONNECTOR = {
+  ...ACCOUNT_LINEAR_CONNECTOR,
+  LINEAR_WORKSPACE_CONNECTOR_UID: "linear/luke-workspaces",
+} as const;
 
 /** One issue as Linear's GraphQL API lists it. */
 const LINEAR_NODE = {
@@ -76,8 +82,11 @@ function linearApi(refuses: boolean) {
   return { layer, asked };
 }
 
-/** The group over the test's database, a deployment naming Linear's connector, and Linear's API. */
-const standing = (refuses = false) =>
+/** The group over the test's database, a deployment naming these Linear connectors, and Linear's API. */
+const standing = (
+  refuses = false,
+  connectors: Readonly<Record<string, string>> = LINEAR_CONNECTOR,
+) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const linear = linearApi(refuses);
@@ -85,7 +94,7 @@ const standing = (refuses = false) =>
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, clock),
-      integrationConnectOver(LINEAR_CONNECTOR),
+      integrationConnectOver(connectors),
       linear.layer,
     );
     const app = HttpRouter.toWebHandler(
@@ -305,6 +314,25 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
         assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE });
         assert.ok(Option.isSome(listed));
         assert.deepEqual(listed.value.linear, { active: false });
+      }),
+  );
+
+  it.effect(
+    "a deployment naming only the accounts' Linear connector connects no workspace, since its tokens are its MCP server's and Linear's API refuses them",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(false, ACCOUNT_LINEAR_CONNECTOR);
+        const { admin, member, workspaceId } = yield* team;
+
+        const begun = yield* group.connect(admin, workspaceId);
+        const read = yield* group.issues(member, workspaceId);
+        const listed = yield* workspaceOf(member, workspaceId);
+
+        assert.deepEqual(begun.body, { error: HOSTED_API_ERROR.UNAVAILABLE });
+        assert.deepEqual(read.body, { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE });
+        assert.ok(Option.isSome(listed));
+        assert.equal(listed.value.linear, undefined);
+        assert.deepEqual(group.linear.asked, []);
       }),
   );
 });

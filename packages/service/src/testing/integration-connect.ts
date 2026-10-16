@@ -7,10 +7,13 @@
  * vocabulary needs nothing here. `integrationConnectOver` builds it instead
  * from a deployment's variables, through the production read, so a suite
  * holds the connectors and allowlists exactly as that environment configures
- * them, each asking a Connect that holds every account's grant.
+ * them, each asking a Connect that holds every account's grant. Each also
+ * stands the workspace Linear connector (`WorkspaceLinearConnect`) beside
+ * the record.
  */
 
 import {
+  INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
@@ -24,6 +27,8 @@ import {
   IntegrationConnectFailure,
   type IntegrationConnectService,
   integrationConnectFromEnvironment,
+  WorkspaceLinearConnect,
+  workspaceLinearConnectFromEnvironment,
 } from "../integrations/integration-connect.js";
 import type { IntegrationAccountKey } from "../integrations/integration-store.js";
 
@@ -35,15 +40,18 @@ export function firstIntegrationAccount(
   return { provider, connectionName: provider, connectSubject: userId };
 }
 
-/** Every provider's connector, as the suite builds each one. */
+/** Every provider's connector, as the suite builds each one, and the workspace Linear connector as it builds Linear's. */
 export function integrationConnectOf(
   connectorOf: (provider: IntegrationProvider) => ConnectorService,
-): Layer.Layer<IntegrationConnect> {
+): Layer.Layer<IntegrationConnect | WorkspaceLinearConnect> {
   // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
   const service = Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [provider, connectorOf(provider)]),
   ) as IntegrationConnectService;
-  return Layer.succeed(IntegrationConnect, service);
+  return Layer.merge(
+    Layer.succeed(IntegrationConnect, service),
+    Layer.succeed(WorkspaceLinearConnect, connectorOf(INTEGRATION_PROVIDER.LINEAR)),
+  );
 }
 
 /** A connector a suite that asks Connect nothing stands up: every ask is a defect. */
@@ -68,8 +76,9 @@ const NOT_AUTHORIZED = new IntegrationConnectFailure({
 });
 
 /**
- * Every provider's connector as a deployment with these variables
- * configures it, read by the production layer: a provider whose connector
+ * Every provider's connector, and the workspace Linear connector, as a
+ * deployment with these variables configures them, read by the production
+ * layers: a provider whose connector
  * variable is set keeps the accounts its allowlist names, and asks a Connect
  * that begins every sign-in, issues every account a token, and revokes
  * anything, or, where it `declines`, holds no grant at all; one unset stays
@@ -93,49 +102,55 @@ export function integrationConnectOver(
     readonly names?: (subject: string) => string | undefined;
     readonly grantsOnce?: boolean;
   } = {},
-): Layer.Layer<IntegrationConnect, Config.ConfigError> {
+): Layer.Layer<IntegrationConnect | WorkspaceLinearConnect, Config.ConfigError> {
   // How many tokens the granting Connect below has issued, which `grantsOnce` refuses past the first.
   let issued = 0;
-  const granting = Effect.gen(function* () {
+  const granting = (connector: ConnectorService): ConnectorService =>
+    connector.configured
+      ? {
+          ...connector,
+          authorize: () =>
+            Effect.succeed({
+              url: GRANTING_SIGN_IN_URL,
+              verifier: Redacted.make(GRANTING_SIGN_IN_VERIFIER),
+            }),
+          signInResult: (verifier) =>
+            Effect.succeed(
+              Redacted.value(verifier) === GRANTING_SIGN_IN_VERIFIER
+                ? ends
+                : { kind: CONNECT_SIGN_IN_RESULT.PENDING },
+            ),
+          token: (subject) => {
+            if (declines || (grantsOnce && issued > 0)) return Effect.fail(NOT_AUTHORIZED);
+            issued += 1;
+            const accountName = names(subject);
+            return Effect.succeed({
+              token: Redacted.make(`token_${subject}`),
+              expiresAt: Infinity,
+              ...(accountName !== undefined ? { accountName } : undefined),
+            });
+          },
+          revoke: () => Effect.void,
+        }
+      : connector;
+  const providers = Effect.gen(function* () {
     const deployment = yield* IntegrationConnect;
     // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
     return Object.fromEntries(
-      INTEGRATION_PROVIDER_LIST.map((provider): [IntegrationProvider, ConnectorService] => {
-        const connector = deployment[provider];
-        if (!connector.configured) return [provider, connector];
-        return [
-          provider,
-          {
-            ...connector,
-            authorize: () =>
-              Effect.succeed({
-                url: GRANTING_SIGN_IN_URL,
-                verifier: Redacted.make(GRANTING_SIGN_IN_VERIFIER),
-              }),
-            signInResult: (verifier) =>
-              Effect.succeed(
-                Redacted.value(verifier) === GRANTING_SIGN_IN_VERIFIER
-                  ? ends
-                  : { kind: CONNECT_SIGN_IN_RESULT.PENDING },
-              ),
-            token: (subject) => {
-              if (declines || (grantsOnce && issued > 0)) return Effect.fail(NOT_AUTHORIZED);
-              issued += 1;
-              const accountName = names(subject);
-              return Effect.succeed({
-                token: Redacted.make(`token_${subject}`),
-                expiresAt: Infinity,
-                ...(accountName !== undefined ? { accountName } : undefined),
-              });
-            },
-            revoke: () => Effect.void,
-          },
-        ];
-      }),
+      INTEGRATION_PROVIDER_LIST.map((provider) => [provider, granting(deployment[provider])]),
     ) as IntegrationConnectService;
   });
-  return Layer.effect(IntegrationConnect, granting).pipe(
-    Layer.provide(integrationConnectFromEnvironment),
+  const workspaceLinear = Effect.gen(function* () {
+    return granting(yield* WorkspaceLinearConnect);
+  });
+  return Layer.merge(
+    Layer.effect(IntegrationConnect, providers).pipe(
+      Layer.provide(integrationConnectFromEnvironment),
+    ),
+    Layer.effect(WorkspaceLinearConnect, workspaceLinear).pipe(
+      Layer.provide(workspaceLinearConnectFromEnvironment),
+    ),
+  ).pipe(
     Layer.provide(
       Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnvRecord(variables)),
     ),
