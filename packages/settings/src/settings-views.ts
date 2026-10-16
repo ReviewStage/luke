@@ -87,6 +87,8 @@ export const SETTINGS_SECTION = {
   LEAVE: "workspace-leave",
   /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: GitHub's connect, Manage, and disconnect, and the repositories chosen on GitHub. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
+  /** A workspace's repositories, each opening its own settings: the command Run on this Mac runs. */
+  REPOSITORIES: "workspace-repositories",
 } as const;
 
 type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];

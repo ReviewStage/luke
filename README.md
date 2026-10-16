@@ -76,7 +76,8 @@ You can also run a coding agent's pull request on your Mac: Run on this Mac,
 in the pull request's menu, fetches its newest commit into a checkout Luke
 keeps for it under its application data, with a one-repository read token the
 same App mints and Luke gives back once the fetch ends, and runs the command
-you set for that repository in Settings › This Mac from the checkout's root,
+you set for that repository in its Workspace › Repositories settings, from the
+checkout's root,
 its output live in a tab of its own. Nothing runs until you press it, and the
 pull request never chooses the command. See [PRIVACY.md](PRIVACY.md) for
 details.

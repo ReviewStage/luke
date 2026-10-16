@@ -42,6 +42,7 @@ import { SpinnerRegion } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
+import { RepositoriesGroup, RepositoryPage, useRepositoriesRead } from "./repository-settings";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
@@ -1328,6 +1329,21 @@ function ShownWorkspace({
 }): React.JSX.Element {
   const members = useMembersRead(workspace.id, workspace.memberCount);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
+  const repositories = useRepositoriesRead(workspace.id);
+  // The repository whose own page stands in the workspace's place, none while the workspace's shows.
+  const [repository, setRepository] = useState<string | undefined>(undefined);
+  if (repository !== undefined) {
+    return (
+      <RepositoryPage
+        workspaceId={workspace.id}
+        workspaceName={workspace.name}
+        repository={repository}
+        command={repositories.commands.get(repository.toLowerCase())}
+        onBack={() => setRepository(undefined)}
+        onSaved={repositories.reread}
+      />
+    );
+  }
   return (
     <>
       <SettingsGroup>
@@ -1354,6 +1370,7 @@ function ShownWorkspace({
       <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
       </SettingsGroup>
+      <RepositoriesGroup read={repositories} onOpen={setRepository} />
       <LeaveGroup
         workspace={workspace}
         members={members.read}

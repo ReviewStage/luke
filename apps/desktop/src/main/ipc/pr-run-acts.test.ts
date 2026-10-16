@@ -227,7 +227,7 @@ it.effect(
 it.effect("a run the host refuses closes its port and says why", () =>
   Effect.gen(function* () {
     const refusal =
-      "Set a run command for octocat/relay in Settings, under This Mac, then run it again.";
+      "Set a run command for octocat/relay in Settings, under Workspace › Repositories, then run it again.";
     const { router, asked, opened } = fixture({ start: { refused: refusal } });
 
     const started = yield* router.performAct(

@@ -205,7 +205,7 @@ it.effect(
 
         assert.deepEqual(answered, {
           refused:
-            "Set a run command for octocat/relay in Settings, under This Mac, then run it again.",
+            "Set a run command for octocat/relay in Settings, under Workspace › Repositories, then run it again.",
         });
         assert.deepEqual(asked, []);
         assert.equal(existsSync(checkout), false);

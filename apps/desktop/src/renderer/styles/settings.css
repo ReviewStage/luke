@@ -776,3 +776,112 @@
     border-bottom: 1px solid var(--hairline);
   }
 }
+
+/* A workspace's repositories --------------------------------------------- */
+
+/* A repository's row opens its own page, so the whole row is the press: its
+   name over whether it runs on this Mac, and a chevron at its end. */
+.settings-card > .repository-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.settings-card > .repository-row:first-child {
+  border-top: 0;
+  border-radius: var(--control-radius) var(--control-radius) 0 0;
+}
+
+.settings-card > .repository-row:last-child {
+  border-radius: 0 0 var(--control-radius) var(--control-radius);
+}
+
+.settings-card > .repository-row:only-child {
+  border-radius: var(--control-radius);
+}
+
+.repository-row:hover {
+  background: var(--raised);
+}
+
+/* A command is code, cut to the row rather than wrapping it. */
+.repository-row-command {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-row .settings-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A repository's own page: the way back to its workspace over its name, in
+   the place the workspace's groups stood. */
+.repository-page-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.repository-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.repository-page-back:hover {
+  color: var(--text-primary);
+}
+
+.repository-page-back > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.repository-page-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The command's field stands on a line of its own under what it does, full
+   width, its actions under it at the right. */
+.settings-card > .repository-run-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+
+.repository-run-command {
+  min-height: 64px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.repository-run-actions {
+  justify-content: flex-end;
+}

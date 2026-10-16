@@ -420,7 +420,7 @@ function composed(
       const command = yield* commandFor(owner, pullRequest);
       if (command === undefined) {
         return {
-          refused: `Set a run command for ${pullRequest.repository} in Settings, under This Mac, then run it again.`,
+          refused: `Set a run command for ${pullRequest.repository} in Settings, under Workspace › Repositories, then run it again.`,
         } satisfies PrRunOutcome;
       }
       const place = checkoutPlace(kernel.stateRoot, { ...pullRequest, accountEmail: owner });

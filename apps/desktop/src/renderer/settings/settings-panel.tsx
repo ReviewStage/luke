@@ -19,7 +19,6 @@ import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
-import { PrRunsSection } from "./pr-runs-section";
 import { WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { ShortcutSection } from "./voice-keys";
@@ -172,13 +171,7 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
-        <>
-          <MacCommandsSection view={panelView} writes={writes} />
-          <PrRunsSection
-            workspace={workspace ? shownWorkspace(workspace) : undefined}
-            signedIn={signedIn}
-          />
-        </>
+        <MacCommandsSection view={panelView} writes={writes} />
       ) : null}
 
       {view === SETTINGS_VIEW.EXPERIMENTAL ? (

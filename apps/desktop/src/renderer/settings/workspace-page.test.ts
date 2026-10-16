@@ -91,6 +91,19 @@ const FIRST: Workspace = {
 let stored: WorkspaceMember[] = [];
 /** Every act the section sent, in order. */
 let sent: Act[] = [];
+
+/** The one repository the workspace's installation reaches. */
+const RELAY_REPOSITORY = {
+  owner: "acme",
+  name: "relay",
+  fullName: "acme/relay",
+  defaultBranch: "main",
+  private: true,
+  updatedAt: 0,
+};
+
+/** The run commands set on this Mac, as the host keeps them. */
+let runCommands: { workspaceId: string; repository: string; command: string }[] = [];
 /** Whether the service refuses to read the invitations. */
 let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
@@ -152,6 +165,31 @@ const done = (value: ActResultFor<ActKind>): ActOutcome => ({
 
 /** The bridge, answering the section's acts the way the host would. */
 function answer(request: Act): Promise<ActOutcome> {
+  // The Repositories group's acts are its own, kept apart from the rest the page sends.
+  switch (request.kind) {
+    case ACT_KIND.PLANNING_REPOSITORIES:
+      return Promise.resolve(
+        done({
+          repositories: {
+            installed: true,
+            installationUrl: "https://github.com/apps/luke/installations/new",
+            repositories: [RELAY_REPOSITORY],
+          },
+        }),
+      );
+    case ACT_KIND.PR_RUN_COMMANDS:
+      return Promise.resolve(done({ commands: runCommands }));
+    case ACT_KIND.PR_RUN_SET_COMMAND: {
+      const { workspaceId, repository, command } = request.payload;
+      runCommands = [
+        ...runCommands.filter((each) => each.repository !== repository.toLowerCase()),
+        ...(command === null
+          ? []
+          : [{ workspaceId, repository: repository.toLowerCase(), command }]),
+      ];
+      return Promise.resolve(done(undefined));
+    }
+  }
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
@@ -287,6 +325,7 @@ beforeEach(() => {
   installScrollIntoView();
   stored = [OWNER, MEMBER];
   sent = [];
+  runCommands = [];
   refuseMembersRead = false;
   membersHeld = undefined;
   refuseInvitationsRead = false;
@@ -1653,4 +1692,43 @@ test("an invitations read that failed says so with Retry in the list's place, wh
     invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
     ["sam@example.com"],
   );
+});
+
+test("a repository's row opens its own page, where its run command on this Mac is saved and removed", async () => {
+  const { page } = await mount(ACME);
+  await settle();
+  const row = () =>
+    [...page.querySelectorAll<HTMLButtonElement>(".repository-row")].find(
+      (each) => each.querySelector("strong")?.textContent === "acme/relay",
+    ) ?? assert.fail("no acme/relay row");
+
+  assert.equal(row().querySelector("small")?.textContent, "No run command on this Mac");
+  act(() => row().click());
+  await settle();
+  assert.equal(page.querySelector(".repository-page-title")?.textContent, "acme/relay");
+  const field =
+    page.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("no run command field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "  pnpm install && pnpm dev  ",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => button(page, "Save").click());
+  await settle();
+
+  assert.deepEqual(runCommands, [
+    { workspaceId: ACME.id, repository: "acme/relay", command: "pnpm install && pnpm dev" },
+  ]);
+  act(() => button(page, "Remove").click());
+  await settle();
+  assert.deepEqual(runCommands, []);
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>(".repository-page-back") ?? assert.fail("no way back")
+    ).click(),
+  );
+  await settle();
+  assert.equal(row().querySelector("small")?.textContent, "No run command on this Mac");
 });

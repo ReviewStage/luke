@@ -69,7 +69,7 @@ is told that no Mac is listening.
 **Pull requests you run on your Mac.** Run on this Mac, in a coding agent's
 pull request menu, runs that pull request on your Mac, and only when you press
 it. It runs the command you set for the pull request's repository in Settings ›
-This Mac; Luke never takes the command from the pull request, an agent cannot
+Workspace › Repositories; Luke never takes the command from the pull request, an agent cannot
 set or start one, and a repository with no command set runs nothing. Each
 press asks our service for the pull request's newest commit; the service
 checks you are a member of its workspace, reads the pull request on GitHub,
