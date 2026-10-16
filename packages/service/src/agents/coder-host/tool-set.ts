@@ -19,7 +19,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
- * opens for it (`pull-request.ts`), the load of one of its
+ * opens for it (`pull-request.ts`), its reach to the other coding agents of
+ * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
  * checks or a deploy with. The worker's own rows name
@@ -54,6 +55,8 @@ export const CODER_TOOL = {
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
+  LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
+  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,

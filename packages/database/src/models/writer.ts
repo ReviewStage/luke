@@ -305,18 +305,21 @@ type UserMessageWriteResult = Result.Result<
 /**
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
- * or GitHub by the login of who caused what it tells of.
+ * GitHub by the login of who caused what it tells of, or another coding
+ * agent by its name as it stands at the send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
-  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string };
+  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
+  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
 
-/** The name a line's row keeps beside its sender's kind: an automation's, or the GitHub login; none for any other. */
+/** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
 function senderNameOf(sender: LineSender | undefined): string | null {
   switch (sender?.kind) {
     case MESSAGE_SENDER.AUTOMATION:
+    case MESSAGE_SENDER.AGENT:
       return sender.name;
     case MESSAGE_SENDER.GITHUB:
       return sender.login;

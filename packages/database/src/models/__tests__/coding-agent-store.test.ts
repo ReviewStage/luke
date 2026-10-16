@@ -172,6 +172,10 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
+        const byAgent = yield* line("agent", {
+          kind: MESSAGE_SENDER.AGENT,
+          name: "Invite expiry",
+        });
         // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
           .insert(messages)
@@ -186,7 +190,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
-        const ids = [byTeammate, byLuke, byAutomation, byGitHub, earlier?.id ?? ""];
+        const ids = [byTeammate, byLuke, byAutomation, byGitHub, byAgent, earlier?.id ?? ""];
 
         const senders = yield* lineSendersOf(target, ids);
         assert.deepEqual(
@@ -196,6 +200,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             { kind: MESSAGE_SENDER.LUKE },
             { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
             { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
+            { kind: MESSAGE_SENDER.AGENT, name: "Invite expiry" },
             undefined,
           ],
         );
