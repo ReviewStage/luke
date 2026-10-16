@@ -608,10 +608,10 @@ function CardedFace({
   );
 }
 
-/** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say. */
+/** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say, wrapping within the card. */
 function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
   return (
-    <span className="actor-words">
+    <span className="actor-more-words">
       {faceName(actor, {})}
       {githubBot(actor) ? " " : null}
       <BotBadge actor={actor} />

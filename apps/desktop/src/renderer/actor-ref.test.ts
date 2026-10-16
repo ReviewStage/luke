@@ -376,6 +376,9 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
     document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-row') ??
     assert.fail("the count's card names the rest");
   assert.equal(row.textContent, "dependabot bot · Commented");
+  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  const words = row.lastElementChild ?? assert.fail("the row has words");
+  assert.notEqual(getComputedStyle(words).whiteSpace, "pre", "a long row wraps within the card");
 });
 
 test("a person GitHub names by login alone stands by the avatar GitHub serves for that login, and by their letter where it fails, while a bot named so keeps its robot", () => {

@@ -1289,6 +1289,17 @@ ul.actor-stack {
   gap: var(--space-8);
 }
 
+/* A row's words wrap within the card, a long login anywhere, and a bot's
+   badge rides the line its name ends on. */
+.actor-more-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actor-more-words .actor-bot {
+  display: inline-block;
+}
+
 .actor-stack-more {
   display: inline-grid;
   height: 18px;
