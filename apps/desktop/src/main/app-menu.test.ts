@@ -3,7 +3,16 @@ import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { APP_COMMAND, shortcutShown, shownShortcutGroups } from "#shared/shortcuts";
+import {
+  APP_COMMAND,
+  APP_SHORTCUTS,
+  appCommandLabel,
+  KEYED_COMMANDS,
+  SHORTCUT_KEY,
+  shortcutAccelerator,
+  shortcutShown,
+  shownShortcutGroups,
+} from "#shared/shortcuts";
 import { ellipsized } from "#testing/action-label";
 import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 
@@ -29,7 +38,6 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Home",
       "Inbox",
-      "Factory",
       "Automations",
       "-",
       "Back",
@@ -43,14 +51,7 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), [
-      "Home",
-      "Factory",
-      "Automations",
-      "-",
-      "Back",
-      "Forward",
-    ]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Automations", "-", "Back", "Forward"]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
@@ -58,7 +59,6 @@ describe("the menu bar's gate", () => {
       (command) =>
         command !== APP_COMMAND.HOME &&
         command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.FACTORY &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
@@ -76,22 +76,21 @@ describe("the Automations item", () => {
   });
 });
 
-describe("Factory's item", () => {
-  test("stands under Go only while the account has Factory's experiment on", () => {
-    const off = appMenuTemplate("Luke", undefined, (command) => shortcutShown(command, {}));
-    assert.ok(!labelsOf(off, "Go").includes("Factory"));
+describe("Factory", () => {
+  test("keeps no menu bar item and no chord, with its experiment on as off, so ⇧⌘F reaches no command", () => {
     const on = appMenuTemplate("Luke", undefined, (command) =>
       shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY)),
     );
-    assert.ok(labelsOf(on, "Go").includes("Factory"));
-  });
-
-  test("Factory's chord is listed only while its experiment is on", () => {
-    const listed = (groups: ReturnType<typeof shownShortcutGroups>) =>
-      groups.flatMap((group) => group.commands);
-    assert.ok(!listed(shownShortcutGroups({})).includes(APP_COMMAND.FACTORY));
+    assert.ok(!labelsOf(on, "Go").includes("Factory"));
+    const listed = shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY)).flatMap(
+      (group) => group.commands,
+    );
+    assert.ok(!listed.some((command) => appCommandLabel(command) === "Factory"));
+    const freed = shortcutAccelerator({ key: SHORTCUT_KEY.F, shift: true });
     assert.ok(
-      listed(shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY))).includes(APP_COMMAND.FACTORY),
+      !KEYED_COMMANDS.some(
+        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === freed,
+      ),
     );
   });
 });

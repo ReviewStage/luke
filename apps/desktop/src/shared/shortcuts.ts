@@ -102,10 +102,14 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
 /**
  * The commands ⌘K alone offers, by the name it gives them: the sidebar's
- * view of its tasks, which its View options menu sets too, so no chord or
- * menu bar item spends a key on them.
+ * view of its tasks, which its View options menu sets too, and Factory,
+ * which the sidebar's row opens, so no chord or menu bar item spends a key
+ * on them. Factory keeps no chord while it is an experiment, so ⇧⌘F stays
+ * free for a find across everything; ⌘K offers it only while the account
+ * has it on, since its command is offered nothing otherwise.
  */
 const PALETTE_COMMAND_LABELS = {
+  [APP_COMMAND.FACTORY]: "Factory",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
@@ -399,11 +403,6 @@ export const APP_SHORTCUTS = {
     label: "Exit profile",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.FACTORY]: {
-    label: "Factory",
-    chord: { key: SHORTCUT_KEY.F, shift: true },
-    experiment: EXPERIMENT.FACTORY,
-  },
   [APP_COMMAND.EXIT_FACTORY]: {
     label: "Exit factory",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -470,7 +469,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
-      APP_COMMAND.FACTORY,
       APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,
       APP_COMMAND.EXIT_AUTOMATIONS,

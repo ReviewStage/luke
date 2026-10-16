@@ -908,9 +908,9 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
- * Factory's row, after the Inbox's and drawn as it is: the factory, its
- * name, and its chord at its end while the row is hovered or reached from
- * the keyboard. A press opens the window's Factory (`desktop-factory.tsx`),
+ * Factory's row, after the Inbox's and drawn as it is: the factory and its
+ * name, with no chord, since Factory keeps none while it is an experiment
+ * (⌘K reaches it). A press opens the window's Factory (`desktop-factory.tsx`),
  * and the row is the place shown while it stands.
  */
 function SidebarFactoryRow({
@@ -927,13 +927,11 @@ function SidebarFactoryRow({
       type="button"
       className="sidebar-search sidebar-factory"
       aria-current={current ? "page" : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FACTORY)}
       disabled={disabled}
       onClick={onOpen}
     >
       <FactoryIcon />
       Factory
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FACTORY].chord} className="row-shortcut" />
     </button>
   );
 }
