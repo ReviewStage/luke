@@ -67,7 +67,14 @@ export function useAgentPullRequest(input: {
   const ended = !agentStillWriting(status);
 
   useEffect(() => {
-    if (!shown) return;
+    // A tab put out of sight lets go of the read it has out, whose answer may
+    // land after a newer one the plan read, and asks afresh when it is next
+    // shown, whatever the gap, so it never comes back on the older answer.
+    if (!shown) {
+      asks.current += 1;
+      last.current = { agentId, read: undefined };
+      return;
+    }
     const before = last.current.read;
     const forced = ended && (before === undefined || !before.ended);
     const at = latest.current.now();

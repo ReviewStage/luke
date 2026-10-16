@@ -79,3 +79,38 @@ test("a transcript page landing while the read is out leaves its answer standing
 
   assert.deepEqual(held, PUBLISHED, "the pull request's chip stands without another message");
 });
+
+test("a tab put out of sight drops the read it had out, and asks afresh when shown again", async () => {
+  const answers: ((value: CodingAgentPullRequestAnswerView) => void)[] = [];
+  const read = () =>
+    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+      answers.push(resolve);
+    });
+  let held: CodingAgentPullRequestAnswer | undefined;
+  function Probe({ shown }: { shown: boolean }) {
+    held = useAgentPullRequest({
+      agentId: AGENT,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      shown,
+      messages: page("first"),
+      read,
+      now: () => 1_000,
+    });
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(Probe, { shown: true })));
+  act(() => root?.render(createElement(Probe, { shown: false })));
+  act(() => root?.render(createElement(Probe, { shown: true })));
+  assert.equal(answers.length, 2, "shown again inside the gap, it asks afresh");
+
+  const opened = PUBLISHED.pullRequest ?? assert.fail("the fixture names a pull request");
+  const newer: CodingAgentPullRequestAnswer = {
+    ...PUBLISHED,
+    pullRequest: { ...opened, number: 43 },
+  };
+  await act(async () => answers[1]?.(newer));
+  await act(async () => answers[0]?.(PUBLISHED));
+  assert.equal(held?.pullRequest?.number, 43, "the read let go of never lands over the newer one");
+});
