@@ -257,7 +257,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
   const { tasks } = openTab();
   openMenu(mountToolbar(tasks));
   choose("Permanently delete");
-  const drawn = dialog()?.closest(".confirm-dialog-backdrop");
+  const drawn = dialog()?.closest(".luke-dialog-backdrop");
   assert.ok(drawn);
   for (const element of [drawn, ...drawn.querySelectorAll("*")]) {
     for (const attribute of element.attributes) {

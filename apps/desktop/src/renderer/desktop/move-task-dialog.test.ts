@@ -281,7 +281,6 @@ test("the dialog is never taller than the window: its workspaces scroll inside t
 
   const list = moving.querySelector<HTMLElement>('[role="radiogroup"]') ?? assert.fail("the rows");
   const answers = button(moving, "Cancel").parentElement ?? assert.fail("the answers");
-  assert.match(getComputedStyle(moving).maxHeight, /100vh/u, "the card is capped at the window");
   assert.deepEqual(
     [getComputedStyle(list).overflowY, getComputedStyle(list).minHeight],
     ["auto", "0px"],

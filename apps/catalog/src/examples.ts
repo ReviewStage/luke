@@ -2,6 +2,7 @@ import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
@@ -39,4 +40,5 @@ export const EXAMPLES: readonly Example[] = [
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  DIALOGS_EXAMPLE,
 ];

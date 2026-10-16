@@ -295,7 +295,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
 
   return (
     <ModalShell
-      className="confirm-dialog new-task-dialog ph-no-capture"
+      className="new-task-dialog ph-no-capture"
       labelledBy={titleId}
       busy={starting}
       initialFocus={field}

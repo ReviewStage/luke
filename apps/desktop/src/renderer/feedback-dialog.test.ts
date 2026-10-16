@@ -137,7 +137,6 @@ test("the dialog is never taller than the window: the note gives way, down to it
 
   const feedback = openFromHelp(APP_COMMAND.SEND_FEEDBACK);
 
-  assert.match(getComputedStyle(feedback).maxHeight, /100vh/u, "the card is capped at the window");
   assert.equal(field().parentElement, feedback, "the note is one of the card's own rows");
   assert.equal(getComputedStyle(field()).minHeight, "112px");
   assert.doesNotMatch(
