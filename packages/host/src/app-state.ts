@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import {
   type SessionReplayBootstrap,
@@ -188,6 +189,8 @@ export interface AppInboxSlice {
   planless: readonly AppInboxPlanlessItem[];
   /** Every automation holding items of its agents with no plan, as `plans` lists the plans. */
   automations: readonly AppInboxAutomationHolding[];
+  /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
+  failedRuns: readonly AccountFailedRun[];
 }
 
 /**

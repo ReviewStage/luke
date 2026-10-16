@@ -5,7 +5,11 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { createAutomation } from "@luke/database/models/automation-store";
+import {
+  createAutomation,
+  recordAutomationRun,
+  settleAutomationRun,
+} from "@luke/database/models/automation-store";
 import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
@@ -35,6 +39,8 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationFiring,
@@ -1796,6 +1802,62 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
+      }),
+  );
+
+  it.effect(
+    "a run of the account's own automation that failed to start rides the account's inbox read and moves its cursor, as no item, and another account's read carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, waiting } = yield* openInbox();
+        const automation = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            planId: plan.id,
+            name: "Nightly flaky-test sweep",
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+            guards: AUTOMATION_DEFAULT_GUARDS,
+            nextRunAt: null,
+            webhookSecretHash: null,
+          }),
+        );
+        const before = yield* waiting();
+
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.MANUAL },
+            firedAt: yield* DateTime.nowAsDate,
+          }),
+        );
+        yield* settleAutomationRun(run.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+        });
+        const after = yield* waiting(before.cursor);
+
+        assert.deepEqual(before.failedRuns, []);
+        assert.notEqual(after.cursor, before.cursor);
+        assert.deepEqual(after.items, before.items);
+        assert.deepEqual(
+          after.failedRuns?.map((each) => [
+            each.id,
+            each.automationId,
+            each.automationName,
+            each.workspaceId,
+            each.reason,
+          ]),
+          [
+            [
+              run.id,
+              automation.id,
+              "Nightly flaky-test sweep",
+              plan.workspaceId,
+              AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+            ],
+          ],
+        );
+        assert.deepEqual((yield* waiting(undefined, other)).failedRuns, []);
       }),
   );
 

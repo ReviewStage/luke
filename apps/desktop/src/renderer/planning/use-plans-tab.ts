@@ -1,3 +1,4 @@
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { Board } from "@luke/features/board-wire";
 import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
@@ -437,6 +438,8 @@ export interface PlansControl {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** What waits on the developer from agents with no plan, as main's read last answered: what the window's Inbox lists beside the plans' and counts with them. */
   inboxPlanless: readonly AppInboxPlanlessItem[];
+  /** The newest run of each of the account's own automations that failed to start lately, every workspace's, which marks the sidebar's Automations of the run's workspace until that automation is opened. */
+  failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
@@ -785,6 +788,8 @@ export function usePlansTab(input: {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** What main says waits on the developer from agents with no plan. */
   inboxPlanless: readonly AppInboxPlanlessItem[];
+  /** The newest run of each of the account's own automations main says failed to start lately. */
+  failedRuns: readonly AccountFailedRun[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -2207,6 +2212,7 @@ export function usePlansTab(input: {
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
     inboxPlanless: input.inboxPlanless,
+    failedRuns: input.failedRuns,
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,

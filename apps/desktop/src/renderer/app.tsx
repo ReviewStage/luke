@@ -1,7 +1,8 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -45,6 +46,7 @@ import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
+import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { prefetchEditorBundle } from "./editor-bundle";
@@ -87,6 +89,8 @@ const NOTHING_WAITING: readonly AppInboxPlan[] = [];
 const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
 /** Nothing waiting from agents with no plan, as one value across renders. */
 const NOTHING_PLANLESS: readonly AppInboxPlanlessItem[] = [];
+/** No automation's run failed, as one value across renders. */
+const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -285,6 +289,7 @@ export function App(): React.JSX.Element {
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
+    failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
@@ -352,6 +357,18 @@ export function App(): React.JSX.Element {
   const workspacesUnread = plans.workspaces.length === 0 && !plans.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => window.luke.onShowLink(openLink), [openLink]);
+  // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
+  const openRunLink = useRef(openLink);
+  openRunLink.current = openLink;
+  const openFailedRun = useCallback(
+    ({ automationId, runId, workspaceId }: FailedRunPlace) =>
+      openRunLink.current({
+        workspace: workspaceId,
+        place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId },
+      }),
+    [],
+  );
+  useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
   const showPlan = useRef(plans.onShowPlan);
@@ -391,6 +408,8 @@ export function App(): React.JSX.Element {
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
   useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
+  // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
+  useFailedRunToasts(openFailedRun);
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
   const showInbox = useRef(plans.onShowInbox);
   showInbox.current = plans.onShowInbox;

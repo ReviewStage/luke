@@ -1,10 +1,12 @@
 import type {
+  AccountFailedRun,
   AccountInboxAnswer,
   AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxPlan,
   AccountPlanlessEntry,
 } from "@luke/features/account-inbox-wire";
+import { failedRunText } from "@luke/features/automation-list-model";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -107,6 +109,14 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
  * answer is asked again on the watch's clock.
+ *
+ * The same read carries the newest run of each of the account's own
+ * automations that failed to start lately, which is written for the
+ * window's Automations to mark until that automation is opened, and counts
+ * on no badge, since nothing answers it. A run that failed since the last
+ * answer is announced once by the same doors and gates, in the failed tone,
+ * under its automation's name, and its click or its toast's View opens that
+ * run, in its automation's workspace; nothing is said while the account has Automations off.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
@@ -155,6 +165,20 @@ export interface AgentEndToast {
   failed: boolean;
 }
 
+/** Where a failed run's click takes the developer: the run, in its automation, in the workspace it stands in. */
+export interface FailedRunPlace {
+  automationId: string;
+  runId: string;
+  workspaceId: string;
+}
+
+/** A run that failed to start as the window's own toast says it: the run its View opens, the words, and the automation's name under them. */
+export interface FailedRunToast {
+  place: FailedRunPlace;
+  words: string;
+  detail: string;
+}
+
 /** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
 export interface InboxItemToast {
   planId: string;
@@ -174,6 +198,7 @@ export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
   toast(end: AgentEndToast): void;
   toastInbox(item: InboxItemToast): void;
+  toastFailedRun(run: FailedRunToast): void;
   /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
@@ -216,6 +241,10 @@ export interface AgentNoticesDependencies {
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
   /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
+  /** Brings Luke forward on a failed run, in its automation's workspace: its notification's click. */
+  openFailedRun: (place: FailedRunPlace) => void;
+  /** Whether the account has Automations on, without which no failed run is announced. */
+  automationsOn: () => boolean;
   openPlanlessItem: (item: {
     readonly agentId: string;
     readonly itemId: string;
@@ -424,7 +453,10 @@ function planlessNoticeText(
 }
 
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
-type InboxAnswered = Pick<AccountInboxAnswer, "items" | "plans" | "planless" | "automations">;
+type InboxAnswered = Pick<
+  AccountInboxAnswer,
+  "items" | "plans" | "planless" | "automations" | "failedRuns"
+>;
 
 /** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model, the automation and repository standing in a plan's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
 function samePlanless(
@@ -607,6 +639,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         plans: answer.plans,
         planless: waitingPlanless(answer.planless ?? []),
         automations: answer.automations ?? [],
+        failedRuns: answer.failedRuns ?? [],
       };
     }
 
@@ -629,6 +662,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
               itemId: item.id,
               ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
             }),
+        });
+      }
+    }
+
+    /** A run failed to start: told in the toast in front, and as a notification behind, each opening its automation. */
+    function announceFailedRun(run: AccountFailedRun): void {
+      if (!dependencies.automationsOn()) return;
+      const words = failedRunText(run.reason);
+      const place = { automationId: run.automationId, runId: run.id, workspaceId: run.workspaceId };
+      if (focused) {
+        doors.toastFailedRun({ place, words, detail: run.automationName });
+        return;
+      }
+      if (dependencies.notifying()) {
+        doors.post({
+          title: run.automationName,
+          body: words,
+          onClick: () => dependencies.openFailedRun(place),
         });
       }
     }
@@ -703,6 +754,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
         if (since === undefined || was?.items.has(item.id) === true) continue;
         if ((known ?? 0) < item.revision && item.updatedAt > since) announcePlanless(item);
+      }
+      // A run settles once, so one the last answer did not hold that failed since it was read is news.
+      const told = new Set((was?.answer.failedRuns ?? []).map((run) => run.id));
+      for (const run of answer.failedRuns ?? []) {
+        if (since === undefined || told.has(run.id) || run.failedAt <= since) continue;
+        announceFailedRun(run);
       }
     }
 

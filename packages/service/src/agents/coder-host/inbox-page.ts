@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
+import { ownFailedAutomationRuns } from "@luke/database/models/automation-store";
+import type { AccountFailedRun, AccountInboxAnswer } from "@luke/features/account-inbox-wire";
+import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
-import { Clock, type Duration, Effect, Schedule } from "effect";
+import { Clock, Duration, Effect, Schedule } from "effect";
 import {
   accountInboxAutomations,
   accountInboxPlans,
@@ -41,10 +43,19 @@ import { CODER } from "./bounds.js";
  * it for as long as it is signed in rather than while a tab is on screen.
  * The open items of agents with no plan, and the automations holding them,
  * ride beside the plans' under keys of their own, and move the same cursor.
+ * So does the newest run of each of the account's own automations that
+ * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
+ * is what its owner is told of whichever plan is open.
  */
+
+/** How far back a run that failed to start is still carried to its automation's owner. */
+const FAILED_RUN_WINDOW = Duration.days(7);
 
 /** How many characters of the digest a cursor carries: far more than any two inboxes of a plan could share by chance. */
 const CURSOR_CHARS = 32;
+
+/** What a cursor digests of one thing it covers, an item or a failed run: its id, revision, status, and instant. */
+type CursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & { readonly status: string };
 
 /**
  * Where the inbox stands for a reader: a digest of every item's id,
@@ -54,9 +65,7 @@ const CURSOR_CHARS = 32;
  * inbox digests to a cursor of its own rather than the start, so a first
  * read answers at once.
  */
-function cursorOf(
-  stamps: readonly Pick<InboxStamp, "id" | "revision" | "status" | "updatedAt">[],
-): string {
+function cursorOf(stamps: readonly CursorStamp[]): string {
   const standing = stamps
     .map((stamp) => [stamp.id, stamp.revision, stamp.status, stamp.updatedAt] as const)
     .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -69,7 +78,7 @@ function cursorOf(
  * caller reads them whole once this returns.
  */
 function heldUntilMoved(
-  stamps: InboxStoreEffect<readonly InboxStamp[]>,
+  stamps: InboxStoreEffect<readonly CursorStamp[]>,
   after: string,
   poll: Duration.Duration,
 ): InboxStoreEffect<void> {
@@ -79,6 +88,26 @@ function heldUntilMoved(
     Effect.timeoutOption(CODER.MESSAGES_HOLD),
     Effect.asVoid,
   );
+}
+
+/** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
+function failedRunsOf(userId: string): InboxStoreEffect<readonly AccountFailedRun[]> {
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const since = new Date(now - Duration.toMillis(FAILED_RUN_WINDOW));
+    const runs = yield* ownFailedAutomationRuns(userId, since);
+    return runs.map((run) => ({ ...run, failedAt: run.failedAt.getTime() }));
+  });
+}
+
+/** Where each failed run stands, as the cursor digests it beside the items: a run settles once, so its id and instant are all of it. */
+function failedRunStamps(runs: readonly AccountFailedRun[]): readonly CursorStamp[] {
+  return runs.map((run) => ({
+    id: run.id,
+    revision: 0,
+    status: AUTOMATION_RUN_STATUS.FAILED,
+    updatedAt: run.failedAt,
+  }));
 }
 
 /** One agent's inbox as any member of its workspace reads it, held while its cursor is still the reader's: what an agent's page answers from. */
@@ -121,12 +150,16 @@ export function accountInboxPast(
     const plans = yield* accountInboxPlans(userId);
     const planlessRows = yield* accountPlanlessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
+    const failedRuns = yield* failedRunsOf(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
     const planless = planlessRows.map(({ status: _status, ...entry }) => entry);
-    const cursor = cursorOf([...rows, ...planlessRows]);
-    return { items, plans, planless, automations, cursor, readAt };
+    const cursor = cursorOf([...rows, ...planlessRows, ...failedRunStamps(failedRuns)]);
+    return { items, plans, planless, automations, failedRuns, cursor, readAt };
   });
-  return heldUntilMoved(accountWaitingStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
-    Effect.andThen(read),
+  const stamps = Effect.zipWith(
+    accountWaitingStamps(userId),
+    Effect.map(failedRunsOf(userId), failedRunStamps),
+    (items, runs) => [...items, ...runs],
   );
+  return heldUntilMoved(stamps, after, CODER.ACCOUNT_INBOX_POLL).pipe(Effect.andThen(read));
 }

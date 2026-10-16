@@ -45,7 +45,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     voice: { avatar: AVATAR_OFF },
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [], planless: [], automations: [] },
+    inbox: { waiting: [], plans: [], planless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
