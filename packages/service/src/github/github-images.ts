@@ -63,7 +63,7 @@ const ASCII = new TextEncoder();
 /** The media type GitHub serves a repository's file as when asked for its raw bytes, whatever the file holds. */
 const RAW_CONTENTS = "application/vnd.github.raw";
 
-/** The bytes each type's file opens with, or for an SVG holds near its start, which a repository's file must show to be read as it. */
+/** The bytes each type's file opens with, or for an SVG holds anywhere, which a repository's file must show to be read as it. */
 const SIGNATURES: ReadonlyMap<GitHubImageType, (bytes: Uint8Array) => boolean> = new Map([
   [
     GITHUB_IMAGE_TYPE.PNG,
@@ -77,10 +77,8 @@ const SIGNATURES: ReadonlyMap<GitHubImageType, (bytes: Uint8Array) => boolean> =
       opensWith(bytes, [...ASCII.encode("RIFF")]) &&
       opensWith(bytes.subarray(8), [...ASCII.encode("WEBP")]),
   ],
-  [
-    GITHUB_IMAGE_TYPE.SVG,
-    (bytes) => new TextDecoder().decode(bytes.subarray(0, 4_096)).includes("<svg"),
-  ],
+  // Note that an SVG may open with a declaration and comments of any length, so the whole file, within the bound, is read.
+  [GITHUB_IMAGE_TYPE.SVG, (bytes) => new TextDecoder().decode(bytes).includes("<svg")],
 ]);
 
 /** Whether the bytes open with the ones given. */

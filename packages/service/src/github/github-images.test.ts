@@ -153,6 +153,15 @@ it.effect(
       );
       assert.equal(contents?.headers.get("accept"), "application/vnd.github.raw");
       assert.equal(contents?.headers.get("authorization"), "Bearer ghs_fixture_installation_token");
+
+      const licensed = new TextEncoder().encode(
+        `<?xml version="1.0"?><!-- ${"license ".repeat(1_000)}--><svg xmlns="http://www.w3.org/2000/svg"/>`,
+      );
+      const svg = yield* read("https://raw.githubusercontent.com/acme/relay/main/logo.svg", () =>
+        raw(licensed),
+      );
+      assert.ok(Option.isSome(svg.result), "an SVG with a long comment before its root is read");
+      assert.equal(svg.result.value.contentType, GITHUB_IMAGE_TYPE.SVG);
     }),
 );
 
