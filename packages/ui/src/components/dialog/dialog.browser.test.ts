@@ -89,13 +89,14 @@ test("it opens on its field, keeps Tab and Shift-Tab among its controls, and Esc
   await expect.element(opener).toHaveFocus();
 });
 
-test("a link or a select at either end of the card is one of its controls, so Tab wraps from it", async () => {
+test("a link or a select at either end of the card is one of its controls, so Tab wraps from it past what is out of the Tab order", async () => {
   await mount(
     createElement(Dialog, {
       labelledBy: "title",
       onDismiss: () => undefined,
       children: [
         createElement("h2", { key: "title", id: "title" }, "Invite"),
+        createElement("div", { key: "details", tabIndex: -2 }, "Details"),
         createElement(
           "select",
           { key: "role", "aria-label": "Role" },

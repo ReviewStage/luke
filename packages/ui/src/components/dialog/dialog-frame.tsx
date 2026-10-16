@@ -16,14 +16,19 @@ export const DIALOG_ROLE = {
 
 export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 
-/** What Tab may land on inside the card: its enabled controls and links, and never a hidden one nor one taken out of the Tab order, as a menu's rows are. */
+/**
+ * What Tab may land on inside the card: its enabled controls and links, and
+ * anything else given a place in the Tab order. Note that one taken out of
+ * that order, as a menu's rows are, is dropped by its `tabIndex` rather than
+ * here, because any negative value takes it out.
+ */
 const FOCUSABLE = [
-  'a[href]:not([tabindex="-1"])',
-  'button:not([disabled]):not([tabindex="-1"])',
-  'textarea:not([disabled]):not([tabindex="-1"])',
-  'select:not([disabled]):not([tabindex="-1"])',
-  'input:not([disabled]):not([hidden]):not([tabindex="-1"])',
-  '[tabindex]:not([tabindex="-1"]):not(:disabled)',
+  "a[href]",
+  "button:not([disabled])",
+  "textarea:not([disabled])",
+  "select:not([disabled])",
+  "input:not([disabled]):not([hidden])",
+  "[tabindex]:not(:disabled)",
 ].join(", ");
 
 /** The `data-` attributes a caller still draws its card with, for its own styles. */
@@ -68,7 +73,9 @@ function precedes(first: Node, second: Node): boolean {
 /** The move Tab makes from the focused element, kept to the card's own controls. */
 function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
   const card = event.currentTarget;
-  const controls = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  const controls = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (control) => control.tabIndex >= 0,
+  );
   const focused = document.activeElement;
   const at = focused instanceof HTMLElement ? controls.indexOf(focused) : -1;
   // Note that a focus inside the card off its controls, a picker's list that
