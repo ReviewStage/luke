@@ -3096,8 +3096,8 @@ ul.actor-stack {
 
 /* Who said or wrote a message on a shared plan, a teammate, Luke, or an
    automation, named by their mark and name in the muted meta voice, the mark
-   centred on the words; the reader's own carry no name. A plan card names
-   them over it; a sent message, under its bubble (`.message-meta`). */
+   centred on the words; the reader's own carry no name. A plan card and a
+   sent message alike name them under it (`.message-meta`). */
 .message-sender {
   display: flex;
   align-items: center;
@@ -3130,23 +3130,30 @@ ul.actor-stack {
 }
 
 /* What a transcript opens on, the plan, an automation's prompt, or a
-   worker's task, stands as a sent message does, at the right under the line
-   naming who sent it, its card across the message's whole measure, so it
-   lines up with a long sent message's left edge rather than a width of its
-   own: the measure is the sent message's (`Message`'s `is-user`), and a card
-   folded or open spans all of it. */
+   worker's task, stands as a sent message does, at the right over the line
+   naming who sent it and when, its card across the message's whole measure,
+   so it lines up with a long sent message's left edge rather than a width of
+   its own: the measure is the sent message's (`Message`'s `is-user`), and a
+   card folded or open spans all of it. */
 .agent-origin > .agent-origin-card {
   width: 100%;
 }
 
-.agent-origin > .message-sender {
-  max-width: 100%;
+/* Its meta line breaks before the time rather than squeeze who sent it: a
+   long sender keeps the card's whole measure, the time on a line under it. */
+.agent-origin > .message-meta {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.agent-origin > .message-meta > .message-sender {
+  min-width: 0;
 }
 
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */
-.agent-origin > .message-sender > .actor-words {
+.agent-origin > .message-meta > .message-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--space-2);
 }
