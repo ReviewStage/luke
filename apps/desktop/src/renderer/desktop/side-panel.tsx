@@ -1798,7 +1798,7 @@ export function SidePanel({
   // A Browser tab stands while the experiment is on; turned off, it closes (below).
   const browsing = useExperiment(EXPERIMENT.BROWSER);
   const browsers = browsing ? panel.browsers : NO_BROWSERS;
-  const browserPages = useBrowserPages();
+  const browserPages = useBrowserPages(browsing);
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {

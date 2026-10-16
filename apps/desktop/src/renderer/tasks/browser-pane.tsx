@@ -86,9 +86,20 @@ function hearPages(listener: () => void): () => void {
   };
 }
 
-/** How each of this window's Browser tabs' pages stands, by tab, which the strip names its tabs by and the pane draws its bar from. */
-export function useBrowserPages(): ReadonlyMap<string, BrowserPage> {
-  return useSyncExternalStore(hearPages, () => pages);
+/** Hears nothing, for a reader with no Browser tab to draw. */
+function hearNothing(): () => void {
+  return () => undefined;
+}
+
+/**
+ * How each of this window's Browser tabs' pages stands, by tab, which the
+ * strip names its tabs by and the pane draws its bar from; main is heard only
+ * while `hearing`, the Browser tab experiment on.
+ */
+export function useBrowserPages(hearing = true): ReadonlyMap<string, BrowserPage> {
+  const read = () => pages;
+  // Note that a server render, as a test draws one, reads the pages as they stand too.
+  return useSyncExternalStore(hearing ? hearPages : hearNothing, read, read);
 }
 
 /** What a Browser tab is called: its page's title, its address's host until it has one, and none before a page is opened. */

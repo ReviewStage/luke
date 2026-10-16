@@ -112,7 +112,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Chat"));
+  assert.ok(page.textContent?.startsWith("Browser tab"));
 
   await act(async () => factory.click());
   assert.deepEqual(sent, [
@@ -166,7 +166,13 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
   const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
     [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
   );
-  assert.deepEqual(cards, [["Chat"], ["Video calls", "Avatar"], ["Automations"], ["Factory"]]);
+  assert.deepEqual(cards, [
+    ["Browser tab"],
+    ["Chat"],
+    ["Video calls", "Avatar"],
+    ["Automations"],
+    ["Factory"],
+  ]);
 
   await act(async () => chip.click());
   const options = [...document.querySelectorAll('[role="option"]')];
