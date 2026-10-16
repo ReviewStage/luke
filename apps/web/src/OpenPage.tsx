@@ -19,6 +19,9 @@ import { LukeMark } from "./SiteChrome";
  * browser with no app for the scheme answers an automatic hand-off with an
  * error of its own; and the page counts no visit, because its address names
  * a workspace and a thing in it.
+ * Pasted into Slack or a message, a link unfurls as the site's own card,
+ * the same for every link (`open.html`'s head), since an unfurler fetches it
+ * signed out and anyone holding the link reads what the card says.
  *
  * A browser says nothing when no app answers the scheme, and an app too old
  * to know it is the same silence, so a press is followed, a moment later, by

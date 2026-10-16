@@ -1006,6 +1006,11 @@ address, which links your earlier visits to your account. Your browser
 contacts PostHog directly, so PostHog sees your network address, as it does
 for the app's recordings.
 
+A link to something in Luke, pasted into Slack, iMessage, or anywhere else
+that previews links, shows only Luke's own card: the Luke name and logo, the
+same for every link, and nothing of the task, the agent, the person, or the
+workspace it opens.
+
 ## Storage
 
 Your settings and your account's sign-in tokens stay on your Mac, the tokens
