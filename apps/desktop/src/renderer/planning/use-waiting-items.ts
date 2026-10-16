@@ -28,6 +28,8 @@ export interface WaitingItems {
   readonly items: readonly InboxListed[];
   /** The plans whose items were read as main says they stand now, which `items` speaks for whole; a plan that changed since, its read out or failed, is not among them. */
   readonly readPlans: ReadonlySet<string>;
+  /** The agents with no plan whose items were read as main says they stand now, which `items` speaks for whole. */
+  readonly readAgents: ReadonlySet<string>;
   readonly reading: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
@@ -78,6 +80,7 @@ export function useWaitingItems(plans: PlansControl): WaitingItems {
   return {
     items,
     readPlans: read.current,
+    readAgents: planless.current,
     reading,
     failed: read.failed || planless.failed,
     onRetry,

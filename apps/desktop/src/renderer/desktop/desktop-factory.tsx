@@ -1,4 +1,4 @@
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { type PlanlessAgent, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -50,6 +50,7 @@ import {
   type FactoryWork,
   factoryBoard,
   factoryMovedAt,
+  factoryOneOffWaiting,
   factoryWaiting,
 } from "./factory-model";
 import { paneTiming } from "./pane-motion";
@@ -59,31 +60,31 @@ import { useRowKeys } from "./use-row-keys";
 /**
  * desktop-factory.tsx -- the window's Factory: the workspace's tasks being talked through, built, and shipped, as three stations on one line, each leading with what waits on the developer there.
  *
- * It stands in the plan's place beside the sidebar, as the Inbox does, and
- * is a live view rather than a report: no totals, only where work stands
- * now and what moved in the last day (`factory-model.ts`), read from the
- * plan list, every member's open Inbox items as Home reads them, and the
- * call. Three stations run left to right, each a card counting the rows it
- * lists: Talk, the task on a call with Luke; Build, the agents at work; and
- * Ship, what merged in the last day. Every row reads as Home's does: a glyph, what it is, the task it is
- * about in the faint context ink, a teammate's face, and when it moved, the
- * time slot holding nothing but a time. What waits on the developer stands
- * first in the station it holds up, in the unread weight with its dot,
- * apart from the rest by a hairline: under Build the agents stopped on a
- * question or a failed turn, under Ship failing checks and pull requests
- * ready to merge. The line above the stations says how many wait, how many
- * agents work, and how much shipped today. A question opens in the Inbox,
- * an agent its page, a pull request on GitHub (its row ends in ↗), and
+ * It stands in the plan's place beside the sidebar, as the Inbox does, and is
+ * a live view rather than a report: no totals, only where work stands now and
+ * what moved in the last day (`factory-model.ts`), read from the plan list,
+ * every member's open Inbox items as Home reads them, and the call. Three
+ * stations run left to right, each a card counting the rows it lists: Talk,
+ * the task on a call with Luke; Build, the agents at work, an agent with no
+ * task among them by its automation's name, opening its own page; and Ship,
+ * what merged in the last day. Every row reads as Home's does: a glyph, what
+ * it is, the task it is about in the faint context ink, a teammate's face,
+ * and when it moved, the time slot holding nothing but a time. What waits on
+ * the developer stands first in the station it holds up, in the unread weight
+ * with its dot, apart from the rest by a hairline: under Build the agents
+ * stopped on a question or a failed turn, under Ship failing checks and pull
+ * requests ready to merge. The line above the stations says how many wait,
+ * how many agents work, and how much shipped today. A question opens in the
+ * Inbox, an agent its page, a pull request on GitHub (its row ends in ↗), and
  * anything else its task, whose card hangs on the row's hover. A row that
  * moves from one station to another slides there once, and one that arrives
  * fades in; nothing else moves, and the times count on with the window's
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
  * over, and so does any row of the sidebar. Until the plan list is read
- * nothing stands, a list that could not be read says so with Retry, above the line
- * where an earlier read still stands, and
- * with nothing on a call, built, or shipped the page is the app's empty
- * state. It is an experiment
+ * nothing stands, a list that could not be read says so with Retry, above the
+ * line where an earlier read still stands, and with nothing on a call, built,
+ * or shipped the page is the app's empty state. It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -154,9 +155,28 @@ function useFactoryBoard(plans: PlansControl, now: number): FactoryRead {
       ),
     [items, readPlans, plans.inbox],
   );
+  const oneOff = plans.listedAgents.standing;
+  // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
+  const { readAgents } = questions;
+  const oneOffWaiting = useMemo(
+    () =>
+      factoryOneOffWaiting(
+        items,
+        plans.inboxPlanless.filter((each) => !readAgents.has(each.agentId)),
+      ),
+    [items, readAgents, plans.inboxPlanless],
+  );
   const board = useMemo(
-    () => factoryBoard({ plans: listed, waiting, callPlanId: plans.callPlanId, now }),
-    [listed, waiting, plans.callPlanId, now],
+    () =>
+      factoryBoard({
+        plans: listed,
+        waiting,
+        callPlanId: plans.callPlanId,
+        oneOff,
+        oneOffWaiting,
+        now,
+      }),
+    [listed, waiting, plans.callPlanId, oneOff, oneOffWaiting, now],
   );
   return { board, questions };
 }
@@ -365,12 +385,18 @@ function Arrow(): React.JSX.Element {
 /** Who a row names: whoever started its agent where that is a teammate, else whoever created its task where that is. */
 function useWho(): (plan: PlanSummary, agent?: PlanAgentLine) => Actor | undefined {
   const reader = useMemberDirectory();
-  return (plan, agent) => {
-    const starter = agent?.startedBy;
-    if (starter === undefined) return teammateCreator(plan, reader);
-    if (starter.userId === reader.readerId) return undefined;
-    return personActor(starter, reader.members, reader.readerId);
-  };
+  const started = useStarter();
+  return (plan, agent) =>
+    agent?.startedBy === undefined ? teammateCreator(plan, reader) : started(agent);
+}
+
+/** Who started an agent, where that is a teammate; an agent with no task names no creator besides. */
+function useStarter(): (agent: Pick<PlanlessAgent, "startedBy">) => Actor | undefined {
+  const reader = useMemberDirectory();
+  return ({ startedBy }) =>
+    startedBy === undefined || startedBy.userId === reader.readerId
+      ? undefined
+      : personActor(startedBy, reader.members, reader.readerId);
 }
 
 /** The line, left to right, each station leading with what waits on the developer there. */
@@ -385,6 +411,7 @@ function Line({
 }): React.JSX.Element {
   const card = (plan: PlanSummary) => planCardOf(plans, plan, now);
   const who = useWho();
+  const started = useStarter();
   const models = plans.agents.models;
   const ask = (plan: PlanSummary, itemId: string) => {
     plans.inboxView.onOpen();
@@ -404,7 +431,54 @@ function Line({
       onOpen={() => plans.onSelect(plan.id)}
     />
   );
+  // An agent with no task names its automation where the rows of a task name the task, and opens its own page.
+  const oneOffStopRow = (
+    stop: Extract<
+      FactoryStop,
+      { readonly kind: typeof FACTORY_STOP.ONE_OFF_QUESTION | typeof FACTORY_STOP.ONE_OFF_FAILED }
+    >,
+  ) => {
+    const { agent } = stop;
+    if (stop.kind === FACTORY_STOP.ONE_OFF_QUESTION) {
+      const itemId = stop.item.id;
+      return (
+        <FactoryRow
+          key={itemId}
+          slide={itemId}
+          glyph={<AgentGlyph agent={agent} />}
+          words={stop.item.title}
+          context={agent.automationName}
+          actor={started(agent)}
+          at={stop.item.postedAt}
+          waiting
+          link={{ place: { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.id, itemId } }}
+          onOpen={() => {
+            plans.inboxView.onOpen();
+            plans.inboxView.onChoose({ agentId: agent.id, itemId });
+          }}
+        />
+      );
+    }
+    return (
+      <FactoryRow
+        key={agent.id}
+        slide={agent.id}
+        glyph={<AgentGlyph agent={agent} />}
+        words={`${agentTabLabel(agent, models)} failed`}
+        context={agent.automationName}
+        actor={started(agent)}
+        at={agent.activityAt}
+        end={agentEndMark(agent, true)}
+        waiting
+        link={{ place: agentPlace({ id: agent.id, planId: null }) }}
+        onOpen={() => plans.agentView.onOpen(agent.id)}
+      />
+    );
+  };
   const stopRow = (stop: FactoryStop) => {
+    if (stop.kind === FACTORY_STOP.ONE_OFF_QUESTION || stop.kind === FACTORY_STOP.ONE_OFF_FAILED) {
+      return oneOffStopRow(stop);
+    }
     const { plan } = stop;
     if (stop.kind === FACTORY_STOP.QUESTION) {
       const agent = plan.agents?.agents.find((each) => each.id === stop.item.agentId);
@@ -443,6 +517,22 @@ function Line({
     );
   };
   const workRow = (work: FactoryWork) => {
+    if (work.kind === FACTORY_WORK.ONE_OFF) {
+      const { agent } = work;
+      return (
+        <FactoryRow
+          key={agent.id}
+          slide={agent.id}
+          glyph={<AgentGlyph agent={agent} />}
+          words={agentTabLabel(agent, models)}
+          context={agent.automationName}
+          actor={started(agent)}
+          at={agent.activityAt}
+          link={{ place: agentPlace({ id: agent.id, planId: null }) }}
+          onOpen={() => plans.agentView.onOpen(agent.id)}
+        />
+      );
+    }
     const { plan } = work;
     if (work.kind === FACTORY_WORK.AGENT) {
       const { agent } = work;
