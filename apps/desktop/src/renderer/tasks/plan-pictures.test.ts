@@ -11,6 +11,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
@@ -118,6 +119,21 @@ test("a plan's picture is drawn from its bytes under its caption, and one this r
   assert.equal(blocks[0]?.querySelector(".picture-caption")?.textContent, "The mock Lee shared");
   assert.equal(blocks[1]?.querySelector("img"), null);
   assert.equal(blocks[1]?.textContent, "Members page · not available");
+});
+
+test("a picture this reader cannot reach stands in a frame of the one width whatever its words, never a share of the block it stands in, which takes its width from the frame", async () => {
+  const planId = "5b2e8c41-9d3a-4f7e-8b1c-2a3d4e5f6a04";
+  standHost(new Set(), []);
+  const style = layContainersAt({});
+  const body = ["## Approach", `![Members page](${picture(planId, GONE)})`].join("\n\n");
+
+  const view = await drawn(createElement(PlanBody, { plan: planOf(planId, body), live: false }));
+
+  const frame = view.querySelector<HTMLElement>(".picture-missing");
+  assert.ok(frame, "the picture is drawn as its words");
+  // A share has nothing to resolve against while the block is measured, so a short alt would hug its words and a long one leave the frame narrower than its block.
+  assert.match(getComputedStyle(frame).width, /^\d+px$/);
+  style.remove();
 });
 
 test("a press on a picture opens the plan's pictures over the window, named by their alt text", async () => {

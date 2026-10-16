@@ -625,6 +625,24 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
+test("the pane's crumbs name the item's plan and its agent whole while the bar has room, held to no tab's width, and the chevron between them stands no wider than its glyph", async () => {
+  const styles = await layWindowStyles();
+  const { page } = mount();
+  await settle();
+  const path = page.querySelector<HTMLElement>('.inbox-view-items nav[aria-label="Path"]');
+  assert.ok(path, "the pane draws its crumbs");
+  const crumbs = [...path.querySelectorAll<HTMLElement>("li.inbox-crumb")];
+  assert.equal(crumbs.length, 2);
+  for (const crumb of crumbs) {
+    assert.equal(getComputedStyle(crumb).maxWidth, "none", `${crumb.textContent} is cut by no cap`);
+  }
+  const chevron = path.querySelector<HTMLElement>("li.file-breadcrumb-separator");
+  assert.ok(chevron, "a chevron parts the crumbs");
+  // A crumb's floor holds a name's first letters, so on the chevron it would stand a gap after it.
+  assert.equal(getComputedStyle(chevron).minWidth, "0px");
+  styles.remove();
+});
+
 test("the keyboard's ring on a crumb of the pane's path and on an option of the choice is drawn whole, past the boxes that clip what runs long", async () => {
   const styles = await layWindowStyles();
   const { page } = mount();

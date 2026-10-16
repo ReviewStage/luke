@@ -518,6 +518,22 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
   text-decoration: line-through;
 }
 
+/* A chip held with its punctuation (`.link-glued`, markdown.css) is capped
+   by its length alone, because the box it stands in is the one held to the
+   column, and the chip in it already gives way before it would push its
+   comma past the edge. Note that a share of the column would not do: the
+   box takes its width from the chip, so the share has nothing to resolve
+   against while it does, Chromium reads the cap as none, and the box keeps
+   the room of the whole name as a gap after the chip it then cuts, washed
+   where a version's change mark holds the chip. */
+.link-glued .mention-chip {
+  max-width: 240px;
+}
+
+.link-glued .mention-chip:has(.mention-chip-state) {
+  max-width: 360px;
+}
+
 /* The list an @ opens (`mention-picker.tsx`): a searchable menu whose field
    is the editor it was typed in, hung under the word's line inside it, its
    rows grouped by kind under the menu's own headings, each with its kind's
@@ -1083,7 +1099,10 @@ button.file-ref:hover .file-ref-path {
   flex-shrink: 1;
 }
 
+/* Note that a chevron standing as a crumb of its own, as the Inbox pane's
+   does, takes no crumb's floor, which would stand it a name's width wide. */
 .file-breadcrumbs .file-breadcrumb-separator {
+  min-width: 0;
   flex-shrink: 0;
 }
 
@@ -4109,7 +4128,7 @@ button.picture-frame {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  width: min(480px, 100%);
+  width: 480px;
   padding: var(--space-12);
   border-style: dashed;
   color: var(--text-secondary);
