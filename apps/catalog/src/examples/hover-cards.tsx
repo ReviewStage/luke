@@ -40,38 +40,38 @@ function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.
   const [anchor, setAnchor] = useState<HTMLElement | undefined>(undefined);
   const hung = useRef<HTMLElement | null>(null);
   const show = (event: { currentTarget: HTMLElement }) => setAnchor(event.currentTarget);
-  const hide = () => setAnchor(undefined);
   useEffect(() => {
     if (anchor === undefined) return;
+    const holds = (node: EventTarget | null) =>
+      node instanceof Node && (anchor.contains(node) || hung.current?.contains(node) === true);
+    // Note that the pointer leaving lets a card go only while the keyboard does not hold it.
     const follow = (event: PointerEvent) => {
       const at = hung.current?.getBoundingClientRect();
-      if (at === undefined) return;
-      if (!withinBoth(event.clientX, event.clientY, anchor.getBoundingClientRect(), at)) {
+      if (at === undefined || holds(document.activeElement)) return;
+      if (!withinBoth(event.clientX, event.clientY, anchor.getBoundingClientRect(), at))
         setAnchor(undefined);
-      }
     };
+    // Note that focus let fall to nothing, as a press on the card's words drops it, leaves the pointer to decide.
+    const refocus = (event: FocusEvent) => {
+      if (event.relatedTarget !== null && !holds(event.relatedTarget)) setAnchor(undefined);
+    };
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnchor(undefined);
+    };
+    // Note that focus and keys are heard at the document, because the card is portalled outside the control.
     document.addEventListener("pointermove", follow);
-    return () => document.removeEventListener("pointermove", follow);
+    document.addEventListener("focusout", refocus);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointermove", follow);
+      document.removeEventListener("focusout", refocus);
+      document.removeEventListener("keydown", dismiss);
+    };
   }, [anchor]);
   return (
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper hears the pointer and the focus its button's own events bubble, because a shared button takes no handlers but its press. */}
-      <span
-        className="catalog-hinted"
-        onPointerEnter={show}
-        onFocus={show}
-        onBlur={(event) => {
-          // Note that focus moving onto the card's own button keeps it hung, so the press lands.
-          if (
-            !(event.relatedTarget instanceof Node && hung.current?.contains(event.relatedTarget))
-          ) {
-            hide();
-          }
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") hide();
-        }}
-      >
+      <span className="catalog-hinted" onPointerEnter={show} onFocus={show}>
         <Button
           variant={BUTTON_VARIANT.OUTLINE}
           aria-describedby={anchor === undefined ? undefined : id}
@@ -87,7 +87,7 @@ function Carded({ label, card }: { label: string; card: ReactNode }): React.JSX.
           ref={(element) => {
             hung.current = element;
           }}
-          onChoice={hide}
+          onChoice={() => setAnchor(undefined)}
         >
           {card}
         </TooltipCard>
