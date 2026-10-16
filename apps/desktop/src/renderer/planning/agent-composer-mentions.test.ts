@@ -832,3 +832,37 @@ test("a word typed after @ finds an agent the workspace's newest leave out, as t
     includeArchived: true,
   });
 });
+
+test("a sent mention of an agent the page has no tab of hangs a card naming where it works: this task, another, or none", () => {
+  const mention = (agentId: string, taskId: string | undefined) =>
+    mentionMarkdown(
+      taskId === undefined
+        ? { kind: MENTION_KIND.AGENT, agentId }
+        : { kind: MENTION_KIND.AGENT, taskId, agentId },
+      "Agent",
+      PLACE,
+    );
+  const container = drawn(
+    createElement(TranscriptWords, {
+      text: `${mention("agent-7", PLAN_ID)} ${mention(BILLING_AGENT.id, BILLING.id)} ${mention(SWEEPER.id, undefined)}`,
+    }),
+    planPage([]),
+  );
+
+  const notes = [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => {
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const card = document.querySelector(".tooltip-card [data-mention-card]");
+    const words = card?.textContent ?? "";
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return words;
+  });
+
+  assert.deepEqual(
+    notes.map((words) => /A coding agent on [a-z ]+task/u.exec(words)?.[0]),
+    ["A coding agent on this task", "A coding agent on another task", "A coding agent on no task"],
+  );
+});
