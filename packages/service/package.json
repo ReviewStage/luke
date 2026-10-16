@@ -168,6 +168,7 @@
     "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",
     "./tasks/task-file": "./src/tasks/task-file.js",
+    "./tasks/task-sections-app": "./src/tasks/task-sections-app.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",
     "./tasks/plan-scribe": "./src/tasks/plan-scribe.js",
     "./tasks/task-skills": "./src/tasks/task-skills.js",

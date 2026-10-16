@@ -29,6 +29,7 @@ export * from "./session-sandbox.js";
 export * from "./storage.js";
 export * from "./task.js";
 export * from "./task-pin.js";
+export * from "./task-section.js";
 export * from "./usage.js";
 export * from "./voice.js";
 export * from "./workspace-integration.js";

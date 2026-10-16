@@ -29,6 +29,12 @@ import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
+  TASK_SECTION_WRITE,
+  type TaskSection,
+  type TaskSections,
+  type TaskSectionWrite,
+} from "@luke/features/task-section-wire";
+import {
   PLAN_ACTOR,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
@@ -74,6 +80,7 @@ import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
 /** The text the edit tests' task opens on. */
 const INVITES_TEXT = "# Teammate invitations";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -169,6 +176,10 @@ interface FakeService extends TasksClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
+  sections: TaskSections | undefined;
+  /** Every change to the sections the service was asked for, in order. */
+  sectionWrites: TaskSectionWrite[];
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -322,6 +333,8 @@ function fakeService(tasks: Task[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    sections: undefined,
+    sectionWrites: [],
     memberships: [PERSONAL],
     installUrl: INSTALL_URL,
     workspacesFail: false,
@@ -558,6 +571,13 @@ function fakeService(tasks: Task[]): FakeService {
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
         return service.pins;
+      }),
+    taskSections: () => Effect.sync(() => service.sections),
+    // The service answers its sections as they stand, the test having set them to what the write left.
+    writeTaskSection: (write) =>
+      Effect.sync(() => {
+        service.sectionWrites.push(write);
+        return service.sections;
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1075,6 +1095,39 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
     assert.deepEqual(told, []);
     assert.deepEqual(service.reads, []);
   }),
+);
+
+it.effect(
+  "the window's refresh reads the account's sections, a change takes the service's answer, and one refused leaves them as read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      service.sections = { sections: [launch], entries: [] };
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.deepEqual(last()?.taskSections, service.sections);
+
+      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
+      service.sections = { sections: [launch], entries: [placed] };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+
+      service.sections = undefined;
+      const removal = { ...place, sectionId: null };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
+        changed: false,
+      });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(service.sectionWrites, [place, removal]);
+    }),
 );
 
 it.effect("a sign-out drops the view the window drew", () =>

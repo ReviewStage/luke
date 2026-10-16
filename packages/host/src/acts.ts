@@ -194,6 +194,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -321,6 +322,8 @@ export const ACT_KIND = {
   TASKS_PIN: "tasks.pin",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
   TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
@@ -912,6 +915,11 @@ export const ACT = {
     payload: actSchema(tasksPinRepositoryParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that repository on this system.",
+  },
+  [ACT_KIND.TASKS_WRITE_SECTION]: {
+    payload: actSchema(tasksWriteSectionParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change that section on this system.",
   },
   [ACT_KIND.TASKS_ARCHIVE]: {
     payload: actSchema(tasksArchiveParamsSchema),
