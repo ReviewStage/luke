@@ -16,6 +16,7 @@ import { SpinnerRegion } from "../spinner";
 import { agentCardReading } from "../tasks/agent-ref";
 import { AgentTab } from "../tasks/agent-tab";
 import { AgentTabCard } from "../tasks/agent-tab-card";
+import type { ChatNoticeDoors } from "../tasks/chat-notice";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -62,11 +63,14 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  *
  * The plan's tab stands first, named for the plan, and hangs the plan's
  * card, as its sidebar row does (`task-card.tsx`): its repository, its
- * agents, and its pull requests. It is anchored there: it never closes, never moves, and Close
- * others on it closes every other tab. A press chooses it; its menu
- * renames the plan in place, as the ⋯ menu does. While it is the column's
- * only tab it is quiet, drawing no fill at rest, as a lone tab need not be
- * told from others; beside an agent's it is drawn as any tab is.
+ * agents, and its pull requests. It is anchored there: it never moves, and
+ * Close others on it closes every other tab. Beside another tab it closes
+ * as that tab does, and the "+" offers the plan first to open it again; as
+ * the column's only tab it offers no close, so the column is never empty
+ * (`use-main-tabs.ts`). A press chooses it; its menu renames the plan in
+ * place, as the ⋯ menu does. While it is the column's only tab it is quiet,
+ * drawing no fill at rest, as a lone tab need not be told from others;
+ * beside an agent's it is drawn as any tab is.
  *
  * The plan's Inbox tab stands among the agents' while it is open: an item
  * the developer has not seen opens it after every tab, and it closes and
@@ -92,7 +96,8 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  * agents until its first message starts the agent, and closing it lets the
  * draft go. Every tab wears its kind's look (`tab-look.tsx`).
  *
- * The "+" after the last tab drops the shared searchable menu: New coding
+ * The "+" after the last tab drops the shared searchable menu: the plan,
+ * which chooses its tab or opens it again where it was closed, New coding
  * agent, which opens a draft agent's tab, or chooses the plan's draft where
  * it has one, unavailable with Start's own reason while Start could not
  * run, the plan's Inbox where it has an agent, and each of the plan's
@@ -114,6 +119,9 @@ const NEW_AGENT_STARTING = "Starting…";
 /** The row that opens the plan's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
 
+/** The "+" menu's row that opens the plan's own tab, which no agent's id spells. */
+const PLAN_ROW = "plan";
+
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
 
@@ -123,10 +131,11 @@ export function agentTranscriptRead(
   agentId: string,
   title: string,
   brief: CodingAgentBrief | undefined,
+  chatOn: boolean,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief }),
+      messages === undefined ? undefined : agentTranscript({ title, messages, brief, chatOn }),
     );
 }
 
@@ -219,7 +228,7 @@ function AgentMenuTab({
 interface DrawnTab {
   tab: MainTab;
   look: TabLook;
-  /** Closes the tab, as its × does; none for the plan's. */
+  /** Closes the tab, as its × does; none for the plan's while it stands alone. */
   close: (() => void) | undefined;
   copy?: ((copy: TranscriptCopy) => void) | undefined;
   agent?: CodingAgentSummary | undefined;
@@ -253,7 +262,13 @@ function agentTabs(input: {
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
-    const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
+    const read = agentTranscriptRead(
+      agents.readTranscript,
+      agent.id,
+      label,
+      agent.brief,
+      agents.chatOn,
+    );
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     return {
       tab,
@@ -339,13 +354,22 @@ export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): A
 }
 
 /**
- * The "+" menu's rows: the plan's Inbox first, by itself under no heading
+ * The "+" menu's rows: the plan itself, which opens its tab again where it
+ * was closed, and its Inbox, each by itself under no heading
  * (`inboxEntries`); New coding agent, unavailable with Start's own reason
  * while Start could not run, and left out on an archived plan; then each
  * of its agents under Coding agents (`agentEntries`).
  */
-function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
+function addEntries(
+  task: TaskSummary,
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+): AddEntry[] {
   const { start } = agents;
+  const plan: AddEntry = {
+    row: { id: PLAN_ROW, ...tabLook({ kind: TAB_KIND.PLAN, name: task.name }) },
+    onPick: () => main.onChoose(MAIN_TAB.PLAN),
+  };
   const newAgent: AddEntry = {
     row: {
       id: NEW_AGENT_ROW,
@@ -357,14 +381,15 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
   const agentRows = agentEntries(main, agents);
-  return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
+  return [plan, ...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
 /**
- * The column's strip across its toolbar: the plan's tab, the agents', the
- * draft's, and the Inbox's, then the "+", which stands apart from the strip so it is
- * never dragged nor dropped before. ⌘W closes the chosen tab while the
- * column holds the window's focus (`keys`), and nothing on the plan's.
+ * The column's strip across its toolbar: the plan's tab where open, the
+ * agents', the draft's, and the Inbox's, then the "+", which stands apart
+ * from the strip so it is never dragged nor dropped before. ⌘W closes the
+ * chosen tab while the column holds the window's focus (`keys`), and
+ * nothing on the plan's while it stands alone.
  */
 export function MainTabStrip({
   task,
@@ -437,19 +462,24 @@ export function MainTabStrip({
     main.tabs,
     (entry) => entry.tab,
   );
-  const taskTab: DrawnTab = {
-    tab: MAIN_TAB.PLAN,
-    look: {
-      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name }),
-      selected: main.tab === MAIN_TAB.PLAN,
-      quiet: own.length === 0,
-      anchored: true,
-      card: taskCard,
-      onSelect: () => main.onChoose(MAIN_TAB.PLAN),
-    },
-    close: undefined,
-  };
-  const strip = [taskTab, ...own];
+  const taskTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.PLAN)
+    ? [
+        {
+          tab: MAIN_TAB.PLAN,
+          look: {
+            ...tabLook({ kind: TAB_KIND.PLAN, name: task.name }),
+            selected: main.tab === MAIN_TAB.PLAN,
+            quiet: own.length === 0,
+            anchored: true,
+            card: taskCard,
+            onSelect: () => main.onChoose(MAIN_TAB.PLAN),
+          },
+          // Alone, the plan's tab stays, so the column always has one to show.
+          close: own.length === 0 ? undefined : () => main.onClose(MAIN_TAB.PLAN),
+        },
+      ]
+    : [];
+  const strip = [...taskTab, ...own];
   const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
@@ -548,7 +578,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents)}
+        entries={addEntries(task, main, agents)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -587,6 +617,7 @@ export function MainTabContent({
   onOpenPullRequest,
   onOpenTarget,
   cards,
+  chat,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -607,6 +638,8 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: TaskCards;
+  /** The chat a chat notice's card reads and opens; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -635,6 +668,7 @@ export function MainTabContent({
       }
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
+      chat={chat}
       onHeld={views.onAgentHeld}
       run={agents.origin}
     />

@@ -6,7 +6,13 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
-import { agentTranscript, TRANSCRIPT_COPY, transcriptMarkdown } from "./transcript-copy";
+import {
+  agentTranscript,
+  LATEST_ACTIVITY,
+  latestActivity,
+  TRANSCRIPT_COPY,
+  transcriptMarkdown,
+} from "./transcript-copy";
 
 /**
  * transcript-copy.test.ts -- a transcript's copy follows the order its tab
@@ -58,6 +64,7 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
     title: "Tile",
     messages,
     brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
   });
 
   assert.equal(
@@ -73,6 +80,69 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
       "## Agent",
       "- Ran `pnpm c`",
       "Fixed.",
+    ].join("\n\n") + "\n",
+  );
+});
+
+function said(id: string, role: CodingAgentMessage["role"], text: string): CodingAgentMessage {
+  return { id, role, parts: [{ type: "text", text }] };
+}
+
+test("a chat notice is copied under the member it tells of a message from, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
+  const notice: CodingAgentMessage = {
+    ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    chatOn: true,
+    messages: [
+      notice,
+      said("plan", MESSAGE_ROLE.USER, "Build invitations."),
+      said("turn", MESSAGE_ROLE.ASSISTANT, "Yes, base on my migration."),
+      { ...notice, id: "notice-2" },
+    ],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Chat from @agent-2",
+      "@agent-1 are you changing memberships?",
+      "## Agent",
+      "Yes, base on my migration.",
+      "## Chat from @agent-2",
+      "@agent-1 are you changing memberships?",
+    ].join("\n\n") + "\n",
+  );
+  assert.deepEqual(latestActivity(transcript), {
+    kind: LATEST_ACTIVITY.WORDS,
+    text: "Yes, base on my migration.",
+  });
+});
+
+test("with Chat off, a chat notice is copied as the plain line it is drawn as, under the developer's heading, and still never as the plan", () => {
+  const notice: CodingAgentMessage = {
+    ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    chatOn: false,
+    messages: [notice, said("plan", MESSAGE_ROLE.USER, "Build invitations.")],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Developer",
+      "@agent-1 are you changing memberships?",
     ].join("\n\n") + "\n",
   );
 });

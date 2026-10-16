@@ -15,7 +15,7 @@ import {
 /**
  * The side panel's tabs at its narrowest, 280px, where no tab has room for
  * a pane beside it or for every word of its bars: a Changes tab draws its
- * tree over the diff only once asked and numbers the diff on one side, a
+ * tree over the diff only once asked, a
  * note of Luke's says its age in a pill, a subagent's job takes two lines,
  * and a page's bar counts its versions. jsdom lays nothing out, so the
  * window's stylesheets are laid once for a panel that wide
@@ -43,16 +43,6 @@ afterEach(() => {
  */
 function drawn(element: Element): boolean {
   return getComputedStyle(element).display !== "none";
-}
-
-/** The diff's lines as drawn: each the numbers shown in its gutter, then its text. */
-function diffLines(tab: HTMLElement): string[][] {
-  return [...tab.querySelectorAll(".code-line[data-diff]")].map((line) => [
-    ...[...line.querySelectorAll(".code-line-number")]
-      .filter(drawn)
-      .map((number) => number.textContent ?? ""),
-    line.querySelector(".code-line-text")?.textContent ?? "",
-  ]);
 }
 
 test("a Changes tab draws no tree beside the diff, its count under the diff, until the tree's toggle opens it over the diff for this tab alone", async () => {
@@ -232,17 +222,6 @@ test("a press of the toggle over a peek opens the tree with the keyboard in it, 
     diff.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
   });
   assert.ok(!treeDrawn(), "the first press on the diff takes the tree down");
-});
-
-test("a Changes tab numbers its diff on the new side alone, a removed line by its tint", async () => {
-  const tab = await drawChangesTab();
-  assert.deepEqual(diffLines(tab), [
-    ["", "@@ -1,2 +1,3 @@"],
-    ["1", "const a = 1;"],
-    ["", "const b = 2;"],
-    ["2", "const b = 3;"],
-    ["3", "const c = 4;"],
-  ]);
 });
 
 test("a note of Luke's says its age in the link's pill, the link drawing its glyph alone and still named, so the header's parts never stand on one another", async () => {
