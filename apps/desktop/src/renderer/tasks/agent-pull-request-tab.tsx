@@ -517,7 +517,6 @@ function ThreadCard({
     <li className="pull-request-thread">
       <Fold defaultOpen={labels.length === 0}>
         <FoldSummary className="pull-request-thread-head">
-          <FoldChevron />
           <Tooltip label={thread.path}>
             <span className="pull-request-thread-path">
               <bdi>{thread.path}</bdi>
@@ -529,6 +528,7 @@ function ThreadCard({
               {label}
             </span>
           ))}
+          <FoldChevron />
         </FoldSummary>
         <FoldBody>
           {preview === undefined ? null : (
