@@ -195,6 +195,7 @@ function PlanRows({
           plans={context.plans}
           plan={plan}
           current={context.marked(plan.id, undefined)}
+          open={context.current(plan.id)}
           unread={context.unread(plan)}
           now={context.now}
           at={taskTime(plan, context.order)}
@@ -250,6 +251,7 @@ function PinnedRows({
             plans={context.plans}
             plan={plan}
             current={context.marked(plan.id, undefined)}
+            open={context.current(plan.id)}
             unread={context.unread(plan)}
             now={context.now}
             onOpen={() => context.onOpen(plan.id)}

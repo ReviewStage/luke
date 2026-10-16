@@ -228,7 +228,8 @@ interface DrawnTab {
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab
- * whose box holds a draft wears the draft's pencil at its end, where a
+ * whose box holds a draft wears the draft's pencil at its end while another
+ * tab is chosen, since the chosen one's box shows the words, where a
  * failure's mark does not stand there first (`draft-mark.tsx`).
  */
 function agentTabs(input: {
@@ -261,7 +262,8 @@ function agentTabs(input: {
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         endMark:
-          agentEndMark(agent, false) ?? (drafted.includes(agent.id) ? <DraftMark /> : undefined),
+          agentEndMark(agent, false) ??
+          (drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined),
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),

@@ -23,10 +23,12 @@ import {
   typeInComposer,
 } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
+import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useDraftsOwner } from "./composer-drafts";
 import { DesktopPlans } from "./desktop/desktop-plans";
+import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { SidebarPlan } from "./desktop/plan-actions";
 import { DRAFT_WORD } from "./draft-mark";
 import {
@@ -41,10 +43,11 @@ import { NO_LOOKS } from "./planning/use-plan-looks";
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
  * wait there while another task is open and while the agent's tab is away,
- * which its tab and its task's sidebar row mark with the Draft pencil
- * meanwhile, outlast a reload of the window, and go with the message that
- * sends them; and an inbox card's answer, kept the same way, until the
- * agent changes the item it answers.
+ * which its task's sidebar row and its tab mark with the Draft pencil
+ * meanwhile, and only meanwhile, the box in sight showing them itself,
+ * outlast a reload of the window, and go with the message that sends them;
+ * and an inbox card's answer, kept the same way, until the agent changes
+ * the item it answers.
  */
 
 /** A task with one agent of its own, open on its agent's tab. */
@@ -214,25 +217,38 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   };
 }
 
-test("words typed in one task's agent's box wait there while another task is open, and its row and its agent's tab wear the Draft pencil meanwhile", async () => {
+test("words typed in one task's agent's box wait there while another task is open, its row wearing the Draft pencil only meanwhile", async () => {
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES);
-  assert.equal(app.rowDrafted(INVITES.plan.name), false, "an empty box marks nothing");
-
   typeInComposer(app.container, "Expire invites after a week");
   await settle();
-  assert.equal(app.rowDrafted(INVITES.plan.name), true);
-  assert.equal(app.rowDrafted(BILLING.plan.name), false, "only the task holding it is marked");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the open task's box shows its words");
 
   await app.show(BILLING);
   assert.equal(app.box(), "", "another task's agent starts from nothing of this one's");
   assert.equal(app.rowDrafted(INVITES.plan.name), true, "the draft is marked while away");
+  assert.equal(app.rowDrafted(BILLING.plan.name), false, "only the task holding it is marked");
 
   await app.show(INVITES, { onPlan: true });
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), true);
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "nor while another of its tabs is chosen");
 
   await app.show(INVITES);
   assert.equal(app.box(), "Expire invites after a week");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false);
+});
+
+test("an agent's tab wears the Draft pencil while another tab is chosen, and not while its own box is in sight", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES);
+  typeInComposer(app.container, "Expire invites after a week");
+  await settle();
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its box shows its words");
+
+  await app.show(INVITES, { onPlan: true });
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), true, "the draft is marked while away");
+
+  await app.show(INVITES);
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
@@ -259,13 +275,12 @@ test("a message sent takes its words out of the draft, so the box comes back emp
   await app.show(INVITES, { send });
   typeInComposer(app.container, "Expire invites after a week");
   await settle();
-  assert.equal(app.rowDrafted(INVITES.plan.name), true);
   pressInComposer(app.container, "Enter");
   await settle();
   assert.deepEqual(sent, ["Expire invites after a week"]);
-  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the mark goes with the words");
 
   await app.show(BILLING);
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the mark goes with the words");
   await app.show(INVITES, { onPlan: true });
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
   await app.show(INVITES);
@@ -277,11 +292,11 @@ test("a box emptied by hand lets its draft go, and its mark with it", async () =
   await app.show(INVITES);
   typeInComposer(app.container, "Expire invites after a week");
   await settle();
-  assert.equal(app.rowDrafted(INVITES.plan.name), true);
 
   const editor = composerEditor(app.container).editor ?? assert.fail("the box's editor is running");
   act(() => editor.commands.clearContent(true));
   await settle();
+  await app.show(BILLING);
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
   await app.show(INVITES, { onPlan: true });
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
@@ -295,6 +310,7 @@ test("a draft is its account's: another signing in on the same Mac meets none of
 
   await app.show(INVITES, { account: SAM });
   assert.equal(app.box(), "");
+  await app.show(BILLING, { account: SAM });
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
@@ -303,6 +319,7 @@ test("a draft is its account's: another signing in on the same Mac meets none of
   assert.equal(relaunched.box(), "", "nor after a relaunch");
   await relaunched.show(INVITES, { account: DEAN });
   assert.equal(relaunched.box(), "Expire invites after a week");
+  await relaunched.show(BILLING, { account: DEAN });
   assert.equal(relaunched.rowDrafted(INVITES.plan.name), true);
 });
 
@@ -314,6 +331,7 @@ test("accounts whose identity holds no id are told apart by their address, so ne
 
   await app.show(INVITES, { account: { email: SAM.email } });
   assert.equal(app.box(), "");
+  await app.show(BILLING, { account: { email: SAM.email } });
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
   await app.show(INVITES, { account: { email: DEAN.email } });
   assert.equal(app.box(), "Expire invites after a week");
@@ -327,6 +345,7 @@ test("the drafts an account kept under its address are its own still once its id
 
   await app.show(INVITES, { account: DEAN });
   assert.equal(app.box(), "Expire invites after a week");
+  await app.show(BILLING, { account: DEAN });
   assert.equal(app.rowDrafted(INVITES.plan.name), true);
 });
 
@@ -375,6 +394,68 @@ test("where an account kept a draft for one place under its id and a later one u
   assert.equal(app.box(), "Expire invites after a week");
 });
 
+/** The window's motion as a Mac with none reduced answers it. */
+function answerMotion(): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
+/**
+ * The sidebar itself, open on `open`'s agent's tab from the tab pinned to it
+ * where `pinned`, which the sidebar then marks in place of the task's row.
+ */
+async function sidebarOn(open: typeof INVITES, pinned: boolean) {
+  answerMotion();
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
+  });
+  const pin = { plan: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
+  const plans = plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    plans: [INVITES.plan, BILLING.plan],
+    activePlanId: open.plan.id,
+    chosenPin: pinned ? pin : undefined,
+    sidePanel: { ...plansControl().sidePanel, pins: pinned ? [pin] : [] },
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(plans))),
+    ),
+  );
+  await settle();
+  return (name: string) =>
+    (
+      [...container.querySelectorAll<HTMLElement>(".sidebar-plan")].find(
+        (row) => row.querySelector(".sidebar-plan-name")?.textContent === name,
+      ) ?? assert.fail(`the sidebar lists ${name}`)
+    ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
+}
+
+test("a task opened from a tab pinned to the sidebar is open still, so its row wears no Draft pencil", async () => {
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([
+      { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
+    ]),
+  );
+  const fromPin = await sidebarOn(INVITES, true);
+  assert.equal(fromPin(INVITES.plan.name), false);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const away = await sidebarOn(BILLING, false);
+  assert.equal(away(INVITES.plan.name), true);
+});
+
 /** An item of the Teammate invitations agent's, open and asking for an approval, at `revision`. */
 function approval(revision: number): InboxItem {
   return {
@@ -393,16 +474,13 @@ function approval(revision: number): InboxItem {
   };
 }
 
-/** The window on its own registry, open on the Teammate invitations task's Inbox tab, whose read answers `item`. */
+/**
+ * The window on its own registry, open on the Teammate invitations task's
+ * Inbox tab, whose read answers `item`. Its sidebar row is drawn as it is
+ * while another task is open, the only time it wears the Draft pencil.
+ */
 async function inboxOn(item: InboxItem) {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({
-      matches: false,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }),
-  });
+  answerMotion();
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -438,7 +516,7 @@ async function inboxOn(item: InboxItem) {
             createElement(SidebarPlan, {
               plans,
               plan: INVITES.plan,
-              current: true,
+              current: false,
               unread: false,
               now: 3,
               onOpen: () => undefined,

@@ -419,7 +419,8 @@ export function PlanActions({
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
- * waits in one of its boxes (`draft-mark.tsx`), and before that, on a task someone else
+ * waits in one of its boxes and the plan is not the one open, whose boxes
+ * are in sight (`draft-mark.tsx`), and before that, on a task someone else
  * created, its creator's face (`teammateCreator`), read against the members
  * of the directory around the list; the reader's own tasks wear none. Its
  * repository's name, muted, where the list hands one (in one run), and no
@@ -436,6 +437,7 @@ export function SidebarPlan({
   plans,
   plan,
   current,
+  open = current,
   unread,
   now,
   at = plan.updatedAt,
@@ -447,6 +449,8 @@ export function SidebarPlan({
   plan: PlanSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
+  /** Whether the plan is open in the window, which a row the sidebar does not mark may be, as one opened from a pin; the row's own mark unless said. */
+  open?: boolean;
   /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
   /** The time the row's last update is counted back from. */
@@ -519,7 +523,7 @@ export function SidebarPlan({
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
-                {drafted ? <DraftMark /> : null}
+                {drafted && !open ? <DraftMark /> : null}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={at} now={now} hint={false} />
               </span>
