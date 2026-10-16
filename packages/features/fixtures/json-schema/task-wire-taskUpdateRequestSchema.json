@@ -20,6 +20,9 @@
     "pinned": {
       "type": "boolean"
     },
+    "pinPosition": {
+      "type": "string"
+    },
     "archived": {
       "type": "boolean"
     },

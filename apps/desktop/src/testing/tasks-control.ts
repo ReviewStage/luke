@@ -212,6 +212,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onPin: ignore,
       onUnpin: ignore,
       onRenamePins: ignore,
+      onPlacePins: ignore,
       onOpenFile: ignore,
       onBrowseFile: ignore,
       onFileHistory: ignore,
@@ -315,6 +316,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     pinnedRepositories: [],
     onPinRepository: ignore,
     onPinAgent: ignore,
+    onMovePins: ignore,
     onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.

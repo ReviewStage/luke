@@ -322,17 +322,18 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin and archive drawn in place of what it carries. */
+/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
-): Omit<Row, keyof MarkStamps> & MarkStamps {
-  const { pinnedAt, archivedAt, ...rest } = row;
+): Omit<Row, keyof MarkStamps | "pinPosition"> & MarkStamps & Pick<TaskSummary, "pinPosition"> {
+  const { pinnedAt, pinPosition, archivedAt, ...rest } = row;
   const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
   const archived = stampAfter(archivedAt, mark?.archivedAt);
   return {
     ...rest,
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
+    ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
     ...(archived === undefined ? undefined : { archivedAt: archived }),
   };
 }
@@ -468,6 +469,70 @@ export function unsettledAgentPins(
   return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 
+/** What the toast says when the service refused a pin's new place, which is put back. */
+export const PIN_MOVE_FAILED_NOTE = "The pin could not be moved. Try again.";
+
+/** One pin dragged to a new place in the sidebar's Pinned section: a plan's or an agent's with no plan, and the position it takes (`@luke/features/pin-order`). */
+export interface PinMove {
+  readonly agent: boolean;
+  readonly id: string;
+  readonly position: string;
+}
+
+/** A place a drag here gave a pin: the position, and whether the service has answered the write. */
+interface PendingPinPosition {
+  readonly position: string;
+  readonly answered: boolean;
+}
+
+/** Where pins dragged here stand until main's view carries them, by the plan's or the agent's id. */
+export type PendingPinPositions = ReadonlyMap<string, PendingPinPosition>;
+
+/** A row of the list with the place a drag here gave its pin drawn over the one it carries. */
+function placed<Row extends { readonly id: string; readonly pinPosition?: string }>(
+  row: Row,
+  pending: PendingPinPositions,
+): Row {
+  const place = pending.get(row.id);
+  return place === undefined ? row : { ...row, pinPosition: place.position };
+}
+
+/** The view with each pin dragged here drawn at its new place, the plans' and the agents' with no plan alike, so a drop stands at once. */
+export function positionedView(view: TasksView, pending: PendingPinPositions): TasksView {
+  if (pending.size === 0) return view;
+  const agents = view.tasklessAgents;
+  return {
+    ...view,
+    tasks: view.tasks.map((task) => placed(task, pending)),
+    ...(agents === undefined
+      ? undefined
+      : { tasklessAgents: agents.map((agent) => placed(agent, pending)) }),
+  };
+}
+
+/**
+ * The dragged places the view still contradicts. One it now carries has
+ * landed, one of a pin it no longer holds has nothing left to place, and one
+ * the service already answered is let go too, since the host wrote what it
+ * answered before it answered: a view that still differs is newer word, a
+ * drag on another Mac since, which the pin then follows.
+ */
+export function unsettledPinPositions(
+  pending: PendingPinPositions,
+  view: TasksView,
+): PendingPinPositions {
+  const rows: readonly {
+    readonly id: string;
+    readonly pinnedAt?: number;
+    readonly pinPosition?: string;
+  }[] = [...view.tasks, ...(view.tasklessAgents ?? [])];
+  const unsettled = [...pending].filter(([id, place]) => {
+    const row = rows.find((each) => each.id === id);
+    return !place.answered && row?.pinnedAt !== undefined && row.pinPosition !== place.position;
+  });
+  return unsettled.length === pending.size ? pending : new Map(unsettled);
+}
+
 /** The plans the sidebar lists, each in its place. */
 export interface SidebarTasks {
   /** The pinned plans, newest pinned first. */
@@ -479,7 +544,9 @@ export interface SidebarTasks {
 }
 
 /**
- * The account's plans sorted into the sidebar's places. Note that an
+ * The account's plans sorted into the sidebar's places, the pinned ones
+ * newest pinned first until the Pinned section orders them with the rest of
+ * its pins (`@luke/features/pin-order`). Note that an
  * archived plan is drawn only among the archived, pinned or not, because its
  * pin is kept for when it is brought back rather than shown while it is away.
  */

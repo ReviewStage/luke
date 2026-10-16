@@ -50,11 +50,15 @@ import {
   microphoneButton,
   type PendingAgentPins,
   type PendingMarks,
+  type PendingPinPositions,
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
+  PIN_MOVE_FAILED_NOTE,
+  type PinMove,
   pendingMark,
   pinnedRepositories,
+  positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
   renamedView,
@@ -70,6 +74,7 @@ import {
   tasksPage,
   unsettledAgentPins,
   unsettledMarks,
+  unsettledPinPositions,
   unsettledRenames,
   unsettledRepositoryPins,
   workspaceReaches,
@@ -566,6 +571,14 @@ export interface TasksControl {
   onPinRepository: (repository: string, pinned: boolean) => void;
   /** Pins an agent with no plan in the sidebar or unpins it, for the account alone: drawn at once, and put back with a toast if the service refuses. */
   onPinAgent: (agentId: string, pinned: boolean) => void;
+  /**
+   * Gives the pins a drag in the sidebar's Pinned section moved their new
+   * places, on the account: a plan's and an agent's with no plan, drawn
+   * there at once, and put back with a toast if the service refuses, along
+   * with what `putBack` undoes. A tab pinned to the sidebar keeps its place
+   * on this Mac instead (`sidePanel`), which the drop's `putBack` restores.
+   */
+  onMovePins: (moves: readonly PinMove[], putBack?: () => void) => void;
   /** Deletes a plan, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
   /**
@@ -683,6 +696,9 @@ const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 
 /** No agent pin given here and still waiting on main's view. */
 const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
+
+/** No pin dragged here whose new place main's view has yet to carry. */
+const NO_PENDING_POSITIONS: PendingPinPositions = new Map();
 
 /** A plan with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
@@ -905,11 +921,23 @@ export function useTasksTab(input: {
       ),
     [viewed, accountSignedIn],
   );
+  // A pin dragged here stands in its new place until main's view carries it, as a pin does.
+  const [pinPositions, setPinPositions] = useState<PendingPinPositions>(NO_PENDING_POSITIONS);
+  useEffect(
+    () =>
+      setPinPositions((held) =>
+        accountSignedIn ? unsettledPinPositions(held, viewed) : NO_PENDING_POSITIONS,
+      ),
+    [viewed, accountSignedIn],
+  );
   // A tab closed names a plan of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const tasks = markedView(renamedView(renamedView(viewed, renames), drafts), marks);
+  const tasks = positionedView(
+    markedView(renamedView(renamedView(viewed, renames), drafts), marks),
+    pinPositions,
+  );
   // The sidebar lists the chosen workspace's plans alone, and everything
   // else that finds a plan, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every plan is listed.
@@ -1448,6 +1476,60 @@ export function useTasksTab(input: {
         tone: TOAST_TONE.FAILED,
         hold: TOAST_HOLD.FAILED,
       });
+    });
+  };
+
+  // A fixture's pins are moved nowhere, as they are pinned nowhere. A drop
+  // stands at once, and each pin it gave a place is asked of the service: a
+  // plan's through the host, which asks one change at a time, and an agent's
+  // after that agent's pins already in flight, as a pin waits, and never
+  // under an account signed in since. A place answered is let go with the
+  // next view, which carries it or a later drag from another Mac. A refusal
+  // puts back only the places no later drop replaced, and whatever else the
+  // drop placed on this Mac alone (`putBack`), and says so once for the
+  // drop, since the pointer that asked has let go.
+  const movePins = (moves: readonly PinMove[], putBack?: () => void) => {
+    if (fixture !== undefined || moves.length === 0) return;
+    setPinPositions(
+      (held) =>
+        new Map([
+          ...held,
+          ...moves.map(({ id, position }) => [id, { position, answered: false }] as const),
+        ]),
+    );
+    const pressedBy = input.account;
+    const settle = (id: string, position: string, changed: boolean | undefined) =>
+      setPinPositions((held) => {
+        const place = held.get(id);
+        if (place?.position !== position) return held;
+        const next = new Map(held);
+        if (changed === false) next.delete(id);
+        else next.set(id, { position, answered: true });
+        return next;
+      });
+    const asked = moves.map(({ agent, id, position }) => {
+      const flights = agentPinFlights.current;
+      const flight: Promise<boolean | undefined> = agent
+        ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
+            accountNow.current === pressedBy
+              ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId: id, pinned: true, position }).then(
+                  (answer) => "agent" in answer,
+                  () => false,
+                )
+              : undefined,
+          )
+        : act(ACT_KIND.TASKS_PIN, { taskId: id, pinned: true, position }).catch(() => false);
+      if (agent) flights.set(id, flight);
+      return flight.then((changed) => {
+        if (agent && flights.get(id) === flight) flights.delete(id);
+        settle(id, position, changed);
+        return changed;
+      });
+    });
+    Promise.all(asked).then((answers) => {
+      if (!answers.includes(false)) return;
+      putBack?.();
+      toast({ words: PIN_MOVE_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     });
   };
 
@@ -2447,6 +2529,7 @@ export function useTasksTab(input: {
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
     onPinAgent: pinAgent,
+    onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,
     leaveGuard,

@@ -1,6 +1,7 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -79,6 +80,7 @@ import {
 import { SidebarTask } from "./task-actions";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
+import { useRowDrag } from "./use-row-drag";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
@@ -249,21 +251,29 @@ function pinOf(tasks: TasksControl, agent: TasklessAgent): ((pinned: boolean) =>
     : undefined;
 }
 
-/** One row under Pinned: a pinned plan, a tab pinned on a listed plan, or a pinned agent with no plan, and when it was pinned. */
+/** One row under Pinned: a pinned plan, a tab pinned on a listed plan, or a pinned agent with no plan, and where its pin stands. */
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
       readonly plan: TaskSummary;
       readonly pin: PinnedTab | undefined;
-      readonly at: number;
+      readonly place: PinPlace;
     }
-  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent; readonly at: number };
+  | {
+      readonly kind: typeof TASK_ROW.AGENT;
+      readonly agent: TasklessAgent;
+      readonly place: PinPlace;
+    };
+
+/** Where a row's pin stands, which `pin-order.ts` orders the section by. */
+const placeOf = (row: PinnedRow): PinPlace => row.place;
 
 /**
- * The rows under Pinned, newest pinned first: the pinned plans, the pinned
- * agents with no plan among them, and the tabs pinned to the sidebar on
- * plans the list holds. A tab of an archived or deleted plan is drawn
- * nowhere, its plan being out of the list.
+ * The rows under Pinned in the order the developer dragged them to, a pin
+ * not yet dragged on top, newest pinned first (`pin-order.ts`): the pinned
+ * plans, the pinned agents with no plan among them, and the tabs pinned to
+ * the sidebar on plans the list holds. A tab of an archived or deleted plan
+ * is drawn nowhere, its plan being out of the list.
  */
 function pinnedRows(
   pinned: readonly TaskSummary[],
@@ -271,16 +281,54 @@ function pinnedRows(
   tasks: TasksControl,
 ): PinnedRow[] {
   const taskRows = pinned.map(
-    (plan): PinnedRow => ({ kind: TASK_ROW.TASK, plan, pin: undefined, at: plan.pinnedAt ?? 0 }),
+    (plan): PinnedRow => ({
+      kind: TASK_ROW.TASK,
+      plan,
+      pin: undefined,
+      place: { position: plan.pinPosition, at: plan.pinnedAt ?? 0 },
+    }),
   );
   const agentRows = agents.map(
-    (agent): PinnedRow => ({ kind: TASK_ROW.AGENT, agent, at: agent.pinnedAt ?? 0 }),
+    (agent): PinnedRow => ({
+      kind: TASK_ROW.AGENT,
+      agent,
+      place: { position: agent.pinPosition, at: agent.pinnedAt ?? 0 },
+    }),
   );
   const tabRows = tasks.sidePanel.pins.flatMap((pin): PinnedRow[] => {
     const plan = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return plan === undefined ? [] : [{ kind: TASK_ROW.TASK, plan, pin, at: pin.at }];
+    return plan === undefined
+      ? []
+      : [{ kind: TASK_ROW.TASK, plan, pin, place: { position: pin.position, at: pin.at } }];
   });
-  return [...taskRows, ...agentRows, ...tabRows].sort((a, b) => b.at - a.at);
+  return inPinOrder([...taskRows, ...agentRows, ...tabRows], placeOf);
+}
+
+/**
+ * Stands the row at `from` under Pinned at `to`: each pin the drop gives a
+ * place takes it, a plan's and an agent's on the account and a tab's on
+ * this Mac, so the section draws the new order at once. A drop the service
+ * refuses any of puts the tabs' places back too, so the section is left in
+ * no order of its own making.
+ */
+function movePinned(
+  rows: readonly PinnedRow[],
+  from: number,
+  to: number,
+  tasks: TasksControl,
+): void {
+  const positions = pinPositionsForMove(rows, from, to, placeOf);
+  const tabs = new Map<number, string>();
+  const before = new Map<number, string | undefined>();
+  const moves = [...positions].flatMap(([row, position]) => {
+    if (row.kind === TASK_ROW.AGENT) return [{ agent: true, id: row.agent.id, position }];
+    if (row.pin === undefined) return [{ agent: false, id: row.plan.id, position }];
+    tabs.set(row.pin.at, position);
+    before.set(row.pin.at, row.pin.position);
+    return [];
+  });
+  if (tabs.size > 0) tasks.sidePanel.onPlacePins(tabs);
+  tasks.onMovePins(moves, () => tasks.sidePanel.onPlacePins(before));
 }
 
 /** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents, a pinned tab being its plan's. */
@@ -300,13 +348,19 @@ function PinnedRows({
   rows,
   context,
   onOpenTab,
+  movable,
 }: {
   rows: readonly PinnedRow[];
   context: RowContext;
   onOpenTab: (pin: PinnedTab) => void;
+  /** Whether a row is dragged to another place among them, which a fold drawing only some of them forbids. */
+  movable: boolean;
 }): React.JSX.Element {
+  const drag = useRowDrag(
+    movable ? (from, to) => movePinned(rows, from, to, context.tasks) : undefined,
+  );
   return (
-    <ul className="sidebar-tasks">
+    <ul className="sidebar-tasks" onPointerDown={drag}>
       {rows.map((row) => {
         if (row.kind === TASK_ROW.AGENT) {
           const { agent } = row;
@@ -387,7 +441,7 @@ function PinnedSection({
         onToggle={folds.togglePinned}
       />
       {drawn.length === 0 ? null : (
-        <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} />
+        <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} movable={!folded} />
       )}
     </nav>
   );

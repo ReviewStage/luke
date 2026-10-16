@@ -188,6 +188,9 @@
     "pinnedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "pinPosition": {
+      "type": "string"
     }
   },
   "required": [

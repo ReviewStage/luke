@@ -1601,6 +1601,29 @@ ul.actor-stack {
   z-index: 1;
 }
 
+/* A pinned row's transform is a drag's (use-row-drag.ts): sliding aside for
+   a row dragged past it on the motion tokens, and put back home the same
+   way, so reduced motion and a capture run hold it still. */
+.sidebar-tasks > .sidebar-task-item {
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+/* A row being dragged is lifted over the rows it passes: the open row's fill
+   made opaque on the sidebar's ground, and a shadow beneath. It follows the
+   pointer frame for frame, so its own transform eases nothing. */
+.sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
+  z-index: 2;
+  border-radius: 9px;
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-sidebar);
+  box-shadow: 0 4px 12px var(--shadow);
+  transition: none;
+}
+
+/* While a row is dragged, the pointer says it is holding one. */
+.sidebar-tasks[data-dragging="true"] {
+  cursor: grabbing;
+}
+
 /* Note that a one-off agent's row keeps its time, because it has no marks to make room for. */
 .sidebar-task-item:hover .sidebar-task:not(.sidebar-agent) .sidebar-task-time,
 .sidebar-task-item:has(:focus-visible) .sidebar-task:not(.sidebar-agent) .sidebar-task-time {
