@@ -195,29 +195,27 @@ function wholeIn(shown: DOMRect, box: DOMRect, by = 0): boolean {
 /**
  * Settles a scroll of the strip's own, a wheel's step or a swipe, on whole
  * tabs in the way it went: a tab it left cut at the strip's start is passed
- * going forward, or brought in whole going back, as it is where the strip
- * has no room left to go forward. A chosen tab shown whole stays whole, so
- * where neither way keeps it so, the cut tab is left as it is. Note that a
- * cut tab is not drawn, so a scroll left between tabs would show an empty
- * room where a tab nearly stood.
+ * going forward, where the strip has the room, or brought in whole going
+ * back, unless that cuts a chosen tab shown whole. Otherwise the cut tab is
+ * left as it is, so a scroll that reached the strip's end, by a wheel's
+ * steps or the keyboard reaching its last tab, keeps that last tab whole.
+ * Note that a cut tab is not drawn, so a scroll left between tabs would
+ * show an empty room where a tab nearly stood.
  */
 function settle(strip: HTMLElement, forward: boolean): void {
   const shown = strip.getBoundingClientRect();
   const room = strip.scrollWidth - strip.clientWidth - strip.scrollLeft;
   const own = strip.querySelector(`${TAB}[aria-selected="true"]`)?.closest(".tab");
   const chosen = own?.getBoundingClientRect();
-  const keeps = (by: number) =>
-    chosen === undefined || !wholeIn(shown, chosen) || wholeIn(shown, chosen, by);
   for (const pill of strip.querySelectorAll(".tab")) {
     const box = pill.getBoundingClientRect();
     if (box.left >= shown.left - OVERFLOW_SLACK || box.right <= shown.left + OVERFLOW_SLACK)
       continue;
     const past = box.right - shown.left + startGap(strip, box.right);
     const back = box.left - shown.left;
-    const by = (forward ? [past, back] : [back, past]).find(
-      (way) => way <= room + OVERFLOW_SLACK && keeps(way),
-    );
-    if (by !== undefined) scrollStrip(strip, by, false);
+    const keeps = chosen === undefined || !wholeIn(shown, chosen) || wholeIn(shown, chosen, back);
+    if (forward && past <= room + OVERFLOW_SLACK) scrollStrip(strip, past, false);
+    else if (!forward && keeps) scrollStrip(strip, back, false);
     return;
   }
 }
