@@ -379,15 +379,15 @@ function openIntegrationResult(page: HTMLElement, name: string): void {
   act(() => result.click());
 }
 
-/** Presses Escape where the caret stands, the window answering what nothing nearer kept as its own Escape does. */
-function pressEscape(): void {
+/** Presses Escape where the caret stands, mid-composition where `composing`, the window answering what nothing nearer kept as its own Escape does. */
+function pressEscape(composing = false): void {
   const leave = (event: KeyboardEvent) => {
     if (event.key === "Escape") runAppCommand(APP_COMMAND.EXIT_SETTINGS);
   };
   window.addEventListener("keydown", leave);
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: composing }),
     );
   });
   window.removeEventListener("keydown", leave);
@@ -416,6 +416,9 @@ test("Settings opens with the caret in its search, uncounted as a search opened,
   assert.ok(document.activeElement === field, "the caret stands in the search");
   assert.equal(searchesOpened(), 0);
 
+  // An input method's Escape dismisses its candidates and leaves nothing.
+  pressEscape(true);
+  assert.equal(exits, 0);
   pressEscape();
   assert.equal(exits, 1);
 

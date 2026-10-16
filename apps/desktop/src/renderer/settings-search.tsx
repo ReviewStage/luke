@@ -506,8 +506,10 @@ export function SettingsSearchField({
           }}
           onKeyDown={(event) => {
             // The caret Settings placed on its own holds no layer, so its
-            // Escape falls through to the window and leaves Settings.
-            if (event.key === "Escape" && placed.current && query.length === 0) return;
+            // Escape falls through to the window and leaves Settings, unless
+            // an input method is spending the press on its candidates.
+            const untouched = placed.current && query.length === 0;
+            if (event.key === "Escape" && untouched && !event.nativeEvent.isComposing) return;
             // Note that an Escape is stopped even mid-composition, because the
             // input method spends that press dismissing its candidates, and
             // the window's own Escape would turn the page behind the field.
