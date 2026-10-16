@@ -7339,11 +7339,14 @@ button.automation-run:hover {
 
 /* A picker's menu here is as wide as its widest value, within a bound,
    since the chip it hangs from grew to name its whole value: an owner's
-   long workspace name reads whole in the menu, not faded at its check. */
+   long workspace name reads whole in the menu, not faded at its check.
+   The bound is also the room the scroller leaves from the chip's edge the
+   menu hangs from (`picker-row.tsx`), so a menu beside the runs never runs
+   past the form's edge and loses the start of its rows. */
 .automation-form .settings-picker .settings-picker-menu {
   width: max-content;
-  min-width: max(280px, 100%);
-  max-width: 400px;
+  min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
+  max-width: min(400px, var(--settings-picker-width-max, 400px));
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing

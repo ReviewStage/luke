@@ -146,6 +146,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a Run now is held unanswered, as one still out on the wire. */
+let runHeld = false;
 /** What a Run now answers where it does not start a run. */
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
 /** Every agent whose page a run opened. */
@@ -186,6 +188,7 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
   factoryOpens = [];
@@ -282,6 +285,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
           runsAsked.push(request.payload.automationId);
+          if (runHeld) return new Promise<never>(() => undefined);
           if (runRefusal !== undefined) {
             return Promise.resolve({
               status: ACT_OUTCOME_STATUS.DONE,
@@ -1246,19 +1250,49 @@ test("the crumb naming an automation, cut short by its toolbar, reads whole on t
   assert.equal(pillOver(crumb), SWEEP.name);
 });
 
-test("the Owner menu is as wide as its widest owner's name, within a bound, so a long workspace name reads whole beside its check", async () => {
+test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
   handState({});
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  act(() => picker(page, "Owner").click());
-  const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+  const chip = picker(page, "Owner");
+  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
+  // The form beside the runs, 300px from its left edge to the chip's right one.
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
+  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
 
   const sheets = layContainersAt({});
   try {
-    const drawn = getComputedStyle(menu);
-    assert.deepEqual([drawn.width, drawn.maxWidth], ["max-content", "400px"]);
+    act(() => chip.click());
+    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
+    assert.equal(getComputedStyle(menu).width, "max-content");
+    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
   } finally {
     sheets.remove();
+  }
+});
+
+test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  runHeld = true;
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    const run = button("Run now");
+    act(() => run.click());
+    await settle();
+
+    assert.deepEqual(
+      {
+        pressable: !run.disabled,
+        ring: run.querySelector('.spinner[role="status"]') !== null,
+        glyph: run.querySelector("svg.lucide-play") !== null,
+      },
+      { pressable: false, ring: true, glyph: false },
+    );
+  } finally {
+    narrow.remove();
   }
 });
 

@@ -655,6 +655,7 @@ function EditorToolbar({
             <FoldingButton
               label="Run now"
               glyph={<PlayIcon />}
+              busy={running ? "Running" : undefined}
               className="toolbar-button bordered-button"
               disabled={running}
               onClick={onRunNow}

@@ -1,4 +1,5 @@
 import { type ButtonHTMLAttributes, type ReactNode, useCallback, useState } from "react";
+import { Spinner } from "./spinner";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -40,6 +41,7 @@ function useFolded(): [(button: HTMLElement | null) => (() => void) | undefined,
 export function FoldingButton({
   label,
   glyph,
+  busy,
   children,
   className = "toolbar-button",
   ...button
@@ -47,6 +49,8 @@ export function FoldingButton({
   /** Its words, and its name and pill once they are folded away. */
   label: string;
   glyph: ReactNode;
+  /** While its press is out, what it is doing ("Running"): folded, the ring stands in its glyph's place under that name, since the words that carry the ring are gone. */
+  busy?: string | undefined;
   /** What stands for the words while they are drawn, where that is more than the words: a busy ring over them. */
   children?: ReactNode;
 } & Omit<
@@ -54,6 +58,7 @@ export function FoldingButton({
   "aria-label" | "children" | "type"
 >): React.JSX.Element {
   const [measured, folded] = useFolded();
+  const ringed = folded && busy !== undefined;
   return (
     <Tooltip label={folded ? label : undefined}>
       <button
@@ -63,7 +68,7 @@ export function FoldingButton({
         aria-label={folded ? label : undefined}
         {...button}
       >
-        {glyph}
+        {ringed ? <Spinner label={busy} /> : glyph}
         <span className={WORDS}>{children ?? label}</span>
       </button>
     </Tooltip>
