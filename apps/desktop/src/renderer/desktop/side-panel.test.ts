@@ -131,6 +131,11 @@ test("a shared pull request's Pull request tab stands under the agent it was ope
     files: [],
     changes: changesOffers(control, openChanges),
   }).filter((entry) => entry.row.section === ADD_SECTION.PULL_REQUESTS);
+  assert.equal(
+    row?.row.label,
+    "Pull request: Invite flow",
+    "the row names the agent whose tab it opens",
+  );
   row?.onPick();
   assert.deepEqual(chosen, [{ pullRequest: FIRST.id }], "the + chooses the tab already open");
   assert.deepEqual(
