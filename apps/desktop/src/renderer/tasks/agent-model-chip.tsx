@@ -1,7 +1,7 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
@@ -23,7 +23,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
  * from its trailing edge, since the chip stands at the foot's right
- * (`../anchored-popover.tsx`), the
+ * (`@luke/ui`'s `AnchoredPopover`), the
  * agent's choice checked; what the menu chooses is the agent's model,
  * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from

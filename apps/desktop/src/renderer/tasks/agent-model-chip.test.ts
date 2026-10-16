@@ -67,7 +67,7 @@ function stageLayout(): void {
       const width = fast ? CHIP_WIDTH.FAST : CHIP_WIDTH.STANDARD;
       return box(CHIP_RIGHT - width, 700, width, 24);
     }
-    if (this.classList.contains("anchored-popover")) return box(0, 0, 340, MENU_HEIGHT);
+    if (this.classList.contains("luke-anchored-popover")) return box(0, 0, 340, MENU_HEIGHT);
     return box(0, 0, 0, 0);
   });
 }
@@ -89,7 +89,7 @@ function Owned(): React.JSX.Element {
 /** Where the open menu's left edge is drawn in the window: its layer's inset from whichever chip edge it is held by. */
 function menuLeft(view: HTMLElement): number {
   const anchor = view.querySelector(".agent-model-chip");
-  const layer = view.querySelector<HTMLElement>(".anchored-popover");
+  const layer = view.querySelector<HTMLElement>(".luke-anchored-popover");
   assert.ok(anchor !== null && layer !== null, "the menu is open over the chip");
   const chip = anchor.getBoundingClientRect();
   const width = Number.parseFloat(layer.style.width);

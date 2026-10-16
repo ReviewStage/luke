@@ -3713,24 +3713,9 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-/* A popover hung from its own button (`anchored-popover.tsx`): the layer
-   stands a small gap above the box that holds the button, or below it
-   where only there is room, its asked edge at the inset and width it was
-   measured to, and the popover inside stands in the layer's place. */
-.anchored-popover {
-  position: absolute;
-  z-index: 2;
-}
-
-.anchored-popover[data-side="above"] {
-  bottom: calc(100% + var(--space-4));
-}
-
-.anchored-popover[data-side="below"] {
-  top: calc(100% + var(--space-4));
-}
-
-.anchored-popover > .searchable-menu {
+/* A searchable menu hung from its own button (`@luke/ui`'s
+   `AnchoredPopover`) stands in the layer's place. */
+.luke-anchored-popover > .searchable-menu {
   position: static;
   width: auto;
 }

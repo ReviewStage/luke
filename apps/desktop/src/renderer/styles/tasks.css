@@ -3696,11 +3696,11 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 /* The chips along the box's foot: the model chip, the MCP button, and the
-   context ring, each the box its popover hangs from (`anchored-popover.tsx`),
-   above itself since the box stands at the panel's foot, and before them what
-   the agent published, in the composer's pill (`chip.tsx`), the pull
-   request's wearing its state's colour, the branch's its name in the code
-   face. */
+   context ring, each the box its popover hangs from (`@luke/ui`'s
+   `AnchoredPopover`), above itself since the box stands at the panel's foot,
+   and before them what the agent published, in the composer's pill
+   (`chip.tsx`), the pull request's wearing its state's colour, the branch's
+   its name in the code face. */
 .agent-model-chip,
 .agent-servers,
 .agent-context {

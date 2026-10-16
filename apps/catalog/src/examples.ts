@@ -1,3 +1,4 @@
+import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -39,4 +40,5 @@ export const EXAMPLES: readonly Example[] = [
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  ANCHORED_POPOVER_EXAMPLE,
 ];
