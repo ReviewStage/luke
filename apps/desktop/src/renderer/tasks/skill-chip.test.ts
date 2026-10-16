@@ -133,7 +133,7 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
 
-  const card = document.querySelector<HTMLElement>(".tooltip-card > [data-skill-card]");
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, "/release");
   assert.equal(card?.querySelector(".card-note")?.textContent, RELEASE.description);
 });
@@ -147,7 +147,7 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
   act(() => chip.focus());
-  const card = document.querySelector<HTMLElement>(".tooltip-card > [data-skill-card]");
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
   assert.ok(card.querySelector(".card-head .card-glyph svg"), "the head wears the skill's mark");
   assert.equal(card.querySelector(".card-name")?.textContent, "/release");
@@ -194,7 +194,7 @@ function agentTurn(message: CodingAgentMessage): ReactNode {
 function cardOf(control: HTMLElement): string | undefined {
   document.documentElement.dataset.keyboard = "true";
   act(() => control.focus());
-  const card = [...document.querySelectorAll(".tooltip-card > [data-skill-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(-1);
   act(() => control.blur());
   return card?.outerHTML;
 }

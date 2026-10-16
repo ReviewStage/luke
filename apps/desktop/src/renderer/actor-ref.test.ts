@@ -265,7 +265,7 @@ function cardOf(actor: Actor): Element {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   return (
-    document.querySelector('.tooltip-card [data-actor-card="github"]') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="github"]') ??
     assert.fail("a card hangs")
   );
 }
@@ -404,7 +404,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
       ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const row =
-    document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-row') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="more"] .actor-more-row') ??
     assert.fail("the count's card names the rest");
   assert.equal(
     row.textContent,

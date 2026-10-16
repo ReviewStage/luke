@@ -908,7 +908,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const card = document.querySelector(".tooltip-card [data-mention-card]");
+    const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
     const words = card?.textContent ?? "";
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

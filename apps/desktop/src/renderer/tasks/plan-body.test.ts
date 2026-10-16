@@ -154,7 +154,7 @@ function cardOf(view: HTMLElement, selector = ".actor-ref"): HTMLElement {
   act(() => {
     anchor.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return document.querySelector<HTMLElement>(".tooltip-card") ?? assert.fail("the card hangs");
+  return document.querySelector<HTMLElement>(".luke-tooltip-card") ?? assert.fail("the card hangs");
 }
 
 test("the saved body is drawn as Markdown", () => {

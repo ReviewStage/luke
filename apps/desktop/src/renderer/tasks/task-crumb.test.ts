@@ -294,7 +294,7 @@ function cardOf(control: HTMLElement, mark: string): HTMLElement {
 /** The card the newest tooltip hangs, by its mark. */
 function hungCard(mark: string): HTMLElement {
   return (
-    [...document.querySelectorAll<HTMLElement>(`.tooltip-card > [${mark}]`)].at(-1) ??
+    [...document.querySelectorAll<HTMLElement>(`.luke-tooltip-card > [${mark}]`)].at(-1) ??
     assert.fail(`a control hangs its ${mark} card`)
   );
 }

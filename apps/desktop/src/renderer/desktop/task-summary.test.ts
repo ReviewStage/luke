@@ -167,7 +167,7 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
@@ -206,7 +206,7 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
   );
   assert.ok(row, "the page has a row");
   hover(row);
-  const card = document.querySelector(".tooltip-card [data-page-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, funnel.title);
   assert.equal(card.querySelector(".card-sub"), null, "a page's one version is not counted");
@@ -227,7 +227,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   const latestStep = (shown: "agent" | "plan") => {
     const { page } = mount(shown);
     hover(cardAgent(page));
-    const words = [...document.querySelectorAll(".tooltip-card [data-tab-card]")]
+    const words = [...document.querySelectorAll(".luke-tooltip-card [data-tab-card]")]
       .map((card) => card.textContent ?? "")
       .join(" | ");
     act(() => root?.unmount());

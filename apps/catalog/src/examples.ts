@@ -9,6 +9,7 @@ import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
+import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
 /**
@@ -39,4 +40,5 @@ export const EXAMPLES: readonly Example[] = [
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  TOOLTIPS_EXAMPLE,
 ];

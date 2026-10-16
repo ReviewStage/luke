@@ -962,7 +962,7 @@ test("a chip of another task's agent in a plan's version history names who start
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Started by.*Sam Okafor/u);
 });
 
@@ -995,7 +995,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
 
-  const card = document.querySelector(".tooltip-card [data-task-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
 });
 

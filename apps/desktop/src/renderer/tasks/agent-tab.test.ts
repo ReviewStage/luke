@@ -424,7 +424,7 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
     card.querySelector(".card-name")?.textContent,

@@ -82,8 +82,9 @@ function cardOf(line: HTMLElement): string | undefined {
   act(() => {
     line.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return [...document.querySelectorAll(`.tooltip-card > [data-run-card="${RUN_CARD.CALL}"]`)].at(-1)
-    ?.outerHTML;
+  return [
+    ...document.querySelectorAll(`.luke-tooltip-card > [data-run-card="${RUN_CARD.CALL}"]`),
+  ].at(-1)?.outerHTML;
 }
 
 test("the Code tab begins and ends each call as the Call tab does: the same divider, naming a teammate's call, live while it stands, and the same closing line hanging the call's card", () => {

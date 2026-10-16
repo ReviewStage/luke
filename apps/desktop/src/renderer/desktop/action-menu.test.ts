@@ -219,7 +219,7 @@ test("a Settings row keeps its muted ⋯, named for its menu, and More on the po
 
   assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
   assert.equal(ellipsis.textContent, "", "with no words of its own");
-  assert.equal(document.querySelector(".tooltip")?.textContent, "More");
+  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "More");
 });
 
 /** A menu of two submenus, as the sidebar's View options is: Group by over Order by. */

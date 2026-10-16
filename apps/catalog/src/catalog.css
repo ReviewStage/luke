@@ -278,3 +278,8 @@ body {
 .catalog-grow {
   flex: 1;
 }
+
+/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+.catalog-hinted {
+  display: inline-flex;
+}
