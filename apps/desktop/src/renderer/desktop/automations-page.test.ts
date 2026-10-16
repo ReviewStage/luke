@@ -1794,6 +1794,39 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   ]);
 });
 
+test("a link to a run shows the Runs panel a reader folded, its run marked current, and the fold after it stands", async () => {
+  window.localStorage.clear();
+  runs = [
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  act(() => button("Hide runs").click());
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  await settle();
+  const current = page.querySelector(".automation-run")?.getAttribute("aria-current");
+  act(() => button("Hide runs").click());
+
+  assert.equal(current, "true");
+  assert.equal(page.querySelector("aside[aria-label='Runs']"), null, "the fold after it stands");
+  window.localStorage.clear();
+});
+
 test("a link to a run opens its automation's editor with that run marked current among its runs", async () => {
   runs = [
     {

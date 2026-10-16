@@ -1391,6 +1391,12 @@ export function AutomationEditor({
   const runsPanel = useRunsPanel();
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
+  // A link to a run shows the Runs panel it is listed in, once per run it names, so a fold after it stands.
+  const showRuns = useRef(runsPanel.onShow);
+  showRuns.current = runsPanel.onShow;
+  useEffect(() => {
+    if (linkedRun !== undefined) showRuns.current();
+  }, [linkedRun]);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
