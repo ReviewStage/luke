@@ -343,6 +343,11 @@ interface StandingSession {
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
+  /**
+   * Whether the session's end hands the developer's words no ask carried to
+   * the brain; not where it is let go of for its peer to attach to again.
+   */
+  handsOver: boolean;
   micLive: boolean;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
@@ -825,8 +830,6 @@ export class LiveSessionService {
         eventId: this.#options.createId(),
         settled: Deferred.await(session.settled),
       });
-      // Once the session has said its last, so the words transcribed as it closed are in the ask.
-      yield* this.#askUnheard(session);
       yield* this.#over(session);
     });
   }
@@ -951,6 +954,7 @@ export class LiveSessionService {
       this.#stopRunEvents();
       const session = this.#standing;
       const releasing = this.#releasing;
+      if (session !== undefined) session.handsOver = false;
       if (session !== undefined) yield* this.#over(session);
       else if (releasing !== undefined) yield* Deferred.await(releasing);
     });
@@ -1028,6 +1032,7 @@ export class LiveSessionService {
         started: false,
         ended: false,
         closing: undefined,
+        handsOver: true,
         micLive: false,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
@@ -1838,7 +1843,8 @@ export class LiveSessionService {
    * sideband's transport released, and with it whatever the source left
    * standing under it. Then what the end owes and nothing inside it waits
    * on: every row with a write still put off written as it stands, so a
-   * socket closing mid-sentence leaves the words said so far on the row.
+   * socket closing mid-sentence leaves the words said so far on the row, and
+   * then the words no ask carried handed to the brain (`#askUnheard`).
    */
   #release(session: StandingSession): Effect.Effect<void> {
     return Effect.andThen(
@@ -1846,9 +1852,16 @@ export class LiveSessionService {
       Effect.suspend(() => {
         const rows = [...session.pendingRows.keys()];
         session.pendingRows.clear();
-        return Effect.all(
-          rows.map((rowId) => this.#upsertRow(session, rowId)),
-          { concurrency: "unbounded", discard: true },
+        return Effect.andThen(
+          Effect.all(
+            rows.map((rowId) => this.#upsertRow(session, rowId)),
+            { concurrency: "unbounded", discard: true },
+          ),
+          // Every end but a let-go hands on what no ask carried, once the session has said its
+          // last, however the end came: the developer's hang-up, the idle close, the session's own
+          // `session.closed`, or the socket gone. The service's stop waits on this release, so the
+          // brain is still standing when it runs.
+          session.handsOver ? this.#askUnheard(session) : Effect.void,
         );
       }),
     );
