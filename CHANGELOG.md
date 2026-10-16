@@ -64,6 +64,124 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.16.0 — 2026-10-16
+
+### Links that say what they point at
+
+Every Luke link in a plan, a transcript, an Inbox item, or the Call tab is a
+chip named for its place: the task's, agent's, page's, person's, or
+automation's own name, wearing its glyph. A Luke address pasted into a box
+becomes its chip, and a bare one in a message is handed to the agent as its
+mention. A pull request's, a GitHub issue's, or a Linear issue's link says its
+title and state, read through the workspace's own GitHub App or Linear, in an
+Inbox item through that item's own workspace. A Luke link pasted into Slack,
+iMessage, or X unfurls as Luke's card.
+([#3036](https://github.com/ReviewStage/luke/pull/3036),
+[#3038](https://github.com/ReviewStage/luke/pull/3038),
+[#3047](https://github.com/ReviewStage/luke/pull/3047),
+[#3049](https://github.com/ReviewStage/luke/pull/3049),
+[#3071](https://github.com/ReviewStage/luke/pull/3071),
+[#3074](https://github.com/ReviewStage/luke/pull/3074),
+[#3098](https://github.com/ReviewStage/luke/pull/3098))
+
+### Agents that start, mention, and archive agents
+
+A coding agent starts another coding agent on its own task or on any task of
+its workspace, which `list_tasks` finds, and the new agent reports back to it.
+The @ list offers every coding agent of the workspace, labelled by its task,
+and coding agents write mentions too. Luke and coding agents read any page of
+the workspace with `read_page`, so a page mention points at the page rather
+than carrying it. An agent can archive or unarchive another, and the archived
+agent's card and banner say who archived it and why. A message from another
+coding agent is drawn under that agent's mark.
+([#3028](https://github.com/ReviewStage/luke/pull/3028),
+[#3029](https://github.com/ReviewStage/luke/pull/3029),
+[#3064](https://github.com/ReviewStage/luke/pull/3064),
+[#3067](https://github.com/ReviewStage/luke/pull/3067),
+[#3068](https://github.com/ReviewStage/luke/pull/3068),
+[#3076](https://github.com/ReviewStage/luke/pull/3076),
+[#3078](https://github.com/ReviewStage/luke/pull/3078),
+[#3088](https://github.com/ReviewStage/luke/pull/3088),
+[#3093](https://github.com/ReviewStage/luke/pull/3093))
+
+### Start a task without planning
+
+New task has a Plan switch. Turn it off and the task starts with an empty
+plan and no call, and the switch stays as you left it next time.
+([#3083](https://github.com/ReviewStage/luke/pull/3083))
+
+### Luke at any width
+
+A narrow window or side panel keeps everything in reach. A side panel's file
+tree, Changes tree, and Terminal shells float over a skinny tab, peeked by
+hover and opened by their toggle, as the main sidebar does. Tab strips shrink,
+then fold to glyphs, then scroll with the chosen tab in view. The plan, an
+agent's transcript, the call bar, Settings, the Factory, Home, the Inbox, and
+the sidebar's foot all read in a narrow column, and toasts, dialogs, and menus
+stay on screen in a short window.
+([#3089](https://github.com/ReviewStage/luke/pull/3089),
+[#3090](https://github.com/ReviewStage/luke/pull/3090),
+[#3079](https://github.com/ReviewStage/luke/pull/3079),
+[#3056](https://github.com/ReviewStage/luke/pull/3056),
+[#3055](https://github.com/ReviewStage/luke/pull/3055),
+[#3058](https://github.com/ReviewStage/luke/pull/3058),
+[#3052](https://github.com/ReviewStage/luke/pull/3052),
+[#3053](https://github.com/ReviewStage/luke/pull/3053),
+[#3054](https://github.com/ReviewStage/luke/pull/3054),
+[#3050](https://github.com/ReviewStage/luke/pull/3050),
+[#3043](https://github.com/ReviewStage/luke/pull/3043),
+[#3051](https://github.com/ReviewStage/luke/pull/3051),
+[#3059](https://github.com/ReviewStage/luke/pull/3059))
+
+### Improvements
+
+- Luke's video shows in the in-app call card and the floating call window
+  while Settings › Experimental › Video calls is on
+  ([#3061](https://github.com/ReviewStage/luke/pull/3061),
+  [#3062](https://github.com/ReviewStage/luke/pull/3062))
+- Code review is a suggested automation on the Automations list
+  ([#3077](https://github.com/ReviewStage/luke/pull/3077))
+- An MCP server's chip shows the server's row and tools, and says whether the
+  turn is handed it ([#3097](https://github.com/ReviewStage/luke/pull/3097))
+- What scrolls fades beneath every pinned bar, banner, and call timer
+  ([#3057](https://github.com/ReviewStage/luke/pull/3057))
+- The keyboard's focus ring is drawn once, whole, on the shape you see, and
+  scrolls its control in with room to spare
+  ([#3044](https://github.com/ReviewStage/luke/pull/3044),
+  [#3045](https://github.com/ReviewStage/luke/pull/3045),
+  [#3046](https://github.com/ReviewStage/luke/pull/3046),
+  [#3069](https://github.com/ReviewStage/luke/pull/3069))
+- Settings, dialogs, and empty states say less and only what helps
+  ([#3096](https://github.com/ReviewStage/luke/pull/3096))
+
+### Fixes
+
+- Fixed Open in Luke opening a bare Electron rather than Luke
+  ([#3063](https://github.com/ReviewStage/luke/pull/3063))
+- Fixed Reopen on an account still signing in adding a new account, and a
+  disconnect deleting an account added under the same name
+  ([#3039](https://github.com/ReviewStage/luke/pull/3039))
+- Fixed an agent whose harness is not yet known wearing a stray glyph
+  ([#3094](https://github.com/ReviewStage/luke/pull/3094))
+- Fixed an automation's Runs panel appearing without sliding as the window's
+  panes do ([#3091](https://github.com/ReviewStage/luke/pull/3091))
+- Fixed a plan picture's last editor drawn over the text rather than in the
+  viewer ([#3073](https://github.com/ReviewStage/luke/pull/3073))
+- Fixed an empty plan drawing a summary and its button
+  ([#3072](https://github.com/ReviewStage/luke/pull/3072))
+- Fixed a click on an empty plan's panel not putting the caret in its text
+  ([#3075](https://github.com/ReviewStage/luke/pull/3075))
+- Fixed an Inbox picture standing taller than a screenful
+  ([#3065](https://github.com/ReviewStage/luke/pull/3065))
+- Fixed a chip parting from the punctuation after it at a line's end
+  ([#3060](https://github.com/ReviewStage/luke/pull/3060))
+
+### Misc
+
+- Added a View › Developer menu and named side-by-side instances to development
+  builds ([#3080](https://github.com/ReviewStage/luke/pull/3080),
+  [#3087](https://github.com/ReviewStage/luke/pull/3087))
+
 ## 0.15.0 — 2026-10-16
 
 ### Pictures in plans

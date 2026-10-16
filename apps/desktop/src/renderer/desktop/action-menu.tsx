@@ -261,15 +261,12 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="menu-item-hint" />;
 }
 
-/** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */
-export function MenuItem({
+/** One item, as a menu draws it, reached by the menu's keys. */
+function MenuItem({
   action,
-  inMenu,
   onChoose,
 }: {
   action: MenuAction;
-  /** A menu's item, reached by the menu's keys, or else a button of its own in the page's order. */
-  inMenu: boolean;
   onChoose: () => void;
 }): React.JSX.Element {
   const label = <span className="plan-menu-label">{action.label}</span>;
@@ -290,7 +287,7 @@ export function MenuItem({
   // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
   const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
   // A setting in a menu says whether it is on as a menu's check does.
-  if (inMenu && action.checked !== undefined) {
+  if (action.checked !== undefined) {
     return (
       <button
         type="button"
@@ -310,9 +307,9 @@ export function MenuItem({
   return (
     <button
       type="button"
-      role={inMenu ? "menuitem" : undefined}
+      role="menuitem"
       aria-label={heard}
-      tabIndex={inMenu ? -1 : undefined}
+      tabIndex={-1}
       className="menu-item"
       data-danger={action.danger ? "true" : undefined}
       data-detail={action.detail === undefined ? undefined : "true"}
@@ -448,7 +445,7 @@ function Submenu({
       onKeyDown={keyDown}
     >
       {entry.items.map((action) => (
-        <MenuItem key={action.label} action={action} inMenu onChoose={() => onChoose(action)} />
+        <MenuItem key={action.label} action={action} onChoose={() => onChoose(action)} />
       ))}
     </div>
   );
@@ -608,7 +605,7 @@ export function ActionMenu({
                 onOpen={(anchor, focus) => setSubmenu({ entry, anchor, focus })}
               />
             ) : (
-              <MenuItem key={entry.label} action={entry} inMenu onChoose={() => choose(entry)} />
+              <MenuItem key={entry.label} action={entry} onChoose={() => choose(entry)} />
             ),
           )}
         </Fragment>

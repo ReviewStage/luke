@@ -1,6 +1,6 @@
 {
   "name": "@luke/database",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The hosted store's Drizzle schema, queries, and migrations, and the test databases",
