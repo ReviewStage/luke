@@ -471,10 +471,10 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.deepEqual(
           [first.body, again.body, fromBot.body, otherLabel.body],
           [
-            { read: 0, queued: 1 },
-            { read: 0, queued: 0 },
-            { read: 0, queued: 0 },
-            { read: 0, queued: 0 },
+            { read: 0, queued: 1, told: 0 },
+            { read: 0, queued: 0, told: 0 },
+            { read: 0, queued: 0, told: 0 },
+            { read: 0, queued: 0, told: 0 },
           ],
         );
         const runs = yield* listAutomationRuns(owner, made.id);
@@ -548,7 +548,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
 
         assert.deepEqual(
           answers,
-          [2, 1, 1, 0, 0, 0].map((queued) => ({ read: 0, queued })),
+          [2, 1, 1, 0, 0, 0].map((queued) => ({ read: 0, queued, told: 0 })),
           "an opened pull request fires both automations; a draft fires neither, asking for none",
         );
         const runs = yield* listAutomationRuns(owner, review.id);
@@ -566,7 +566,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
 
         // Its owner gone from the workspace, the automation hears nothing more.
         yield* leaveWorkspace(plan.workspaceId, owner);
-        assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0 });
+        assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0, told: 0 });
       }),
   );
 
@@ -783,9 +783,9 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       assert.deepEqual(
         [failedMain.body, passedMain.body, failedAgent.body],
         [
-          { read: 0, queued: 1 },
-          { read: 0, queued: 0 },
-          { read: 0, queued: 0 },
+          { read: 0, queued: 1, told: 0 },
+          { read: 0, queued: 0, told: 0 },
+          { read: 0, queued: 0, told: 0 },
         ],
       );
       assert.deepEqual(
