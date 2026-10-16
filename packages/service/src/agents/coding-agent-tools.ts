@@ -69,7 +69,7 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
-import { workspaceStepOf, writtenMention } from "./written-mentions.js";
+import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
  * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
@@ -467,7 +467,8 @@ export const READ_PAGE_TOOL = {
   description:
     "Read a page an agent showed on a task of your workspace, by its id: its title, the " +
     "version read (the newest unless you name one) and the newest there is, its task and " +
-    "whether that is the task you work on, and its HTML as it stands, cut on a line at " +
+    "whether that is the task you work on, its mention ready to write, and its HTML as it " +
+    "stands, cut on a line at " +
     `${READ_PAGE_CHARS} characters with how many were left out. Read a page the developer ` +
     "pointed you at, or one another agent showed, before you build on it or revise it; to " +
     `revise a page of your own task, show it again with ${AGENT_TOOL.SHOW_PAGE} and its id.`,
@@ -1223,6 +1224,7 @@ export function runReadPage(
       }
       const { taskId, page, newestVersion } = found.value;
       const names = yield* planNamesOf(userId, [taskId]);
+      const step = yield* taskStepOf(userId, taskId);
       const cut = pageCut(page.html);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -1233,6 +1235,16 @@ export function runReadPage(
           newestVersion,
           task: { id: taskId, name: names.get(taskId)?.name ?? null },
           isYourTask: taskId === callerTask(caller),
+          // The page's mention, ready to write, wherever its task's workspace reads for the member.
+          ...(Option.isNone(step)
+            ? undefined
+            : {
+                mention: writtenMention(
+                  { kind: MENTION_KIND.PAGE, taskId, pageId: page.id },
+                  page.title,
+                  step.value,
+                ),
+              }),
           html: cut.html,
           leftOutChars: cut.leftOutChars,
         },

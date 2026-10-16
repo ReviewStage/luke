@@ -859,6 +859,12 @@ test("read_page reads a page a teammate showed on another task of the caller's w
     [read.title, read.version, read.newestVersion, read.task, read.isYourTask],
     ["Seats by month", 2, 2, { id: plans.billing, name: "Billing" }, false],
   );
+  assert.ok(
+    isWireString(read.mention) &&
+      read.mention.startsWith("[@Seats by month](") &&
+      read.mention.endsWith(`/plan/${plans.billing}/page/${shown.id})`),
+    String(read.mention),
+  );
   assert.ok(isWireString(read.html) && read.html.length <= 40_000 && read.html.endsWith("</p>"));
   assert.equal(
     (isWireString(read.html) ? read.html.length : 0) + Number(read.leftOutChars),

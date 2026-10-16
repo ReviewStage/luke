@@ -135,7 +135,7 @@ function namingWords(repository: string, taskLink: string | null): string {
       ? ""
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
-- A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
+- A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
   return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, an inbox item, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:
 - A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
