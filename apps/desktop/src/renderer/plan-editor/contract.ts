@@ -184,6 +184,12 @@ export interface ComposerChip {
   readonly name: string;
 }
 
+/** A quote of the agent's words the composer holds as a block of its own (`@luke/ui/reply-quote`): its words, and what takes it out of the box. */
+export interface ComposerQuote {
+  readonly words: string;
+  readonly remove: () => void;
+}
+
 /** What the message box hands its editor as it mounts it. */
 export interface ComposerEditorProps {
   /** The words it opens on, each `/name` of a known skill a chip. */
@@ -208,6 +214,8 @@ export interface ComposerEditorProps {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** Draws a chip into the element its node stands as; answers what takes the drawing down. */
   readonly drawChip: (element: HTMLElement, chip: ComposerChip) => () => void;
+  /** Draws a quote into the element its block stands as; answers what takes the drawing down. Where none is given, the quote's words are drawn as they are. */
+  readonly drawQuote?: ((element: HTMLElement, quote: ComposerQuote) => () => void) | undefined;
   /** What the box's mentions are picked and drawn with: an `@` word reported as `/` words are, and each mention drawn into its node's element; none where the box takes no mentions. */
   readonly mentions?: ComposerMentions | undefined;
 }
@@ -233,6 +241,13 @@ export interface ComposerEditorHandle {
   readonly mark: () => ComposerMark;
   /** The `/` word the caret ends written as the skill named, a space after it. */
   readonly chooseSkill: (name: string) => void;
+  /**
+   * Words of the agent's laid in as a quote block under the line the caret
+   * stands on, or in its place where the line is empty, the caret on an
+   * empty line under it and the box focused; cut where the bound cuts it.
+   * Answers whether any went in.
+   */
+  readonly insertQuote: (words: string) => boolean;
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
   /** The `@` word the caret ends written as the skill named, as a `/` word's pick writes it. */

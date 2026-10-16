@@ -87,9 +87,6 @@ function Composer({ words }: { words: string }): ReactNode {
     composer: {
       draft,
       setDraft,
-      replies: [],
-      addReply: ignore,
-      removeReply: ignore,
       attachments,
       setAttachments: (next) => setAttachments(next),
       sending: false,

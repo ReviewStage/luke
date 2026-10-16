@@ -2124,53 +2124,43 @@ button.skill-chip:hover,
   border-color: var(--selected-edge);
 }
 
-/* The words of the agent's a message replies to (`reply-to-selection.tsx`):
-   quoted at the card's top, over its files, one row each in the order
-   added, three lines at most, with the press that takes it off at the
-   row's end. */
-.agent-composer-replies {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 -10px;
-  padding: 12px 8px 0 15px;
-  list-style: none;
-}
-
-.agent-composer-reply {
+/* A quote block in the message box (`reply-to-selection.tsx`): the agent's
+   words on a raised card rounded on every corner, an inset bar at its
+   leading edge, three lines at most, with the press that takes it out at
+   its end. It stands in the editor's flow as a line of its own does. */
+.composer-quote {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  margin: 4px 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: var(--raised-strong);
+  box-shadow: inset 3px 0 0 var(--hairline-strong);
   color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 20px;
+  user-select: none;
 }
 
-.agent-composer-reply-glyph {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  margin-top: 3px;
-}
-
-.agent-composer-reply-words {
+.composer-quote .composer-quote-words {
   display: -webkit-box;
   min-width: 0;
   flex: 1 1 auto;
   margin: 0;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 20px;
   overflow-wrap: anywhere;
   white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
 
-.agent-composer-reply-remove {
+.composer-quote .composer-quote-remove {
   width: 20px;
   height: 20px;
 }
 
-.agent-composer-reply-remove svg {
+.composer-quote .composer-quote-remove svg {
   width: 12px;
   height: 12px;
 }

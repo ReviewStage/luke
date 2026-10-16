@@ -1098,6 +1098,8 @@ function AgentTabView({
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
   const tab = useRef<HTMLElement>(null);
+  // The door the box hands Reply, which lays a quote in at its caret.
+  const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const origin = agentOrigin({
     agent,
     run,
@@ -1173,12 +1175,13 @@ function AgentTabView({
             followsUp
             keywords={keywords}
             skills={skills}
+            replyDoor={replyDoor}
           />
         )}
       </footer>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
       {onUnarchive !== undefined || composer.closed !== undefined || composer.sending ? null : (
-        <ReplyToSelection scope={tab} onReply={composer.addReply} />
+        <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
     </section>
   );

@@ -36,11 +36,12 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 /**
  * Words selected in an agent's message, answered from its box: Reply stands
  * over a selection inside the agent's words and nowhere else, not over its
- * thoughts or the developer's words, each press stacks one more quote
- * them over the box and hands it the caret, the message sent opens on them
- * as a Markdown quote, a message that did not go brings the reply back
- * apart from its words, and the reply's way off takes it off; and on the
- * agent's own tab, Reply stands down while a message is out.
+ * thoughts or the developer's words; each press lays a quote block in where
+ * the caret stands and hands the box the caret on a line under it, the
+ * message sent holds each quote as a Markdown blockquote set apart, quotes
+ * alone send nothing, a message that did not go comes back with its quotes
+ * as blocks, and a quote's way off takes it out; and on the agent's own
+ * tab, Reply stands down while a message is out.
  */
 
 const AGENT_WORDS = "Option A ships today. Option B waits for review.";
@@ -93,6 +94,7 @@ async function settle(): Promise<void> {
 /** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box. */
 function Tab({ sender }: { sender: MessageSender }): ReactNode {
   const tab = useRef<HTMLElement>(null);
+  const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const composer = useAgentComposer({
     agentId: "agent-1",
     planId: "plan-1",
@@ -111,8 +113,11 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
       delegation: { models: [] },
     }),
     createElement("p", null, DEVELOPER_WORDS),
-    createElement(AgentComposer, { ...QUIET_COMPOSER, composer }),
-    createElement(ReplyToSelection, { scope: tab, onReply: composer.addReply }),
+    createElement(AgentComposer, { ...QUIET_COMPOSER, composer, replyDoor }),
+    createElement(ReplyToSelection, {
+      scope: tab,
+      onReply: (words: string) => replyDoor.current?.(words),
+    }),
   );
 }
 
@@ -156,10 +161,12 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
       [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
         (each) => each.textContent === "Reply",
       ),
-    /** The words quoted over the box, in order. */
-    quoted: () =>
-      [...container.querySelectorAll(".agent-composer-reply-words")].map(
-        (each) => each.textContent,
+    /** The box's blocks, in order: each quote as `> ` and its words, each line as typed. */
+    blocks: () =>
+      [...composerEditor(container).children].map((each) =>
+        each.matches("[data-quote]")
+          ? `> ${each.querySelector(".composer-quote-words")?.textContent ?? ""}`
+          : each.textContent,
       ),
     /** Presses Reply where it stands. */
     pressReply: async () => {
@@ -173,33 +180,33 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
   };
 }
 
-test("words selected in the agent's message stack as quotes over the box, and the message sent opens on them in that order", async () => {
+test("Reply lays the selected words in where the caret stands, a line under each for its answer, and the message sends each as a quote set apart", async () => {
   const tab = await mounted();
   composerEditor(tab.container).blur();
 
   tab.select(AGENT_WORDS, "Option B", "review.");
   await tab.pressReply();
-  assert.deepEqual(tab.quoted(), ["Option B waits for review."]);
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
   assert.equal(tab.reply() === undefined, true, "Reply goes once pressed");
   assert.equal(document.activeElement, composerEditor(tab.container), "the box takes the caret");
 
+  typeInComposer(tab.container, "Why wait?");
   tab.select(AGENT_WORDS, "Option A", "today.");
   await tab.pressReply();
-  tab.select(AGENT_WORDS, "Option B", "review.");
-  await tab.pressReply();
-  assert.deepEqual(
-    tab.quoted(),
-    ["Option B waits for review.", "Option A ships today."],
-    "a second Reply stacks under the first, and the same words are quoted once",
-  );
+  typeInComposer(tab.container, "Ship it.");
+  assert.deepEqual(tab.blocks(), [
+    "> Option B waits for review.",
+    "Why wait?",
+    "> Option A ships today.",
+    "Ship it.",
+  ]);
 
-  typeInComposer(tab.container, "Which is safer?");
   pressInComposer(tab.container, "Enter");
   await settle();
   assert.deepEqual(tab.sent, [
-    "> Option B waits for review.\n\n> Option A ships today.\n\nWhich is safer?",
+    "> Option B waits for review.\n\nWhy wait?\n\n> Option A ships today.\n\nShip it.",
   ]);
-  assert.deepEqual(tab.quoted(), [], "the replies go with the message");
+  assert.deepEqual(tab.blocks(), [""], "the quotes go with the message");
 });
 
 test("a selection outside the agent's words, in its thought or the developer's words, is offered no Reply", async () => {
@@ -210,7 +217,7 @@ test("a selection outside the agent's words, in its thought or the developer's w
   assert.equal(tab.reply() === undefined, true);
 });
 
-test("replies alone send nothing, a message that did not go brings them back apart from its words, and each one's way off takes it off", async () => {
+test("quotes alone send nothing, a message that did not go comes back with its quotes as blocks, and a quote's way off takes it out", async () => {
   const tab = await mounted(() =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
   );
@@ -225,16 +232,19 @@ test("replies alone send nothing, a message that did not go brings them back apa
   typeInComposer(tab.container, "Ship it");
   pressInComposer(tab.container, "Enter");
   await settle();
-  assert.equal(composerEditor(tab.container).textContent, "Ship it");
-  assert.deepEqual(tab.quoted(), ["Option A ships today.", "Option B waits for review."]);
+  assert.deepEqual(tab.blocks(), [
+    "> Option A ships today.",
+    "> Option B waits for review.",
+    "Ship it",
+  ]);
 
   const remove = tab.container.querySelector<HTMLButtonElement>(
-    'button[aria-label="Remove reply"]',
+    'button[aria-label="Remove quote"]',
   );
   assert.ok(remove);
   act(() => remove.click());
   await settle();
-  assert.deepEqual(tab.quoted(), ["Option B waits for review."], "its own way off takes one off");
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", "Ship it"]);
   pressInComposer(tab.container, "Enter");
   await settle();
   assert.deepEqual(tab.sent, [

@@ -14,6 +14,7 @@ import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
 import { lapsedServer, namedServers } from "@luke/ui/agent-servers-model";
+import { wordsBesideQuotes } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -45,7 +46,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useMentionBox, usePlanMentions } from "./plan-mentions";
-import { ComposerReplies } from "./reply-to-selection";
+import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
@@ -104,11 +105,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * takes it (`hasWordsOrFiles`), so files alone send too.
  *
  * Words selected in one of the agent's messages and answered with Reply
- * stand quoted at the card's top, over the files, with their way off, and
- * the box takes the caret to write the answer under them; each Reply more
- * stacks another quote under those standing, and the message sent opens on
- * them, as quotes in the order they were added (`reply-to-selection.tsx`).
- * A reply is no message of its own, so it goes only with words or files.
+ * are laid into the words as a quote block under the line the caret stands
+ * on, and the caret goes to a fresh line under it, so the developer answers
+ * there; Reply again without a word between stacks the quotes, and words
+ * between them answer point by point (`reply-to-selection.tsx`). A quote
+ * goes out as a Markdown blockquote set apart by a blank line, and is no
+ * message of its own, so it goes only with words or files.
  *
  * Words can be spoken into the box as well: the microphone left of the
  * round button records in place of the foot's controls until ✓ or Enter sends the clip
@@ -261,6 +263,7 @@ export function AgentComposer({
   followsUp,
   keywords = [],
   skills,
+  replyDoor,
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
@@ -288,6 +291,8 @@ export function AgentComposer({
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;
+  /** Where the box hands the transcript's Reply the door that lays a quote in at its caret; none where nothing replies. */
+  replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
@@ -311,7 +316,8 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
+  // Note that quotes alone are no message, so they leave Send off and Stop standing.
+  const empty = !hasWordsOrFiles(wordsBesideQuotes(composer.draft), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(editorBundleAtom);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
@@ -370,13 +376,16 @@ export function AgentComposer({
           });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
-  // A reply laid over the box hands it the caret, for the answer written under it.
-  const replied = useRef(composer.replies.length);
+  // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
   useEffect(() => {
-    const added = composer.replies.length > replied.current;
-    replied.current = composer.replies.length;
-    if (added) editor.current?.focus();
-  }, [composer.replies.length]);
+    if (replyDoor === undefined) return undefined;
+    replyDoor.current = (words) => {
+      editor.current?.insertQuote(words);
+    };
+    return () => {
+      replyDoor.current = undefined;
+    };
+  }, [replyDoor]);
 
   const dictation = useDictation({ editor, keywords, onNote: setRefusal });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
@@ -530,10 +539,6 @@ export function AgentComposer({
           composer.send();
         }}
       >
-        <ComposerReplies
-          replies={composer.replies}
-          onRemove={held ? undefined : composer.removeReply}
-        />
         <AttachedFileChips
           files={attachmentChips(composer.attachments)}
           onRemove={
@@ -577,6 +582,7 @@ export function AgentComposer({
           }}
           onTrigger={skillPicker.onTrigger}
           chip={skillPicker.chip}
+          quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
           mentions={
             planMentions === undefined
               ? undefined

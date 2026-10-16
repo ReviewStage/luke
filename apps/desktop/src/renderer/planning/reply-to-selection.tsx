@@ -1,24 +1,25 @@
 import { replyOf } from "@luke/ui/reply-quote";
-import { CornerDownRightIcon, ReplyIcon, XIcon } from "lucide-react";
+import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import type { ComposerQuote } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 
 /**
- * reply-to-selection.tsx -- words selected in an agent's message answered from its message box: Reply over the selection, and the reply quoted over the box with its way off.
+ * reply-to-selection.tsx -- words selected in an agent's message answered from its message box: Reply over the selection, and the quote block it lays into the box.
  *
  * Every chat that does this, ChatGPT's "Ask ChatGPT" and Claude's Reply,
- * offers a press beside the words once they are selected, and the press
- * lays them over the composer as one quote of their own, apart from the
- * words being written, with a way off; the quote leads the message once it
- * is sent. So here: a selection inside an agent's own words, a text part
- * of one of its messages, which wears `REPLY_SCOPE`, never a call's output
- * or a thought beside it, stands Reply over it once
- * the pointer or the keys let it go, and a press hands the words to the
- * agent's box (`use-agent-composer.ts`'s `addReply`), which quotes them
- * (`ComposerReplies`) under any replies already standing, and sends each
- * as a Markdown quote leading the words, in the order added
- * (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
+ * offers a press beside the words once they are selected. Here the press
+ * lays them into the message box as a quote block where the caret stands,
+ * as email and GitHub let a reply quote what it answers, so a message can
+ * answer several points, each under its quote, or several quotes at once.
+ * A selection inside an agent's own words, a text part of one of its
+ * messages, which wears `REPLY_SCOPE`, never a call's output or a thought
+ * beside it, stands Reply over it once the pointer or the keys let it go,
+ * and a press hands the words to the box (`AgentComposer`'s `replyDoor`),
+ * whose editor lays them in (`insertQuote`), drawn here
+ * (`ComposerQuoteView`), and sends them as a Markdown blockquote set apart
+ * by a blank line (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
  * the transcript, so the log's own clipping never cuts it, follows the
  * selection as the log scrolls, and goes as the selection does. Note that
  * the press takes no focus and leaves the selection as it was until it is
@@ -33,8 +34,7 @@ const SCOPE_SELECTOR = `[${REPLY_SCOPE}]`;
 /** What the presses are called, which are their names and their hints. */
 const REPLY_WORDS = {
   REPLY: "Reply",
-  REMOVE: "Remove reply",
-  LIST: "Replies",
+  REMOVE: "Remove quote",
 } as const;
 
 /** How far the press stands off the selection, and the least room it keeps from the window's sides. */
@@ -144,35 +144,30 @@ export function ReplyToSelection({
   );
 }
 
-/** The replies over the message box: each of the agent's words they answer, quoted, in the order added, with the press that takes it off; nothing without one. */
-export function ComposerReplies({
-  replies,
-  onRemove,
+/** A quote block in the message box: the agent's words, three lines at most, and the press that takes it out, off while the box is held. */
+export function ComposerQuoteView({
+  quote,
+  held,
 }: {
-  replies: readonly string[];
-  /** Takes one reply off, by its place; none while the box is held, when they stay. */
-  onRemove: ((index: number) => void) | undefined;
-}): ReactNode {
-  if (replies.length === 0) return null;
+  quote: ComposerQuote;
+  held: boolean;
+}): React.JSX.Element {
   return (
-    <ul className="agent-composer-replies" aria-label={REPLY_WORDS.LIST}>
-      {replies.map((reply, index) => (
-        <li key={reply} className="agent-composer-reply">
-          <CornerDownRightIcon aria-hidden="true" className="agent-composer-reply-glyph" />
-          <blockquote className="agent-composer-reply-words">{reply}</blockquote>
-          <Tooltip label={REPLY_WORDS.REMOVE}>
-            <button
-              type="button"
-              className="icon-button agent-composer-reply-remove"
-              aria-label={REPLY_WORDS.REMOVE}
-              disabled={onRemove === undefined}
-              onClick={() => onRemove?.(index)}
-            >
-              <XIcon aria-hidden="true" />
-            </button>
-          </Tooltip>
-        </li>
-      ))}
-    </ul>
+    <div className="composer-quote">
+      <span className="composer-quote-words">{quote.words}</span>
+      <Tooltip label={REPLY_WORDS.REMOVE}>
+        <button
+          type="button"
+          className="icon-button composer-quote-remove"
+          aria-label={REPLY_WORDS.REMOVE}
+          disabled={held}
+          // Note that the press keeps the caret where it stands, so the words around the quote stay where they were.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={quote.remove}
+        >
+          <XIcon aria-hidden="true" />
+        </button>
+      </Tooltip>
+    </div>
   );
 }
