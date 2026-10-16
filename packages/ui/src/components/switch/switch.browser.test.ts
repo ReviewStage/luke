@@ -58,6 +58,33 @@ test("the drawing alone is hidden from a reader, and the row around it is the sw
   );
 });
 
+test("a switch is described by the words its caller points it at, by either name", async () => {
+  await mount(
+    createElement(
+      "div",
+      null,
+      createElement("p", { id: "alerts-note" }, "Sends one notice an hour."),
+      createElement(Switch, {
+        checked: true,
+        label: "Alerts",
+        onChange: () => undefined,
+        "aria-describedby": "alerts-note",
+      }),
+      createElement(Switch, {
+        checked: true,
+        label: "Digest",
+        onChange: () => undefined,
+        describedBy: "alerts-note",
+      }),
+    ),
+  );
+  for (const name of ["Alerts", "Digest"]) {
+    await expect
+      .element(page.getByRole("switch", { name }))
+      .toHaveAccessibleDescription("Sends one notice an hour.");
+  }
+});
+
 for (const surface of [
   surfaceAttributes(PROFILE.DESKTOP, THEME.LIGHT),
   surfaceAttributes(PROFILE.WEB, THEME.DARK),
