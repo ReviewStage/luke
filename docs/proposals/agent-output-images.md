@@ -1,8 +1,10 @@
 # Proposal: images in agent output
 
-Status: **approved by Dean on 2026-10-15**, all twelve decisions as
-recommended, with the limits revised after benchmarking (§3, Limits) and
-several pictures in a row added as decision 13. PR 1 is being built.
+Status: **shipped.** Dean approved all twelve decisions on 2026-10-15 as
+recommended, revised the limits after benchmarking (§3, Limits), and added
+several pictures in a row as decision 13. All five PRs merged on 2026-10-15
+and 2026-10-16; "As decided and shipped" below says what landed and where it
+differs from this proposal.
 
 The show is `docs/proposals/agent-output-images/index.html`, one
 self-contained file that fetches nothing. Open it in a browser. Each frame
@@ -30,6 +32,60 @@ This proposal adds a second owner of pictures, the agent's transcript. It
 reuses 318's machinery rather than building another system.
 
 Research with sources is in `agent-output-images/research.md`.
+
+## As decided and shipped
+
+| # | PR | What landed |
+| --- | --- | --- |
+| 1 | #2906 | An integration's picture is kept in `conversation_attachment` and named by `picture: {id, mediaType, width, height, byteCount}`, not carried as base64 in the transcript. `image-signature.ts` reads a picture's size from its header. |
+| 2 | #2911 | `GET /api/agents/:id/pictures/:picture` and `…/subagents/:call/pictures/:picture`, for whoever may read the agent (`reachedAgent`); `HostedCodingAgentClient.agentPicture`. |
+| 3 | #2919 | `show_image(images)`, 1 to 20 `{path, caption}`, for coding agents and their workers. A call keeps all its pictures or none, in one transaction. |
+| 4 | #2927 | The desktop draws them: a shown set kept out of the fold, an integration's pictures as chips under the call, markdown images as links that never fetch, and the viewer walking the set. |
+| 5 | #2979 | **Add to plan** in the viewer, with Undo. |
+
+**Dean's limits**, one constant (`CONVERSATION_PICTURE_BOUNDS`):
+
+- 4 MB per picture, under Vercel's 4.5 MB response;
+- 200 MB per conversation, in bytes rather than a count;
+- 20 per `show_image` call;
+- deduplicated by hash within a conversation.
+
+A picture over a limit is "Not kept", with its size.
+
+**Several pictures in a row** (decision 13) shipped as proposed:
+
+- one picture draws alone, with its caption;
+- two or three share one justified row;
+- four or more draw as wrapping thumbnails, six shown with "+N";
+- calls in one step join into one set.
+
+**Where it differs from this proposal:**
+
+- **Add to plan always appends.** Decision 10 says "at the caret if the
+  plan editor is open". The editor closes as focus leaves it, and the press
+  is in the agent's tab, so the plan's end is the only place the line can
+  go. It is written as its own paragraph through `planning.edit`, the same
+  edit a developer's save is. The toast's Undo takes it back out where it
+  still stands alone.
+- **Add to plan re-encodes, not copies.** The picture is re-encoded on the
+  Mac to the plan's 1.5 MB bound and kept through 318's
+  `planning.pictureKeep`, rather than copied server-side by a
+  `planning.attachFile` from a conversation's file. That is because an
+  agent's picture may be up to 4 MB.
+- **No "In the plan" state.** The press does not change once used; the
+  toast says the picture was added.
+- **Names.** The routes say `pictures`, not `files`. The shared component
+  is 318's `PictureBlock` with `@luke/ui/picture-cache`, not a lifted
+  `StoredImage`.
+
+**Later** (§8), unchanged but for the browser:
+
+- **A browser in the sandbox image** is in progress, built by worker 349
+  (agent capability gaps).
+- The Call tab's pictures, through a plan route.
+- `read_file`'s picture in its row, only if asked.
+- Screenshots of every run, a Mac screenshot through `run_on_mac`, video,
+  and before-and-after pairs: not planned.
 
 ## 1. Today
 
@@ -510,7 +566,7 @@ image note from a sandbox path), so no agent tool is added here.
 | What | Value | Effort | When |
 | --- | --- | --- | --- |
 | The Call tab's pictures | Medium: Luke's MCP pictures, drawn | S: a plan route over the same table | After PR 4 |
-| A browser in the sandbox image | High if agents screenshot often | M: image size, snapshot time | When `show_image` use shows it |
+| A browser in the sandbox image | High if agents screenshot often | M: image size, snapshot time | In progress: worker 349 (agent capability gaps) |
 | `read_file`'s picture in its row | Low: the agent's input | S: read at settle, keep by hash | Only if asked |
 | Screenshots of every run, automatic | Medium | L: a browser and a dev-server convention per repository | Not planned |
 | A Mac screenshot (`run_on_mac`) | Low | M: consent, the Mac carve-out | Not planned |
