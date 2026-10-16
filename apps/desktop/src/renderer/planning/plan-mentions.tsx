@@ -97,18 +97,6 @@ export function usePlanMentions(): PlanMentionsValue | undefined {
 /** Where no plan's page stands, or a page stands with no plan, its plan: none, so a section of any plan is drawn as found, and none is offered. */
 export const NO_PLAN = "";
 
-/**
- * The workspace words drawn off a plan's page are of, where the place
- * drawing them knows it, as the window's Inbox knows an item's: its slug,
- * which their mentions are written under and their links to Linear and
- * GitHub are read through (`use-link-standing.ts`). None where it does not
- * know it, so a link there reads nothing rather than another workspace's.
- */
-const WordsWorkspaceContext = createContext<string | undefined>(undefined);
-
-/** Hands the words under it the workspace they are of, by its slug. */
-export const WordsWorkspace = WordsWorkspaceContext.Provider;
-
 /** The anchors of no plan. */
 const NO_ANCHORS: ReadonlySet<string> = new Set();
 
@@ -166,21 +154,20 @@ export interface MentionedPlan {
  * names the plan, so a file of its repository is still the file and a
  * section the plan no longer holds is drawn gone; with none, as in the
  * workspace's Inbox, no repository is at hand, so a GitHub page is drawn as
- * GitHub's, under the workspace `WordsWorkspace` names, if any.
+ * GitHub's.
  */
 export function useMentionDoors(plan?: MentionedPlan): MentionDoors {
   const page = useContext(PlanMentionsContext)?.doors;
-  const wordsWorkspace = useContext(WordsWorkspaceContext) ?? "";
   const openPlan = useOpenPlan();
   const windowDoors = useMemo<MentionDoors>(
     () => ({
       planId: plan?.planId ?? NO_PLAN,
-      place: plan?.place ?? { workspace: wordsWorkspace, repository: null },
+      place: plan?.place ?? { workspace: "", repository: null },
       anchors: plan?.anchors ?? NO_ANCHORS,
       onOpenPlan: openPlan ?? OPEN_NOTHING,
       onOpenFile: undefined,
     }),
-    [openPlan, plan, wordsWorkspace],
+    [openPlan, plan],
   );
   return page ?? windowDoors;
 }

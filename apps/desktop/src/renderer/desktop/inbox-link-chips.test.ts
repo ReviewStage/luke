@@ -120,11 +120,13 @@ async function inbox(options: {
   listed: Workspace | undefined;
   planItems: readonly InboxItem[];
   sweep: { readonly item: InboxItem; readonly workspaceId: string | undefined } | undefined;
+  /** The account's workspaces as main's document holds them; Acme and Globex unless said. */
+  workspaces?: readonly Workspace[];
 }) {
   const asked: Act[] = [];
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [PLAN], workspaces: [ACME, GLOBEX] },
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [PLAN], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
   const inboxOf = (items: readonly InboxItem[]): Promise<ActOutcome> =>
     Promise.resolve({
@@ -235,6 +237,22 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
 
   assert.deepEqual(chips(container), [["relay#42 Send invitations in batches", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-acme acme/relay#42"]);
+});
+
+test("an item of a workspace an older service answered with no slug still reads its links through that workspace, by its id", async () => {
+  const { slug: _slug, ...unslugged } = GLOBEX;
+  const { container, asked } = await inbox({
+    listed: undefined,
+    planItems: [],
+    sweep: {
+      item: item("a1b2c3d4-0000-4000-8000-000000000004", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
+      workspaceId: GLOBEX.id,
+    },
+    workspaces: [ACME, unslugged],
+  });
+
+  assert.deepEqual(chips(container), [["ledger#5 Settle the ledger nightly", "Merged"]]);
+  assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 
 test("an item of an agent with no plan reads its links through the agent's own workspace, not the one the Inbox lists", async () => {

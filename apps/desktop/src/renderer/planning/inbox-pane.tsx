@@ -44,7 +44,6 @@ import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import {
   AgentActorRef,
@@ -77,13 +76,13 @@ import {
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
-import { WordsWorkspace } from "./plan-mentions";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { WordsWorkspace } from "./use-link-standing";
 import { opensAsLink } from "./use-open-link";
 import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
@@ -1086,9 +1085,6 @@ export function InboxPane({
   const draft = control.draftOf(item);
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
-  const wordsWorkspace = useAppState()?.tasks.workspaces.find(
-    (each) => each.id === workspaceId,
-  )?.slug;
   return (
     <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
@@ -1118,7 +1114,7 @@ export function InboxPane({
           data-item-id={item.id}
           ref={board}
         >
-          <WordsWorkspace value={wordsWorkspace}>
+          <WordsWorkspace value={workspaceId}>
             <Message from="assistant">
               <Byline by={by} did="asked" at={item.postedAt} now={now} />
               <MessageContent className="inbox-indent">
