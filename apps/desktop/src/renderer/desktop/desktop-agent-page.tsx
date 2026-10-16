@@ -7,7 +7,7 @@ import { EllipsisIcon } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -143,6 +143,33 @@ function AgentMentions({
   return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
 }
 
+/**
+ * Reads the open task's agents again once the page's agent, an agent of
+ * that task, is archived or brought back here. Note that the page reads its
+ * one agent apart from the task's list, which is read only as the task
+ * opens, so without this an agent brought back on its page would stay out
+ * of its task's tabs, and ⌘K would still call it archived.
+ */
+function useTaskAgentsFollow(
+  tasks: TasksControl,
+  agentId: string,
+  agent: { readonly planId: string | null; readonly archivedAt?: number | undefined } | undefined,
+): void {
+  const seen = useRef<{ agentId: string; archivedAt: number | undefined } | undefined>(undefined);
+  const planId = agent?.planId ?? null;
+  const archivedAt = agent?.archivedAt;
+  const drawn = agent !== undefined;
+  const { activeTaskId } = tasks;
+  const readTaskAgents = tasks.agents.onRetryList;
+  useEffect(() => {
+    if (!drawn) return;
+    const was = seen.current;
+    seen.current = { agentId, archivedAt };
+    if (was === undefined || was.agentId !== agentId || was.archivedAt === archivedAt) return;
+    if (planId !== null && planId === activeTaskId) readTaskAgents();
+  }, [drawn, agentId, archivedAt, planId, activeTaskId, readTaskAgents]);
+}
+
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
   tasks,
@@ -178,6 +205,7 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
+  useTaskAgentsFollow(tasks, agentId, agent);
   // Note that the models come from the open plan's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no plan to bring back with it.
