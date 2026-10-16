@@ -24,6 +24,7 @@
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",
+    "./task-sections-model": "./src/task-sections-model.js",
     "./integration-search": "./src/integration-search.js",
     "./agent-servers-model": "./src/agent-servers-model.js",
     "./github-html": "./src/github-html.js",
