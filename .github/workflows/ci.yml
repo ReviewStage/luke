@@ -86,6 +86,16 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      # What a failed browser test drew, beside its golden and their diff,
+      # for whoever reads the failure: synthetic catalog examples only.
+      - if: failure() && matrix.shard == 4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: browser-test-captures
+          path: |
+            apps/catalog/.vitest/
+            packages/ui/.vitest/
+          if-no-files-found: ignore
 
   # The generated migrations meet a real Postgres here, the major production
   # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is

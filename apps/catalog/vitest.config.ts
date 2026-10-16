@@ -15,10 +15,26 @@ export default defineConfig({
     name: "catalog",
     include: ["src/**/*.test.ts"],
     update: process.env.LUKE_UPDATE_FIXTURES === "1",
+    // React under `act`, and the page emptied after each capture, as every
+    // browser test of a shared component has it.
+    setupFiles: ["src/test-setup.ts"],
     browser: {
       enabled: true,
       headless: true,
-      provider: playwright(),
+      // Note that we draw text without hinting, subpixel positioning, or
+      // LCD antialiasing, because Chromium otherwise takes each from the
+      // machine's fontconfig, and two Linux images set them differently: a
+      // golden must be the same pixels on any Linux that runs it.
+      provider: playwright({
+        launchOptions: {
+          args: [
+            "--font-render-hinting=none",
+            "--disable-font-subpixel-positioning",
+            "--disable-lcd-text",
+            "--force-color-profile=srgb",
+          ],
+        },
+      }),
       instances: [{ browser: "chromium" }],
       expect: {
         toMatchScreenshot: {
