@@ -2245,6 +2245,37 @@ export function useTasksTab(input: {
     for (const closed of reopenFor) reopenNow.current(closed);
   }, [reopenFor, tasks.activeTaskId, setReopenFor]);
 
+  // Showing the panel on a plan whose strip holds no tab opens one first, so
+  // the panel is never shown empty beside the summary that lists the same:
+  // the tab last closed on the plan this launch, where ⇧⌘T would open it,
+  // else the kind last closed on it, kept across launches, else Call. An
+  // agent's page has no kind to fall back on, so its panel shows empty,
+  // offering what its "+" does.
+  const toggleSidePanel = () => {
+    const task = tasks.activeTaskId;
+    if (
+      sidePanel.open ||
+      sidePanel.strip.length > 0 ||
+      pageAgents !== undefined ||
+      task === undefined
+    ) {
+      sidePanel.onToggle();
+      return;
+    }
+    const stack = latestClosedTabs();
+    const at = stack.findLastIndex(
+      (closed) =>
+        closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL && closed.task === task && drawsAgain(closed),
+    );
+    const closed = stack[at];
+    if (closed !== undefined) {
+      setClosedTabs(stack.toSpliced(at, 1));
+      reopenHere(closed);
+      return;
+    }
+    sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.CALL);
+  };
+
   // The home page is where the tab rests, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
@@ -2328,7 +2359,7 @@ export function useTasksTab(input: {
     status: callStatus(reported, tasks),
     live,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
-    sidePanel: { ...sidePanel, onClose: closeSidePanelTab },
+    sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,

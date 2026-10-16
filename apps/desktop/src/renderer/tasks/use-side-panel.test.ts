@@ -34,6 +34,8 @@ function usedTask(id: string): OpenTask {
 interface Stood {
   task: string;
   taskAgents: readonly string[] | undefined;
+  /** Whether the plan holds nothing yet, so its strip draws no tab. */
+  bare?: boolean;
 }
 
 /** Mounts the panel alone, as a launch does, over the plan and agents given, answering the control as it stands. */
@@ -42,7 +44,7 @@ function launch(stood: Stood) {
   function Probe({ held }: { held: Stood }) {
     control = useSidePanel(
       undefined,
-      usedTask(held.task),
+      held.bare === true ? { id: held.task, holds: {} } : usedTask(held.task),
       held.taskAgents,
       [],
       [],
@@ -263,4 +265,31 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.deepEqual(panel.control().strip, []);
   assert.equal(panel.control().tab, undefined);
   assert.deepEqual(panel.control().closedTabs, SIDE_PANEL_TABS);
+});
+
+test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {
+  const panel = launch({ task: TASK, taskAgents: [] });
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  assert.equal(panel.control().open, true);
+
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  assert.deepEqual(panel.control().strip, []);
+  assert.equal(panel.control().open, false);
+
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.equal(panel.control().open, true);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
+
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, true, "shown on purpose, it stands empty");
+  assert.deepEqual(panel.control().strip, []);
+  panel.render({ task: TASK, taskAgents: [] });
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  assert.equal(panel.control().open, false, "left and come back to, it is asked for again");
+  act(() => panel.control().onToggle());
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, false);
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.equal(panel.control().open, false, "hidden by the toggle, not by the empty strip");
 });
