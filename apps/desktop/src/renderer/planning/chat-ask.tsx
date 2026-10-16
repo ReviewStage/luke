@@ -9,8 +9,9 @@ import {
   knownResponse,
   replyWords,
 } from "@luke/features/chat-wire";
-import type { InboxReadResponse } from "@luke/features/inbox-wire";
+import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
+import { Option, Schema } from "effect";
 import { ArrowUpIcon, CheckIcon } from "lucide-react";
 import { useState } from "react";
 import { BusyLabel } from "../spinner";
@@ -18,11 +19,12 @@ import { Tooltip } from "../tooltip";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, FormFields } from "./inbox-pane";
 
-/** The ask's response as the Inbox's answer parts read it. */
-function asInboxResponse(response: ChatReadResponse): InboxReadResponse {
-  // SAFETY: chat's ask responses were lifted from the Inbox's and still share its shape; the two
-  // differ only in the brand each puts on a response type a newer service names.
-  return response as unknown as InboxReadResponse;
+/** Reads a chat ask's response as the Inbox's answer parts take one, the two sharing one wire shape. */
+const readInboxResponse = Schema.decodeUnknownOption(inboxReadResponseSchema);
+
+/** The ask's response as the Inbox's answer parts read it; none where it does not read as one. */
+function asInboxResponse(response: ChatReadResponse): InboxReadResponse | undefined {
+  return Option.getOrUndefined(readInboxResponse(response));
 }
 
 /**
@@ -171,7 +173,8 @@ function Presses({
   sending: boolean;
   onAnswer: (press?: ChatReplyKind) => void;
 }): React.JSX.Element {
-  const presses = pressesOf(asInboxResponse(response));
+  const inbox = asInboxResponse(response);
+  const presses = inbox === undefined ? undefined : pressesOf(inbox);
   if (presses === undefined) {
     return (
       <Tooltip label="Send">
@@ -180,7 +183,7 @@ function Presses({
           className="chat-send"
           aria-label="Send"
           disabled={
-            sending || inboxReply({ response: asInboxResponse(response) }, draft) === undefined
+            sending || inbox === undefined || inboxReply({ response: inbox }, draft) === undefined
           }
         >
           <BusyLabel busy={sending} label="Sending">
