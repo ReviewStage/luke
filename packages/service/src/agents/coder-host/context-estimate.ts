@@ -12,6 +12,7 @@ import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { OPEN_PULL_REQUEST_TOOL } from "./pull-request.js";
 import { bashStartingIn } from "./shell.js";
 import { SHOW_IMAGE_TOOL } from "./show-image.js";
 import { TODOS_TOOL } from "./todos.js";
@@ -93,6 +94,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.READ_INBOX]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
+  },
+  [CODER_TOOL.OPEN_PULL_REQUEST]: {
+    description: OPEN_PULL_REQUEST_TOOL.description,
+    inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

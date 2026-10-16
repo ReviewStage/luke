@@ -103,6 +103,27 @@ export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW]
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
+/**
+ * Who a coding agent's commits are by and its pull request is opened as,
+ * settled once for the agent as its first session starts: the developer who
+ * started it, on their own GitHub account with the Luke GitHub App's bot as
+ * co-author, or the App's bot alone, with why it is the bot.
+ */
+export const CODING_AGENT_AUTHOR = {
+  /** The developer who started the agent, through the GitHub account they signed in with. */
+  DEVELOPER: "developer",
+  /** The App: the developer has no GitHub sign-in, or GitHub no longer honours it. */
+  APP_UNLINKED: "app-unlinked",
+  /** The App: the developer's own GitHub account may not push to the repository. */
+  APP_NO_PUSH: "app-no-push",
+  /** The App: an automation started the agent, so no developer's hand did. */
+  APP_AUTOMATION: "app-automation",
+  /** The App: GitHub could not be read as the agent started, so the developer's reach went unknown. */
+  APP_UNREAD: "app-unread",
+} as const;
+
+export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
+
 /** What an agent was handed as its first message: the plan's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",

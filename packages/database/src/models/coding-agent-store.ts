@@ -1,6 +1,8 @@
 import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_AUTHOR,
   CONTEXT_WINDOW,
+  type CodingAgentAuthor,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
   type ContextWindow,
@@ -109,6 +111,10 @@ import type { ConversationTarget } from "./writer.js";
  * the developer archived is a stamp on its row: every list leaves it out
  * but the plan's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
+ * Who the agent writes as on GitHub is settled once, by its first session,
+ * and a later session's word is answered with the one standing rather than
+ * written over it; it is written over only where the developer's token was
+ * refused as the service opened the agent's pull request, with why.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
  */
@@ -148,6 +154,8 @@ export interface CodingAgent {
   readonly archivedAt: Date | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
   readonly disabledServers: readonly IntegrationProvider[];
+  /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
+  readonly author: CodingAgentAuthor | null;
   readonly createdAt: Date;
 }
 
@@ -227,6 +235,7 @@ const CODING_AGENT_COLUMNS = {
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
   disabledServers: codingAgent.disabledServers,
+  author: codingAgent.author,
   createdAt: codingAgent.createdAt,
 };
 
@@ -262,6 +271,8 @@ const AutomationOriginColumnSchema = Schema.NullOr(
     body: Schema.optionalKey(Schema.String),
   }),
 );
+/** An author as the agent's row holds it. */
+const AuthorColumnSchema = Schema.Literals(Object.values(CODING_AGENT_AUTHOR));
 
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
@@ -281,6 +292,7 @@ const CodingAgentRowSchema = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   disabledServers: DisabledServersColumnSchema,
+  author: Schema.NullOr(AuthorColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -602,6 +614,36 @@ const fillAgentTitle = SqlSchema.findAll({
         .set({ title })
         .where(and(reachableAgent(userId, agentId), isNull(codingAgent.title)))
         .returning({ id: codingAgent.id }),
+    ),
+});
+
+const settleAgentAuthor = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    author: AuthorColumnSchema,
+  }),
+  Result: Schema.Struct({ author: AuthorColumnSchema }),
+  execute: ({ userId, agentId, author }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        // Note that the author standing is kept, so the first session's word is the agent's for good.
+        .set({ author: sql`coalesce(${codingAgent.author}, ${author})` })
+        .where(reachableAgent(userId, agentId))
+        .returning({ author: codingAgent.author }),
+    ),
+});
+
+const updateAgentAuthor = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    author: AuthorColumnSchema,
+  }),
+  execute: ({ userId, agentId, author }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ author }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1165,6 +1207,36 @@ export function fillCodingAgentTitle(
   title: string,
 ): CodingAgentStoreEffect<boolean> {
   return Effect.map(fillAgentTitle({ userId, agentId, title }), (rows) => rows.length > 0);
+}
+
+/**
+ * The agent's author settled: the one given where none stands, and the one
+ * standing otherwise, which is answered either way so a second session's
+ * word never moves what the first one's instructions and checkout used;
+ * nothing for an agent of a workspace the account is not in.
+ */
+export function settleCodingAgentAuthor(
+  userId: string,
+  agentId: string,
+  author: CodingAgentAuthor,
+): CodingAgentStoreEffect<Option.Option<CodingAgentAuthor>> {
+  return Effect.map(settleAgentAuthor({ userId, agentId, author }), (row) =>
+    Option.map(row, (settled) => settled.author),
+  );
+}
+
+/**
+ * The agent's author recorded over whatever stood, which is how an agent
+ * that wrote as its developer records why the App opened its pull request
+ * once their token was refused; nothing for an agent of a workspace the
+ * account is not in.
+ */
+export function recordCodingAgentAuthor(
+  userId: string,
+  agentId: string,
+  author: CodingAgentAuthor,
+): CodingAgentStoreEffect<void> {
+  return updateAgentAuthor({ userId, agentId, author });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */

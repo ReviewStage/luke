@@ -72,6 +72,7 @@
     "./agents/coder-host/model": "./src/agents/coder-host/model.js",
     "./agents/coder-host/plan-edit": "./src/agents/coder-host/plan-edit.js",
     "./agents/coder-host/production": "./src/agents/coder-host/production.js",
+    "./agents/coder-host/pull-request": "./src/agents/coder-host/pull-request.js",
     "./agents/coder-host/published": "./src/agents/coder-host/published.js",
     "./agents/coder-host/shell": "./src/agents/coder-host/shell.js",
     "./agents/coder-host/skills": "./src/agents/coder-host/skills.js",

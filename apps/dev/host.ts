@@ -13,6 +13,10 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "@luke/service/agents/coder-host/production";
+import {
+  type PullRequestToolResult,
+  pullRequestRejected,
+} from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
@@ -182,6 +186,21 @@ export function editPlanNotes(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
       return yield* host.editPlan(admitted.success, input, takenInTurn, sandbox);
+    }),
+  );
+}
+
+/** One `open_pull_request` call run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function runPullRequestTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+): Promise<PullRequestToolResult> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return pullRequestRejected(admitted.failure);
+      return yield* host.openPullRequest(admitted.success, input);
     }),
   );
 }

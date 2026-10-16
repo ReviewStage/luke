@@ -1,6 +1,7 @@
 import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
   CONTEXT_WINDOW,
+  type CodingAgentAuthor,
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
@@ -64,6 +65,11 @@ import { conversations } from "./storage.js";
  * kept as it stood when the run started (`StoredAutomationOrigin`), so the
  * agent still names its automation once that automation is deleted and
  * `automation_id` goes null; null for an agent started by hand.
+ * `author` is who the agent's commits are by and its pull request is opened
+ * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
+ * settled once as its first session starts and never moved after, so its
+ * instructions and its checkout agree; null before then, and for an agent
+ * from before the column, which writes as the App.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -162,6 +168,8 @@ export const codingAgent = pgTable(
     disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
     /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
     mentionedServers: jsonb("mentioned_servers").$type<readonly IntegrationProvider[]>(),
+    /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
+    author: text("author").$type<CodingAgentAuthor>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

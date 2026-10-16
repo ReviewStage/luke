@@ -56,6 +56,7 @@ import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentCiReadable,
+  agentCoAuthor,
   agentRepositoryToken,
   CheckoutRefused,
   type CheckoutServices,
@@ -83,6 +84,12 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import {
+  openPullRequest,
+  PULL_REQUEST_UNAVAILABLE,
+  type PullRequestToolResult,
+  pullRequestRejected,
+} from "./pull-request.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
@@ -122,21 +129,25 @@ type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseS
 /** How a checkout or a mint fails: the checkout's refusal, which the host's own refusal of a conversation that is no agent's is carried as, or the store's. */
 export type CheckoutFailure = CheckoutRefused | QueryError | Schema.SchemaError;
 
-/** The prompt a session runs under and the content address its turns are recorded under, with the one fact of the repository it was composed on. */
+/** The prompt a session runs under and the content address its turns are recorded under, with the facts of the repository it was composed on. */
 interface CoderSessionPrompt {
   readonly text: string;
   readonly hash: string;
   readonly ciReadable: boolean;
+  /** The co-author trailer the prompt handed, where the agent writes as its developer. */
+  readonly coAuthor: string | undefined;
 }
 
 /**
  * What the coder project keeps of the session's prompt, beside the content
  * address the planning brain keeps (`brain-host/host.ts`): whether the
- * prompt said the repository's CI is readable, which is what composes the
- * same text again for a step's estimate of it.
+ * prompt said the repository's CI is readable, and the co-author trailer it
+ * handed where it handed one, which are what compose the same text again
+ * for a step's estimate of it.
  */
 export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly ciReadable?: boolean;
+  readonly coAuthor?: string;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -189,7 +200,7 @@ export interface CoderHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI; the text itself is stored nowhere. */
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
     agent: CodingAgent,
@@ -248,6 +259,11 @@ export interface CoderHost extends HostAdmission {
     takenInTurn: number,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
+  /** Opens the agent's pull request (`pull-request.ts`): as its developer where it writes as them, as the App otherwise. */
+  openPullRequest(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+  ): Effect.Effect<PullRequestToolResult, never, CheckoutServices>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
     admitted: AdmittedConversation,
@@ -371,11 +387,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       );
     });
 
-  /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
-  const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
+  /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
+  const promptOf = (
+    agent: CodingAgent,
+    ciReadable: boolean,
+    coAuthor: string | undefined,
+  ): CoderSessionPrompt => {
     const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
-    const text = coderInstructions(agent.repository, brief, ciReadable, agent.planId !== null);
-    return { text, hash: promptHashOf(text), ciReadable };
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      agent.planId !== null,
+      coAuthor,
+    );
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor };
   };
 
   /**
@@ -397,7 +423,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const step = agentStepOf(
             event.data.usage,
             {
-              instructions: promptOf(agent, prompt.ciReadable ?? false).text,
+              instructions: promptOf(agent, prompt.ciReadable ?? false, prompt.coAuthor).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
             seams.now(),
@@ -497,8 +523,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
 
     prompt: (admitted, agent) =>
-      Effect.map(agentCiReadable(admitted.target, agent), (ciReadable) =>
-        promptOf(agent, ciReadable),
+      Effect.map(
+        Effect.all([
+          agentCiReadable(admitted.target, agent),
+          agentCoAuthor(admitted.target, agent),
+        ]),
+        ([ciReadable, coAuthor]) => promptOf(agent, ciReadable, coAuthor),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),
@@ -603,6 +633,16 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
+      ),
+
+    openPullRequest: (admitted, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return pullRequestRejected(found.failure);
+        return yield* openPullRequest(admitted.target, found.success, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
       ),
 
     showPage: (admitted, input, sandbox) =>
