@@ -3480,6 +3480,14 @@ button.picture-frame {
   font-weight: 500;
 }
 
+/* With no room above the picture inside the plan's scroller, as at its top,
+   the tools stand inside the picture's top edge rather than be cut off. */
+.picture-tools[data-above="false"] {
+  top: var(--space-8);
+  left: var(--space-8);
+  translate: none;
+}
+
 /* A tool that is its glyph alone, in a column too narrow for its name, is square. */
 .picture-tools[data-worded="false"] .picture-tool {
   width: 26px;

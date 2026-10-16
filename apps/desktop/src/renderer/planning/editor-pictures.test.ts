@@ -288,11 +288,17 @@ function selectPicture(container: HTMLElement): HTMLElement {
   );
 }
 
-/** The column the picture stands in laid out at `width`, as the window would report it. */
-function layOutColumn(container: HTMLElement, width: number): void {
+/**
+ * The column the picture stands in laid out at `width`, its picture `below`
+ * pixels under the top of the plan's scroller, as the window would report it.
+ */
+function layOutColumn(container: HTMLElement, width: number, below = 200): void {
   const column =
     container.querySelector<HTMLElement>(".editor-picture") ?? assert.fail("the picture stands");
-  column.getBoundingClientRect = () => new DOMRect(0, 0, width, 600);
+  const frame =
+    column.querySelector<HTMLElement>(".picture-frame") ?? assert.fail("the picture is framed");
+  column.getBoundingClientRect = () => new DOMRect(0, below, width, 600);
+  frame.getBoundingClientRect = () => new DOMRect(0, below, width / 2, 600);
   act(() => relayout());
 }
 
@@ -346,4 +352,25 @@ test("in a column too narrow for their names, a selected picture's tools are the
     [...tools.querySelectorAll("button")].map((button) => button.textContent),
     ["Alt text", "Caption", "Enlarge", "Delete"],
   );
+});
+
+test("a selected picture scrolled to the top of the plan stands its tools inside its top edge, and above it again once there is room", async () => {
+  document.head.appendChild(document.createElement("style")).textContent = PLANNING_CSS;
+  const container = await editing();
+  await pasteScreenshot(container);
+  await keepAsked();
+  await answerKeep({ id: KEPT_ID });
+  const tools = selectPicture(container);
+  const scroller =
+    container.querySelector<HTMLElement>(".plan-document-scroll") ??
+    assert.fail("the plan scrolls");
+
+  layOutColumn(container, 720, 0);
+  assert.equal(getComputedStyle(tools).top, "var(--space-8)", "inside the picture's top edge");
+
+  layOutColumn(container, 720, 200);
+  act(() => {
+    scroller.dispatchEvent(new Event("scroll"));
+  });
+  assert.equal(getComputedStyle(tools).top, "0px", "above the picture");
 });
