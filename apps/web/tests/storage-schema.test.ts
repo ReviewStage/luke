@@ -48,6 +48,8 @@ const DECLARED_TABLES = [
   "asks",
   "automation",
   "automation_run",
+  "chat_channel",
+  "chat_member",
   "coding_agent",
   "coding_agent_delegation",
   "conversation_attachment",

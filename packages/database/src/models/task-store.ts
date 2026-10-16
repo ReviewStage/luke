@@ -27,6 +27,7 @@ import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
+import { followPlanArchive } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
@@ -966,6 +967,7 @@ export function updateTask<E = never, R = never>(
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId);
         }
+        if (changes.archived !== undefined) yield* followPlanArchive(taskId, row.archivedAt);
         return Option.some(yield* taskOf(userId, row));
       }),
     ),
