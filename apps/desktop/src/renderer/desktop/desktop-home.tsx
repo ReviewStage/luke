@@ -13,6 +13,7 @@ import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { useWaitingItems } from "../planning/use-waiting-items";
+import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
@@ -38,11 +39,15 @@ import { useRowKeys } from "./use-row-keys";
  * as well as from a row, and Return opens the row reached, so a launch is a
  * key or two from a plan; a key pressed anywhere else, the sidebar or a
  * field, is left to it. Until the plan list is read the page draws nothing,
- * since what it says hangs on the list.
+ * since what it says hangs on the list; a read refused says so under Recent,
+ * with Retry, over whatever an earlier read listed.
  */
 
 /** How many plans Recent lists. */
 const RECENT_COUNT = 6;
+
+/** What Recent says where the plan list could not be read, as the sidebar says it. */
+const UNREAD_LINE = "Your tasks could not be read.";
 
 /** The greeting: the account's first name where it has one. */
 function greeting(name: string | undefined): string {
@@ -122,7 +127,7 @@ export function RecentRow({
  * read, failed, or none. It is headed by the Inbox's name, the place a press
  * on a row opens, and says it holds nothing waiting in the Inbox's own words.
  */
-function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
+function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element | null {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
   const open = ({ holder, item }: InboxListed) => {
@@ -134,6 +139,8 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
     );
   };
   const empty = waiting.items.length === 0;
+  // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
+  if (empty && plans.listFailed) return null;
   return (
     <section className="home-section" aria-labelledby="home-inbox">
       <h2 className="home-section-title" id="home-inbox">
@@ -170,6 +177,43 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
   );
 }
 
+/** Recent: the plans saved latest, under a refused read's Retry where the list could not be read, and nothing where neither stands. */
+function HomeRecent({
+  plans,
+  now,
+}: {
+  plans: PlansControl;
+  now: number;
+}): React.JSX.Element | null {
+  const recent = recentPlans(plans.listed.plans);
+  if (recent.length === 0 && !plans.listFailed) return null;
+  return (
+    <section className="home-section" aria-labelledby="home-recent">
+      <h2 className="home-section-title" id="home-recent">
+        Recent
+      </h2>
+      {plans.listFailed ? (
+        <div className="sidebar-note">
+          <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+        </div>
+      ) : null}
+      {recent.length === 0 ? null : (
+        <ul className="sidebar-plans">
+          {recent.map((plan) => (
+            <RecentRow
+              key={plan.id}
+              plan={plan}
+              pictures={plans.repositories.pictures}
+              now={now}
+              onOpen={() => plans.onSelect(plan.id)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** A new account's welcome: Luke's face and New task. */
 function Welcome({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
@@ -195,7 +239,6 @@ export function DesktopHome({
   const now = useMinute();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   useRowKeys(column, plans.shown);
-  const { listed } = plans;
   if (!plans.listRead && !plans.listFailed) return null;
   // Only an account with no plan in any workspace, and nothing an agent with
   // no plan waits on, is new; a workspace of its own with none still says
@@ -203,7 +246,6 @@ export function DesktopHome({
   const fresh =
     plans.plans.length === 0 && plans.archived.length === 0 && plans.inboxPlanless.length === 0;
   if (!plans.listFailed && fresh) return <Welcome plans={plans} />;
-  const recent = recentPlans(listed.plans);
   return (
     // The Inbox's agent cards name who started each agent, and Recent's rows
     // who created each teammate's task, read against the listed workspace's members.
@@ -215,24 +257,7 @@ export function DesktopHome({
             <NewPlanButton plans={plans} />
           </header>
           <HomeInbox plans={plans} now={now} />
-          {recent.length === 0 ? null : (
-            <section className="home-section" aria-labelledby="home-recent">
-              <h2 className="home-section-title" id="home-recent">
-                Recent
-              </h2>
-              <ul className="sidebar-plans">
-                {recent.map((plan) => (
-                  <RecentRow
-                    key={plan.id}
-                    plan={plan}
-                    pictures={plans.repositories.pictures}
-                    now={now}
-                    onOpen={() => plans.onSelect(plan.id)}
-                  />
-                ))}
-              </ul>
-            </section>
-          )}
+          <HomeRecent plans={plans} now={now} />
         </div>
       </div>
     </MemberDirectory>
