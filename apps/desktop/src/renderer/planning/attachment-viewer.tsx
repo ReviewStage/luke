@@ -19,7 +19,8 @@ import { FileTypeIcon } from "./file-type-icon";
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
- * far along the message's files it is, beside Copy for a text file,
+ * far along the message's files it is, a note the place opening it gives
+ * the file shown (who last edited it, for a plan's picture), beside Copy for a text file,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame
  * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
@@ -158,6 +159,7 @@ export function AttachmentViewer({
   onAt,
   onClose,
   action,
+  note,
 }: {
   files: readonly FileChip[];
   at: number;
@@ -166,6 +168,8 @@ export function AttachmentViewer({
   onClose: () => void;
   /** One more thing a picture shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
   action?: ViewerAction | undefined;
+  /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
+  note?: React.ReactNode;
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
@@ -203,6 +207,9 @@ export function AttachmentViewer({
           {file.name}
         </h2>
         <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+        {note === undefined || note === null ? null : (
+          <span className="attachment-viewer-note">{note}</span>
+        )}
         {files.length > 1 ? (
           <div className="attachment-viewer-walk">
             <HeaderButton label={VIEWER_LABEL.PREVIOUS} onClick={() => walk(-1)}>

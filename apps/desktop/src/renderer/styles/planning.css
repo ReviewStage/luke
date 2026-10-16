@@ -2664,6 +2664,24 @@ button.attached-file-face:hover img {
   font-size: 12px;
 }
 
+/* What the place opening the viewer says of the file shown, after its size
+   in the same quiet ink, a plan's picture saying who last edited it: the
+   size gives it the room the size kept before the header's buttons, and it
+   is cut before it reaches them. */
+.attachment-viewer-size:has(+ .attachment-viewer-note) {
+  margin-right: 0;
+}
+
+.attachment-viewer-note {
+  display: flex;
+  min-width: 0;
+  margin: 0 auto 0 var(--space-12);
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .attachment-viewer-walk {
   display: flex;
   align-items: center;
