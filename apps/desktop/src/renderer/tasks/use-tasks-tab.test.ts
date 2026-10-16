@@ -1157,6 +1157,33 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(tab.shownInboxes.at(-1), null);
 });
 
+test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().inboxView.onOpen());
+  const chosen = tab.control().inboxView.chosen;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
+    }),
+  );
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().inboxView.onOpen());
+  const linked = tab.control().inboxView.chosen;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().inboxView.onClose());
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
+  assert.deepEqual(linked, { taskId: "notes", itemId });
+  assert.equal(tab.control().inboxView.chosen, undefined);
+});
+
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
