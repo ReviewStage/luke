@@ -1,4 +1,5 @@
 import type { Board } from "@luke/features/board-wire";
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -312,6 +313,11 @@ export interface PlansControl {
     archived: PlanningView["plans"];
     inbox: readonly AppInboxPlan[];
     inboxPlans: readonly AppInboxPlanHolding[];
+  };
+  /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
+  listedAgents: {
+    readonly standing: readonly PlanlessAgent[];
+    readonly archived: readonly PlanlessAgent[];
   };
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
@@ -669,6 +675,9 @@ const NO_HOLDS: PlanHolds = {};
 /** No ids, the same array every render. */
 const NO_IDS: readonly string[] = [];
 
+/** No agent with no plan, before the list carries any. */
+const NO_PLANLESS_AGENTS: readonly PlanlessAgent[] = [];
+
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
@@ -897,6 +906,17 @@ export function usePlansTab(input: {
       : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
   );
   const listedWorkspaceId = listedWorkspace?.id;
+  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are.
+  const { planlessAgents } = planning;
+  const listedAgents = useMemo(() => {
+    const listed = (planlessAgents ?? NO_PLANLESS_AGENTS).filter(
+      (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
+    );
+    return {
+      standing: listed.filter((agent) => agent.archivedAt === undefined),
+      archived: listed.filter((agent) => agent.archivedAt !== undefined),
+    };
+  }, [planlessAgents, listedWorkspaceId]);
   const { inboxWaiting, inboxPlans } = input;
   const listedInbox = useMemo(
     () => ({
@@ -2081,6 +2101,7 @@ export function usePlansTab(input: {
       inbox: listedInbox.inbox,
       inboxPlans: listedInbox.inboxPlans,
     },
+    listedAgents,
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),

@@ -63,7 +63,7 @@ const ITEM: InboxItem = {
   updatedAt: 1_800_000_060_000,
 };
 
-function fixture() {
+function fixture(answered: CodingAgentAgentAnswer = STARTED) {
   const asked: string[] = [];
   /** What the notices were told, in order. */
   const noted: string[] = [];
@@ -150,7 +150,7 @@ function fixture() {
       codingAgentRename: ({ agentId, title }) =>
         Effect.sync(() => {
           asked.push(`rename:${agentId}:${title}`);
-          return STARTED;
+          return answered;
         }),
       codingAgentServers: ({ agentId, disabledServers }) =>
         Effect.sync(() => {
@@ -165,7 +165,11 @@ function fixture() {
       codingAgentArchive: ({ agentId, archived }) =>
         Effect.sync(() => {
           asked.push(`archive:${agentId}:${String(archived)}`);
-          return STARTED;
+          return answered;
+        }),
+      planningRefresh: () =>
+        Effect.sync(() => {
+          asked.push("refresh");
         }),
       codingAgentPage: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
@@ -284,6 +288,35 @@ it.effect(
 
       assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
       assert.deepEqual(asked, [`start:${PLAN_ID}:press-1`]);
+    }),
+);
+it.effect(
+  "a rename or an archive answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not",
+  () =>
+    Effect.gen(function* () {
+      assert.ok("agent" in STARTED);
+      const planless = fixture({ agent: { ...STARTED.agent, planId: null } });
+      const onPlan = fixture();
+      const rename = {
+        kind: ACT_KIND.CODING_AGENTS_RENAME,
+        payload: { agentId: AGENT_ID, title: "Triage" },
+      } as const;
+      const archive = {
+        kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
+        payload: { agentId: AGENT_ID, archived: true },
+      } as const;
+
+      yield* planless.router.performAct(rename, PANEL);
+      yield* planless.router.performAct(archive, PANEL);
+      yield* onPlan.router.performAct(rename, PANEL);
+
+      assert.deepEqual(planless.asked, [
+        `rename:${AGENT_ID}:Triage`,
+        "refresh",
+        `archive:${AGENT_ID}:true`,
+        "refresh",
+      ]);
+      assert.deepEqual(onPlan.asked, [`rename:${AGENT_ID}:Triage`]);
     }),
 );
 it.effect(

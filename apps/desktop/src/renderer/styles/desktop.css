@@ -1395,6 +1395,16 @@ ul.actor-stack {
   flex: 1;
 }
 
+/* A one-off agent's row leads with its harness mark, as its tab does, so it
+   reads apart from a task; the line's baseline holds it level with the name. */
+.sidebar-agent-glyph {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  --state-glyph-size: 14px;
+  color: var(--text-secondary);
+}
+
 .sidebar-plan-time {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
@@ -1549,8 +1559,9 @@ ul.actor-stack {
   z-index: 1;
 }
 
-.sidebar-plan-item:hover .sidebar-plan-time,
-.sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+/* Note that a one-off agent's row keeps its time, because it has no marks to make room for. */
+.sidebar-plan-item:hover .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time,
+.sidebar-plan-item:has(:focus-visible) .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time {
   visibility: hidden;
 }
 

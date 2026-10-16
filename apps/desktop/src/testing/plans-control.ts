@@ -145,6 +145,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       inbox: overrides.inbox ?? [],
       inboxPlans: overrides.inboxPlans ?? [],
     },
+    listedAgents: { standing: [], archived: [] },
     workspaces: [],
     workspace: undefined,
     onChooseWorkspace: ignore,

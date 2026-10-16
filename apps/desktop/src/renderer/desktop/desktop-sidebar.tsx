@@ -17,18 +17,23 @@ import {
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { PLANS_PAGE, repositoryPageUrl } from "@luke/ui/planning-model";
-import { sameTab } from "@luke/ui/tab-strip-model";
+import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
+  agentRow,
   type CreatorGroup,
-  createdByOnly,
   creatorGroups,
-  orderTasks,
+  orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
   TASK_GROUPING,
+  TASK_ROW,
   type TaskOrder,
-  taskTime,
+  type TaskRow,
+  taskRow,
+  taskRowRepository,
+  taskRowsCreatedBy,
+  taskRowTime,
 } from "@luke/ui/task-list-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
@@ -56,6 +61,7 @@ import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
+import { SidebarAgent } from "./sidebar-agent";
 import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
@@ -157,8 +163,14 @@ interface RowContext {
   /** Whether a row is the one the sidebar marks: the pin the open plan was opened from, else the open plan's own row. */
   readonly marked: (planId: string, pin: PinnedTab | undefined) => boolean;
   readonly onOpen: (planId: string) => void;
+  /** Whether a row is the one standing: the open plan's, or the agent's whose page stands. */
+  readonly currentRow: (row: TaskRow) => boolean;
+  /** Opens an agent with no plan on its own page. */
+  readonly onOpenAgent: (agentId: string) => void;
   /** Whether a plan was saved since the developer last looked at it on this Mac. */
   readonly unread: (plan: PlanSummary) => boolean;
+  /** Whether an agent's turn ended while the developer was not looking at it. */
+  readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
   readonly now: number;
   /** The list's order, whose time each of its rows shows. */
@@ -172,9 +184,10 @@ interface RowContext {
 }
 
 /**
- * One group's plans, each a row of the sidebar showing the time the list's
- * order chooses: its repository's name where `repository` names one, and a
- * teammate's face unless `face` is off, as under a group by creator.
+ * One group's rows, each a plan's or an agent's with no plan, showing the
+ * time the list's order chooses. A row says what its group does not: its
+ * repository's name where `repository` names one, and a teammate's face
+ * unless `face` is off, as under a group by creator.
  */
 function PlanRows({
   rows,
@@ -182,28 +195,42 @@ function PlanRows({
   repository,
   face = context.faces,
 }: {
-  rows: readonly PlanSummary[];
+  rows: readonly TaskRow[];
   context: RowContext;
-  repository?: (plan: PlanSummary) => string | undefined;
+  repository?: (row: TaskRow) => string | undefined;
   face?: boolean;
 }): React.JSX.Element {
   return (
     <ul className="sidebar-plans">
-      {rows.map((plan) => (
-        <SidebarPlan
-          key={plan.id}
-          plans={context.plans}
-          plan={plan}
-          current={context.marked(plan.id, undefined)}
-          open={context.current(plan.id)}
-          unread={context.unread(plan)}
-          now={context.now}
-          at={taskTime(plan, context.order)}
-          repository={repository?.(plan)}
-          face={face}
-          onOpen={() => context.onOpen(plan.id)}
-        />
-      ))}
+      {rows.map((row) =>
+        row.kind === TASK_ROW.TASK ? (
+          <SidebarPlan
+            key={row.plan.id}
+            plans={context.plans}
+            plan={row.plan}
+            current={context.marked(row.plan.id, undefined)}
+            open={context.current(row.plan.id)}
+            unread={context.unread(row.plan)}
+            now={context.now}
+            at={taskRowTime(row, context.order)}
+            repository={repository?.(row)}
+            face={face}
+            onOpen={() => context.onOpen(row.plan.id)}
+          />
+        ) : (
+          <SidebarAgent
+            key={row.agent.id}
+            agent={row.agent}
+            current={context.currentRow(row)}
+            unread={context.unseenAgent(row.agent.id)}
+            now={context.now}
+            at={taskRowTime(row, context.order)}
+            repository={repository?.(row)}
+            face={face}
+            onOpen={() => context.onOpenAgent(row.agent.id)}
+          />
+        ),
+      )}
     </ul>
   );
 }
@@ -329,15 +356,18 @@ function repositoryActionGroups(
   archived: boolean,
 ): MenuAction[][] {
   const { repository } = group;
-  const archive: MenuAction[] = archived
-    ? []
-    : [
-        {
-          label: "Archive tasks",
-          icon: <ArchiveIcon />,
-          onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
-        },
-      ];
+  // Note that only the group's plans are archived from here, because an agent is archived from its own page.
+  const planIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.plan.id] : []));
+  const archive: MenuAction[] =
+    archived || planIds.length === 0
+      ? []
+      : [
+          {
+            label: "Archive tasks",
+            icon: <ArchiveIcon />,
+            onSelect: () => plans.onArchivePlans(planIds),
+          },
+        ];
   if (repository === null) return archive.length === 0 ? [] : [archive];
   const pin: MenuAction = plans.pinnedRepositories.includes(repository)
     ? {
@@ -390,7 +420,7 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
-  const rows = folded ? group.plans.filter((plan) => context.current(plan.id)) : group.plans;
+  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useActionMenu(context.plans.shown && context.inSight);
@@ -412,7 +442,7 @@ function RepositorySection({
         }
         name={named}
         folded={folded}
-        count={group.plans.length}
+        count={group.rows.length}
         trailing={
           repository !== null && context.plans.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
@@ -484,22 +514,29 @@ function CreatorSection({
   context: RowContext;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
-  const first = group.plans[0];
-  const actor = creatorActor(first ?? {}, reader, undefined);
+  const first = group.rows[0];
+  const actor = creatorActor(first === undefined ? {} : creatorOf(first), reader, undefined);
   const folded = folds.creatorFolded(group.creatorId);
-  const rows = folded ? group.plans.filter((plan) => context.current(plan.id)) : group.plans;
+  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
         glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
         name={actorName(actor)}
         folded={folded}
-        count={group.plans.length}
+        count={group.rows.length}
         onToggle={() => folds.toggleCreator(group.creatorId)}
       />
       {rows.length === 0 ? null : <PlanRows rows={rows} context={context} face={false} />}
     </div>
   );
+}
+
+/** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
+function creatorOf(row: TaskRow): Pick<PlanSummary, "createdBy" | "ownerId"> {
+  if (row.kind === TASK_ROW.TASK) return row.plan;
+  const { startedBy } = row.agent;
+  return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
 }
 
 /** The listed tasks as the view groups them: by repository, by creator, or in one run. */
@@ -509,7 +546,7 @@ type TaskSections =
       readonly groups: readonly RepositoryGroup[];
     }
   | { readonly grouping: typeof TASK_GROUPING.CREATOR; readonly groups: readonly CreatorGroup[] }
-  | { readonly grouping: typeof TASK_GROUPING.NONE; readonly plans: readonly PlanSummary[] };
+  | { readonly grouping: typeof TASK_GROUPING.NONE; readonly rows: readonly TaskRow[] };
 
 /**
  * The tasks under Tasks as the view groups and orders them. Grouped by
@@ -517,16 +554,16 @@ type TaskSections =
  * pinned first, and the rest keep the order's.
  */
 function taskSections(
-  tasks: readonly PlanSummary[],
+  tasks: readonly TaskRow[],
   grouping: TaskSections["grouping"],
   order: TaskOrder,
   plans: PlansControl,
-  creatorName: (plan: PlanSummary) => string,
+  creatorName: (row: TaskRow) => string,
 ): TaskSections {
   if (grouping === TASK_GROUPING.CREATOR) {
     return { grouping, groups: creatorGroups(tasks, order, plans.me, creatorName) };
   }
-  if (grouping === TASK_GROUPING.NONE) return { grouping, plans: orderTasks(tasks, order) };
+  if (grouping === TASK_GROUPING.NONE) return { grouping, rows: orderTaskRows(tasks, order) };
   const grouped = repositoryGroups(tasks, order);
   const pinnedAt = (group: RepositoryGroup) =>
     group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
@@ -539,23 +576,23 @@ function taskSections(
   };
 }
 
-/** The rows the sections draw, in their order: each group's unless folded, the open plan standing under its fold. */
+/** The rows the sections draw, in their order: each group's unless folded, the row standing under its fold. */
 function drawnTasks(
   sections: TaskSections,
   folds: FoldedGroups,
-  current: (planId: string) => boolean,
-): PlanSummary[] {
-  const under = (folded: boolean, rows: readonly PlanSummary[]) =>
-    folded ? rows.filter((plan) => current(plan.id)) : rows;
+  current: (row: TaskRow) => boolean,
+): TaskRow[] {
+  const under = (folded: boolean, rows: readonly TaskRow[]) =>
+    folded ? rows.filter(current) : rows;
   switch (sections.grouping) {
     case TASK_GROUPING.REPOSITORY:
-      return sections.groups.flatMap((group) => under(folds.folded(group.repository), group.plans));
+      return sections.groups.flatMap((group) => under(folds.folded(group.repository), group.rows));
     case TASK_GROUPING.CREATOR:
       return sections.groups.flatMap((group) =>
-        under(folds.creatorFolded(group.creatorId), group.plans),
+        under(folds.creatorFolded(group.creatorId), group.rows),
       );
     case TASK_GROUPING.NONE:
-      return [...sections.plans];
+      return [...sections.rows];
   }
 }
 
@@ -573,7 +610,7 @@ function TaskGroups({
   context,
 }: {
   sections: TaskSections;
-  repositoryOf: (plan: PlanSummary) => string | undefined;
+  repositoryOf: (row: TaskRow) => string | undefined;
   folds: FoldedGroups;
   onNewPlanIn: (repository: string) => void;
   context: RowContext;
@@ -612,8 +649,8 @@ function TaskGroups({
         </>
       );
     case TASK_GROUPING.NONE:
-      return sections.plans.length === 0 ? null : (
-        <PlanRows rows={sections.plans} context={context} repository={repositoryOf} />
+      return sections.rows.length === 0 ? null : (
+        <PlanRows rows={sections.rows} context={context} repository={repositoryOf} />
       );
   }
 }
@@ -1091,8 +1128,21 @@ function SidebarColumn({
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !standingIn && planId === plans.activePlanId;
+  // An agent with no plan stands on its own page, which is the place shown while it stands.
+  const agentShown = onPlans ? plans.agentView.agentId : undefined;
+  const currentRow = (row: TaskRow) =>
+    row.kind === TASK_ROW.TASK ? current(row.plan.id) : row.agent.id === agentShown;
+  const openAgent = (agentId: string) => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.agentView.onOpen(agentId);
+  };
   // The list is the chosen workspace's; the unread marks above read every plan.
-  const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
+  const { listed: listedRows, listedAgents } = plans;
+  const unlisted =
+    listedRows.plans.length === 0 &&
+    listedRows.archived.length === 0 &&
+    listedAgents.standing.length === 0 &&
+    listedAgents.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
   // The pin the open plan was opened from is marked in its plan's place,
@@ -1113,7 +1163,11 @@ function SidebarColumn({
     marked: (planId, pin) =>
       pinMarked === undefined ? pin === undefined && current(planId) : pin === pinMarked,
     onOpen: chosen(openPlan),
+    currentRow,
+    onOpenAgent: chosen(openAgent),
     unread,
+    unseenAgent: (agentId) =>
+      plans.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
     order: taskView.view.order,
     faces: createdBy === undefined,
@@ -1134,10 +1188,15 @@ function SidebarColumn({
             sameTab(plans.sidePanel.tab, pin.tab))));
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice, and stand aside while the archived tasks are shown.
-  const unpinned = archive.shown
-    ? plans.listed.archived
-    : plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
-  const tasks = createdByOnly(unpinned, createdBy);
+  // The agents with no plan stand among the plans, the archived ones among the archived.
+  const unpinnedPlans = archive.shown
+    ? listedRows.archived
+    : listedRows.plans.filter((plan) => plan.pinnedAt === undefined);
+  const unpinned = [
+    ...unpinnedPlans.map(taskRow),
+    ...(archive.shown ? listedAgents.archived : listedAgents.standing).map(agentRow),
+  ];
+  const tasks = taskRowsCreatedBy(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
     tasks,
@@ -1145,29 +1204,38 @@ function SidebarColumn({
     order,
     plans,
     // A creator's group is ordered by the name its header says.
-    (plan) => actorName(creatorActor(plan, reader, undefined)),
+    (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
   );
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
-  const repositoryOf = (plan: PlanSummary) =>
-    plan.repository === null ? NO_REPOSITORY : repositoryLabel(plan.repository, named);
+  const repositoryOf = (row: TaskRow) => {
+    const repository = taskRowRepository(row);
+    return repository === null ? NO_REPOSITORY : repositoryLabel(repository, named);
+  };
   // The rows as the list draws them: the pinned, then each group not folded
-  // away, the open plan standing in its place even under a fold, so walking
+  // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const drawn = [
     ...(archive.shown
       ? []
       : folds.pinnedFolded
         ? pinned.filter((plan) => current(plan.id))
-        : pinned),
-    ...drawnTasks(sections, folds, current),
+        : pinned
+    ).map(taskRow),
+    ...drawnTasks(sections, folds, currentRow),
   ];
   // Moving up and down the list as it reads: down from the home page, where
-  // no plan is open, is the first plan. The ends go no further.
-  const at = drawn.findIndex((plan) => plan.id === plans.activePlanId);
+  // no row is open, is the first row. The ends go no further.
+  const at = drawn.findIndex((row) =>
+    agentShown === undefined
+      ? row.kind === TASK_ROW.TASK && row.plan.id === plans.activePlanId
+      : row.kind === TASK_ROW.AGENT && row.agent.id === agentShown,
+  );
   const step = (by: number) => {
-    const plan = drawn[at + by];
-    if (plan !== undefined) openPlan(plan.id);
+    const row = drawn[at + by];
+    if (row === undefined) return;
+    if (row.kind === TASK_ROW.TASK) openPlan(row.plan.id);
+    else openAgent(row.agent.id);
   };
   const listed = plans.signedIn && drawn.length > 0;
   useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at > 0 ? () => step(-1) : undefined);
@@ -1261,7 +1329,7 @@ function SidebarColumn({
           {plans.signedIn ? (
             <ViewChips
               createdBy={createdBy}
-              plans={unpinned}
+              plans={unpinnedPlans}
               onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
               archive={archive}
             />
@@ -1299,13 +1367,14 @@ function SidebarColumn({
           {plans.signedIn && unlisted && plans.listRead && !plans.listFailed && !archive.shown ? (
             <p className="sidebar-note">No tasks yet.</p>
           ) : null}
-          {/* Every task archived, the list would stand empty with no word of where they went. */}
+          {/* Every task and agent archived, the list would stand empty with no word of where they went. */}
           {plans.signedIn &&
           !archive.shown &&
           plans.listRead &&
           !plans.listFailed &&
           plans.listed.plans.length === 0 &&
-          plans.listed.archived.length > 0 ? (
+          listedAgents.standing.length === 0 &&
+          (plans.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
             <p className="sidebar-note">
               Every task is archived.{" "}
               <button

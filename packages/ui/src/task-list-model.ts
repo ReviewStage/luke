@@ -1,3 +1,5 @@
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import { agentTabLabel } from "@luke/features/model-label";
 import type { PlanSummary } from "@luke/features/plan-wire";
 
 /**
@@ -9,6 +11,11 @@ import type { PlanSummary } from "@luke/features/plan-wire";
  * order chosen orders the rows within a group and the groups themselves,
  * and is the time each row shows, so the order and the label never
  * disagree.
+ *
+ * A row of the sidebar's list is a task, or an agent an automation started
+ * with no task, which stands among the tasks by the same rules rather than
+ * in a group of its own: under its repository, under whoever started it, and
+ * in the order chosen, a task's row timed as the task is (`taskTime`).
  */
 
 /** How the list groups its tasks. */
@@ -42,16 +49,57 @@ export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
   order: TASK_ORDER.UPDATED,
 };
 
-/** The plans of one repository, as the sidebar groups them under its header; null is the plans with none. */
+/** What a row of the list stands for: a task, or an agent with no task. */
+export const TASK_ROW = {
+  TASK: "task",
+  AGENT: "agent",
+} as const;
+
+/** One row of the list: a task, or an agent an automation started with no task. */
+export type TaskRow =
+  | { readonly kind: typeof TASK_ROW.TASK; readonly plan: PlanSummary }
+  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: PlanlessAgent };
+
+/** The rows of one repository, as the sidebar groups them under its header; null is the rows with none. */
 export interface RepositoryGroup {
   readonly repository: string | null;
-  readonly plans: readonly PlanSummary[];
+  readonly rows: readonly TaskRow[];
 }
 
-/** One creator's plans, by their account id; undefined is the plans nobody is named for. */
+/** One creator's rows, by their account id; undefined is the rows nobody is named for. */
 export interface CreatorGroup {
   readonly creatorId: string | undefined;
-  readonly plans: readonly PlanSummary[];
+  readonly rows: readonly TaskRow[];
+}
+
+/** A task as a row of the list. */
+export function taskRow(plan: PlanSummary): TaskRow {
+  return { kind: TASK_ROW.TASK, plan };
+}
+
+/** An agent with no task as a row of the list. */
+export function agentRow(agent: PlanlessAgent): TaskRow {
+  return { kind: TASK_ROW.AGENT, agent };
+}
+
+/** The row's name: its task's, or its agent's as its tab names it (`agentTabLabel`). */
+export function taskRowName(row: TaskRow): string {
+  return row.kind === TASK_ROW.TASK ? row.plan.name : agentTabLabel(row.agent);
+}
+
+/** The repository the row works in; null for a task with none chosen yet. */
+export function taskRowRepository(row: TaskRow): string | null {
+  return row.kind === TASK_ROW.TASK ? row.plan.repository : row.agent.repository;
+}
+
+/** Who created a plan, by account id: the creator the wire names, else its owner. */
+function creatorIdOf(plan: PlanSummary): string | undefined {
+  return plan.createdBy?.userId ?? plan.ownerId;
+}
+
+/** Who created the row, by account id: a task's creator, or whoever started the agent, whose automation it ran on. */
+function taskRowCreatorId(row: TaskRow): string | undefined {
+  return row.kind === TASK_ROW.TASK ? creatorIdOf(row.plan) : row.agent.startedBy?.userId;
 }
 
 /**
@@ -68,39 +116,49 @@ export function taskTime(plan: PlanSummary, order: TaskOrder): number {
   return Math.max(plan.updatedAt, plan.agents?.activityAt ?? 0);
 }
 
-/** Two plans in the order chosen; a tie in name falls to the later activity. */
-function byOrder(order: TaskOrder): (a: PlanSummary, b: PlanSummary) => number {
+/** The time a row shows and is ordered by: its task's (`taskTime`), or its agent's start under Created and its last activity otherwise. */
+export function taskRowTime(row: TaskRow, order: TaskOrder): number {
+  if (row.kind === TASK_ROW.TASK) return taskTime(row.plan, order);
+  return order === TASK_ORDER.CREATED ? row.agent.createdAt : row.agent.activityAt;
+}
+
+/** Two rows in the order chosen; a tie in name falls to the later activity. */
+function byOrder(order: TaskOrder): (a: TaskRow, b: TaskRow) => number {
   if (order === TASK_ORDER.NAME) {
     return (a, b) =>
-      a.name.localeCompare(b.name) ||
-      taskTime(b, TASK_ORDER.UPDATED) - taskTime(a, TASK_ORDER.UPDATED);
+      taskRowName(a).localeCompare(taskRowName(b)) ||
+      taskRowTime(b, TASK_ORDER.UPDATED) - taskRowTime(a, TASK_ORDER.UPDATED);
   }
-  return (a, b) => taskTime(b, order) - taskTime(a, order);
+  return (a, b) => taskRowTime(b, order) - taskRowTime(a, order);
 }
 
-/** The plans in the order chosen. */
+/** The rows in the order chosen. */
+export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskRow[] {
+  return rows.toSorted(byOrder(order));
+}
+
+/** The plans in the order chosen, as their rows are ordered. */
 export function orderTasks(plans: readonly PlanSummary[], order: TaskOrder): PlanSummary[] {
-  return plans.toSorted(byOrder(order));
+  return orderTaskRows(plans.map(taskRow), order).flatMap((row) =>
+    row.kind === TASK_ROW.TASK ? [row.plan] : [],
+  );
 }
 
-/** The plans split by a key, each run kept in the order it was handed. */
-function grouped<K>(
-  plans: readonly PlanSummary[],
-  keyOf: (plan: PlanSummary) => K,
-): Map<K, PlanSummary[]> {
-  const groups = new Map<K, PlanSummary[]>();
-  for (const plan of plans) {
-    const key = keyOf(plan);
+/** The rows split by a key, each run kept in the order it was handed. */
+function grouped<K>(rows: readonly TaskRow[], keyOf: (row: TaskRow) => K): Map<K, TaskRow[]> {
+  const groups = new Map<K, TaskRow[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
     const group = groups.get(key);
-    if (group === undefined) groups.set(key, [plan]);
-    else group.push(plan);
+    if (group === undefined) groups.set(key, [row]);
+    else group.push(row);
   }
   return groups;
 }
 
-/** The latest time among a group's plans, under the order chosen. */
-function latest(plans: readonly PlanSummary[], order: TaskOrder): number {
-  return Math.max(...plans.map((plan) => taskTime(plan, order)));
+/** The latest time among a group's rows, under the order chosen. */
+function latest(rows: readonly TaskRow[], order: TaskOrder): number {
+  return Math.max(...rows.map((row) => taskRowTime(row, order)));
 }
 
 /** A repository's name without its owner: `relay` of `acme/relay`. */
@@ -109,17 +167,17 @@ function nameOf(repository: string): string {
 }
 
 /**
- * The plans grouped by their repository, in the order chosen: under Last
- * updated or Created the group holding the latest plan first, under Name
- * the repositories by name. The plans with none stand last whatever their
+ * The rows grouped by their repository, in the order chosen: under Last
+ * updated or Created the group holding the latest row first, under Name
+ * the repositories by name. The rows with none stand last whatever their
  * age or name.
  */
 export function repositoryGroups(
-  plans: readonly PlanSummary[],
+  rows: readonly TaskRow[],
   order: TaskOrder = TASK_ORDER.UPDATED,
 ): readonly RepositoryGroup[] {
-  const groups = [...grouped(orderTasks(plans, order), (plan) => plan.repository)].map(
-    ([repository, members]) => ({ repository, plans: members }),
+  const groups = [...grouped(orderTaskRows(rows, order), taskRowRepository)].map(
+    ([repository, members]) => ({ repository, rows: members }),
   );
   return groups.sort((a, b) => {
     if (a.repository === null || b.repository === null) {
@@ -127,7 +185,7 @@ export function repositoryGroups(
     }
     return order === TASK_ORDER.NAME
       ? nameOf(a.repository).localeCompare(nameOf(b.repository))
-      : latest(b.plans, order) - latest(a.plans, order);
+      : latest(b.rows, order) - latest(a.rows, order);
   });
 }
 
@@ -136,7 +194,10 @@ export function repositoryGroups(
  * alone, its owner left to the hover, unless another group's repository
  * shares the name, where both say `owner/name` so neither is mistaken.
  */
-export function repositoryLabel(repository: string, groups: readonly RepositoryGroup[]): string {
+export function repositoryLabel(
+  repository: string,
+  groups: readonly Pick<RepositoryGroup, "repository">[],
+): string {
   const name = nameOf(repository);
   const shared = groups.some(
     (group) =>
@@ -147,11 +208,6 @@ export function repositoryLabel(repository: string, groups: readonly RepositoryG
   return shared ? repository : name;
 }
 
-/** Who created a plan, by account id: the creator the wire names, else its owner. */
-function creatorIdOf(plan: PlanSummary): string | undefined {
-  return plan.createdBy?.userId ?? plan.ownerId;
-}
-
 /** The plans one member created, or every plan where the view names nobody. */
 export function createdByOnly(
   plans: readonly PlanSummary[],
@@ -160,29 +216,37 @@ export function createdByOnly(
   return createdBy === undefined ? plans : plans.filter((plan) => creatorIdOf(plan) === createdBy);
 }
 
+/** The rows one member created, or every row where the view names nobody. */
+export function taskRowsCreatedBy(
+  rows: readonly TaskRow[],
+  createdBy: string | undefined,
+): readonly TaskRow[] {
+  return createdBy === undefined ? rows : rows.filter((row) => taskRowCreatorId(row) === createdBy);
+}
+
 /**
- * The plans grouped by who created them, in the order chosen: the reader's
+ * The rows grouped by who created them, in the order chosen: the reader's
  * own first, then each teammate's, under Last updated or Created the one
- * holding the latest plan first, under Name by the creator's name as
- * `nameOf` says it, the name the group's header says, and the plans nobody
+ * holding the latest row first, under Name by the creator's name as
+ * `nameOf` says it, the name the group's header says, and the rows nobody
  * is named for last.
  */
 export function creatorGroups(
-  plans: readonly PlanSummary[],
+  rows: readonly TaskRow[],
   order: TaskOrder,
   readerId: string | undefined,
-  nameOf: (plan: PlanSummary) => string,
+  nameOf: (row: TaskRow) => string,
 ): readonly CreatorGroup[] {
-  const groups = [...grouped(orderTasks(plans, order), creatorIdOf)].map(
+  const groups = [...grouped(orderTaskRows(rows, order), taskRowCreatorId)].map(
     ([creatorId, members]) => ({
       creatorId,
-      plans: members,
+      rows: members,
     }),
   );
   const rank = (group: CreatorGroup) =>
     group.creatorId === undefined ? 2 : group.creatorId === readerId ? 0 : 1;
   const nameIn = (group: CreatorGroup) => {
-    const first = group.plans[0];
+    const first = group.rows[0];
     return first === undefined ? "" : nameOf(first);
   };
   return groups.sort(
@@ -190,6 +254,6 @@ export function creatorGroups(
       rank(a) - rank(b) ||
       (order === TASK_ORDER.NAME
         ? nameIn(a).localeCompare(nameIn(b))
-        : latest(b.plans, order) - latest(a.plans, order)),
+        : latest(b.rows, order) - latest(a.rows, order)),
   );
 }
