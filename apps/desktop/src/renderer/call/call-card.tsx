@@ -21,7 +21,7 @@ import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
-import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
+import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
 import { useClipped } from "../use-clipped";
@@ -31,8 +31,8 @@ import { CallVideoTile, VideoToggle } from "./call-video-tile";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
-function returnLabel(planName: string): string {
-  return `Open ${planName}`;
+function returnLabel(taskName: string): string {
+  return `Open ${taskName}`;
 }
 
 /** Where a card is drawn, which decides how its title answers and how its controls are hinted. */
@@ -145,7 +145,7 @@ function CallCard({
   const [title, clipped] = useClipped();
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
   const name = (
-    <span className="call-card-plan" ref={title} data-overflow={clipped}>
+    <span className="call-card-task" ref={title} data-overflow={clipped}>
       {card.taskName}
     </span>
   );

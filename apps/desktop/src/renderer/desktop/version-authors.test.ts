@@ -9,11 +9,11 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { plansControl } from "#testing/plans-control";
+import { DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { HISTORY_READ } from "../planning/use-plan-history";
-import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { tasksControl } from "#testing/tasks-control";
+import { HISTORY_READ } from "../tasks/use-plan-history";
+import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
@@ -74,11 +74,11 @@ afterEach(() => {
 
 /** The plan's version history over the window, its versions by Lee read, and the sections of version 3 open. */
 function drawn(): HTMLElement {
-  const base = plansControl();
-  const plans = plansControl({
+  const base = tasksControl();
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: DOCUMENT_PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, workspaceId: ACME.id } },
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
     workspaces: [ACME],
     workspace: ACME,
     history: {
@@ -106,7 +106,7 @@ function drawn(): HTMLElement {
           staged: false,
         },
         history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-        subject: planVersionSubject(plans),
+        subject: taskVersionSubject(plans),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
         call: undefined,
         onExit: ignore,

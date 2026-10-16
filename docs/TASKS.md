@@ -336,7 +336,7 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   with no mark, from another Mac, is unread once anything has been saved in
   it since it started.
 - The task's name, drawn as its title in the look of a `#` heading
-  (`planning/plan-title.tsx`), over its text, the saved `body` rendered as
+  (`planning/task-title.tsx`), over its text, the saved `body` rendered as
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
   The text is cut into sections as the service cuts it (`planSections` in
@@ -1290,7 +1290,7 @@ the exact shape.
 
 | Part | Reuse | New |
 | --- | --- | --- |
-| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
+| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
@@ -1369,12 +1369,12 @@ changes when a check is run, not when one is planned.
   the microphone row, and the captions during a call
   have never been seen running. `./scripts/evidence.sh` captures the window
   on the Tasks tab over a synthetic task
-  (`app-smoke-planning.png`, from `--profile planning`), on the
-  task's whiteboard (`app-smoke-planning-board.png`, from
-  `--profile planning-board`), on its transcript mid-call
-  (`app-smoke-planning-transcript.png`, from
-  `--profile planning-transcript`), on its Work tab mid-call
-  (`app-smoke-planning-work.png`, from `--profile planning-work`),
+  (`app-smoke-tasks.png`, from `--profile tasks`), on the
+  task's whiteboard (`app-smoke-tasks-board.png`, from
+  `--profile tasks-board`), on its transcript mid-call
+  (`app-smoke-tasks-transcript.png`, from
+  `--profile tasks-transcript`), on its Work tab mid-call
+  (`app-smoke-tasks-work.png`, from `--profile tasks-work`),
   and over
   the synthetic task list with none open (`app-smoke-expanded.png`, the
   window opening on Tasks), but neither

@@ -36,13 +36,13 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
-import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
@@ -353,7 +353,7 @@ function heightOf(field: Element | null): string {
 let registry = AtomRegistry.make();
 
 /** The page as drawn over the plans control given, rendered again in place where one stands. */
-function render(plans: ReturnType<typeof plansControl>): void {
+function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
       onRegistry(
@@ -361,7 +361,7 @@ function render(plans: ReturnType<typeof plansControl>): void {
         createElement(
           Fragment,
           null,
-          createElement(AutomationsPage, { plans }),
+          createElement(AutomationsPage, { tasks }),
           createElement(ToastHost),
         ),
       ),
@@ -370,12 +370,12 @@ function render(plans: ReturnType<typeof plansControl>): void {
 }
 
 /** The Automations page, standing in the plan's place over the workspace listed. */
-function mount(plans = plansControl({ workspace: WORKSPACE })): HTMLElement {
+function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   registry = AtomRegistry.make();
-  render(plans);
+  render(tasks);
   return container;
 }
 
@@ -528,7 +528,7 @@ test("a switch that settles after the window moved to another workspace reads th
       ?.click(),
   );
   await settle();
-  render(plansControl({ workspace: beta }));
+  render(tasksControl({ workspace: beta }));
   await settle();
   heldChanges[0]?.();
   await settle();
@@ -584,7 +584,7 @@ test("with no automations the page says what one is, and with no workspace liste
   root = undefined;
   listed = [];
 
-  mount(plansControl({ workspace: undefined }));
+  mount(tasksControl({ workspace: undefined }));
   await settle();
   assert.deepEqual(listed, []);
 });
@@ -620,7 +620,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
     const leaveGuard = useLeaveGuard();
-    const plans = plansControl({
+    const plans = tasksControl({
       leaveGuard,
       agentView: {
         agentId: undefined,
@@ -644,12 +644,12 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         onClose: () => undefined,
       },
     });
-    const base = plans.newPlan;
+    const base = plans.newTask;
     openFactory = plans.factoryView.onOpen;
     return createElement(AutomationsPage, {
-      plans: {
+      tasks: {
         ...plans,
-        newPlan: {
+        newTask: {
           ...base,
           repositoriesIn: () => ({
             ...base.repositoriesIn(listed.id),
@@ -748,7 +748,7 @@ function pickerDetail(page: HTMLElement, label: string): string | undefined {
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".plan-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -1025,7 +1025,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
-    row.querySelector(".plan-compose-menu-name")?.textContent,
+    row.querySelector(".task-compose-menu-name")?.textContent,
     row.querySelector(".actor-mark") !== null
       ? "person"
       : row.querySelector(".workspace-tile") !== null
@@ -1038,7 +1038,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   ]);
 
   const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Acme",
+    (row) => row.querySelector(".task-compose-menu-name")?.textContent === "Acme",
   );
   assert.ok(acme, "the menu offers the workspace");
   act(() => acme.click());
@@ -1578,7 +1578,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
   act(() => picker(page, "Agent").click());
 
   assert.deepEqual(
-    [...document.querySelectorAll("[role=option] .plan-compose-menu-name")].map(
+    [...document.querySelectorAll("[role=option] .task-compose-menu-name")].map(
       (name) => name.textContent,
     ),
     ["CI digest"],

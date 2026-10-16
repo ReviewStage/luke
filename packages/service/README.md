@@ -224,7 +224,7 @@ URLs, beside the sign-in's.
 The page draws a fixed card per status and interpolates nothing the address
 brought it; the desktop's repository chip picks the installation up by
 reading the workspace's repositories again when the window next takes focus
-(`apps/desktop/src/renderer/planning/repository-chip.tsx`).
+(`apps/desktop/src/renderer/tasks/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
@@ -1797,7 +1797,7 @@ a task deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.
 `readTask` is the read Luke starts and resumes from, with the
 conversation `attachTaskConversation` associated, and it moves nothing.
-`src/tasks/tasks.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
+`src/tasks/tasks.test.ts` and `apps/web/tests/tasks-app.test.ts` hold both halves
 against a real dialect.
 
 Luke's judgment is the hosted brain run over a task conversation (`plan`), which

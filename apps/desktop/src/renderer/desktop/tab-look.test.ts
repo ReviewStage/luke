@@ -15,13 +15,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { conversationOf, worker, workerCall, workTurn } from "#testing/plan-work";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MAIN_TAB } from "../planning/use-main-tabs";
-import { NO_LOOKS } from "../planning/use-plan-looks";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
-import { DesktopPlans } from "./desktop-plans";
+import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { MAIN_TAB } from "../tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { NO_LOOKS } from "../tasks/use-task-looks";
+import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
@@ -29,7 +29,7 @@ import { DesktopPlans } from "./desktop-plans";
  * that strip's "+" menu wears, and the plan's own tab hangs the plan's card.
  */
 
-const PLAN: Task = {
+const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -40,12 +40,12 @@ const PLAN: Task = {
 };
 
 const SUMMARY: TaskSummary = {
-  id: PLAN.id,
-  workspaceId: PLAN.workspaceId,
-  name: PLAN.name,
-  createdAt: PLAN.createdAt,
-  updatedAt: PLAN.updatedAt,
-  repository: PLAN.repository,
+  id: TASK.id,
+  workspaceId: TASK.workspaceId,
+  name: TASK.name,
+  createdAt: TASK.createdAt,
+  updatedAt: TASK.updatedAt,
+  repository: TASK.repository,
   agents: {
     total: 1,
     working: 1,
@@ -71,7 +71,7 @@ function agent(
 ): CodingAgentSummary {
   return {
     id,
-    planId: PLAN.id,
+    planId: TASK.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
@@ -119,12 +119,12 @@ function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const base = plansControl();
-  const plans = plansControl({
+  const base = tasksControl();
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    plans: [SUMMARY],
-    activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
+    tasks: [SUMMARY],
+    activeTaskId: TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: WORKING.id }, { draft: DRAFT }],
@@ -171,7 +171,7 @@ function mount(): HTMLElement {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
       ),
     ),
   );
@@ -200,7 +200,7 @@ function rowLooks(column: Element): Map<string, Look> {
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
-    const label = row.querySelector(".plan-compose-menu-name")?.textContent ?? "";
+    const label = row.querySelector(".task-compose-menu-name")?.textContent ?? "";
     return [label, { glyph: row.querySelector(".menu-item-glyph")?.innerHTML, label }] as const;
   });
   act(() => add.click());
@@ -234,16 +234,16 @@ test("the side panel's + offers a working subagent and an agent's Changes in the
 test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", () => {
   const column = mount().querySelector(".main-tabs");
   const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.equal(tab?.textContent, PLAN.name);
+  assert.equal(tab?.textContent, TASK.name);
   act(() => {
     tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-plan-card]");
+  const card = document.querySelector(".tooltip-card [data-task-card]");
   assert.ok(card, "the plan's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, PLAN.name);
+  assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
   // The card is the plan as the list names it, its agents among it.
-  assert.equal(card.querySelector("[data-plan-card-agent]")?.textContent, "Invite flow");
+  assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
 });
 
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", () => {

@@ -52,7 +52,7 @@ const WORD_REST = /^[^\s@[\]()\uFFFC]*/u;
 const SPACE = " ";
 
 /** The `@` word the caret ends: the report, and the range a pick replaces. */
-interface PlanTrigger {
+interface TaskTrigger {
   readonly trigger: ComposerTrigger;
   readonly from: number;
   readonly to: number;
@@ -60,12 +60,12 @@ interface PlanTrigger {
 
 /** What the plugin holds between changes: the word last found, and the report last made. */
 interface MentionsState {
-  found: PlanTrigger | undefined;
+  found: TaskTrigger | undefined;
   reported: ComposerTrigger | undefined;
 }
 
 /** The `@` word the caret ends in plain text, outside code; nothing while the editor has no caret or the caret ends none. */
-function triggerAt(view: EditorView): PlanTrigger | undefined {
+function triggerAt(view: EditorView): TaskTrigger | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
   const { $from } = selection;

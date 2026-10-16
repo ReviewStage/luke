@@ -15,10 +15,10 @@ import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { BANNER_LOOK, Banner } from "../banner";
-import type { PlanReader } from "../planning/edit-ref";
-import { PlanBody } from "../planning/plan-body";
-import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import type { TaskReader } from "../tasks/edit-ref";
+import { PlanBody } from "../tasks/plan-body";
+import type { PlanEditDoor } from "../tasks/use-plan-editing";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
@@ -28,7 +28,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  *
  * The template is a plan's text before it is a plan, so the page is a plan's
  * page beside Settings' page list, with no top bar: the document is the
- * plan's own (`../planning/plan-body.tsx`), at the Settings pages' width and
+ * plan's own (`../tasks/plan-body.tsx`), at the Settings pages' width and
  * in a plan's type, read as sections until a click or Return opens the same
  * editor on the same words with the same keyboard. Its title is the page's
  * name, at a page title's place and size, which is
@@ -45,7 +45,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
  * one. The document saves the words as the developer pauses and as they
- * leave the editor (`../planning/use-plan-editing.ts`), here as a write of
+ * leave the editor (`../tasks/use-plan-editing.ts`), here as a write of
  * the whole template, which is the developer's alone and so never meets
  * words of Luke's to merge. A save that failed says so under the editor
  * with a Retry, or, once the page has gone, in a toast whose Retry sends the
@@ -322,7 +322,7 @@ function TitleActions({
   onReset: () => void;
 }): React.JSX.Element {
   return (
-    <span className="plan-title-actions">
+    <span className="task-title-actions">
       <Tooltip label={HISTORY_LABEL}>
         <button
           type="button"
@@ -351,7 +351,7 @@ function TemplateDocument({
 }: {
   template: TemplateControl;
   /** The account reading it, whose every edit it is. */
-  reader: PlanReader;
+  reader: TaskReader;
   onShowHistory: () => void;
 }): React.JSX.Element {
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
@@ -359,7 +359,7 @@ function TemplateDocument({
     <>
       <div className="desktop-document template-document ph-no-capture">
         <PlanBody
-          plan={templateDocument(template.text, template.lastEdit)}
+          task={templateDocument(template.text, template.lastEdit)}
           live={false}
           reader={reader}
           onEdit={template.edit}

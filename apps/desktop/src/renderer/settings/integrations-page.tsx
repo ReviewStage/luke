@@ -41,7 +41,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
+import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
@@ -604,7 +604,7 @@ function IntegrationRow({
         </span>
         <span className="settings-copy">
           {editing && account !== undefined ? (
-            <PlanNameField
+            <TaskNameField
               name={integrationAccountLabel(account)}
               className="settings-input integration-account-input"
               label={`${name} account name`}

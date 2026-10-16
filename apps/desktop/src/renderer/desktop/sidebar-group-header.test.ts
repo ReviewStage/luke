@@ -10,9 +10,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ArchivedAgents } from "./agent-archive";
 import { DesktopSidebar } from "./desktop-sidebar";
 
@@ -52,7 +52,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function plan(id: string, name: string, repository: string | null): TaskSummary {
+function task(id: string, name: string, repository: string | null): TaskSummary {
   return { id, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt: 2, repository };
 }
 
@@ -66,8 +66,8 @@ function mount(element: ReactElement): HTMLElement {
 }
 
 /** The sidebar on the Plans tab, open, listing what `plans` lists. */
-function mountSidebar(plans: PlansControl): HTMLElement {
-  return mount(createElement(DesktopSidebar, sidebarProps(plans)));
+function mountSidebar(tasks: TasksControl): HTMLElement {
+  return mount(createElement(DesktopSidebar, sidebarProps(tasks)));
 }
 
 /** The fold whose words start with `name`. */
@@ -111,10 +111,10 @@ test("the summary's archived agents fold under a group header that counts them f
 test("a repository's header folds on its name, says its pin, counts its plans folded, keeps its + outside the fold, and opens its menu on a right-click", () => {
   const asked: string[] = [];
   const sidebar = mountSidebar(
-    plansControl({
-      plans: [plan("p-1", "Invite expiry", "acme/relay"), plan("p-2", "Retry audit", "acme/relay")],
+    tasksControl({
+      tasks: [task("p-1", "Invite expiry", "acme/relay"), task("p-2", "Retry audit", "acme/relay")],
       pinnedRepositories: ["acme/relay"],
-      onNewPlanIn: (repository) => asked.push(repository),
+      onNewTaskIn: (repository) => asked.push(repository),
     }),
   );
   const relay = () => fold(sidebar, "relay");
@@ -145,7 +145,7 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
 });
 
 test("the sidebar's tasks fade under the rule above them and over the account row below them, rather than being sliced at either", () => {
-  const page = mountSidebar(plansControl());
+  const page = mountSidebar(tasksControl());
   const sheets = layFades();
   try {
     const list = page.querySelector(".sidebar-section") ?? assert.fail("the tasks are listed");
@@ -157,14 +157,14 @@ test("the sidebar's tasks fade under the rule above them and over the account ro
 
 test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
   const page = mountSidebar(
-    plansControl({
+    tasksControl({
       inbox: [
         {
           taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
           items: [{ id: "item-1", agentId: "agent-1", title: "Retry?", postedAt: 1 }],
         },
       ],
-      inboxPlanless: [
+      inboxTaskless: [
         {
           id: "item-2",
           agentId: "agent-2",

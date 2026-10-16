@@ -40,7 +40,7 @@ import { SpinnerRing } from "../spinner";
  * owner prevented the default, so an owner can give a modified Enter a
  * meaning of its own without re-stating what plain Enter and Shift+Enter
  * do. The field is a textarea here; the agent's message box draws an editor
- * in its place (`../planning/composer-field.tsx`) in the same look
+ * in its place (`../tasks/composer-field.tsx`) in the same look
  * (`PROMPT_INPUT_FIELD_CLASS`), whose Enter submits through the same door
  * (`submitPromptInput`).
  *

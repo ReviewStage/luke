@@ -18,12 +18,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
-import { NO_LOOKS } from "../planning/use-plan-looks";
-import type { SidePanelTab } from "../planning/use-side-panel";
-import { DesktopPlans } from "./desktop-plans";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
+import type { SidePanelTab } from "../tasks/use-side-panel";
+import { NO_LOOKS } from "../tasks/use-task-looks";
+import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * origin-senders.test.ts -- in a task's column, an agent's tab opens on its
@@ -83,20 +83,20 @@ async function mount(input: {
   const chosen: MainTab[] = [];
   // Note that only the first read answers, because a read past the cursor waits on the service.
   const read = new Set<string>();
-  const control = plansControl({
+  const control = tasksControl({
     me: input.reader,
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: PLAN.id,
+    activeTaskId: PLAN.id,
     region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     mainTabs: {
-      ...plansControl().mainTabs,
+      ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }],
       tab: input.main,
       openAgents: [AGENT.id],
       onChoose: (tab) => chosen.push(tab),
     },
     sidePanel: {
-      ...plansControl().sidePanel,
+      ...tasksControl().sidePanel,
       open: input.side !== undefined,
       subagents: [{ subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } }],
       tab: input.side,
@@ -127,11 +127,11 @@ async function mount(input: {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopPlans, {
+        createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
-          plans: control,
+          tasks: control,
         }),
       ),
     ),
@@ -166,7 +166,7 @@ test("a task's agent opens on its plan sent by the task, which opens the plan, w
 
   const line = senderLine(container);
   assert.equal(words(line), "Teammate invitations · started by Charles Pan");
-  const task = line.querySelector<HTMLButtonElement>("[data-plan-ref]");
+  const task = line.querySelector<HTMLButtonElement>("[data-task-ref]");
   assert.ok(task, "the task's name is a press");
   act(() => task.click());
 

@@ -14,14 +14,14 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanCard } from "./desktop/plan-card";
-import { ChangesCard } from "./planning/agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "./planning/agent-ref";
-import { AgentTabCard, cardCorner } from "./planning/agent-tab-card";
-import { CallEnded } from "./planning/call-card";
-import { SentWords, SkillFiles } from "./planning/skill-chip";
-import type { SkillSource } from "./planning/skill-picker";
-import { TurnCard } from "./planning/turn-card";
+import { TaskCard } from "./desktop/task-card";
+import { ChangesCard } from "./tasks/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref";
+import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card";
+import { CallEnded } from "./tasks/call-card";
+import { SentWords, SkillFiles } from "./tasks/skill-chip";
+import type { SkillSource } from "./tasks/skill-picker";
+import { TurnCard } from "./tasks/turn-card";
 
 /**
  * hover-card.test.ts -- every hover card heads itself alike: a plan's, a
@@ -30,7 +30,7 @@ import { TurnCard } from "./planning/turn-card";
  * corner in the same places, and a call's card is a turn's card.
  */
 
-const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const STARTED_AT = Date.UTC(2026, 9, 14, 12, 0, 0);
 const ENDED_AT = STARTED_AT + 90_000;
@@ -92,7 +92,7 @@ function hung(view: HTMLElement, selector: string): HTMLElement {
 }
 
 const SUMMARY: TaskSummary = {
-  id: PLAN,
+  id: TASK,
   workspaceId: "workspace",
   name: "Teammate invitations",
   createdAt: STARTED_AT,
@@ -112,9 +112,9 @@ const PULL_REQUEST = {
 };
 
 test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {
-  const plan = drawn(
-    createElement(PlanCard, {
-      plan: SUMMARY,
+  const task = drawn(
+    createElement(TaskCard, {
+      task: SUMMARY,
       models: [],
       pictures: false,
       now: STARTED_AT + 3 * 3_600_000,
@@ -122,7 +122,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
       onShowAgent: ignore,
     }),
   );
-  assert.deepEqual(headOf(plan), {
+  assert.deepEqual(headOf(task), {
     glyph: false,
     name: "Teammate invitations",
     sub: undefined,
@@ -157,7 +157,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
           agents: [
             {
               id: AGENT,
-              planId: PLAN,
+              planId: TASK,
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               title: "Invite flow",
@@ -268,8 +268,8 @@ test("a plan's card says in its corner when the task last saw activity, its agen
     },
   };
   const card = drawn(
-    createElement(PlanCard, {
-      plan: worked,
+    createElement(TaskCard, {
+      task: worked,
       models: [],
       pictures: false,
       now: STARTED_AT + 3 * 3_600_000,

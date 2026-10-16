@@ -56,25 +56,25 @@ const openUser = Effect.gen(function* () {
 });
 
 /** An account with one plan started. */
-const openPlan = Effect.gen(function* () {
+const openTask = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* startTask(userId, { name: "Teammate invitations" });
-  return { userId, planId: plan.id };
+  const task = yield* startTask(userId, { name: "Teammate invitations" });
+  return { userId, taskId: task.id };
 });
 
 /** What a Start hands the agent where the test names nothing: the plan's text. */
-const PLAN_BRIEF: CodingAgentBriefText = {
+const TASK_BRIEF: CodingAgentBriefText = {
   planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
   prompt: null,
 };
 
 function start(
-  planId: string,
+  taskId: string,
   overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentPlace>> = {},
-  brief: CodingAgentBriefText = PLAN_BRIEF,
+  brief: CodingAgentBriefText = TASK_BRIEF,
 ): NewCodingAgent {
   return {
-    taskId: planId,
+    taskId: taskId,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -134,23 +134,23 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
     () =>
       Effect.gen(function* () {
-        const { userId, planId } = yield* openPlan;
-        const other = yield* openPlan;
-        const agent = started(yield* createCodingAgent(userId, start(planId)));
-        const theirs = started(yield* createCodingAgent(other.userId, start(other.planId)));
+        const { userId, taskId } = yield* openTask;
+        const other = yield* openTask;
+        const agent = started(yield* createCodingAgent(userId, start(taskId)));
+        const theirs = started(yield* createCodingAgent(other.userId, start(other.taskId)));
 
         yield* recordCodingAgentPublished(userId, agent.id, PULL_REQUEST);
         // Another account's write names no agent of theirs, and another account's read names none of this one's.
         yield* recordCodingAgentPublished(userId, theirs.id, PULL_REQUEST);
-        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId, other.planId]), [
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId, other.taskId]), [
           { agent, published: PULL_REQUEST },
         ]);
-        assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.planId]), [
+        assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.taskId]), [
           { agent: theirs, published: null },
         ]);
 
         yield* recordCodingAgentPublished(userId, agent.id, null);
-        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), [
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), [
           { agent, published: null },
         ]);
       }),
@@ -158,7 +158,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
   it.effect("an archived agent is left out of its plan's agents unless asked for", () =>
     Effect.gen(function* () {
-      const { userId, planId } = yield* openPlan;
+      const { userId, taskId: planId } = yield* openTask;
       const agent = started(yield* createCodingAgent(userId, start(planId)));
       const archived = Option.getOrElse(yield* archiveCodingAgent(userId, agent.id, true), () =>
         assert.fail("the agent is archived"),
@@ -176,7 +176,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     "a plan whose agent was archived still reads that agent's activity, naming the agent no more",
     () =>
       Effect.gen(function* () {
-        const { userId, planId } = yield* openPlan;
+        const { userId, taskId: planId } = yield* openTask;
         yield* TestClock.adjust("1 hour");
         const agent = started(yield* createCodingAgent(userId, start(planId)));
         yield* archiveCodingAgent(userId, agent.id, true);
@@ -197,12 +197,12 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     "the servers a send eve took mentioned are taken once, each once, by the next turn, the task's among them, while a refused send's are put back as they stood, and another account adds or takes none",
     () =>
       Effect.gen(function* () {
-        const { userId, planId } = yield* openPlan;
-        const other = yield* openPlan;
+        const { userId, taskId } = yield* openTask;
+        const other = yield* openTask;
         const agent = started(
           yield* createCodingAgent(
             userId,
-            start(planId, { mentionedServers: [INTEGRATION_PROVIDER.SENTRY] }),
+            start(taskId, { mentionedServers: [INTEGRATION_PROVIDER.SENTRY] }),
           ),
         );
         const taken = Effect.succeed(true);
@@ -241,12 +241,12 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
   it.effect("a Start is one agent on a conversation of its own, holding what it was handed", () =>
     Effect.gen(function* () {
-      const { userId, planId } = yield* openPlan;
-      const asked = start(planId, { model: "openai/gpt-6.1-sol", effort: "xhigh" });
+      const { userId, taskId } = yield* openTask;
+      const asked = start(taskId, { model: "openai/gpt-6.1-sol", effort: "xhigh" });
 
       const agent = started(yield* createCodingAgent(userId, asked));
 
-      assert.equal(agent.taskId, planId);
+      assert.equal(agent.taskId, taskId);
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
       assert.equal(agent.planSnapshot, asked.planSnapshot);
@@ -262,13 +262,13 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
   it.effect("a plan another account owns starts nothing and reads as no agents", () =>
     Effect.gen(function* () {
-      const { userId, planId } = yield* openPlan;
+      const { userId, taskId } = yield* openTask;
       const other = yield* openUser;
-      const agent = started(yield* createCodingAgent(userId, start(planId)));
+      const agent = started(yield* createCodingAgent(userId, start(taskId)));
 
-      assert.deepEqual(yield* createCodingAgent(other, start(planId)), Option.none());
+      assert.deepEqual(yield* createCodingAgent(other, start(taskId)), Option.none());
       assert.equal(yield* agentRows(other), 0);
-      assert.deepEqual(yield* listCodingAgents(other, planId), []);
+      assert.deepEqual(yield* listCodingAgents(other, taskId), []);
       assert.deepEqual(yield* readCodingAgent(other, agent.id), Option.none());
     }),
   );
@@ -280,14 +280,14 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const starter = yield* openUser;
         const teammate = yield* openUser;
         const stranger = yield* openUser;
-        const plan = yield* startTask(starter, { name: "Teammate invitations" });
-        yield* joinWorkspace(plan.workspaceId, teammate);
-        const asked = start(plan.id);
+        const task = yield* startTask(starter, { name: "Teammate invitations" });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const asked = start(task.id);
         const agent = started(yield* createCodingAgent(starter, asked));
         assert.equal(agent.userId, starter);
 
-        assert.deepEqual(yield* listCodingAgents(teammate, plan.id), [agent]);
-        assert.deepEqual(yield* listPublishedCodingAgents(teammate, [plan.id]), [
+        assert.deepEqual(yield* listCodingAgents(teammate, task.id), [agent]);
+        assert.deepEqual(yield* listPublishedCodingAgents(teammate, [task.id]), [
           { agent, published: null },
         ]);
         assert.deepEqual(yield* readCodingAgent(teammate, agent.id), Option.some(agent));
@@ -311,15 +311,15 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const theirs = started(
           yield* createCodingAgent(
             teammate,
-            start(plan.id, { idempotencyKey: asked.idempotencyKey }),
+            start(task.id, { idempotencyKey: asked.idempotencyKey }),
           ),
         );
         assert.notEqual(theirs.id, agent.id);
         assert.equal(theirs.userId, teammate);
         assert.equal(found(yield* createCodingAgent(starter, asked)).id, agent.id);
 
-        assert.deepEqual(yield* listCodingAgents(stranger, plan.id), []);
-        assert.deepEqual(yield* listPublishedCodingAgents(stranger, [plan.id]), []);
+        assert.deepEqual(yield* listCodingAgents(stranger, task.id), []);
+        assert.deepEqual(yield* listPublishedCodingAgents(stranger, [task.id]), []);
         assert.deepEqual(yield* readCodingAgent(stranger, agent.id), Option.none());
         assert.deepEqual(
           yield* readCodingAgentOfConversation(stranger, agent.conversationId),
@@ -330,7 +330,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
           yield* updateCodingAgentChoice(stranger, agent.id, { model: "x/y", effort: "low" }),
           Option.none(),
         );
-        assert.deepEqual(yield* createCodingAgent(stranger, start(plan.id)), Option.none());
+        assert.deepEqual(yield* createCodingAgent(stranger, start(task.id)), Option.none());
       }),
   );
 });

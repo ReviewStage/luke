@@ -26,8 +26,8 @@ import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import type { HistorySpot } from "./planning/use-plan-history";
-import type { LeaveGuard, PlansControl } from "./planning/use-plans-tab";
+import type { HistorySpot } from "./tasks/use-plan-history";
+import type { LeaveGuard, TasksControl } from "./tasks/use-tasks-tab";
 import { useExperiment } from "./use-app-state";
 
 /** The most places the history holds; the oldest go first. */
@@ -41,7 +41,7 @@ export const MOUSE_BUTTON = {
 
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
-  PLAN: "plan",
+  TASK: "plan",
   VERSION_HISTORY: "version-history",
   HOME: "home",
   INBOX: "inbox",
@@ -54,10 +54,10 @@ const PLACE_KIND = {
 
 /** A place the window can stand on: a plan, or its version history where it stands, by its id, so a rename leaves it the same place. */
 type Place =
-  | { readonly kind: typeof PLACE_KIND.PLAN; readonly planId: string }
+  | { readonly kind: typeof PLACE_KIND.TASK; readonly taskId: string }
   | {
       readonly kind: typeof PLACE_KIND.VERSION_HISTORY;
-      readonly planId: string;
+      readonly taskId: string;
       readonly spot: HistorySpot | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
@@ -85,7 +85,7 @@ const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 /** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the Automations page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
-  if ("planId" in one && "planId" in other) return one.planId === other.planId;
+  if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   if ("userId" in one && "userId" in other) {
     return one.userId === other.userId && one.workspaceId === other.workspaceId;
@@ -251,14 +251,14 @@ export function useWindowHistory(input: {
   onTabChange: (tab: PanelTab) => void;
   settingsView: SettingsView;
   onSettingsViewChange: (view: SettingsView) => void;
-  plans: Pick<
-    PlansControl,
+  tasks: Pick<
+    TasksControl,
     | "boundFor"
-    | "plans"
+    | "tasks"
     | "archived"
     | "listFailed"
     | "onSelect"
-    | "onLeavePlan"
+    | "onLeaveTask"
     | "history"
     | "inboxView"
     | "agentView"
@@ -270,7 +270,7 @@ export function useWindowHistory(input: {
     | "leaveGuard"
   >;
 }): WindowHistory {
-  const { tab, settingsView, plans } = input;
+  const { tab, settingsView, tasks: plans } = input;
   const { boundFor } = plans;
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
@@ -288,7 +288,7 @@ export function useWindowHistory(input: {
   const known = input.known && !plans.restoring;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
-  for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
+  for (const task of [...plans.tasks, ...plans.archived]) everListed.add(task.id);
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
@@ -306,8 +306,8 @@ export function useWindowHistory(input: {
     if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
-      ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
-      : { kind: PLACE_KIND.PLAN, planId: boundFor };
+      ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
+      : { kind: PLACE_KIND.TASK, taskId: boundFor };
   }, [
     known,
     tab,
@@ -329,12 +329,12 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.AUTOMATIONS) return automationsOn;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
-    if (!("planId" in to) || to.planId === boundFor) return true;
-    if (plans.archived.some((plan) => plan.id === to.planId)) return false;
+    if (!("taskId" in to) || to.taskId === boundFor) return true;
+    if (plans.archived.some((plan) => plan.id === to.taskId)) return false;
     return (
       plans.listFailed ||
-      !everListed.has(to.planId) ||
-      plans.plans.some((plan) => plan.id === to.planId)
+      !everListed.has(to.taskId) ||
+      plans.tasks.some((task) => task.id === to.taskId)
     );
   };
   const go = (to: Place) => {
@@ -374,12 +374,12 @@ export function useWindowHistory(input: {
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.
     if (to.kind === PLACE_KIND.VERSION_HISTORY) {
-      plans.history.onReturn(to.planId, to.spot);
+      plans.history.onReturn(to.taskId, to.spot);
       return;
     }
     if (historyOpen) plans.history.onClose();
-    if (to.kind === PLACE_KIND.PLAN && boundFor !== to.planId) plans.onSelect(to.planId);
-    if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) plans.onLeavePlan();
+    if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) plans.onSelect(to.taskId);
+    if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) plans.onLeaveTask();
   };
   const { backTo, ...history } = useHistory({
     place,
@@ -390,7 +390,7 @@ export function useWindowHistory(input: {
   return {
     ...history,
     onLeaveVersionHistory: () => {
-      if (boundFor !== undefined && backTo({ kind: PLACE_KIND.PLAN, planId: boundFor })) return;
+      if (boundFor !== undefined && backTo({ kind: PLACE_KIND.TASK, taskId: boundFor })) return;
       plans.history.onClose();
     },
   };

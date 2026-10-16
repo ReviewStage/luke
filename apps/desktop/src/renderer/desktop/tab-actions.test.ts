@@ -10,12 +10,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
-import { NO_LOOKS } from "../planning/use-plan-looks";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "../planning/use-side-panel";
-import { DesktopPlans } from "./desktop-plans";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel";
+import { NO_LOOKS } from "../tasks/use-task-looks";
+import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
@@ -26,7 +26,7 @@ import { DesktopPlans } from "./desktop-plans";
  * tab wears one of its own.
  */
 
-const PLAN: Task = {
+const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -38,7 +38,7 @@ const PLAN: Task = {
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: PLAN.id,
+  planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
@@ -72,21 +72,21 @@ const TAB_KEEPING = new Set(["Close", "Close others", "Pin tab", "Unpin tab"]);
  * delegated worker's, a file's, the agent's Changes and Terminal, and a page's.
  */
 function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLElement {
-  const control = plansControl({
+  const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
+    activeTaskId: TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
-      ...plansControl().mainTabs,
+      ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }, { draft: "draft-1" }, MAIN_TAB.INBOX],
       tab: chosen.main,
       openAgents: [AGENT.id],
     },
     sidePanel: {
-      ...plansControl().sidePanel,
+      ...tasksControl().sidePanel,
       open: true,
       subagents: [SUBAGENT],
-      files: [{ path: "src/invite.ts", range: undefined, opened: 1, browsedOn: PLAN.id }],
+      files: [{ path: "src/invite.ts", range: undefined, opened: 1, browsedOn: TASK.id }],
       changes: [{ changes: AGENT.id }],
       terminals: [{ terminal: AGENT.id }],
       pages: [{ page: PAGE_ID }],
@@ -112,11 +112,11 @@ function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLEleme
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopPlans, {
+        createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
-          plans: control,
+          tasks: control,
         }),
       ),
     ),
@@ -135,7 +135,7 @@ function readAndClose(): string[] {
   assert.ok(menu, "a menu stands open");
   const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
     (item) =>
-      `${item.querySelector(".plan-menu-label")?.textContent}${item.disabled ? " (off)" : ""}`,
+      `${item.querySelector(".task-menu-label")?.textContent}${item.disabled ? " (off)" : ""}`,
   );
   act(() => {
     menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -164,7 +164,7 @@ interface Bars {
 
 /** The two columns' bars, as the plan's page draws them. */
 function bars(container: HTMLElement): Bars {
-  const main = container.querySelector<HTMLElement>(".desktop-plan-main .desktop-toolbar");
+  const main = container.querySelector<HTMLElement>(".desktop-task-main .desktop-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(main && side, "both columns draw their bars");
   return { main, side };
@@ -265,7 +265,7 @@ function installClipboard(): string[] {
 
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the task's, the agent's, its worker's, its Changes', a page's, or the Call tab's link", async () => {
   const copied = installClipboard();
-  const task = `https://tryluke.dev/workspace-personal/plan/${PLAN.id}`;
+  const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
     [{ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD }, "main", task],
     [

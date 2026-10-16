@@ -29,7 +29,7 @@ import { Tooltip } from "./tooltip";
  * find-in-tab.tsx -- ⌘F inside the tab that holds the window's focus: a find bar at the tab's top right, its matches tinted in the tab's own text and stepped through one at a time.
  *
  * Each column of the plan's page wraps the tab it shows in a scope, which
- * offers Find while the column holds the window's keys (`desktop-plans.tsx`),
+ * offers Find while the column holds the window's keys (`desktop-tasks.tsx`),
  * so ⌘F finds in the plan's document, an agent's transcript, or whatever
  * the side panel shows, and never in both columns at once, which is why
  * Electron's `findInPage`, a find over the whole window, is not used. The
@@ -89,7 +89,7 @@ type FindPage = (typeof FIND_PAGE)[keyof typeof FIND_PAGE];
  * holds several, as the Automations page holds its list and each editor.
  */
 export type FindSubject =
-  | { readonly plan: string; readonly tab: StripTab }
+  | { readonly task: string; readonly tab: StripTab }
   | { readonly agent: string }
   | { readonly page: FindPage; readonly at?: string | undefined };
 
@@ -130,7 +130,7 @@ const NO_TALLY: FindTally = { count: 0, at: -1 };
 
 /** Whether two subjects name the same tab of the same plan, the same agent's page, or the same place on the same page. */
 function sameSubject(a: FindSubject, b: FindSubject): boolean {
-  if ("plan" in a) return "plan" in b && a.plan === b.plan && sameTab(a.tab, b.tab);
+  if ("task" in a) return "task" in b && a.task === b.task && sameTab(a.tab, b.tab);
   if ("agent" in a) return "agent" in b && a.agent === b.agent;
   return "page" in b && a.page === b.page && a.at === b.at;
 }

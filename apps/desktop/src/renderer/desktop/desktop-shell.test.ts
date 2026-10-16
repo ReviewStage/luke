@@ -21,16 +21,16 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
-import { plansControl } from "#testing/plans-control";
+import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
+import { tasksControl } from "#testing/tasks-control";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { MAIN_TAB } from "../planning/use-main-tabs";
-import { HISTORY_READ } from "../planning/use-plan-history";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
+import { MAIN_TAB } from "../tasks/use-main-tabs";
+import { HISTORY_READ } from "../tasks/use-plan-history";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 
@@ -115,7 +115,7 @@ afterEach(() => {
 
 /** The shell's props over `plans`, every other door ignored, the sidebar folded unless patched. */
 function shellProps(
-  plans: PlansControl,
+  tasks: TasksControl,
   tab: PanelTab,
   onTabChange: (tab: PanelTab) => void,
   sidebarPatch: Partial<SidebarCollapse>,
@@ -128,7 +128,7 @@ function shellProps(
     },
     tab,
     onTabChange,
-    plans,
+    tasks: tasks,
     history: {
       canGoBack: false,
       canGoForward: false,
@@ -164,7 +164,7 @@ function shellProps(
 function mount(
   inboxOpen: boolean,
   restoring = false,
-  overrides: Partial<PlansControl> = {},
+  overrides: Partial<TasksControl> = {},
   tab: PanelTab = PANEL_TAB.TASKS,
   onTabChange: (tab: PanelTab) => void = ignore,
   sidebarPatch: Partial<SidebarCollapse> = {},
@@ -173,10 +173,10 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const control = plansControl();
+  const control = tasksControl();
   function Shell() {
     const [asked, setAsked] = useState(false);
-    const plans = plansControl({
+    const plans = tasksControl({
       page: TASKS_PAGE.HOME,
       restoring,
       inboxView: {
@@ -186,8 +186,8 @@ function mount(
         onClose: ignore,
         onChoose: ignore,
       },
-      onNewPlan: () => setAsked(true),
-      newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
+      onNewTask: () => setAsked(true),
+      newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
       ...overrides,
     });
     return createElement(DesktopShell, shellProps(plans, tab, onTabChange, sidebarPatch));
@@ -227,11 +227,11 @@ test("the home page welcomes an account with no plan, and its New plan raises th
   const page = mount(false);
   const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
-  const newPlan = [...home.querySelectorAll("button")].find((button) =>
+  const newTask = [...home.querySelectorAll("button")].find((button) =>
     button.textContent?.startsWith("New task"),
   );
-  assert.ok(newPlan, "the home page offers New plan");
-  act(() => newPlan.click());
+  assert.ok(newTask, "the home page offers New plan");
+  act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
   assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
   const cancel = [...(dialog?.querySelectorAll("button") ?? [])].find(
@@ -269,13 +269,13 @@ test("Home, pressed or by its chord from Settings, brings the Plans tab forward 
   assert.deepEqual([home, tabs], [1, [PANEL_TAB.TASKS]]);
   act(() => root?.unmount());
 
-  const plans = mount(false, false, { onGoHome: () => (home += 1) });
-  act(() => homeRow(plans).click());
+  const tasks = mount(false, false, { onGoHome: () => (home += 1) });
+  act(() => homeRow(tasks).click());
   assert.equal(home, 2);
 });
 
 const ACME: Workspace = {
-  id: DOCUMENT_PLAN.workspaceId,
+  id: DOCUMENT_TASK.workspaceId,
   name: "Acme",
   slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
@@ -291,7 +291,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
         signedIn,
         workspaces,
         workspace: ACME,
-        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
       },
       tab,
     );
@@ -315,25 +315,25 @@ test("the window is called by what stands in it: the plan on screen in its own w
     workspaces: [ACME],
     workspace: ACME,
     factoryView: { open: true, onOpen: ignore, onClose: ignore },
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   });
   assert.equal(document.title, "Factory — Acme");
 });
 
 test("a plan opened on its Inbox tab rather than its own is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
   const unreadOnOpen = (inboxOpen: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_PLAN.id]: 1 }));
+    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
     window.localStorage.setItem("luke.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
       false,
       {
         page: TASKS_PAGE.DOCUMENT,
-        plans: [DOCUMENT_PLAN],
-        activePlanId: DOCUMENT_PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+        tasks: [DOCUMENT_TASK],
+        activeTaskId: DOCUMENT_TASK.id,
+        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
         mainTabs: {
-          ...plansControl().mainTabs,
+          ...tasksControl().mainTabs,
           tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
           tab: MAIN_TAB.INBOX,
         },
@@ -342,7 +342,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
       ignore,
       { collapsed: false },
     );
-    const row = page.querySelector(".sidebar-plan");
+    const row = page.querySelector(".sidebar-task");
     assert.ok(row, "the plan's row stands in the sidebar");
     const unread = row.getAttribute("data-unread");
     act(() => root?.unmount());
@@ -356,7 +356,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
 const NOTES_PLAN: Task = {
-  ...DOCUMENT_PLAN,
+  ...DOCUMENT_TASK,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Release notes",
   createdAt: 4,
@@ -372,17 +372,17 @@ function mountListing(
   listed: readonly Task[],
   looks: Readonly<Record<string, number>>,
 ): (open: Task | undefined) => void {
-  window.localStorage.setItem("luke.planLooks", JSON.stringify(looks));
-  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  window.localStorage.setItem("luke.taskLooks", JSON.stringify(looks));
+  window.localStorage.setItem("luke.taskLooksSeeded", "1");
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   const registry = AtomRegistry.make();
   return (open) => {
-    const plans = plansControl({
+    const plans = tasksControl({
       page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
-      plans: listed.map((plan) => (plan.id === open?.id ? open : plan)),
-      activePlanId: open?.id,
+      tasks: listed.map((plan) => (plan.id === open?.id ? open : plan)),
+      activeTaskId: open?.id,
       region:
         open === undefined
           ? { kind: DOCUMENT_REGION.NONE }
@@ -395,8 +395,8 @@ function mountListing(
 
 /** The sidebar's row for the plan of this name. */
 function sidebarRow(name: string): HTMLButtonElement {
-  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
-    (each) => each.querySelector(".sidebar-plan-name")?.textContent === name,
+  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-task")].find(
+    (each) => each.querySelector(".sidebar-task-name")?.textContent === name,
   );
   assert.ok(row, `the sidebar lists ${name}`);
   return row;
@@ -426,28 +426,28 @@ function rowReadMark(name: string, choose = false): string | undefined {
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
-    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
     [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
   });
-  draw(DOCUMENT_PLAN);
+  draw(DOCUMENT_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
   assert.equal(rowReadMark(DOCUMENT_NAME, true), "Mark as unread");
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw({ ...DOCUMENT_PLAN, updatedAt: DOCUMENT_PLAN.updatedAt + 1 });
+  draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
   draw(NOTES_PLAN);
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw(DOCUMENT_PLAN);
+  draw(DOCUMENT_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
 });
 
 test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
-    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
     [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
   });
   draw(undefined);
@@ -571,7 +571,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
     workspaces: [ACME],
     workspace: ACME,
     automationsView,
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   };
 
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
@@ -591,12 +591,12 @@ test("the Automations page stands in the plan's place, titled for the listed wor
 });
 
 /** The plan the call in progress is about, which none of the places below shows with its call bar. */
-const CALL_PLAN_NAME = "Checkout redesign";
+const CALL_TASK_NAME = "Checkout redesign";
 
 /** Every place in the window the developer can stand while a call goes on about another plan, as the shell is handed it. */
 const PLACE = {
   HOME: "home",
-  OTHER_PLAN: "another plan",
+  OTHER_TASK: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
   PERSON_PAGE: "a person's page",
@@ -612,7 +612,7 @@ type Place = (typeof PLACE)[keyof typeof PLACE];
 /** The column at the window's left in each place: the plans' sidebar, which folds, or a column of the place's own, which does not. */
 const LEFT_COLUMN = {
   [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.OTHER_PLAN]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.OTHER_TASK]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.PERSON_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
@@ -625,36 +625,36 @@ const LEFT_COLUMN = {
 
 /** The tab and the plans' state that stand the window in a place. */
 function placed(place: Place) {
-  const control = plansControl();
-  const onPlan = {
+  const control = tasksControl();
+  const onTask = {
     page: TASKS_PAGE.DOCUMENT,
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   } as const;
-  const plans = {
+  const tasks = {
     [PLACE.HOME]: { page: TASKS_PAGE.HOME },
-    [PLACE.OTHER_PLAN]: onPlan,
+    [PLACE.OTHER_TASK]: onTask,
     [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
     [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
     [PLACE.FACTORY]: { factoryView: { ...control.factoryView, open: true } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
-      ...onPlan,
+      ...onTask,
       sidePanel: { ...control.sidePanel, open: true, fullScreen: true },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },
-    [PLACE.VERSION_HISTORY]: { ...onPlan, history: { ...control.history, open: true } },
-  } satisfies Record<Place, Partial<PlansControl>>;
+    [PLACE.VERSION_HISTORY]: { ...onTask, history: { ...control.history, open: true } },
+  } satisfies Record<Place, Partial<TasksControl>>;
   return {
     tab: place === PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS,
-    plans: plans[place],
+    tasks: tasks[place],
   };
 }
 
 /** The shell standing in a place with a call in progress about another plan, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
-  const { tab, plans } = placed(place);
+  const { tab, tasks } = placed(place);
   return createElement(DesktopShell, {
     gates: {
       accountRequired: false,
@@ -663,7 +663,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
     },
     tab,
     onTabChange: ignore,
-    plans: plansControl(plans),
+    tasks: tasksControl(tasks),
     history: {
       canGoBack: false,
       canGoForward: false,
@@ -682,7 +682,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       staged: false,
     },
     call: {
-      card: { taskName: CALL_PLAN_NAME, status: undefined, microphoneMuted: false },
+      card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
       speakerMuted: false,
       controls: callControls(tell, false),
     },
@@ -735,7 +735,7 @@ function cardStanding(page: HTMLElement, place: Place) {
 /** Presses the card's way back to the call's plan. */
 function pressReturn(page: HTMLElement): void {
   const button = page.querySelector<HTMLButtonElement>(
-    `section.call-card button[aria-label="Open ${CALL_PLAN_NAME}"]`,
+    `section.call-card button[aria-label="Open ${CALL_TASK_NAME}"]`,
   );
   assert.ok(button, "the card offers the way back to the call's plan");
   act(() => button.click());
@@ -759,7 +759,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   }
   assert.deepEqual(toggled, {
     [PLACE.HOME]: false,
-    [PLACE.OTHER_PLAN]: true,
+    [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: false,
     [PLACE.AGENT_PAGE]: true,
     [PLACE.PERSON_PAGE]: false,
@@ -793,7 +793,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   }
   assert.deepEqual(found, {
     [PLACE.HOME]: true,
-    [PLACE.OTHER_PLAN]: true,
+    [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: true,
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
     [PLACE.AGENT_PAGE]: false,
@@ -926,10 +926,10 @@ test("a chip of another task's agent in a plan's version history names who start
     },
   });
   const body = `## Rollout\n\nAsk [@Prorate](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId}).\n`;
-  const control = plansControl();
+  const control = tasksControl();
   const page = mount(false, false, {
     page: TASKS_PAGE.DOCUMENT,
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     me: "user-dean",
     history: {
       ...control.history,

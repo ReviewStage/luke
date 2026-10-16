@@ -8,7 +8,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { dayAndTimeText } from "../planning/plan-time";
+import { dayAndTimeText } from "../tasks/task-time";
 
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;

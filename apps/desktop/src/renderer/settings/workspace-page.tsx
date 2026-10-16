@@ -35,13 +35,13 @@ import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, useActionMenu } from "../desktop/action-menu";
-import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
+import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { dayAndTimeText } from "../planning/plan-time";
 import { SpinnerRegion } from "../spinner";
+import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
@@ -1387,7 +1387,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
         <span className="settings-copy">
           {editing ? (
-            <PlanNameField
+            <TaskNameField
               name={workspace.name}
               className="settings-input workspace-name-input"
               label="Workspace name"

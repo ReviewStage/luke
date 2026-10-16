@@ -14,7 +14,7 @@ import type {
 } from "@luke/features/task-wire";
 import type { AppInboxTask } from "@luke/host/app-state";
 import { test } from "vitest";
-import { INBOX_HOLDER, planHolder } from "../planning/inbox-model";
+import { INBOX_HOLDER, taskHolder } from "../tasks/inbox-model";
 import {
   FACTORY_BLOCK,
   FACTORY_STOP,
@@ -33,7 +33,7 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 
 /** A plan saved `ago` before now, with the agents its row carries where it has any. */
-function plan(n: number, name: string, ago: number, agents?: TaskAgentsSummary): TaskSummary {
+function task(n: number, name: string, ago: number, agents?: TaskAgentsSummary): TaskSummary {
   const summary: TaskSummary = {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -118,8 +118,8 @@ const stops = (rows: readonly FactoryStop[]) =>
 test("a task's agents at work stand in Build each on a row of their own, the latest moved first; a draft, an archived task, or a finished one stands nowhere", () => {
   const drawn = board({
     plans: [
-      plan(1, "Usage alerts", 2 * HOUR),
-      plan(
+      task(1, "Usage alerts", 2 * HOUR),
+      task(
         2,
         "Search across plans",
         5 * HOUR,
@@ -129,8 +129,8 @@ test("a task's agents at work stand in Build each on a row of their own, the lat
           agent(3, CODING_AGENT_STATUS.STARTING, NOW - MINUTE),
         ]),
       ),
-      { ...plan(4, "Shelved", MINUTE), archivedAt: NOW - MINUTE },
-      plan(5, "Finished research", HOUR, agents([agent(4, CODING_AGENT_STATUS.COMPLETED)])),
+      { ...task(4, "Shelved", MINUTE), archivedAt: NOW - MINUTE },
+      task(5, "Finished research", HOUR, agents([agent(4, CODING_AGENT_STATUS.COMPLETED)])),
     ],
   });
   assert.deepEqual(drawn.talking, []);
@@ -145,34 +145,34 @@ test("a task's agents at work stand in Build each on a row of their own, the lat
 });
 
 test("the task on this Mac's call stands in Talk however long ago it was saved, even while its agents build it", () => {
-  const call = plan(
+  const call = task(
     1,
     "Factory tab",
     3 * LOOKBACK_MS,
     agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
-  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
+  const drawn = board({ plans: [task(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
   assert.deepEqual(names(drawn.talking.map((each) => ({ plan: each }))), ["Factory tab"]);
   assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });
 
 test("what stops an agent leads Build: each open Inbox item with its plan, the latest first, then each agent whose turn failed in the last day, the latest first", () => {
   const stalled = agent(1, CODING_AGENT_STATUS.COMPLETED);
-  const billing = plan(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
-  const invites = plan(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
-  const pooling = plan(
+  const billing = task(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
+  const invites = task(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
+  const pooling = task(
     3,
     "Connection pooling",
     HOUR,
     agents([agent(5, CODING_AGENT_STATUS.FAILED, NOW - HOUR)]),
   );
-  const push = plan(
+  const push = task(
     4,
     "Mobile push",
     3 * HOUR,
     agents([agent(6, CODING_AGENT_STATUS.FAILED, NOW - 3 * HOUR)]),
   );
-  const stale = plan(
+  const stale = task(
     5,
     "Old retry",
     2 * LOOKBACK_MS,
@@ -221,7 +221,7 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
 
 test("what stops a merge leads Ship: failing checks, then pull requests ready to merge (passing, or no checks to run); one in checks or a draft is still built, and a closed one stands nowhere", () => {
   const withPullRequest = (n: number, name: string, line: TaskPullRequestLine) =>
-    plan(
+    task(
       n,
       name,
       HOUR,
@@ -270,7 +270,7 @@ test("what stops a merge leads Ship: failing checks, then pull requests ready to
 
 test("a pull request merged in the last day stands in Ship at its task's last activity, the latest first; one merged longer ago stands nowhere", () => {
   const merged = (n: number, name: string, ago: number) =>
-    plan(
+    task(
       n,
       name,
       ago,
@@ -287,7 +287,7 @@ test("a pull request merged in the last day stands in Ship at its task's last ac
     ],
   });
   assert.deepEqual(
-    drawn.shipped.map((row) => [row.pullRequest.number, row.plan.name, row.at]),
+    drawn.shipped.map((row) => [row.pullRequest.number, row.task.name, row.at]),
     [
       [2502, "Tax IDs", NOW - 40 * MINUTE],
       [2501, "CSV export", NOW - 5 * HOUR],
@@ -297,7 +297,7 @@ test("a pull request merged in the last day stands in Ship at its task's last ac
 });
 
 test("with nothing standing anywhere, the board is empty", () => {
-  const drawn = board({ plans: [plan(1, "Old dashboard", 10 * LOOKBACK_MS)] });
+  const drawn = board({ plans: [task(1, "Old dashboard", 10 * LOOKBACK_MS)] });
   assert.deepEqual(drawn, {
     talking: [],
     stopped: [],
@@ -316,8 +316,8 @@ test("an agent that failed before its first turn waits in Build as recent as its
     effort: "high",
     status: CODING_AGENT_STATUS.FAILED,
   };
-  const old = plan(1, "Old billing", 3 * LOOKBACK_MS, agents([turnless]));
-  const started = plan(1, "Old billing", 3 * LOOKBACK_MS, {
+  const old = task(1, "Old billing", 3 * LOOKBACK_MS, agents([turnless]));
+  const started = task(1, "Old billing", 3 * LOOKBACK_MS, {
     ...agents([turnless]),
     activityAt: NOW - 5 * MINUTE,
   });
@@ -328,7 +328,7 @@ test("an agent that failed before its first turn waits in Build as recent as its
 
 test("a draft's failing checks are its own work still, standing in Build; only an open pull request's wait in Ship", () => {
   const withPullRequest = (n: number, name: string, line: TaskPullRequestLine) =>
-    plan(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
+    task(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
   const drawn = board({
     plans: [
       withPullRequest(1, "Draft", pullRequest(42, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.FAILING)),
@@ -343,8 +343,8 @@ test("a draft's failing checks are its own work still, standing in Build; only a
 });
 
 test("what waits is every open item the Inbox read of the listed plans and main's own besides, an item both name standing once, and an agent's with no plan left to its own place", () => {
-  const billing = plan(1, "Mercury payouts", HOUR);
-  const invites = plan(2, "Invitations", HOUR);
+  const billing = task(1, "Mercury payouts", HOUR);
+  const invites = task(2, "Invitations", HOUR);
   const item = (id: string, title: string) => ({
     id,
     agentId: "a1",
@@ -361,8 +361,8 @@ test("what waits is every open item the Inbox read of the listed plans and main'
   });
   const waiting = factoryWaiting(
     [
-      { holder: planHolder(billing), item: item("i1", "Which account pays out?") },
-      { holder: planHolder(invites), item: item("i2", "Expire after a week?") },
+      { holder: taskHolder(billing), item: item("i1", "Which account pays out?") },
+      { holder: taskHolder(invites), item: item("i2", "Expire after a week?") },
       {
         holder: {
           kind: INBOX_HOLDER.AUTOMATION,
@@ -426,7 +426,7 @@ test("an agent with no task stands in Build beside the tasks' agents: at work am
   const stale = oneOff(3, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE, "Old run");
   const asking = oneOff(4, CODING_AGENT_STATUS.COMPLETED, NOW - 10 * MINUTE);
   const drawn = board({
-    plans: [plan(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
+    plans: [task(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
     oneOff: [working, failed, stale, asking],
     oneOffWaiting: [
       {
@@ -463,7 +463,7 @@ test("the open items an agent with no task posted are read off the Inbox by thei
   });
   const read = factoryOneOffWaiting(
     [
-      { holder: planHolder(plan(1, "Search", HOUR)), item: item("t1", "a1") },
+      { holder: taskHolder(task(1, "Search", HOUR)), item: item("t1", "a1") },
       {
         holder: {
           kind: INBOX_HOLDER.AUTOMATION,

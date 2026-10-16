@@ -7,8 +7,8 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { TranscriptWords } from "./planning/transcript-blocks";
 import { rendererRegistry } from "./renderer-runtime";
+import { TranscriptWords } from "./tasks/transcript-blocks";
 
 /**
  * markdown-html-parser.test.ts -- a reply drawn before the HTML parser has

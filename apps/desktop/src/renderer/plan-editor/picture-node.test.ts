@@ -13,10 +13,10 @@ import { mountPlanEditor } from "./plan-editor";
  * again on this one. Synthetic plan and pictures.
  */
 
-const PLAN_ID = "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13";
-const OTHER_PLAN_ID = "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
-const KEPT = `https://tryluke.dev/acme/plan/${PLAN_ID}/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01`;
-const OTHERS = `https://tryluke.dev/acme/plan/${OTHER_PLAN_ID}/files/3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02`;
+const TASK_ID = "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13";
+const OTHER_TASK_ID = "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
+const KEPT = `https://tryluke.dev/acme/plan/${TASK_ID}/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01`;
+const OTHERS = `https://tryluke.dev/acme/plan/${OTHER_TASK_ID}/files/3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02`;
 
 const TEXT = "## Approach\n\nThe invite email follows the mock.\n\n## Decisions\n\nSingle use.\n";
 
@@ -33,7 +33,7 @@ function opened(markdown = TEXT) {
   const pictures: PlanEditorPictures = {
     draw: () => ({ redraw: () => undefined, undraw: () => undefined }),
     take: (each) => taken.push(...each),
-    copies: (src) => src.includes(OTHER_PLAN_ID),
+    copies: (src) => src.includes(OTHER_TASK_ID),
   };
   const host = document.body.appendChild(document.createElement("div"));
   const handle = mountPlanEditor(host, {
@@ -116,7 +116,7 @@ test("a picture of another plan pasted in is kept again on this one, and one of 
     [OTHERS],
   );
   assert.ok(handle.markdown().includes(`![The mock](${KEPT})`));
-  assert.equal(handle.markdown().includes(OTHER_PLAN_ID), false);
+  assert.equal(handle.markdown().includes(OTHER_TASK_ID), false);
 });
 
 test("a picture laid in after the text's last block stands apart from it by a blank line", () => {

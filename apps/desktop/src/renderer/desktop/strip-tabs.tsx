@@ -13,14 +13,14 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useCopyToast } from "../copy-feedback";
-import type { HeldTranscript } from "../planning/agent-tab-card";
+import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import type { HeldTranscript } from "../tasks/agent-tab-card";
 import {
   type CopiedTranscript,
   TRANSCRIPT_COPY,
   type TranscriptCopy,
   transcriptMarkdown,
-} from "../planning/transcript-copy";
-import { type MenuRow, SearchableMenu } from "../searchable-menu";
+} from "../tasks/transcript-copy";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";

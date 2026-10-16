@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import type { DesktopSidebar } from "../renderer/desktop/desktop-sidebar";
 import { SIDEBAR_OVERLAY } from "../renderer/desktop/sidebar-collapse";
 import { PANEL_TAB } from "../renderer/panel-tabs";
-import type { PlansControl } from "../renderer/planning/use-plans-tab";
+import type { TasksControl } from "../renderer/tasks/use-tasks-tab";
 
 /**
  * desktop-sidebar.ts -- the sidebar's props on the Plans tab, open and pinned, signed in, listing what `plans` lists, every other press ignored.
@@ -12,7 +12,7 @@ import type { PlansControl } from "../renderer/planning/use-plans-tab";
 
 const ignore = () => undefined;
 
-export function sidebarProps(plans: PlansControl): ComponentProps<typeof DesktopSidebar> {
+export function sidebarProps(tasks: TasksControl): ComponentProps<typeof DesktopSidebar> {
   return {
     sidebar: {
       collapsed: false,
@@ -25,7 +25,7 @@ export function sidebarProps(plans: PlansControl): ComponentProps<typeof Desktop
       staged: false,
     },
     history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-    plans,
+    tasks: tasks,
     tab: PANEL_TAB.TASKS,
     onTabChange: ignore,
     onPressWithin: ignore,

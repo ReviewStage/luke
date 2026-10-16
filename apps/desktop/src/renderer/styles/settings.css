@@ -338,7 +338,7 @@
   bottom: calc(100% + 6px);
 }
 
-.settings-picker .settings-picker-menu .plan-compose-menu-list {
+.settings-picker .settings-picker-menu .task-compose-menu-list {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 

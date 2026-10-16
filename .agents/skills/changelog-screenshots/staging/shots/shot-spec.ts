@@ -8,15 +8,15 @@
  */
 
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import type { PlanningView } from "@luke/features/planning-view";
+import type { TasksView } from "@luke/features/planning-view";
 import type { ActKind, ActPayload, ActResultFor } from "@luke/host/acts";
-import type { AppInboxPlan, AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
-import type { MainTab } from "../planning/use-main-tabs";
-import type { HistorySpot } from "../planning/use-plan-history";
-import type { PlansControl } from "../planning/use-plans-tab";
-import type { SidePanelState, SidePanelTab } from "../planning/use-side-panel";
+import type { MainTab } from "../tasks/use-main-tabs";
+import type { HistorySpot } from "../tasks/use-plan-history";
+import type { TasksControl } from "../tasks/use-tasks-tab";
+import type { SidePanelState, SidePanelTab } from "../tasks/use-side-panel";
 import type { SettingsView } from "../settings-views";
 
 /** An answer that never settles: what a long-poll loop is handed once it has read what it will read. */
@@ -36,7 +36,7 @@ export type ShotAnswers = { readonly [Kind in ActKind]?: ShotAnswer<Kind> };
 
 /** What the staging effect hands each step: the Plans tab, the sidebar, and the way into Settings. */
 export interface ShotStageContext {
-  readonly plans: PlansControl;
+  readonly tasks: TasksControl;
   readonly sidebar: SidebarCollapse;
   readonly openSettings: (view: SettingsView) => void;
 }
@@ -72,7 +72,7 @@ export interface ShotLayout {
   /** Opens ⌘K with the query typed. */
   readonly palette?: { readonly query: string };
   /** The sidebar plan whose hover card stands open. */
-  readonly hoverPlanId?: string;
+  readonly hoverTaskId?: string;
   /** Draws every section's "Edited by" byline, which otherwise shows only under the pointer. */
   readonly bylines?: boolean;
 }
@@ -80,7 +80,7 @@ export interface ShotLayout {
 /** One shot: everything it draws in place of the fixture's, and how it is laid out. */
 export interface ShotSpec {
   /** The plans the Plans tab draws, its open one included. */
-  readonly planning: PlanningView;
+  readonly tasks: TasksView;
   /** The side panel the open plan starts with; referentially stable, as the spec is built once. */
   readonly sidePanel?: SidePanelState;
   /** The call standing on the open plan, as the voice window would report it; none for every shot but the Call tab's. */
@@ -89,8 +89,8 @@ export interface ShotSpec {
   readonly answers?: ShotAnswers;
   /** What main would say waits on the developer: the sidebar's Inbox count and the window's Inbox. */
   readonly inbox?: {
-    readonly waiting: readonly AppInboxPlan[];
-    readonly plans: readonly AppInboxPlanHolding[];
+    readonly waiting: readonly AppInboxTask[];
+    readonly tasks: readonly AppInboxTaskHolding[];
   };
   /**
    * Settings › Integrations as the shot draws it: the providers it leaves

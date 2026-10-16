@@ -10,16 +10,16 @@
  */
 
 import {
-  PLAN_WORK_PART,
-  PLAN_WORK_STATE,
-  PLAN_WORK_TOOL,
-  type PlanningTreeAnswer,
+  TASK_WORK_PART,
+  TASK_WORK_STATE,
+  TASK_WORK_TOOL,
+  type TasksTreeAnswer,
 } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";
-import { PLAN_REPOSITORY, SHOT_ID, shotPlanningView } from "./plan-document";
+import { TASK_REPOSITORY, SHOT_ID, shotTasksView } from "./plan-document";
 import type { ShotSpec } from "./shot-spec";
 
 /** acme/relay's files, as one recursive listing names them. */
@@ -49,11 +49,11 @@ const FILES = [
 ];
 
 /** The listing, folders implied by the paths named. */
-function tree(): PlanningTreeAnswer {
+function tree(): TasksTreeAnswer {
   return {
     folder: {
       path: "",
-      repository: PLAN_REPOSITORY,
+      repository: TASK_REPOSITORY,
       branch: "main",
       entries: FILES.map((name) => ({ name, kind: "file" as const })),
       truncated: false,
@@ -67,16 +67,16 @@ function work() {
     {
       turnId: "shot-turn-1",
       startedAt: ago(9),
-      state: PLAN_WORK_STATE.DONE,
+      state: TASK_WORK_STATE.DONE,
       earlierOmitted: false,
       asked: [],
       parts: [
         {
-          type: PLAN_WORK_PART.TOOL,
+          type: TASK_WORK_PART.TOOL,
           id: "shot-worker-1",
-          tool: PLAN_WORK_TOOL.WORKER,
+          tool: TASK_WORK_TOOL.WORKER,
           name: "worker",
-          state: PLAN_WORK_STATE.DONE,
+          state: TASK_WORK_STATE.DONE,
           subject: "Check how invite links expire in the accept flow",
           input: "{}",
           output: "Links carry no expiry today; acceptInvite reads the token alone.",
@@ -85,14 +85,14 @@ function work() {
             earlierOmitted: false,
             parts: [
               {
-                type: PLAN_WORK_PART.TEXT,
+                type: TASK_WORK_PART.TEXT,
                 text: "Links carry no expiry today; acceptInvite reads the token alone.",
               },
             ],
           },
         },
         {
-          type: PLAN_WORK_PART.TEXT,
+          type: TASK_WORK_PART.TEXT,
           text: "Invite links never expire yet, so the plan's 7 days is new work.",
         },
       ],
@@ -103,15 +103,15 @@ function work() {
 export function paletteShot(): ShotSpec {
   const listing = tree();
   return {
-    planning: shotPlanningView({ extra: { work: work() } }),
+    tasks: shotTasksView({ extra: { work: work() } }),
     sidePanel: FIXTURE_CLOSED_PANEL,
     answers: {
       ...codingAgentAnswers(),
-      [ACT_KIND.PLANNING_TREE]: (payload) => (payload.path === "" ? listing : undefined),
+      [ACT_KIND.TASKS_TREE]: (payload) => (payload.path === "" ? listing : undefined),
     },
     layout: { palette: { query: "invite" } },
   };
 }
 
 /** The plan the palette stands over, for a test or a step to name. */
-export const PALETTE_PLAN_ID = SHOT_ID.PLAN;
+export const PALETTE_TASK_ID = SHOT_ID.TASK;

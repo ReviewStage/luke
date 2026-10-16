@@ -7,31 +7,31 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { plansControl } from "#testing/plans-control";
+import { tasksControl } from "#testing/tasks-control";
 import { useWindowHistory, type WindowHistory } from "./navigation-history";
 import { PANEL_TAB } from "./panel-tabs";
-import type { LeaveAsk, PlansControl } from "./planning/use-plans-tab";
+import type { LeaveAsk, TasksControl } from "./tasks/use-tasks-tab";
 
-const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 
 afterEach(() => {
   document.body.innerHTML = "";
 });
 
 /** The window's history over the Plans tab as `plans` stands, restood by the returned setter. */
-function mount(initial: PlansControl) {
+function mount(initial: TasksControl) {
   let history: WindowHistory | undefined;
-  let restand: ((plans: PlansControl) => void) | undefined;
+  let restand: ((tasks: TasksControl) => void) | undefined;
   function Probe() {
-    const [plans, setPlans] = useState(initial);
-    restand = setPlans;
+    const [tasks, setTasks] = useState(initial);
+    restand = setTasks;
     history = useWindowHistory({
       known: true,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       settingsView: SETTINGS_VIEW.ACCOUNT,
       onSettingsViewChange: () => undefined,
-      plans,
+      tasks,
     });
     return null;
   }
@@ -43,23 +43,23 @@ function mount(initial: PlansControl) {
       assert.ok(history);
       return history;
     },
-    stand: (plans: PlansControl) => act(() => restand?.(plans)),
+    stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
   };
 }
 
 test("a launch that reopens the plan last open leaves nothing behind it to go back to", () => {
-  const window = mount(plansControl({ restoring: true }));
+  const window = mount(tasksControl({ restoring: true }));
   window.stand(
-    plansControl({ page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
   );
   assert.equal(window.history().canGoBack, false);
 });
 
 test("leaving a plan for the home page is a step Back returns from", () => {
   const window = mount(
-    plansControl({ page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
   );
-  window.stand(plansControl());
+  window.stand(tasksControl());
   assert.equal(window.history().canGoBack, true);
 });
 
@@ -67,7 +67,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
   const asked: (() => void)[] = [];
   const ask: LeaveAsk = (leave) => asked.push(leave);
   let standing: LeaveAsk | undefined;
-  const asking = (base: PlansControl): PlansControl => ({
+  const asking = (base: TasksControl): TasksControl => ({
     ...base,
     leaveGuard: {
       stand: () => () => undefined,
@@ -82,14 +82,14 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
   });
   const homes: string[] = [];
   const atPlan = asking(
-    plansControl({
+    tasksControl({
       page: TASKS_PAGE.DOCUMENT,
-      activePlanId: PLAN_ID,
-      boundFor: PLAN_ID,
-      onLeavePlan: () => homes.push("home"),
+      activeTaskId: TASK_ID,
+      boundFor: TASK_ID,
+      onLeaveTask: () => homes.push("home"),
     }),
   );
-  const window = mount(asking(plansControl()));
+  const window = mount(asking(tasksControl()));
   window.stand(atPlan);
   assert.equal(window.history().canGoBack, true);
 
@@ -106,8 +106,8 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
 test("a person's page is a step of its own, which Back from a plan opened after it returns to, and another person's is another step", () => {
   const reopened: string[] = [];
   // Every control the window stands on opens a person's page the same way, recorded.
-  const standing = (userId: string | undefined, rest: Partial<PlansControl> = {}) =>
-    plansControl({
+  const standing = (userId: string | undefined, rest: Partial<TasksControl> = {}) =>
+    tasksControl({
       ...rest,
       personView: {
         userId,
@@ -120,7 +120,7 @@ test("a person's page is a step of its own, which Back from a plan opened after 
   const window = mount(standing("user-charles"));
   window.stand(standing("user-maya"));
   window.stand(
-    standing(undefined, { page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    standing(undefined, { page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
   );
 
   act(() => window.history().onBack());
@@ -133,7 +133,7 @@ test("a person's page is a step of its own, which Back from a plan opened after 
 test("a person's page is theirs in the workspace it stood in, so once another is listed Back passes over it", () => {
   const reopened: string[] = [];
   const standing = (workspaceId: string, userId: string | undefined) =>
-    plansControl({
+    tasksControl({
       workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
       personView: {
         userId,
@@ -154,8 +154,8 @@ test("a person's page is theirs in the workspace it stood in, so once another is
 
 test("a person's page opened again with a newer name keeps that name in its step, which Back opens it with", () => {
   const reopened: (string | undefined)[] = [];
-  const standing = (userId: string | undefined, name?: string, rest: Partial<PlansControl> = {}) =>
-    plansControl({
+  const standing = (userId: string | undefined, name?: string, rest: Partial<TasksControl> = {}) =>
+    tasksControl({
       ...rest,
       personView: {
         userId,
@@ -170,8 +170,8 @@ test("a person's page opened again with a newer name keeps that name in its step
   window.stand(
     standing(undefined, undefined, {
       page: TASKS_PAGE.DOCUMENT,
-      activePlanId: PLAN_ID,
-      boundFor: PLAN_ID,
+      activeTaskId: TASK_ID,
+      boundFor: TASK_ID,
     }),
   );
 

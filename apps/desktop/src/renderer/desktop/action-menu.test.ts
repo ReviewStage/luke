@@ -6,9 +6,9 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { LinesMenu } from "../planning/file-menu";
 import { SearchableMenu } from "../searchable-menu";
 import { MenuRow } from "../settings/menu-row";
+import { LinesMenu } from "../tasks/file-menu";
 import { ActionMenu, useActionMenu } from "./action-menu";
 
 /**

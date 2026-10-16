@@ -9,11 +9,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import { NO_LOOKS } from "../planning/use-plan-looks";
-import { DesktopPlans } from "./desktop-plans";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { NO_LOOKS } from "../tasks/use-task-looks";
+import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * plan-toolbar-width.test.ts -- the plan's toolbar at the widths its column
@@ -63,9 +63,9 @@ afterEach(() => {
 /** The plan's page on its own tab, its toolbar `width` pixels wide, its agents as `agents` says. */
 function drawnAt(width: number, agents: Partial<CodingAgentsControl> = {}): HTMLElement {
   layContainersAt({ "plan-toolbar": width });
-  const control = plansControl({
+  const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: PLAN.id,
+    activeTaskId: PLAN.id,
     region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     agents: codingAgentsControl({
       start: { available: true, reason: undefined, busy: false, note: undefined, onPress: ignore },
@@ -79,11 +79,11 @@ function drawnAt(width: number, agents: Partial<CodingAgentsControl> = {}): HTML
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopPlans, {
+        createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
-          plans: control,
+          tasks: control,
         }),
       ),
     ),

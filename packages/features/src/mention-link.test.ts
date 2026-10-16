@@ -51,6 +51,17 @@ test("a plan's address is found by its id alone, whatever workspace it is spelle
   }
 });
 
+test("a task's address a later build writes under task reads as the one written under plan, by either scheme, and another step reads as no mention", () => {
+  for (const target of [
+    `https://tryluke.dev/acme/task/${TASK_ID}#rollout`,
+    `tryluke://tryluke.dev/acme/task/${TASK_ID}#rollout`,
+  ]) {
+    assert.deepEqual(decodeMention(target, null), ROLLOUT, target);
+  }
+  assert.deepEqual(decodeMention(`https://tryluke.dev/acme/task/${TASK_ID}`, null), TASK);
+  assert.equal(decodeMention(`https://tryluke.dev/acme/tasks/${TASK_ID}`, null), undefined);
+});
+
 test("every form written before the link was settled reads as the mention the settled form names", () => {
   assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}`, null), TASK);
   assert.deepEqual(decodeMention(`luke://plan/${TASK_ID}#Rollout`, null), ROLLOUT);

@@ -54,7 +54,7 @@ const LOCAL_DEV_PRINCIPAL = "local-dev";
 const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 
 /** The plan the planning scenario runs against, and the words its two sessions open with. */
-const PLAN = {
+const TASK = {
   name: "Teammate invitations",
 } as const;
 const PLAN_TEXT =
@@ -118,8 +118,8 @@ async function taskConversation(run: Run, planId: string): Promise<string> {
 }
 
 /** The document the plan holds now, failing the eval where it does not read. */
-async function planDocument(run: Run, planId: string) {
-  const stored = await run(readTask(LOCAL_DEV_PRINCIPAL, planId));
+async function planDocument(run: Run, taskId: string) {
+  const stored = await run(readTask(LOCAL_DEV_PRINCIPAL, taskId));
   assert.ok(Option.isSome(stored));
   return stored.value.task.document;
 }
@@ -169,18 +169,18 @@ export default defineEval({
       // The planning model is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
-      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
+      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
       await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
-      const planConversationId = await taskConversation(run, plan.id);
-      const tasks = await openSession(planConversationId, PLAN_WORDS.FIRST);
-      const planningSession = await t.target.attachSession(tasks.sessionId);
-      planningSession.succeeded();
+      const taskConversationId = await taskConversation(run, plan.id);
+      const tasks = await openSession(taskConversationId, PLAN_WORDS.FIRST);
+      const tasksSession = await t.target.attachSession(tasks.sessionId);
+      tasksSession.succeeded();
       assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
 
       const turnId = hostTurnId(tasks.sessionId, "turn_0");
       const turn = await readTurnById(run, turnId);
       assert.ok(turn);
-      assert.equal(turn.conversationId, planConversationId);
+      assert.equal(turn.conversationId, taskConversationId);
       assert.equal(turn.origin, TURN_ORIGIN.TYPED);
       assert.equal(turn.status, TURN_STATUS.SETTLED);
       // What the turn ran under, carried from the session's start through eve's
@@ -189,31 +189,29 @@ export default defineEval({
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
       assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations()));
 
-      const planningRows = await readMessagesByTurn(run, planConversationId, turnId);
+      const tasksRows = await readMessagesByTurn(run, taskConversationId, turnId);
       assert.deepEqual(
-        planningRows.map((row) => row.role),
+        tasksRows.map((row) => row.role),
         [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
       );
-      assert.deepEqual(planningRows[0]?.metadata, {
+      assert.deepEqual(tasksRows[0]?.metadata, {
         author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.TYPED,
       });
-      const planningAnswer = planningRows[1];
-      assert.ok(planningAnswer);
+      const tasksAnswer = tasksRows[1];
+      assert.ok(tasksAnswer);
       assert.ok(
-        planningAnswer.parts.some(
-          (part) => isTextUIPart(part) && part.text === SCRIPTED_BRAIN_REPLY,
-        ),
+        tasksAnswer.parts.some((part) => isTextUIPart(part) && part.text === SCRIPTED_BRAIN_REPLY),
       );
-      const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
+      const runtimeSessionId = await readConversationRuntimeSessionId(run, taskConversationId);
       assert.equal(runtimeSessionId, tasks.sessionId);
 
       // Research handed to the worker subagent returns a receipt at once, and
       // the planning turn stays open until the worker's result reaches the
       // model inside it: one turn on record, settled, holding the call, the
       // words before the wait, and the words after it.
-      const researchPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
-      const researchConversationId = await taskConversation(run, researchPlan.id);
+      const researchTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      const researchConversationId = await taskConversation(run, researchTask.id);
       const research = await openSession(
         researchConversationId,
         `${SCRIPTED_DELEGATE}invite links`,
@@ -252,8 +250,8 @@ export default defineEval({
       // A repository read on a plan with no repository yet runs nothing and
       // says so: the refusal reaches the model as the tool's result, ahead of
       // any sandbox, and the model repeats why.
-      const readingPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, PLAN));
-      const readingConversationId = await taskConversation(run, readingPlan.id);
+      const readingTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      const readingConversationId = await taskConversation(run, readingTask.id);
       const reading = await openSession(readingConversationId, `${SCRIPTED_READ}ls`);
       const readingSession = await t.target.attachSession(reading.sessionId);
       readingSession.succeeded();
