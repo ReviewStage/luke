@@ -111,6 +111,7 @@
     "./auth/bearer": "./src/auth/bearer.js",
     "./auth/browser-session": "./src/auth/browser-session.js",
     "./auth/oauth-clients": "./src/auth/oauth-clients.js",
+    "./issues/issues-app": "./src/issues/issues-app.js",
     "./automations/automation-github": "./src/automations/automation-github.js",
     "./automations/automation-runs": "./src/automations/automation-runs.js",
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",

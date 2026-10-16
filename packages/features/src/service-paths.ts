@@ -76,6 +76,12 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
+  /**
+   * A workspace's issues: list them, the most recently changed first, where
+   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
+   * declares the bodies.
+   */
+  ISSUES: "/api/issues",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

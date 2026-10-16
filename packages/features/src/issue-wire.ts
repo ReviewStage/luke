@@ -68,6 +68,9 @@ export const ISSUE_PRIORITY_RANK = {
   [ISSUE_PRIORITY.NONE]: 4,
 } as const satisfies Record<IssuePriority, number>;
 
+/** The query an issue list is read by: the workspace, and whether it reads the archived issues instead. */
+export const ISSUE_LIST_QUERY = { WORKSPACE_ID: "workspaceId", ARCHIVED: "archived" } as const;
+
 export const issueStatusSchema = EffectSchema.Literals(Object.values(ISSUE_STATUS));
 
 export const issuePrioritySchema = EffectSchema.Literals(Object.values(ISSUE_PRIORITY));
