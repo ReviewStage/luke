@@ -2499,18 +2499,16 @@ button.skill-chip:hover,
 }
 
 /* A quote block in the message box (`reply-to-selection.tsx`): the agent's
-   words on a raised card rounded on every corner, an inset bar at its
-   leading edge, three lines at most, with the press that takes it out at
-   its end. It stands in the editor's flow as a line of its own does. */
+   words set off by a straight rule at their leading edge, as a sent quote is
+   (`.markdown-quote`), three lines at most, with the press that takes it out
+   at its end. It stands in the editor's flow as a line of its own does. */
 .composer-quote {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   margin: 4px 0;
-  padding: 6px 6px 6px 12px;
-  border-radius: 8px;
-  background: var(--raised-strong);
-  box-shadow: inset 3px 0 0 var(--hairline-strong);
+  padding-left: 0.8em;
+  border-left: 3px solid var(--hairline-strong);
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 20px;
