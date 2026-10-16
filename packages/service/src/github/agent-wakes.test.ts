@@ -15,7 +15,7 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startPlan } from "@luke/database/testing";
-import { TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@luke/wire";
+import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Option, Stream } from "effect";
 import { test } from "vitest";
 import {
@@ -168,16 +168,19 @@ const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
 
 test("a review submitted, a comment on a pull request, and a failed check on an agent's branch are read, each by who caused it and when, and nothing else is", () => {
   const ref = "luke/invites";
-  assert.deepEqual(agentWakeOf("pull_request_review", reviewDelivery(ref, "octocat"), 0), {
-    kind: AGENT_WAKE.REVIEW,
-    repository: RELAY_FULL_NAME,
-    branch: ref,
-    pullRequest: 41,
-    url: `https://github.com/${RELAY_FULL_NAME}/pull/41#pullrequestreview-9`,
-    by: "octocat",
-    at: MADE_AT,
-    verdict: "changes_requested",
-  });
+  assert.deepEqual(
+    agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
+    {
+      kind: AGENT_WAKE.REVIEW,
+      repository: RELAY_FULL_NAME,
+      branch: ref,
+      pullRequest: 41,
+      url: `https://github.com/${RELAY_FULL_NAME}/pull/41#pullrequestreview-9`,
+      by: "octocat",
+      at: MADE_AT,
+      verdict: "changes_requested",
+    },
+  );
   const comment = (pullRequest: boolean, action = "created") => ({
     action,
     repository,
@@ -189,7 +192,7 @@ test("a review submitted, a comment on a pull request, and a failed check on an 
     },
     issue: { number: 41, ...(pullRequest ? { pull_request: { url: "ignored" } } : undefined) },
   });
-  assert.deepEqual(agentWakeOf("issue_comment", comment(true), 0), {
+  assert.deepEqual(agentWakeOf("issue_comment", unparsedWire(comment(true)), 0), {
     kind: AGENT_WAKE.COMMENT,
     repository: RELAY_FULL_NAME,
     branch: undefined,
@@ -210,7 +213,7 @@ test("a review submitted, a comment on a pull request, and a failed check on an 
       pull_requests: [{ number: 41 }],
     },
   });
-  assert.deepEqual(agentWakeOf("check_suite", suite(ref, "failure"), 0), {
+  assert.deepEqual(agentWakeOf("check_suite", unparsedWire(suite(ref, "failure")), 0), {
     kind: AGENT_WAKE.CHECK_FAILED,
     repository: RELAY_FULL_NAME,
     branch: ref,
@@ -228,7 +231,7 @@ test("a review submitted, a comment on a pull request, and a failed check on an 
     ["check_suite", suite(ref, "success")],
     ["check_suite", suite("main", "failure")],
   ] as const) {
-    assert.equal(agentWakeOf(event, payload, 0), undefined, event);
+    assert.equal(agentWakeOf(event, unparsedWire(payload), 0), undefined, event);
   }
 });
 
@@ -287,7 +290,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const github = githubReaching(INSTALLATIONS).layer;
         const wake = Option.getOrThrow(
           Option.fromNullishOr(
-            agentWakeOf("pull_request_review", reviewDelivery(ref, "octocat"), 0),
+            agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
           ),
         );
         const deliveryId = randomUUID();

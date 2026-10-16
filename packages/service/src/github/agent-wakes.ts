@@ -62,7 +62,7 @@ export const AGENT_WAKE = {
   CHECK_FAILED: "check-failed",
 } as const;
 
-export type AgentWakeKind = (typeof AGENT_WAKE)[keyof typeof AGENT_WAKE];
+type AgentWakeKind = (typeof AGENT_WAKE)[keyof typeof AGENT_WAKE];
 
 /** One delivery as the agents on its pull request are told of it. */
 export interface AgentWake {
@@ -263,7 +263,7 @@ function pullRequestWords(wake: AgentWake): string {
 }
 
 /** The message the agent is told, which is also the line its transcript draws as GitHub's. */
-export function agentWakeText(wake: AgentWake): string {
+function agentWakeText(wake: AgentWake): string {
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
       const verdict = VERDICT_WORDS.get(wake.verdict ?? "") ?? REVIEWED;
