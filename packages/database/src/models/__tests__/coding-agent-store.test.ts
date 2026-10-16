@@ -22,6 +22,7 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
+import { plan } from "../../schemas/plan.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace } from "../../testing/index.js";
@@ -35,6 +36,7 @@ import {
   listPlanlessCodingAgents,
   listWorkspaceCodingAgents,
   pinCodingAgent,
+  planNamesOf,
   readCodingAgent,
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
@@ -376,6 +378,7 @@ const planlessAgent = (
       repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
       ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
+      ...(patch.planId === undefined ? undefined : { planId: patch.planId }),
     });
     return { agentId: id, conversationId };
   });
@@ -452,7 +455,7 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
 
 it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => {
   it.effect(
-    "a workspace's agents are listed newest first for any member, an archived one left out, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
+    "a workspace's agents are listed newest first for any member, an archived one left out unless asked for, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -499,11 +502,75 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           ),
           [web.agentId],
         );
+        assert.deepEqual(
+          ids(
+            yield* listWorkspaceCodingAgents(teammate, workspace, {
+              includeArchived: true,
+              limit: 10,
+            }),
+          ),
+          [newest.agentId, archived.agentId, web.agentId, oldest.agentId],
+        );
         assert.deepEqual(ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 2 })), [
           newest.agentId,
           web.agentId,
         ]);
         assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
+
+        // An agent on a plan is listed with the rest, and alone where its plan is named.
+        const invitations = yield* createPlan(teammate, {
+          organizationId: workspace,
+          name: "Teammate invitations",
+        });
+        const archivedPlan = yield* createPlan(starter, { organizationId: workspace, name: "Old" });
+        yield* Effect.flatMap(Database, (db) =>
+          db
+            .update(plan)
+            .set({ archivedAt: at(14) })
+            .where(eq(plan.id, archivedPlan.id)),
+        );
+        const onPlan = yield* planlessAgent(teammate, workspace, {
+          planId: invitations.id,
+          createdAt: at(15),
+        });
+        assert.deepEqual(
+          ids(
+            yield* listWorkspaceCodingAgents(starter, workspace, {
+              planId: invitations.id,
+              includeArchived: true,
+              limit: 10,
+            }),
+          ),
+          [onPlan.agentId],
+        );
+        assert.equal(
+          ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 10 }))[0],
+          onPlan.agentId,
+        );
+        const elsewherePlan = yield* createPlan(outsider, {
+          organizationId: elsewhere,
+          name: "Elsewhere",
+        });
+        const names = yield* planNamesOf(starter, [
+          invitations.id,
+          archivedPlan.id,
+          elsewherePlan.id,
+          invitations.id,
+        ]);
+        assert.equal(names.size, 2, "a plan of a workspace the account is not in names nothing");
+        assert.deepEqual(names.get(invitations.id), {
+          name: "Teammate invitations",
+          archived: false,
+        });
+        assert.deepEqual(names.get(archivedPlan.id), { name: "Old", archived: true });
+        assert.equal((yield* planNamesOf(outsider, [invitations.id])).size, 0);
+        assert.deepEqual(
+          yield* listWorkspaceCodingAgents(outsider, workspace, {
+            includeArchived: true,
+            limit: 10,
+          }),
+          [],
+        );
       }),
   );
 });

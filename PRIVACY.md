@@ -99,9 +99,10 @@ A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
 he answers a spoken ask he reads on our service, from the plan and the record
 described under "Your account". During the call, Luke can
-list the task's coding agents, read the last few turns of one's transcript,
-send one a message it writes for you (kept in that agent's transcript as
-Luke's), and start a new one; what he read and sent is kept with the task's
+list the coding agents of the task's workspace, on any task and whichever
+member started them, read the last few turns of one's transcript, send one a
+message it writes for you (kept in that agent's transcript as Luke's), and
+start a new one on the task; what he read and sent is kept with the task's
 conversation. A fixture or evidence run keeps no conversation at all.
 
 **Tasks.** When you start a named task, our service stores it in a
