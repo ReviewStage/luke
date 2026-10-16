@@ -44,6 +44,7 @@ const DECLARED_TABLES = [
   "account_preference",
   "account_provider_key",
   "admin_favorite",
+  "agent_pin",
   "asks",
   "automation",
   "automation_run",

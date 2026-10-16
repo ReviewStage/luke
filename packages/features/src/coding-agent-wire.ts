@@ -402,6 +402,18 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
 export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
 
 /**
+ * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
+ * asking member's own and no one else's, as a plan's is; pinning one
+ * already pinned keeps the instant it was first pinned. The answer is the
+ * agent as it then stands.
+ */
+export const codingAgentPinRequestSchema = EffectSchema.Struct({
+  pinned: EffectSchema.Boolean,
+});
+
+export type CodingAgentPinRequest = typeof codingAgentPinRequestSchema.Type;
+
+/**
  * Switching the agent's MCP servers (PATCH): the whole list of those off,
  * which replaces the list standing, so two quick changes land as the later
  * one. Empty switches every server back on.
@@ -551,8 +563,9 @@ export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAg
  * the sidebar lists it among them: the agent as the tabs draw it, its
  * automation's name among them, the automation, workspace, and repository
  * its own page names, and when it last moved, which orders it among the
- * plans by their last update. The run that started it is its page's alone,
- * so a list of many carries no prompt.
+ * plans by their last update, and when the reader pinned it, where they did.
+ * The run that started it is its page's alone, so a list of many carries no
+ * prompt.
  */
 export const planlessAgentSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
@@ -561,6 +574,8 @@ export const planlessAgentSchema = EffectSchema.Struct({
   repository: codingAgentPageSchema.fields.repository,
   /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
   activityAt: countedNumber,
+  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type PlanlessAgent = typeof planlessAgentSchema.Type;

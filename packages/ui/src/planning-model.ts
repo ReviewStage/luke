@@ -1,3 +1,4 @@
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
   PLAN_BOUNDS,
@@ -414,6 +415,52 @@ export function unsettledRepositoryPins(
     ([repository, pin]) =>
       (pins ?? []).some((each) => each.repository === repository) !== pin.pinned,
   );
+  return unsettled.length === pending.size ? pending : new Map(unsettled);
+}
+
+/** What the toast says when the service refused an agent's pin, by whether it was a pin or an unpin. */
+export const AGENT_PIN_FAILED_NOTES = {
+  PIN: "The agent could not be pinned. Try again.",
+  UNPIN: "The agent could not be unpinned. Try again.",
+} as const;
+
+/** An agent with no plan pinned or unpinned here that main's view has yet to carry: which, and the instant it was asked. */
+interface PendingAgentPin {
+  readonly pinned: boolean;
+  readonly at: number;
+}
+
+/** The agent pins given here that main's view has yet to carry, by agent. */
+export type PendingAgentPins = ReadonlyMap<string, PendingAgentPin>;
+
+/**
+ * The agents with no plan as the sidebar draws them: every pin and unpin
+ * given here and not yet carried drawn over the pin main's view carries, so
+ * a press moves the agent's row at once, as a plan's pin does. A pin
+ * already carried keeps its instant, as the service keeps it.
+ */
+export function agentsPinned(
+  agents: readonly PlanlessAgent[],
+  pending: PendingAgentPins,
+): readonly PlanlessAgent[] {
+  if (pending.size === 0) return agents;
+  return agents.map((agent) => {
+    const pin = pending.get(agent.id);
+    if (pin === undefined) return agent;
+    const { pinnedAt, ...unpinned } = agent;
+    return pin.pinned ? { ...unpinned, pinnedAt: pinnedAt ?? pin.at } : unpinned;
+  });
+}
+
+/** The pending agent pins the view still contradicts; one it now carries has landed, and one of an agent it no longer lists is let go. */
+export function unsettledAgentPins(
+  pending: PendingAgentPins,
+  agents: readonly PlanlessAgent[],
+): PendingAgentPins {
+  const unsettled = [...pending].filter(([agentId, pin]) => {
+    const agent = agents.find((each) => each.id === agentId);
+    return agent !== undefined && (agent.pinnedAt !== undefined) !== pin.pinned;
+  });
   return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 

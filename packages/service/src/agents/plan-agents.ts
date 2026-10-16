@@ -181,8 +181,9 @@ export function withPlanAgents(
 /**
  * The agents with no plan in the account's workspaces, whichever member
  * started each, newest started first, each read as its own page reads it,
- * with its automation's name and when it last moved, the archived ones only
- * where `includeArchived` asks: the sidebar's rows beside the plans.
+ * with its automation's name, when it last moved, and when the account
+ * pinned it where it did, the archived ones only where `includeArchived`
+ * asks: the sidebar's rows beside the plans.
  */
 export function listPlanlessAgents(
   userId: string,
@@ -200,7 +201,11 @@ export function listPlanlessAgents(
       const turn = turns.get(agent.conversationId);
       const lineAwaits = awaiting.has(agent.conversationId);
       const { origin: _origin, ...page } = codingAgentPage(agent, { turn, lineAwaits }, now, names);
-      return { ...page, activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }) };
+      return {
+        ...page,
+        activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
+        ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
+      };
     });
   });
 }

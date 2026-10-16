@@ -44,6 +44,7 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
+  type CodingAgentPinParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -462,6 +463,7 @@ export interface HostOperator {
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a plan or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
   /** The account's automations, or one plan's or one workspace's; or why there are none. */
@@ -1328,6 +1330,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
           agentId: params.agentId,
           archived: params.archived,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentPin: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PIN, {
+          agentId: params.agentId,
+          pinned: params.pinned,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

@@ -167,6 +167,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`archive:${agentId}:${String(archived)}`);
           return answered;
         }),
+      codingAgentPin: ({ agentId, pinned }) =>
+        Effect.sync(() => {
+          asked.push(`pin:${agentId}:${String(pinned)}`);
+          return answered;
+        }),
       planningRefresh: () =>
         Effect.sync(() => {
           asked.push("refresh");
@@ -291,7 +296,7 @@ it.effect(
     }),
 );
 it.effect(
-  "a rename or an archive answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not",
+  "a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not",
   () =>
     Effect.gen(function* () {
       assert.ok("agent" in STARTED);
@@ -306,14 +311,22 @@ it.effect(
         payload: { agentId: AGENT_ID, archived: true },
       } as const;
 
+      const pin = {
+        kind: ACT_KIND.CODING_AGENTS_PIN,
+        payload: { agentId: AGENT_ID, pinned: true },
+      } as const;
+
       yield* planless.router.performAct(rename, PANEL);
       yield* planless.router.performAct(archive, PANEL);
+      yield* planless.router.performAct(pin, PANEL);
       yield* onPlan.router.performAct(rename, PANEL);
 
       assert.deepEqual(planless.asked, [
         `rename:${AGENT_ID}:Triage`,
         "refresh",
         `archive:${AGENT_ID}:true`,
+        "refresh",
+        `pin:${AGENT_ID}:true`,
         "refresh",
       ]);
       assert.deepEqual(onPlan.asked, [`rename:${AGENT_ID}:Triage`]);

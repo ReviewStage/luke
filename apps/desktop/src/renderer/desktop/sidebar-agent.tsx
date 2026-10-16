@@ -1,4 +1,5 @@
 import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import { PinIcon, UnpinIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useRef } from "react";
@@ -21,7 +22,9 @@ import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
  * automation, and the failed mark once its turn failed. A press opens the
  * agent's own page, and it reads in semibold while it ended unseen, as its
  * tab does. A right-click offers its actions where the pointer is, as a
- * task's row does: Copy link, the agent's own, as its page's ⋯ copies it.
+ * task's row does: Copy link, the agent's own, as its page's ⋯ copies it,
+ * then Pin or Unpin, the reader's own, which moves the row in or out of
+ * Pinned at once; an archived agent offers no pin, as an archived task.
  */
 
 /** What the row's menu is called, as the agent page's ⋯ is. */
@@ -40,6 +43,13 @@ function starterOf(
   return teammateCreator({ createdBy: agent.startedBy, ownerId: agent.startedBy?.userId }, reader);
 }
 
+/** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
+function pinItem(agent: PlanlessAgent, onPin: (pinned: boolean) => void): MenuAction {
+  return agent.pinnedAt === undefined
+    ? { label: "Pin", icon: <PinIcon />, onSelect: () => onPin(true) }
+    : { label: "Unpin", icon: <UnpinIcon />, onSelect: () => onPin(false) };
+}
+
 /** One agent with no task among the sidebar's tasks. */
 export function SidebarAgent({
   agent,
@@ -51,6 +61,7 @@ export function SidebarAgent({
   face = true,
   shown,
   onOpen,
+  onPin,
 }: {
   agent: PlanlessAgent;
   /** Whether this agent's page is the one standing. */
@@ -68,6 +79,8 @@ export function SidebarAgent({
   /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
+  /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
+  onPin?: ((pinned: boolean) => void) | undefined;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
@@ -75,7 +88,10 @@ export function SidebarAgent({
   const row = useRef<HTMLButtonElement | null>(null);
   const menu = useActionMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
-  const groups: MenuAction[][] = copyLink === undefined ? [] : [[copyLink]];
+  const groups = [
+    copyLink === undefined ? [] : [copyLink],
+    onPin === undefined ? [] : [pinItem(agent, onPin)],
+  ].filter((group) => group.length > 0);
   return (
     <li className="sidebar-plan-item">
       <Tooltip label={name}>

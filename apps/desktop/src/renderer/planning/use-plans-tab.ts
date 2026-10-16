@@ -22,6 +22,8 @@ import type { AppInboxPlan, AppInboxPlanHolding, AppInboxPlanlessItem } from "@l
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
 import {
+  AGENT_PIN_FAILED_NOTES,
+  agentsPinned,
   archivedPlansNote,
   archivePlansFailedNote,
   type CallStatus,
@@ -34,6 +36,7 @@ import {
   MICROPHONE_PRESS,
   markedView,
   microphoneButton,
+  type PendingAgentPins,
   type PendingMarks,
   type PendingRenames,
   type PendingRepositoryPin,
@@ -53,6 +56,7 @@ import {
   repositoryPageUrl,
   sidebarPlans,
   startFailureNote,
+  unsettledAgentPins,
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
@@ -554,6 +558,8 @@ export interface PlansControl {
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
   onPinRepository: (repository: string, pinned: boolean) => void;
+  /** Pins an agent with no plan in the sidebar or unpins it, for the account alone: drawn at once, and put back with a toast if the service refuses. */
+  onPinAgent: (agentId: string, pinned: boolean) => void;
   /** Deletes a plan, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
@@ -668,6 +674,9 @@ interface PlanAsk {
 
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
+
+/** No agent pin given here and still waiting on main's view. */
+const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
 
 /** A plan with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<PlanningView["pages"]> = [];
@@ -879,6 +888,17 @@ export function usePlansTab(input: {
       ),
     [viewed, accountSignedIn],
   );
+  // An agent's pin given here stands until main's view carries it, as a plan's does.
+  const [agentPins, setAgentPins] = useState<PendingAgentPins>(NO_PENDING_AGENT_PINS);
+  useEffect(
+    () =>
+      setAgentPins((held) =>
+        accountSignedIn
+          ? unsettledAgentPins(held, viewed.planlessAgents ?? NO_PLANLESS_AGENTS)
+          : NO_PENDING_AGENT_PINS,
+      ),
+    [viewed, accountSignedIn],
+  );
   // A tab closed names a plan of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
@@ -911,17 +931,18 @@ export function usePlansTab(input: {
       : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
   );
   const listedWorkspaceId = listedWorkspace?.id;
-  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are.
+  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
+  // each pinned as given here until main's view carries it.
   const { planlessAgents } = planning;
   const listedAgents = useMemo(() => {
-    const listed = (planlessAgents ?? NO_PLANLESS_AGENTS).filter(
+    const listed = agentsPinned(planlessAgents ?? NO_PLANLESS_AGENTS, agentPins).filter(
       (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
     );
     return {
       standing: listed.filter((agent) => agent.archivedAt === undefined),
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
-  }, [planlessAgents, listedWorkspaceId]);
+  }, [planlessAgents, agentPins, listedWorkspaceId]);
   const { inboxWaiting, inboxPlans } = input;
   const listedInbox = useMemo(
     () => ({
@@ -1373,6 +1394,34 @@ export function usePlansTab(input: {
         );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
+          tone: TOAST_TONE.FAILED,
+          hold: TOAST_HOLD.FAILED,
+        });
+      });
+  };
+
+  // A fixture's agents are pinned nowhere, as its plans are marked nowhere. A
+  // pin says nothing once it lands, since the row it moves is in sight; a
+  // refusal puts the row back only while no later press replaced it, and
+  // says so in a toast, since the menu that asked has closed.
+  const pinAgent = (agentId: string, pinned: boolean) => {
+    if (fixture !== undefined) return;
+    const next = { pinned, at: Date.now() };
+    setAgentPins((held) => new Map(held).set(agentId, next));
+    act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned })
+      .then(
+        (answer) => "agent" in answer,
+        () => false,
+      )
+      .then((changed) => {
+        if (changed) return;
+        setAgentPins((held) =>
+          held.get(agentId) === next
+            ? new Map([...held].filter(([pending]) => pending !== agentId))
+            : held,
+        );
+        toast({
+          words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
           tone: TOAST_TONE.FAILED,
           hold: TOAST_HOLD.FAILED,
         });
@@ -2369,6 +2418,7 @@ export function usePlansTab(input: {
     onArchivePlans: archivePlans,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
+    onPinAgent: pinAgent,
     onDeletePlan: deletePlan,
     back,
     leaveGuard,

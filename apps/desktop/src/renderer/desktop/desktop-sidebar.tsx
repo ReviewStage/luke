@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -232,6 +233,7 @@ function PlanRows({
             face={face}
             shown={context.plans.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
+            onPin={pinOf(context.plans, row.agent)}
           />
         ),
       )}
@@ -239,30 +241,59 @@ function PlanRows({
   );
 }
 
-/** One row under Pinned: a pinned plan, or a tab pinned on a listed plan, and when it was pinned. */
-interface PinnedRow {
-  readonly plan: PlanSummary;
-  readonly pin: PinnedTab | undefined;
-  readonly at: number;
+/** Pin or Unpin for an agent's row, the account's own; none for an archived agent, which the sidebar draws among the archived whether or not it is pinned, as a plan's. */
+function pinOf(plans: PlansControl, agent: PlanlessAgent): ((pinned: boolean) => void) | undefined {
+  return agent.archivedAt === undefined
+    ? (pinned) => plans.onPinAgent(agent.id, pinned)
+    : undefined;
 }
 
+/** One row under Pinned: a pinned plan, a tab pinned on a listed plan, or a pinned agent with no plan, and when it was pinned. */
+type PinnedRow =
+  | {
+      readonly kind: typeof TASK_ROW.TASK;
+      readonly plan: PlanSummary;
+      readonly pin: PinnedTab | undefined;
+      readonly at: number;
+    }
+  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: PlanlessAgent; readonly at: number };
+
 /**
- * The rows under Pinned, newest pinned first: the pinned plans, and the
- * tabs pinned to the sidebar on plans the list holds. A tab of an archived
- * or deleted plan is drawn nowhere, its plan being out of the list.
+ * The rows under Pinned, newest pinned first: the pinned plans, the pinned
+ * agents with no plan among them, and the tabs pinned to the sidebar on
+ * plans the list holds. A tab of an archived or deleted plan is drawn
+ * nowhere, its plan being out of the list.
  */
-function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
-  const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
+function pinnedRows(
+  pinned: readonly PlanSummary[],
+  agents: readonly PlanlessAgent[],
+  plans: PlansControl,
+): PinnedRow[] {
+  const planRows = pinned.map(
+    (plan): PinnedRow => ({ kind: TASK_ROW.TASK, plan, pin: undefined, at: plan.pinnedAt ?? 0 }),
+  );
+  const agentRows = agents.map(
+    (agent): PinnedRow => ({ kind: TASK_ROW.AGENT, agent, at: agent.pinnedAt ?? 0 }),
+  );
   const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
     const plan = plans.listed.plans.find((each) => each.id === pin.plan);
-    return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
+    return plan === undefined ? [] : [{ kind: TASK_ROW.TASK, plan, pin, at: pin.at }];
   });
-  return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
+  return [...planRows, ...agentRows, ...tabRows].sort((a, b) => b.at - a.at);
+}
+
+/** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents, a pinned tab being its plan's. */
+function pinnedTaskRows(rows: readonly PinnedRow[]): TaskRow[] {
+  return rows.flatMap((row): TaskRow[] => {
+    if (row.kind === TASK_ROW.AGENT) return [agentRow(row.agent)];
+    return row.pin === undefined ? [taskRow(row.plan)] : [];
+  });
 }
 
 /**
- * The Pinned section's rows, each a plan's or a tab's. A tab's row is keyed
- * by when it was pinned, which no other pin shares, and a plan's by its id.
+ * The Pinned section's rows, each a plan's, an agent's, or a tab's. A tab's
+ * row is keyed by when it was pinned, which no other pin shares, and a plan's
+ * or an agent's by its id.
  */
 function PinnedRows({
   rows,
@@ -275,8 +306,25 @@ function PinnedRows({
 }): React.JSX.Element {
   return (
     <ul className="sidebar-plans">
-      {rows.map(({ plan, pin }) =>
-        pin === undefined ? (
+      {rows.map((row) => {
+        if (row.kind === TASK_ROW.AGENT) {
+          const { agent } = row;
+          return (
+            <SidebarAgent
+              key={agent.id}
+              agent={agent}
+              current={context.currentRow(agentRow(agent))}
+              unread={context.unseenAgent(agent.id)}
+              now={context.now}
+              at={agent.activityAt}
+              shown={context.plans.shown && context.inSight}
+              onOpen={() => context.onOpenAgent(agent.id)}
+              onPin={pinOf(context.plans, agent)}
+            />
+          );
+        }
+        const { plan, pin } = row;
+        return pin === undefined ? (
           <SidebarPlan
             key={plan.id}
             plans={context.plans}
@@ -298,8 +346,8 @@ function PinnedRows({
             onOpen={() => onOpenTab(pin)}
             onOpenPlan={() => context.onOpen(plan.id)}
           />
-        ),
-      )}
+        );
+      })}
     </ul>
   );
 }
@@ -321,7 +369,7 @@ function PinnedSection({
 }: {
   rows: readonly PinnedRow[];
   folds: FoldedGroups;
-  /** Whether a row is the plan open or the pinned tab on show, which a fold leaves standing. */
+  /** Whether a row is the plan open, the agent whose page stands, or the pinned tab on show, which a fold leaves standing. */
   shown: (row: PinnedRow) => boolean;
   context: RowContext;
   onOpenTab: (pin: PinnedTab) => void;
@@ -1168,24 +1216,27 @@ function SidebarColumn({
     listedAgents.standing.length === 0 &&
     listedAgents.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
-  const pinnedSection = pinnedRows(pinned, plans);
+  const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
+  const pinnedSection = pinnedRows(pinned, pinnedAgents, plans);
   // The pin the open plan was opened from is marked in its plan's place,
   // whichever of the plan's tabs is shown, while its row still stands.
   const { chosenPin } = plans;
   const pinMarked = pinnedSection.find(
-    ({ plan, pin }) =>
-      pin !== undefined &&
+    (row) =>
+      row.kind === TASK_ROW.TASK &&
+      row.pin !== undefined &&
       chosenPin !== undefined &&
-      current(plan.id) &&
-      pin.plan === chosenPin.plan &&
-      pin.at === chosenPin.at,
-  )?.pin;
+      current(row.plan.id) &&
+      row.pin.plan === chosenPin.plan &&
+      row.pin.at === chosenPin.at,
+  );
+  const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
   const { chosen } = overlay;
   const context: RowContext = {
     plans,
     current,
     marked: (planId, pin) =>
-      pinMarked === undefined ? pin === undefined && current(planId) : pin === pinMarked,
+      markedPin === undefined ? pin === undefined && current(planId) : pin === markedPin,
     onOpen: chosen(openPlan),
     currentRow,
     onOpenAgent: chosen(openAgent),
@@ -1200,26 +1251,32 @@ function SidebarColumn({
   };
   // A pinned tab is on show where its plan is open and its column shows it:
   // an agent's or the Inbox in the plan's own column, any other in the side panel. The
-  // pin marked stands too, so a fold never hides the row the sidebar marks.
-  const pinnedShown = ({ plan, pin }: PinnedRow) =>
-    (pin !== undefined && pin === pinMarked) ||
-    (current(plan.id) &&
-      (pin === undefined ||
-        (inColumn(pin.tab)
-          ? sameTab(plans.mainTabs.tab, pin.tab)
-          : plans.sidePanel.open &&
-            plans.sidePanel.tab !== undefined &&
-            sameTab(plans.sidePanel.tab, pin.tab))));
+  // pin marked stands too, so a fold never hides the row the sidebar marks, and so
+  // does a pinned agent while its page stands.
+  const pinnedShown = (row: PinnedRow) => {
+    if (row.kind === TASK_ROW.AGENT) return row.agent.id === agentShown;
+    const { plan, pin } = row;
+    return (
+      (pin !== undefined && pin === markedPin) ||
+      (current(plan.id) &&
+        (pin === undefined ||
+          (inColumn(pin.tab)
+            ? sameTab(plans.mainTabs.tab, pin.tab)
+            : plans.sidePanel.open &&
+              plans.sidePanel.tab !== undefined &&
+              sameTab(plans.sidePanel.tab, pin.tab))))
+    );
+  };
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice, and stand aside while the archived tasks are shown.
   // The agents with no plan stand among the plans, the archived ones among the archived.
   const unpinnedPlans = archive.shown
     ? listedRows.archived
     : listedRows.plans.filter((plan) => plan.pinnedAt === undefined);
-  const unpinned = [
-    ...unpinnedPlans.map(taskRow),
-    ...(archive.shown ? listedAgents.archived : listedAgents.standing).map(agentRow),
-  ];
+  const unpinnedAgents = archive.shown
+    ? listedAgents.archived
+    : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
+  const unpinned = [...unpinnedPlans.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const tasks = taskRowsCreatedBy(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1239,13 +1296,9 @@ function SidebarColumn({
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
+  const pinnedDrawn = pinnedTaskRows(pinnedSection);
   const drawn = [
-    ...(archive.shown
-      ? []
-      : folds.pinnedFolded
-        ? pinned.filter((plan) => current(plan.id))
-        : pinned
-    ).map(taskRow),
+    ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
     ...drawnTasks(sections, folds, currentRow),
   ];
   // Moving up and down the list as it reads: down from the home page, where

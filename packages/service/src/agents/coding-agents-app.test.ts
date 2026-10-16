@@ -1300,6 +1300,48 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member's PATCH pins an agent with no plan in their own plan list and unpins it again, and pins nothing for an account outside its workspace",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const pin = (bearer: string, pinned: boolean) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body: { pinned } }));
+        const pinnedAt = (bearer: string) =>
+          Effect.map(
+            ask(request(PLANS, bearer)),
+            (answered) =>
+              readAnswer(
+                planListAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).planlessAgents?.find((each) => each.id === agent.id)?.pinnedAt,
+          );
+        const at = yield* Clock.currentTimeMillis;
+
+        const pinned = yield* pin(owner, true);
+        const refused = yield* pin(other, true);
+        const held = yield* pinnedAt(owner);
+        yield* pin(owner, false);
+        const unpinned = yield* pinnedAt(owner);
+
+        assert.equal(
+          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, pinned).agent.id,
+          agent.id,
+        );
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(held, at);
+        assert.equal(unpinned, undefined);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {

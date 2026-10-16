@@ -314,6 +314,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onArchivePlans: ignore,
     pinnedRepositories: [],
     onPinRepository: ignore,
+    onPinAgent: ignore,
     onDeletePlan: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.

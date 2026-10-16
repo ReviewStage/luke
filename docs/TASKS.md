@@ -182,15 +182,18 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   it works, ends with its automation's clock and its time, and reads in
   semibold while its end is unseen; a press opens the agent's own page, and a
   right-click offers its Copy link, the agent's own link under the listed
-  workspace, saying Link copied. Pinning one waits for a pin of its own (#2901
-  pinned tasks only).
+  workspace, saying Link copied, then Pin or Unpin, as a task's row offers
+  them; ⌘K offers Pin agent or Unpin agent on the agent's own page. An
+  archived agent offers no pin.
 - Clicking a row opens that task on the document page (see "Leaving and
   resuming").
 - `New task` at the head of the list leaves any open task for the new-task
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-task page shows.
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
-  while any task is pinned, newest pinned first, which no view filters.
+  while any task is pinned, newest pinned first, which no view filters. A
+  pinned agent with no task stands there among the pinned tasks, ordered the
+  same way, and leaves its place among the tasks.
 - An archived task leaves the list. View options' **Archived tasks** turns
   the Tasks section to the archived tasks, grouped and ordered as the view
   says, the pins standing aside, with an Archived chip whose × goes back; it
@@ -202,6 +205,9 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   a shared workspace one member pinned stands under Pinned for them alone,
   both follow the account to every Mac, and a Pin, an Archive, or the way back from either is drawn at once and
   put back, with a quiet note under the task's row, when the service refuses.
+  An agent's pin is the account's own too (`agent_pin`, through
+  `PATCH /api/agents/{id}`), drawn at once and put back with a toast when the
+  service refuses.
 - There is no search in this journey.
 
 ### New task

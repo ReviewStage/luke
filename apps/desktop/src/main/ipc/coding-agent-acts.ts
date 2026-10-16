@@ -21,6 +21,7 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
+  type CodingAgentPinParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -86,6 +87,7 @@ export interface CodingAgentActsDependencies {
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     planningRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
@@ -153,6 +155,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_SERVERS
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
+  | typeof ACT_KIND.CODING_AGENTS_PIN
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
   | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
@@ -266,6 +269,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_ARCHIVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_ARCHIVE, sender);
       return notedAgent(host.codingAgentArchive(params));
+    },
+    [ACT_KIND.CODING_AGENTS_PIN]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
+      return notedAgent(host.codingAgentPin(params));
     },
     [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);

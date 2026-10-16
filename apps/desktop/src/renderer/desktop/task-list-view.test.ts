@@ -53,6 +53,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   openedAgents = [];
   copied = [];
+  pinsAsked = [];
   window.localStorage.clear();
   window.sessionStorage.clear();
   Object.defineProperty(window, "matchMedia", {
@@ -164,6 +165,9 @@ let openedAgents: string[] = [];
 /** What the window copied, in order. */
 let copied: string[] = [];
 
+/** Each agent's pin the sidebar asked for, in order, as `agentId:pinned`. */
+let pinsAsked: string[] = [];
+
 /** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
@@ -191,6 +195,7 @@ function mountSidebar(
       onOpen: (agentId) => openedAgents.push(agentId),
       onClose: () => undefined,
     },
+    onPinAgent: (agentId, pinned) => pinsAsked.push(`${agentId}:${String(pinned)}`),
   });
   act(() =>
     root.render(
@@ -802,6 +807,52 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 1);
+  assert.equal(opened, 2);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
+});
+
+/** The menu a right-click on the agent's row named `title` opens, by its items' words. */
+function agentMenu(sidebar: HTMLElement, title: string): string[] {
+  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
+    (each) => each.textContent?.includes(title) === true,
+  );
+  assert.ok(row, `the row of ${title} stands`);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(itemLabel);
+}
+
+test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest pinned first, and not among its repository's tasks", () => {
+  const pinned = { ...TRIAGE, pinnedAt: 950 };
+  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [pinned, SWEEP]);
+  const section = sidebar.querySelector('nav[aria-label="Pinned"]');
+  assert.deepEqual(
+    [...(section?.querySelectorAll(".sidebar-plan-name") ?? [])].map((name) => name.textContent),
+    ["Triage overnight issues", "Release checklist"],
+  );
+  assert.ok(section?.querySelector(".sidebar-agent .sidebar-agent-glyph svg"), "it wears its mark");
+  assert.ok(
+    !taskRows(sidebar).some((row) => row.name === "Triage overnight issues"),
+    "a pinned agent is not listed again under Tasks",
+  );
+  assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
+});
+
+test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and an archived one offers no pin", async () => {
+  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
+    TRIAGE,
+    { ...SWEEP, pinnedAt: 950 },
+    shelved,
+  ]);
+
+  assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), ["Copy link", "Pin"]);
+  await act(async () => menuItem("Pin").click());
+  assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), ["Copy link", "Unpin"]);
+  await act(async () => menuItem("Unpin").click());
+  assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
+
+  toggleArchived(sidebar);
+  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link"]);
 });

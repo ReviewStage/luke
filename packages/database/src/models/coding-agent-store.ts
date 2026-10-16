@@ -31,6 +31,7 @@ import {
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
 import {
   codingAgent,
@@ -110,6 +111,10 @@ import type { ConversationTarget } from "./writer.js";
  * the developer archived is a stamp on its row: every list leaves it out
  * but the plan's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
+ * A pin of an agent with no plan is the reading member's own
+ * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
+ * them alone, and is kept apart from the archive, so an agent archived and
+ * brought back is pinned again.
  * Who the agent writes as on GitHub is settled once, by its first session,
  * and a later session's word is answered with the one standing rather than
  * written over it; it is written over only where the developer's token was
@@ -156,6 +161,11 @@ export interface CodingAgent {
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
   readonly author: CodingAgentAuthor | null;
   readonly createdAt: Date;
+}
+
+/** One agent with no plan as the sidebar lists it for its reader: the agent, and when the reader pinned it; null where they hold no pin of it. */
+export interface PlanlessCodingAgent extends CodingAgent {
+  readonly pinnedAt: Date | null;
 }
 
 /** What a Start answered: the agent, and whether this Start made it or a retry found it. */
@@ -294,6 +304,12 @@ const CodingAgentRowSchema = Schema.Struct({
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
   createdAt: InstantColumnSchema,
+});
+
+/** An agent's row with the reader's own pin beside it; null where they hold none. */
+const PlanlessAgentRowSchema = Schema.Struct({
+  ...CodingAgentRowSchema.fields,
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
 });
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -754,15 +770,19 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     ),
 });
 
-/** Every agent with no plan in the account's workspaces, newest started first. */
+/** Every agent with no plan in the account's workspaces, newest started first, each with the account's own pin of it. */
 const findPlanlessAgents = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
-  Result: CodingAgentRowSchema,
+  Result: PlanlessAgentRowSchema,
   execute: ({ userId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
+        .select({ ...CODING_AGENT_COLUMNS, pinnedAt: agentPin.pinnedAt })
         .from(codingAgent)
+        .leftJoin(
+          agentPin,
+          and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),
+        )
         .where(
           and(
             isNull(codingAgent.planId),
@@ -866,6 +886,29 @@ const findAgent = SqlSchema.findOneOption({
         .from(codingAgent)
         .where(reachableAgent(userId, agentId))
         .limit(1),
+    ),
+});
+
+/** The account's pin of the agent, from now; one already standing keeps its instant. */
+const insertAgentPin = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  execute: ({ userId, agentId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(agentPin)
+        .values({ userId, codingAgentId: agentId, pinnedAt: now })
+        .onConflictDoNothing(),
+    ),
+});
+
+/** The account's pin of the agent taken away; every other member's stands. */
+const deleteAgentPin = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .delete(agentPin)
+        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId))),
     ),
 });
 
@@ -1015,13 +1058,14 @@ export function listWorkspaceCodingAgents(
 
 /**
  * Every agent with no plan in the account's workspaces, by any member,
- * newest started first, the archived ones only where `includeArchived` asks:
- * what the plan list carries beside the plans, read by the same gate.
+ * newest started first, the archived ones only where `includeArchived` asks,
+ * each with the account's own pin of it: what the plan list carries beside
+ * the plans, read by the same gate.
  */
 export function listPlanlessCodingAgents(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly CodingAgent[]> {
+): CodingAgentStoreEffect<readonly PlanlessCodingAgent[]> {
   return findPlanlessAgents({ userId, includeArchived: options.includeArchived ?? false });
 }
 
@@ -1227,6 +1271,26 @@ export function archiveCodingAgent(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
   );
+}
+
+/**
+ * The account's own pin of the agent set as asked: from now, or from the
+ * instant already standing, so pinning twice moves nothing; or taken away.
+ * Every other member's pin stands as it was. Nothing for an agent of a
+ * workspace the account is not in, which is neither pinned nor unpinned.
+ */
+export function pinCodingAgent(
+  userId: string,
+  agentId: string,
+  pinned: boolean,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.gen(function* () {
+    const found = yield* findAgent({ userId, agentId });
+    if (Option.isNone(found)) return found;
+    if (pinned) yield* insertAgentPin({ userId, agentId, now: yield* DateTime.nowAsDate });
+    else yield* deleteAgentPin({ userId, agentId });
+    return found;
+  });
 }
 
 const findAgentConversation = SqlSchema.findOneOption({

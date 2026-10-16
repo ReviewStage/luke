@@ -51,6 +51,7 @@ import {
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
+  codingAgentPinParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
@@ -389,6 +390,7 @@ export const ACT_KIND = {
   CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  CODING_AGENTS_PIN: "codingAgents.pin",
   /**
    * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item
@@ -1134,6 +1136,11 @@ export const ACT = {
     payload: actSchema(codingAgentArchiveParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not archive the agent on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PIN]: {
+    payload: actSchema(codingAgentPinParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not pin the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     payload: record({

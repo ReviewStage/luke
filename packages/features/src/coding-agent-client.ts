@@ -51,6 +51,7 @@ import {
   CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
+  type CodingAgentPinRequest,
   type CodingAgentRenameRequest,
   type CodingAgentServersRequest,
   type CodingAgentStartRequest,
@@ -609,6 +610,21 @@ export class HostedCodingAgentClient {
         body: JSON.stringify({ archived: request.archived }),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, ARCHIVE_REFUSALS),
+    );
+  }
+
+  /** Pins one agent for the account alone, or unpins it, answering it as it then stands. */
+  pin(
+    agentId: string,
+    request: CodingAgentPinRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify({ pinned: request.pinned }),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
     );
   }
 
