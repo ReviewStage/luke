@@ -757,6 +757,23 @@ test("a Luke link to an Inbox item opens it in its task's workspace, and one to 
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
+test("a Luke link to an automation's run opens its editor naming the run, which its runs mark", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId: "a1", runId: "r1" },
+    }),
+  );
+
+  assert.deepEqual(tab.control().automationsView.place, {
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "a1",
+    runId: "r1",
+  });
+});
+
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;

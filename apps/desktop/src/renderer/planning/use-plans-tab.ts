@@ -264,7 +264,12 @@ export const AUTOMATIONS_PAGE = {
 export type AutomationsPlace =
   | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
   | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
-  | { readonly kind: typeof AUTOMATIONS_PAGE.EDIT; readonly automationId: string };
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.EDIT;
+      readonly automationId: string;
+      /** The run a link named, which its runs mark and bring into view. */
+      readonly runId?: string;
+    };
 
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
@@ -1858,11 +1863,21 @@ export function usePlansTab(input: {
         standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
         return;
       case LINK_PLACE.AUTOMATION:
-      case LINK_PLACE.AUTOMATION_RUN:
         listLinked(workspace);
         standInFor({
           kind: STAND_IN.AUTOMATIONS,
           place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
+        });
+        return;
+      case LINK_PLACE.AUTOMATION_RUN:
+        listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.AUTOMATIONS,
+          place: {
+            kind: AUTOMATIONS_PAGE.EDIT,
+            automationId: place.automationId,
+            runId: place.runId,
+          },
         });
         return;
       case LINK_PLACE.FACTORY:

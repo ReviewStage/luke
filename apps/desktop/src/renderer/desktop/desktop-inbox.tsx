@@ -260,7 +260,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
       !live.read &&
       (holdings.some((holding) => holding.planId === planId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
-      !planless.items.has(chosenAgentId) &&
+      !planless.current.has(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
   const reading =
@@ -274,7 +274,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     planId !== undefined
       ? read.current.has(planId) || live.read || holderEmpty
       : chosenAgentId !== undefined
-        ? live.read || planless.items.has(chosenAgentId) || holderEmpty
+        ? live.read || planless.current.has(chosenAgentId) || holderEmpty
         : true;
   const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
   // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.

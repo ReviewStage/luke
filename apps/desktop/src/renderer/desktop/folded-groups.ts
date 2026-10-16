@@ -281,6 +281,8 @@ export interface RunsPanel {
   /** Asks for a width; it is clamped to the bounds before it is kept. */
   onResize: (width: number) => void;
   onToggle: () => void;
+  /** Shows the panel where it is folded, and is kept so, as a press of its toggle would be. */
+  onShow: () => void;
 }
 
 /** The Runs panel's width and fold, open at the default width until changed, and kept as they are. */
@@ -300,5 +302,8 @@ export function useRunsPanel(): RunsPanel {
     ...kept,
     onResize: (asked) => keep({ ...kept, width: clampRunsWidth(asked) }),
     onToggle: () => keep({ ...kept, open: !kept.open }),
+    onShow: () => {
+      if (!kept.open) keep({ ...kept, open: true });
+    },
   };
 }

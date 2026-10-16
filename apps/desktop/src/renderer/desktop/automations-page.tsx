@@ -9,12 +9,14 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
@@ -24,6 +26,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -45,6 +48,9 @@ import { useAutomations } from "./use-automations";
  * account's switch, and its toolbar says so with a quiet badge and Send
  * feedback.
  */
+
+/** What an automation's row's right-click menu is called. */
+const ROW_ACTIONS = "Automation actions";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -99,9 +105,16 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
-      <button type="button" className="automation-row-open" onClick={onOpen}>
+      <button
+        type="button"
+        className="automation-row-open"
+        onClick={onOpen}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+      >
         <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
         <span className="automation-row-copy">
           <span className="automation-row-name">{automation.name}</span>
@@ -127,6 +140,14 @@ function AutomationRow({
         label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
         onChange={(enabled) => onToggle(enabled)}
       />
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={ROW_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
     </div>
   );
 }
@@ -298,6 +319,16 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * edit is in the list the moment it lands.
  */
 export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+  // Every Copy link on these pages is written under the listed workspace, whose automations they are.
+  return (
+    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+      <AutomationsPages plans={plans} />
+    </LinkWorkspaceProvider>
+  );
+}
+
+/** The Automations pages themselves, under the workspace their links are written in. */
+function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element {
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);
@@ -339,6 +370,7 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
+        linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
         leaveGuard={plans.leaveGuard}
         onCreated={(automationId) => {
           setMade(automationId);

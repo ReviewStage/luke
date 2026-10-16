@@ -48,11 +48,12 @@ import {
   INTEGRATION_STATUS,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { ProviderMark, SidePanelIcon } from "@luke/ui";
+import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -61,6 +62,7 @@ import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
+import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
@@ -79,6 +81,7 @@ import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -523,7 +526,50 @@ function ScheduleRows({
   );
 }
 
-/** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its delete. */
+/** What the editor's ⋯ is called. */
+const ACTIONS_LABEL = "Automation actions";
+
+/** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
+function AutomationActions({
+  automation,
+  onDelete,
+}: {
+  automation: AutomationSummary;
+  onDelete: () => void;
+}): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const remove: MenuAction = {
+    label: "Delete",
+    icon: <Trash2Icon />,
+    onSelect: onDelete,
+    danger: true,
+  };
+  return (
+    <>
+      <Tooltip label={ACTIONS_LABEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={ACTIONS_LABEL}
+          {...menu.trigger()}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
   dirty,
@@ -609,14 +655,7 @@ function EditorToolbar({
               }
               onChange={(enabled) => onToggle(enabled)}
             />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={`Delete ${automation.name}`}
-              onClick={onDelete}
-            >
-              <Trash2Icon />
-            </button>
+            <AutomationActions automation={automation} onDelete={onDelete} />
           </>
         )}
         {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
@@ -1325,6 +1364,7 @@ export function AutomationEditor({
   onBack,
   onCreated,
   onOpenAgent,
+  linked,
   leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
@@ -1337,10 +1377,18 @@ export function AutomationEditor({
   onCreated: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
+  /**
+   * The page as the window was last sent to it, by a link or a press: the
+   * run a link named, which its runs mark and bring into view, none where
+   * no link named one. Each sending is a new value, so a link opened again
+   * shows the runs again.
+   */
+  linked?: { readonly runId?: string | undefined } | undefined;
   /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
   leaveGuard: LeaveGuard;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
+  const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: windowZone(),
@@ -1374,6 +1422,12 @@ export function AutomationEditor({
   const runsPanel = useRunsPanel();
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
+  // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
+  const showRuns = useRef(runsPanel.onShow);
+  showRuns.current = runsPanel.onShow;
+  useEffect(() => {
+    if (linked?.runId !== undefined) showRuns.current();
+  }, [linked]);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
@@ -1510,6 +1564,8 @@ export function AutomationEditor({
           panel={runsPanel}
           mine={automation === undefined || automation.mine === true}
           created={automation !== undefined}
+          automationId={automation?.id}
+          linkedRun={linkedRun}
           runs={runs.read}
           onRetry={runs.reload}
           onOpenAgent={onOpenAgent}

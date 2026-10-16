@@ -28,7 +28,15 @@ export interface PlanlessInboxItems {
   readonly items: ReadonlyMap<string, readonly InboxItem[]>;
   /** Whether an agent's last read did not answer, so the list offers to try again. */
   readonly failed: boolean;
+  /** The agents whose items are read as of main's latest word of what waits on them, or read and waited on no more, so an item they do not hold is not theirs. */
+  readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
+}
+
+/** One agent's items as last read, and the waiting items that read answered for. */
+interface Read {
+  readonly items: readonly InboxItem[];
+  readonly waitingIds: readonly string[];
 }
 
 /** The items main lists as waiting on each agent, by id in id order: what an agent is read again on, an item answered or opened since moving it. */
@@ -55,7 +63,7 @@ export function usePlanlessInboxItems(
   waiting: readonly AppInboxPlanlessItem[],
 ): PlanlessInboxItems {
   const { act } = useAct();
-  const [reads, setReads] = useState<ReadonlyMap<string, readonly InboxItem[]>>(new Map());
+  const [reads, setReads] = useState<ReadonlyMap<string, Read>>(new Map());
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState(0);
   const standing = useMemo(() => waitingPerAgent(waiting), [waiting]);
@@ -101,7 +109,7 @@ export function usePlanlessInboxItems(
           });
           if ("failure" in answer) return;
           readFor.current.set(agentId, items);
-          setReads((was) => new Map(was).set(agentId, answer.items));
+          setReads((was) => new Map(was).set(agentId, { items: answer.items, waitingIds: items }));
         });
     }
   }, [act, standing, attempt]);
@@ -115,9 +123,21 @@ export function usePlanlessInboxItems(
     setFailed(new Set());
     setAttempt((count) => count + 1);
   }, []);
+  const items = useMemo(
+    () => new Map([...reads].map(([agentId, read]) => [agentId, read.items])),
+    [reads],
+  );
+  // Note that an agent nothing waits on any more has no newer read on its way, so its last read stands.
+  const current = new Set(
+    [...reads.keys()].filter((agentId) => {
+      const waitingIds = standing.get(agentId);
+      return waitingIds === undefined || sameItems(reads.get(agentId)?.waitingIds, waitingIds);
+    }),
+  );
   return {
-    items: reads,
+    items,
     failed: [...standing.keys()].some((agentId) => failed.has(agentId)),
+    current,
     onRetry,
   };
 }

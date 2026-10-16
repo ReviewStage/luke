@@ -1981,3 +1981,47 @@ test("an item a link names under a task whose own read fails is kept asked for, 
 
   assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
 });
+
+test("a link to an agent's item newer than the agent's last read waits for the read of it, saying no Not found, and then shows it", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
+  pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  await settle();
+  const held: (() => void)[] = [];
+  holdAgentRead = (respond) => {
+    held.push(respond);
+  };
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  act(() => setPlanless([SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: THIRD_ASK.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  holdAgentRead = undefined;
+  for (const respond of held) respond();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Retry the flaky job?",
+  );
+});
+
+test("an item a link names under an agent nothing waits on any more, read before, is not found by that read though the agent's own read fails", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
+  pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  await settle();
+  agentReadFails = true;
+  act(() => setPlanless([]));
+  act(() =>
+    chooseFromOutside({
+      agentId: SECOND_AGENT,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+});
