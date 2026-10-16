@@ -74,13 +74,15 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberHandle, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { followAccountInbox, type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
+import { followAccountInbox } from "./account-inbox-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
+import { inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
 
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
@@ -148,6 +150,8 @@ export type CodingAgentClient = Pick<
   | "markInboxItemUnread"
   | "markInboxRead"
   | "accountInboxLive"
+  | "taskInboxLive"
+  | "agentInboxLive"
   | "inboxAttachment"
   | "agentPicture"
   | "chat"
@@ -164,11 +168,25 @@ export interface CodingAgentsDependencies {
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** The account inbox let go, as a sign-out lets it go, whoever followed it. */
+  /** The account inbox let go, and every plan's and agent's inbox subscription, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** Whether the service may be asked now: a run that sends, behind an open account gate. */
+function gateOf({ kernel, account }: CodingAgentsDependencies): () => boolean {
+  return () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+}
+
+/** The service asked behind the gate, over the host's own HTTP client. */
+function askedOf(dependencies: CodingAgentsDependencies, http: HttpClient.HttpClient) {
+  const gate = gateOf(dependencies);
+  return <Answer>(
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer | typeof UNANSWERED> =>
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+}
 
 export function composeCodingAgents(
   dependencies: CodingAgentsDependencies,
@@ -176,24 +194,32 @@ export function composeCodingAgents(
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const follower = yield* FiberHandle.make<never>();
-    return composed(dependencies, http, follower);
+    const asked = askedOf(dependencies, http);
+    const { client } = dependencies;
+    const inboxes = yield* scopeInboxes({
+      seal: (scope) => {
+        const [kind, id] = scope.split(":", 2);
+        return asked(
+          kind === "plan" ? client.taskInboxLive(id ?? "") : client.agentInboxLive(id ?? ""),
+        );
+      },
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: dependencies.kernel.now,
+    });
+    return composed(dependencies, http, follower, inboxes);
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it. */
+/** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it, and a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   follower: FiberHandle.FiberHandle<never>,
+  inboxes: ScopeInboxes,
 ): CodingAgentsComposer {
-  const { kernel, account, client } = dependencies;
-  const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
-
-  /** The service asked behind the gate, over the host's own HTTP client. */
-  const asked = <Answer>(
-    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+  const { kernel, client } = dependencies;
+  const gate = gateOf(dependencies);
+  const asked = askedOf(dependencies, http);
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -518,7 +544,9 @@ function composed(
           params,
           "reading a task's inbox names the task and a cursor",
         );
-        const answer = yield* asked(client.inbox(taskId, after));
+        const answer = gate()
+          ? yield* inboxPast(inboxes, `plan:${taskId}`, after, asked(client.inbox(taskId, after)))
+          : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
@@ -528,7 +556,14 @@ function composed(
           params,
           "reading an agent's inbox names the agent and a cursor",
         );
-        const answer = yield* asked(client.agentInbox(agentId, after));
+        const answer = gate()
+          ? yield* inboxPast(
+              inboxes,
+              `agent:${agentId}`,
+              after,
+              asked(client.agentInbox(agentId, after)),
+            )
+          : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
@@ -650,5 +685,10 @@ function composed(
       Effect.as(FiberHandle.clear(follower), {}),
   };
 
-  return { methods, lifetime: Effect.void, reset: FiberHandle.clear(follower) };
+  const reset = Effect.gen(function* () {
+    yield* FiberHandle.clear(follower);
+    for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
+  });
+
+  return { methods, lifetime: Effect.void, reset };
 }

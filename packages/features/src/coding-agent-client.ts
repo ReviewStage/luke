@@ -112,7 +112,12 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
-import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
+import {
+  type AccountInboxLiveAnswer,
+  accountInboxLiveAnswerSchema,
+  type ScopeInboxLiveAnswer,
+  scopeInboxLiveAnswerSchema,
+} from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -869,6 +874,37 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
       (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One plan's inbox sealed for following over Neon Realtime, answered at
+   * once: not found where the account reaches no such plan, unanswered
+   * where the deployment has no Realtime and for anything else, which the
+   * caller answers by holding its read open as before.
+   */
+  taskInboxLive(
+    taskId: string,
+  ): Effect.Effect<ScopeInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_INBOX}?${new URLSearchParams({ id: taskId })}`,
+      }),
+      (answer) => readAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
+  agentInboxLive(
+    agentId: string,
+  ): Effect.Effect<ScopeInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX}?${new URLSearchParams({ id: agentId })}`,
+      }),
+      (answer) => readAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 
