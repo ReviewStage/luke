@@ -4372,6 +4372,21 @@ button.integration-tool-head:hover,
   transform: translateY(-50%);
 }
 
+/* A teammate's open item waits on them, not on the reader: the dot's place
+   holds a hollow ring in the time's ink, so the column still says something
+   is open there without the blue that means the reader is asked. */
+.inbox-row-dot[data-hollow="true"] {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
+}
+
+/* A teammate's item wears their face before its time, as the sidebar marks a
+   teammate's task (`.sidebar-task-time > .actor-mark`). */
+.inbox-row-face {
+  display: flex;
+  flex: none;
+}
+
 /* The agent's byline names it in the thread's own ink, as a message's sender is named. */
 .inbox-byline-agent {
   display: flex;

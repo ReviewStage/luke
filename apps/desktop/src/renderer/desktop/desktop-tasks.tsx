@@ -28,6 +28,7 @@ import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
+  anyNeedsYou,
   firstChoice,
   INBOX_GROUPING,
   type InboxListed,
@@ -210,7 +211,11 @@ function TaskInboxTab({
   const needsYou = useTaskInboxWaitingOnly();
   const items = [...inbox.board.open, ...inbox.board.settled];
   const groups = [{ holder: taskHolder(task), items }];
-  const filter = { grouping: INBOX_GROUPING.NEWEST, waitingOnly: needsYou.waitingOnly };
+  const filter = {
+    grouping: INBOX_GROUPING.NEWEST,
+    waitingOnly: needsYou.waitingOnly,
+    readerId: tasks.me,
+  };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(groups, { ...filter, chosen: undefined });
   const steps = inboxList(groups, { ...filter, chosen: asked });
@@ -263,7 +268,7 @@ function TaskInboxTab({
           shown,
           needsYou,
           view: undefined,
-          waiting: inbox.board.open.length > 0,
+          waiting: anyNeedsYou(groups, tasks.me),
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
