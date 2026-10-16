@@ -443,6 +443,13 @@ export interface InboxListHead {
   readonly waiting: boolean;
 }
 
+/** What the list wears to keep the keyboard: its element, and its handlers for focus arriving and leaving. */
+interface RowFocus {
+  readonly ref: React.RefObject<HTMLElement | null>;
+  readonly onFocus: (event: React.FocusEvent) => void;
+  readonly onBlur: () => void;
+}
+
 /**
  * Keeps the keyboard in the list when the row holding it is no longer
  * drawn, as Needs you leaves out an item answered on another Mac while its
@@ -450,11 +457,7 @@ export interface InboxListHead {
  * out. Note that a removed row fires no blur, so the row last focused is
  * remembered and looked for after every render.
  */
-function useRowFocusKept(): {
-  ref: React.RefObject<HTMLElement | null>;
-  onFocus: (event: React.FocusEvent) => void;
-  onBlur: () => void;
-} {
+function useRowFocusKept(): RowFocus {
   const ref = useRef<HTMLElement | null>(null);
   const focusedRow = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
