@@ -351,3 +351,36 @@ it.live(
       yield* Effect.promise(() => f.exchange.stop());
     }),
 );
+
+it.live(
+  "the developer's words no ask carried reach Luke as the call's exchange closes, so a correction said before hanging up still reaches the plan",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      f.socket.receive(heard("Make the invites expire after three days.", 1000, 2400));
+      // The session ends ahead of the exchange, as the relay's own close of a hung-up device has it.
+      f.socket.receive({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: "closed",
+        reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+        usage: { seconds: 3 },
+      });
+      yield* settled(
+        () => !f.exchange.service.sessionStands(),
+        "the session to end of its own",
+        async () => `reports ${JSON.stringify(f.reports)}`,
+      );
+      yield* Effect.promise(() => f.exchange.stop());
+      assert.deepEqual(
+        f.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      assert.ok(
+        JSON.stringify(f.eve.opened[0]?.message).includes(
+          "Make the invites expire after three days.",
+        ),
+        `opened ${JSON.stringify(f.eve.opened.map((message) => message.message))}; reports ${JSON.stringify(f.reports)}`,
+      );
+    }),
+);

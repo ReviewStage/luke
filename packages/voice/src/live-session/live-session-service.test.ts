@@ -940,3 +940,26 @@ it.effect("a call whose every word an ask carried asks nothing more as it ends",
     assert.equal(f.brain.asks.length, 1);
   }),
 );
+
+it.effect(
+  "the session closing of its own hands on the developer's undelegated words too, and a session let go of for its peer to attach to again hands on nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Make it three days.", 0, 900);
+      sideband.closedBy("expired", 4);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      assert.ok(f.brain.asks[0]?.question.endsWith("Make it three days."));
+
+      const detached = yield* fixture();
+      const held = yield* detached.open();
+      yield* settle();
+      held.input("Make it five days.", 0, 900);
+      yield* detached.service.release();
+      yield* settle();
+      assert.deepEqual(detached.brain.asks, []);
+    }),
+);
