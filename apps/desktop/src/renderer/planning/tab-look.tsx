@@ -7,6 +7,7 @@ import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
 import { fileLook } from "./file-ref";
+import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**
@@ -68,6 +69,8 @@ export type TabSubject =
       readonly kind: typeof TAB_KIND.CHANGES;
       /** The label of the agent whose pull request it is; none before the agent is read. */
       readonly agentName: string | undefined;
+      /** The pull request, whose mark the tab wears for where it stands; none before it is read. */
+      readonly pullRequest?: PullRequestMarked | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
@@ -158,7 +161,12 @@ export function tabLook(subject: TabSubject): KindLook {
       };
     case TAB_KIND.CHANGES:
       return {
-        icon: <GitPullRequestIcon />,
+        icon:
+          subject.pullRequest === undefined ? (
+            <GitPullRequestIcon />
+          ) : (
+            <PullRequestMark pullRequest={subject.pullRequest} />
+          ),
         label:
           subject.agentName === undefined
             ? TAB_WORDS.PULL_REQUEST

@@ -229,6 +229,11 @@ test("the side panel's + offers a working subagent and an agent's Pull request i
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }
   assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
+  assert.match(
+    tabs.get(`Pull request: ${DONE.title}`)?.glyph ?? "",
+    /data-pull-request-state="open"/u,
+    "the Pull request tab wears its pull request's mark for where it stands",
+  );
 });
 
 test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", () => {

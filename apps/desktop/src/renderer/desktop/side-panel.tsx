@@ -463,7 +463,7 @@ export function panelEntries(input: {
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the plan's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
-    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label });
+    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label, pullRequest });
     const number = pullRequestNumberLabel(pullRequest);
     return {
       row: {
@@ -509,11 +509,15 @@ export function planWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it. */
+/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it, wearing its pull request's mark for where it stands. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agent = agents.agents?.find((each) => each.id === agentId);
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-  return tabLook({ kind: TAB_KIND.CHANGES, agentName });
+  return tabLook({
+    kind: TAB_KIND.CHANGES,
+    agentName,
+    pullRequest: agents.pullRequests.get(agentId),
+  });
 }
 
 /**

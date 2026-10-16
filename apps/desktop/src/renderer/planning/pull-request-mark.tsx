@@ -44,6 +44,9 @@ export function pullRequestMarkLabel(
   return `${pullRequestPillLabel(pullRequest)}${failing ? CHECKS_FAILING_WORDS : ""}`;
 }
 
+/** What a pull request's mark is drawn from: its number, where it stands, and how its checks went. */
+export type PullRequestMarked = Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
+
 /** A pull request's mark: its glyph for where it stands, coloured for it, red where its checks failed, and named for a reader who cannot see it. */
 export function PullRequestMark({
   pullRequest,
