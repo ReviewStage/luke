@@ -85,6 +85,7 @@ const UNREAD_TAB_NOTE = "New result";
 /** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
 function tabHint(input: {
   label: string;
+  /** Whether the label may not be read whole: cut short, or a tab other than the chosen one, which a narrow strip draws as its glyph alone. */
   clipped: boolean;
   tooltip: string | undefined;
   unread: boolean;
@@ -385,7 +386,10 @@ export function Tab({
   // Whether the label is cut short: a label renamed, or the plan's one tab
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
-  const hint = tabHint({ label, clipped, tooltip, unread });
+  // Note that a tab other than the chosen one is named in its hint whether or
+  // not its label shows, because a narrow strip draws it as its glyph alone
+  // (desktop.css), which the label's own measure cannot see.
+  const hint = tabHint({ label, clipped: clipped || !selected, tooltip, unread });
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
   const glyph = <span className="tab-icon">{icon}</span>;

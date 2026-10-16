@@ -315,9 +315,17 @@ export function useTabDrag(
     const shown = strip.getBoundingClientRect();
     const view = { left: shown.left, width: shown.width };
     const scrolled = strip.scrollLeft;
+    // Note that each slot is laid from the strip's start by the widths before
+    // it, rather than read off where the tab is drawn, because the chosen tab
+    // is pinned at the strip's edge (desktop.css) and drawn where it is stuck.
+    const style = getComputedStyle(strip);
+    const between = Number.parseFloat(style.columnGap) || 0;
+    let left = Number.parseFloat(style.paddingLeft) || 0;
     const slots = tabs.map((tab) => {
-      const rect = tab.getBoundingClientRect();
-      return { left: rect.left - view.left + scrolled, width: rect.width };
+      const width = tab.getBoundingClientRect().width;
+      const slot = { left, width };
+      left += width + between;
+      return slot;
     });
     const pointer = { pointerId: event.pointerId, x: event.clientX, pointer: event.clientX };
     const press = { ...pointer, scrolled, view, at, tabs, slots, gap: tabGap(slots), to: at };

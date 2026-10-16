@@ -36,17 +36,22 @@ const ignore = () => undefined;
 const roots: Root[] = [];
 
 afterEach(() => {
+  moves = [];
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
 
-/** A strip of `count` tabs, choosing the one pressed, each but the first closing. */
+/** Every move the strip asked for, as its place before and after. */
+let moves: [number, number][] = [];
+
+/** A strip of `count` tabs, choosing the one pressed, each but the first closing, which may be moved. */
 function Strip({ count }: { count: number }): ReactNode {
   const [chosen, choose] = useState(0);
   return createElement(TabStrip, {
     label: "Tabs",
+    onMove: (from: number, to: number) => moves.push([from, to]),
     children: Array.from({ length: count }, (_, at) =>
       createElement(Tab, {
         key: at,
@@ -174,4 +179,45 @@ test("a tab chosen past the strip's end is scrolled into its own place, and one 
   assert.equal(strip.scrollLeft, 6 * TAB_WIDTH - 250);
   act(() => pill(container, "Tab 2").querySelector<HTMLElement>('[role="tab"]')?.click());
   assert.equal(strip.scrollLeft, TAB_WIDTH);
+});
+
+test("the chosen tab, pinned at the strip's start after a scroll, dragged along lands where its own place in the row says", async () => {
+  layOut(250, 6);
+  const container = await drawn(6);
+  const strip = container.querySelector<HTMLElement>(".tab-strip") ?? assert.fail("it stands");
+  act(() => {
+    strip.scrollLeft = 150;
+  });
+  // Pinned at the strip's start, the chosen tab is drawn there, not at its own place in the row.
+  const chosen = pill(container, "Tab 1");
+  vi.spyOn(chosen, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, width: TAB_WIDTH, height: 30 }),
+  );
+  const grip = chosen.querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("it is a tab");
+  const at = (type: string, x: number) =>
+    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, pointerId: 1 });
+  act(() => {
+    grip.dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 120));
+    window.dispatchEvent(at("pointermove", 230));
+    window.dispatchEvent(at("pointerup", 230));
+  });
+  assert.deepEqual(moves, [[0, 2]]);
+});
+
+test("a tab other than the chosen one names itself in its hint, though its label may stand as its glyph alone", async () => {
+  const container = await drawn(3);
+  act(() => {
+    pill(container, "Tab 2")
+      .querySelector('[role="tab"]')
+      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
+});
+
+test("a chosen tab alone in its strip takes a tab's own width, keeping no share for others", async () => {
+  layContainersAt({});
+  const container = await drawn(1);
+  // Note that a chosen tab among others never gives way (flex-shrink 0); alone, it gives way as a tab does.
+  assert.equal(getComputedStyle(pill(container, "Tab 1")).flexShrink, "1");
 });
