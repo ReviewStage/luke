@@ -156,7 +156,6 @@ const overviewOf = (organizationId: string, script: RepositoryScript) =>
     const read = yield* pullRequestOverview(TOKEN, REPOSITORY, NUMBER);
     if (Option.isNone(read)) return undefined;
     return yield* namedOverview(
-      TOKEN,
       { organizationId, author: CODING_AGENT_AUTHOR.DEVELOPER },
       read.value,
     );
@@ -249,7 +248,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           login: LUKE.login,
           bot: true,
           avatarUrl: LUKE.avatar_url,
-          luke: true,
         });
         assert.equal(overview.writtenAs, CODING_AGENT_AUTHOR.DEVELOPER);
         assert.deepEqual(

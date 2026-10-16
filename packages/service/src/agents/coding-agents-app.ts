@@ -841,7 +841,7 @@ const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(
   const overview = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
     const read = yield* pullRequestOverview(token, agent.repository, pullRequest.number);
-    return Option.isNone(read) ? null : yield* namedOverview(token, agent, read.value);
+    return Option.isNone(read) ? null : yield* namedOverview(agent, read.value);
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
