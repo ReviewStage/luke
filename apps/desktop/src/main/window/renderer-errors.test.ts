@@ -5,7 +5,8 @@ import { reportRendererErrors } from "./renderer-errors";
 /**
  * A development build's renderer errors, as the terminal the run was started
  * from reads them: each error a window's page logs is one line naming the
- * document it came from, a warning is not, and once the reporting stops no
+ * document it came from, a warning is not, one naming an access token is
+ * withheld but for the fact of it, and once the reporting stops no
  * window says anything, whether it was open before or opened after.
  *
  * Note that Electron's module is replaced whole, because it is the operating
@@ -55,6 +56,20 @@ test("each error a window logs is one line naming its document, and a warning is
 
   assert.deepEqual(lines, [
     "renderer error in voice.html: Uncaught TypeError: session is undefined (index.js:12)",
+  ]);
+});
+
+test("an error naming an access token says only that one happened, and none of its words", () => {
+  const lines: string[] = [];
+  reportRendererErrors((line) => lines.push(line));
+
+  open("index.html").log(
+    "error",
+    "GET https://avatar.livekit.cloud/rtc/v1/validate?access_token=eyJhbGciOi.secret 401",
+  );
+
+  assert.deepEqual(lines, [
+    "renderer error in index.html, withheld because it names an access token",
   ]);
 });
 

@@ -8,10 +8,16 @@
  * naming the document it came from, since the panels, the voice window, and
  * the call window all run the one bundle. Only errors cross: a warning or a
  * log line is the page's to keep, and DevTools shows it.
+ *
+ * Note that an error naming an access token is withheld whole, as Sentry's
+ * breadcrumbs withhold it (`sentry-breadcrumbs.ts`), because a run's output
+ * is teed to files that are shared and quoted: the line says an error
+ * happened and where, and nothing of its words.
  */
 
 import path from "node:path";
 import { app, type BrowserWindow } from "electron";
+import { withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 
 /** The document a window's page is, by its file's name: `index.html`, `voice.html`, or `call.html`. */
 function documentName(url: string): string {
@@ -27,8 +33,17 @@ function reportErrorsOf(
   const contents = window.webContents;
   contents.on("console-message", (details) => {
     if (details.level !== "error" || !reporting()) return;
+    const page = documentName(contents.getURL());
+    const crumb = withoutAccessTokens({
+      message: details.message,
+      data: { url: details.sourceId },
+    });
+    if (crumb === null) {
+      report(`renderer error in ${page}, withheld because it names an access token`);
+      return;
+    }
     const source = `${documentName(details.sourceId)}:${details.lineNumber}`;
-    report(`renderer error in ${documentName(contents.getURL())}: ${details.message} (${source})`);
+    report(`renderer error in ${page}: ${details.message} (${source})`);
   });
 }
 
