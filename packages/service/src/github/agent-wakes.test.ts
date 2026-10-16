@@ -14,7 +14,7 @@ import { readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Option, Stream } from "effect";
 import { test } from "vitest";
@@ -125,7 +125,7 @@ function fakeEve() {
 /** An account whose plan's workspace reaches the repository, with one agent standing on a branch of its own, its session opened. */
 const openAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
-  const plan = yield* startPlan(owner, {
+  const plan = yield* startTask(owner, {
     name: "Teammate invitations",
     repository: RELAY_FULL_NAME,
   });
@@ -133,7 +133,7 @@ const openAgent = Effect.gen(function* () {
   assert.ok(installation);
   yield* connectWorkspaceGitHub(plan.workspaceId, installation);
   const started = yield* createCodingAgent(owner, {
-    planId: plan.id,
+    taskId: plan.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",

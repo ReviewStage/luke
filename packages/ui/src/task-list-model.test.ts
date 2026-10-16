@@ -1,5 +1,5 @@
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { expect, test } from "vitest";
 import {
   agentRow,
@@ -36,7 +36,7 @@ function task(
   createdAt: number,
   updatedAt: number,
   creator?: keyof typeof NAMES,
-): PlanSummary {
+): TaskSummary {
   return {
     id: name,
     workspaceId: "workspace-acme",
@@ -51,23 +51,23 @@ function task(
 }
 
 /** A creator's name as the wire carries it. */
-const nameOnWire = (plan: PlanSummary) => plan.createdBy?.name ?? "";
+const nameOnWire = (task: TaskSummary) => task.createdBy?.name ?? "";
 
 const names = (groups: readonly { rows: readonly TaskRow[] }[]) =>
   groups.map((group) => group.rows.map(taskRowName));
 
 /** The tasks grouped by repository, as their rows are. */
 const groupsByRepository = (
-  plans: readonly PlanSummary[],
+  plans: readonly TaskSummary[],
   order?: TaskOrder,
 ): readonly RepositoryGroup[] => repositoryGroups(plans.map(taskRow), order);
 
 /** The tasks grouped by creator, as their rows are, each named by its plan. */
 const groupsByCreator = (
-  plans: readonly PlanSummary[],
+  plans: readonly TaskSummary[],
   order: TaskOrder,
   readerId: string | undefined,
-  nameOf: (plan: PlanSummary) => string,
+  nameOf: (plan: TaskSummary) => string,
 ): readonly CreatorGroup[] =>
   creatorGroups(plans.map(taskRow), order, readerId, (row) =>
     row.kind === TASK_ROW.TASK ? nameOf(row.plan) : "",
@@ -113,10 +113,10 @@ test("ordered by name, the repositories and their tasks run alphabetically, the 
 });
 
 test("a row shows when its task was started under Created, and its last update otherwise", () => {
-  const plan = task("Retry webhooks", "acme/relay", 100, 900);
-  expect(taskTime(plan, TASK_ORDER.CREATED)).toBe(100);
-  expect(taskTime(plan, TASK_ORDER.UPDATED)).toBe(900);
-  expect(taskTime(plan, TASK_ORDER.NAME)).toBe(900);
+  const retry = task("Retry webhooks", "acme/relay", 100, 900);
+  expect(taskTime(retry, TASK_ORDER.CREATED)).toBe(100);
+  expect(taskTime(retry, TASK_ORDER.UPDATED)).toBe(900);
+  expect(taskTime(retry, TASK_ORDER.NAME)).toBe(900);
 });
 
 test("two repositories sharing a name are told apart by their owners", () => {
@@ -164,7 +164,7 @@ test("ordered by name, a creator's group sorts by the name its header says, even
     [older, task("Amy's", "acme/relay", 1, 1, MAYA)],
     TASK_ORDER.NAME,
     DEAN,
-    (plan) => (plan.ownerId === "user-zoe" ? "Zoe Quinn" : "Amy Ng"),
+    (task) => (task.ownerId === "user-zoe" ? "Zoe Quinn" : "Amy Ng"),
   );
   expect(
     groups.map((group) => (group.rows[0] === undefined ? undefined : taskRowName(group.rows[0]))),
@@ -177,7 +177,7 @@ test("filtered to one creator, the list holds only the tasks they created; filte
     task("Charles's", "acme/relay", 1, 1, CHARLES),
     task("Unnamed", "acme/relay", 1, 1),
   ];
-  expect(createdByOnly(tasks, DEAN).map((plan) => plan.name)).toEqual(["Dean's"]);
+  expect(createdByOnly(tasks, DEAN).map((task) => task.name)).toEqual(["Dean's"]);
   expect(createdByOnly(tasks, undefined)).toHaveLength(3);
 });
 

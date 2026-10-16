@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import type { StripTab } from "@luke/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,7 +31,7 @@ import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel";
  * sandbox stands.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -41,7 +41,7 @@ const PLAN: Plan = {
   document: { body: "", assumptions: [] },
 };
 
-const SUMMARY: PlanSummary = {
+const SUMMARY: TaskSummary = {
   id: PLAN.id,
   workspaceId: PLAN.workspaceId,
   name: PLAN.name,
@@ -136,10 +136,10 @@ function mount(input: {
   const listed = input.agents ?? [];
   const agentTabs = listed.map((each) => ({ agent: each.id }));
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [SUMMARY],
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     mainTabs: {
       ...base.mainTabs,
       tabs: [MAIN_TAB.PLAN, ...agentTabs],

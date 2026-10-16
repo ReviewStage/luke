@@ -1,4 +1,4 @@
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -12,7 +12,7 @@ import {
   type VoiceSegmentRole,
 } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
-import { readPlan } from "./plan-store.js";
+import { readTask } from "./task-store.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -65,15 +65,15 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
-  planId: string;
+  taskId: string;
   attachId: string;
   model: string;
 }
 
 /** A plan as the account asking for a call about it names it. */
-interface VoiceSessionPlanClaim {
+interface VoiceSessionTaskClaim {
   userId: string;
-  planId: string;
+  taskId: string;
 }
 
 /** A live session as the account that opened it names it. */
@@ -86,7 +86,7 @@ interface VoiceSessionOwnership {
 interface OwnedVoiceSession {
   /** The store's own id for the session's row. */
   readonly voiceSessionId: string;
-  readonly planId: string | undefined;
+  readonly taskId: string | undefined;
 }
 
 /** One stretch of words on an earlier call, by one speaker, in the order it was said. */
@@ -150,7 +150,7 @@ export interface VoiceSessionRecord {
    */
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
   /** The plan named, where the account is a member of its workspace: the check the door makes before a planning call is spent, and what the call opens knowing. */
-  heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<Plan | undefined>;
+  heldTask(input: VoiceSessionTaskClaim): VoiceSessionRecordEffect<Task | undefined>;
   /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   /**
@@ -158,7 +158,7 @@ export interface VoiceSessionRecord {
    * one speaker on one call run together: the newest `EARLIER_CALL_SEGMENTS`
    * segments, which is more than a session's startup history holds.
    */
-  earlierCalls(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
+  earlierCalls(input: VoiceSessionTaskClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
   /** Confirms the close of a session still open; a second close changes nothing. */
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
@@ -198,7 +198,7 @@ const RegisterRequestSchema = Schema.Struct({
   userId: Schema.String,
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
-  planId: Schema.String,
+  taskId: Schema.String,
   attachId: Schema.String,
   model: Schema.String,
   startedAt: Schema.Date,
@@ -214,7 +214,7 @@ const registerSession = SqlSchema.void({
           userId: row.userId,
           liveSessionId: row.liveSessionId,
           delegationMode: row.delegationMode,
-          planId: row.planId,
+          taskId: row.taskId,
           attachId: row.attachId,
           model: row.model,
           startedAt: row.startedAt,
@@ -224,7 +224,7 @@ const registerSession = SqlSchema.void({
 });
 
 const OwnedKeySchema = Schema.Struct({ userId: Schema.String, liveSessionId: Schema.String });
-const OwnedRowSchema = Schema.Struct({ id: Schema.String, planId: Schema.NullOr(Schema.String) });
+const OwnedRowSchema = Schema.Struct({ id: Schema.String, taskId: Schema.NullOr(Schema.String) });
 
 const findOwnedSession = SqlSchema.findOneOption({
   Request: OwnedKeySchema,
@@ -232,7 +232,7 @@ const findOwnedSession = SqlSchema.findOneOption({
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: voiceSessions.id, planId: voiceSessions.planId })
+        .select({ id: voiceSessions.id, taskId: voiceSessions.taskId })
         .from(voiceSessions)
         .where(
           and(
@@ -244,7 +244,7 @@ const findOwnedSession = SqlSchema.findOneOption({
 });
 
 const EarlierCallsRequestSchema = Schema.Struct({
-  planId: Schema.String,
+  taskId: Schema.String,
   limit: Schema.Number,
 });
 
@@ -258,7 +258,7 @@ const EarlierSegmentSchema = Schema.Struct({
  * The newest segments of the plan's calls, whichever member of its workspace
  * made each, newest first: the call by its start, then the segment by its
  * place. The plan alone keys them, because the door read it through
- * `heldPlan`, under the account's membership, before it asks.
+ * `heldTask`, under the account's membership, before it asks.
  */
 const findEarlierSegments = SqlSchema.findAll({
   Request: EarlierCallsRequestSchema,
@@ -273,7 +273,7 @@ const findEarlierSegments = SqlSchema.findAll({
         })
         .from(voiceTranscriptSegments)
         .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-        .where(eq(voiceSessions.planId, request.planId))
+        .where(eq(voiceSessions.taskId, request.taskId))
         .orderBy(
           desc(voiceSessions.startedAt),
           desc(voiceSessions.id),
@@ -461,7 +461,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           userId: input.userId,
           liveSessionId: input.sessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          planId: input.planId,
+          taskId: input.taskId,
           attachId: input.attachId,
           model: input.model,
           startedAt: new Date(now()),
@@ -471,23 +471,23 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           Option.match({ onNone: () => undefined, onSome: (row) => row.id }),
         ),
       ),
-    heldPlan: (input) =>
+    heldTask: (input) =>
       Effect.map(
-        readPlan(input.userId, input.planId),
-        Option.match({ onNone: () => undefined, onSome: (stored) => stored.plan }),
+        readTask(input.userId, input.taskId),
+        Option.match({ onNone: () => undefined, onSome: (stored) => stored.task }),
       ),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
         Option.match({
           onNone: () => undefined,
-          onSome: (row) => ({ voiceSessionId: row.id, planId: row.planId ?? undefined }),
+          onSome: (row) => ({ voiceSessionId: row.id, taskId: row.taskId ?? undefined }),
         }),
       ),
     earlierCalls: (input) =>
       Effect.map(
         findEarlierSegments({
-          planId: input.planId,
+          taskId: input.taskId,
           limit: EARLIER_CALL_SEGMENTS,
         }),
         earlierLines,

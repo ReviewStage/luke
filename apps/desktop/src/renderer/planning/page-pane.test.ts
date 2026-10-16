@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
-import { type CodeLines, PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -78,7 +78,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   return { container, frame, press, render, sourceLines };
 }
 
-const versionUrl = (version: number) => pageFrameUrl({ planId: PLAN, pageId: FUNNEL.id, version });
+const versionUrl = (version: number) => pageFrameUrl({ taskId: PLAN, pageId: FUNNEL.id, version });
 
 test("a page is drawn at its newest version in a frame that runs its own scripts alone, left out of the recording", () => {
   const { container, frame } = mount(FUNNEL);
@@ -129,7 +129,7 @@ test("a source the service did not answer says so in its place, and Retry reads 
   let answered = false;
   const { press, sourceLines, container } = mount(FUNNEL, (version) =>
     Promise.resolve(
-      answered ? { lines: sourceOf(version) } : { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      answered ? { lines: sourceOf(version) } : { failure: TASK_CALL_FAILURE.UNANSWERED },
     ),
   );
 

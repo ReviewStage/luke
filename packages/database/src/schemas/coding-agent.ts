@@ -18,7 +18,7 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 import { conversations } from "./storage.js";
 
 /**
@@ -119,7 +119,7 @@ export const codingAgent = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     /** The plan the agent works on; null for an agent an automation started with no plan. */
-    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
     /** The workspace the agent belongs to, its plan's or its automation's. */
     organizationId: text("organization_id")
       .notNull()
@@ -177,7 +177,7 @@ export const codingAgent = pgTable(
     // One agent per Start: a retry carrying the same key finds this row.
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one plan's agents in the order they were started.
-    index("coding_agent_plan_created").on(table.planId, table.createdAt),
+    index("coding_agent_plan_created").on(table.taskId, table.createdAt),
     // A workspace's agents with no plan are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
   ],

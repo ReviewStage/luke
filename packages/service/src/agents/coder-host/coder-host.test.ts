@@ -10,12 +10,12 @@ import {
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -40,8 +40,8 @@ import {
   unparsedWire,
   type WireRecord,
 } from "../../core.js";
-import { PICTURE_LOOK_STATUS } from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { noNetwork } from "../../testing/no-network.js";
@@ -154,12 +154,12 @@ const unclaimedAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* startPlan(userId, {
+    const task = yield* startTask(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
     const started = yield* createCodingAgent(userId, {
-      planId: plan.id,
+      taskId: task.id,
       idempotencyKey: `start-${minted}`,
       model,
       effort,
@@ -350,9 +350,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
-        const plan = yield* startPlan(userId, { name: "Billing export" });
+        const task = yield* startTask(userId, { name: "Billing export" });
         const conversationId = Option.getOrThrow(
-          yield* openPlanConversation(userId, plan.id),
+          yield* openTaskConversation(userId, task.id),
         ).conversationId;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
@@ -505,8 +505,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, admitted } = yield* openAgent(host);
-        assert.ok(agent.planId !== null);
-        const before = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.ok(agent.taskId !== null);
+        const before = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         const notes = [
           {
             kind: "add",
@@ -531,14 +531,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           missed: "replace a phrase the plan never held",
           current: before.text,
         });
-        const untouched = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const untouched = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         assert.equal(untouched.text, before.text);
         assert.deepEqual(untouched.agentEdits, []);
 
         const answer = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
 
         assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
-        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const stored = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         const sectionText = (heading: string) =>
           planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";
         assert.ok(
@@ -547,10 +547,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           ),
         );
         assert.ok(sectionText("Approach").endsWith("\n\n- Invites expire after 7 days."));
-        assert.equal(stored.plan.document.body, stored.text);
+        assert.equal(stored.task.document.body, stored.text);
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
-        assert.deepEqual(stored.plan.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(stored.task.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
         assert.deepEqual(
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],
@@ -564,14 +564,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
-        assert.ok(agent.planId !== null);
+        assert.ok(agent.taskId !== null);
         const picture = {
           contentType: PICTURE_TYPE.PNG,
           bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 2]),
         };
-        const kept = yield* keepPlanAttachment(userId, agent.planId, picture);
+        const kept = yield* keepPlanAttachment(userId, agent.taskId, picture);
         if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
-        const ref = { planId: agent.planId, attachmentId: kept.id };
+        const ref = { taskId: agent.taskId, attachmentId: kept.id };
         const input = { address: planAttachmentAddress(ref, "acme") };
 
         const answer = yield* host.lookAtPicture(admitted, unparsedWire(input));

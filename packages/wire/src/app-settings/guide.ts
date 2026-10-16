@@ -42,7 +42,7 @@ export interface DescribedSetting {
 /** The window's two places, and so the tabs a panel-tab change is counted as. */
 export const APP_PANEL_TAB = {
   /** The named plans, and the one open plan's saved document and call. */
-  PLANS: "plans",
+  TASKS: "plans",
   SETTINGS: "settings",
 } as const;
 

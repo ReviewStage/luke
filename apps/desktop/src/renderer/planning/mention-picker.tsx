@@ -7,7 +7,7 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
@@ -178,7 +178,7 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
       if (anchor === "") return [];
       return [
         {
-          mention: { kind: MENTION_KIND.SECTION, planId, anchor },
+          mention: { kind: MENTION_KIND.SECTION, taskId: planId, anchor },
           name: heading,
           detail: "Section",
           terms: heading,
@@ -186,7 +186,7 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
       ];
     }),
     {
-      mention: { kind: MENTION_KIND.PLAN, planId },
+      mention: { kind: MENTION_KIND.TASK, taskId: planId },
       name: planName,
       detail: "The whole plan",
       terms: planName,
@@ -198,7 +198,7 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
 function pageRows(planId: string, pages: readonly MentionablePage[]): MentionRow[] {
   if (planId === NO_PLAN) return [];
   return pages.map((page) => ({
-    mention: { kind: MENTION_KIND.PAGE, planId, pageId: page.id },
+    mention: { kind: MENTION_KIND.PAGE, taskId: planId, pageId: page.id },
     name: page.title,
     detail: PAGE_DETAIL,
     terms: page.title,
@@ -215,7 +215,7 @@ function agentRows(
   return agents
     .filter((agent) => agent.id !== self)
     .map((agent) => ({
-      mention: { kind: MENTION_KIND.AGENT, planId, agentId: agent.id },
+      mention: { kind: MENTION_KIND.AGENT, taskId: planId, agentId: agent.id },
       name: agent.name,
       detail: AGENT_DETAIL,
       terms: agent.name,
@@ -315,7 +315,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       return <FolderIcon aria-hidden="true" />;
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
       return <DocumentIcon />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
@@ -528,7 +528,7 @@ export function useMentionPicker({
     const key = treeKey(planId, workspaceId, repository);
     if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.PLANNING_TREE, { ...key, path: "", recursive: true }).then(
+    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then(
       (answer) => {
         if (!live) return;
         const entries = "folder" in answer ? answer.folder.entries : [];
@@ -538,7 +538,7 @@ export function useMentionPicker({
           repository,
           paths: entries.map((entry) => ({
             path: entry.name,
-            folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+            folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
           })),
         });
       },

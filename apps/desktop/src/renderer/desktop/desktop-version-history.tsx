@@ -3,11 +3,11 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import type { PlanRevisionLine } from "@luke/features/plan-wire";
+import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -577,7 +577,7 @@ function VersionPage({
 /** The open plan's history as the view's subject: its name, whether it is archived, its agents, and the places in the window its revisions were written. */
 export function planVersionSubject(plans: PlansControl): VersionSubject {
   const { region, boundFor } = plans;
-  const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const plan = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   const workspace = plans.workspaces.find((each) => each.id === plan?.workspaceId);
   return {
     workspace,

@@ -8,21 +8,21 @@ import {
   newestSession,
 } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openPlanConversation } from "@luke/database/models/plan-store";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "effect";
 import { afterAll, test } from "vitest";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { ASK_REFUSAL, type AskInput, acceptAsk, STOP_REFUSAL, stopAsk } from "./brain-ask.js";
 import {
@@ -396,10 +396,10 @@ test("a member's ask in the plan conversation a teammate opened is recorded unde
   const opener = await database.createUser();
   const member = await database.createUser();
   const stranger = await database.createUser();
-  const plan = await database.run(startPlan(opener, { name: "Teammate invitations" }));
-  await database.run(joinWorkspace(plan.workspaceId, member));
+  const task = await database.run(startTask(opener, { name: "Teammate invitations" }));
+  await database.run(joinWorkspace(task.workspaceId, member));
   const { conversationId } = Option.getOrThrow(
-    await database.run(openPlanConversation(opener, plan.id)),
+    await database.run(openTaskConversation(opener, task.id)),
   );
   const h = harness();
 

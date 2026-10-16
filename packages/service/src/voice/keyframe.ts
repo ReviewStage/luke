@@ -39,7 +39,7 @@ export const KEYFRAME_FAILURE = {
   /** Every session the plan allows is standing, or no worker is free: the call goes on as voice. */
   NO_CAPACITY: "no_capacity",
   /** The plan does not allow the session asked for. */
-  PLAN_REFUSED: "plan_refused",
+  TASK_REFUSED: "plan_refused",
   /** Any other answer, or none: a status where Keyframe answered one. */
   UPSTREAM: "upstream",
 } as const;
@@ -94,7 +94,7 @@ function refusalOf(status: number): KeyframeFailure {
   if (status === SERVICE_UNAVAILABLE || status === HTTP_STATUS.TOO_MANY_REQUESTS) {
     return KEYFRAME_FAILURE.NO_CAPACITY;
   }
-  if (status === HTTP_STATUS.FORBIDDEN) return KEYFRAME_FAILURE.PLAN_REFUSED;
+  if (status === HTTP_STATUS.FORBIDDEN) return KEYFRAME_FAILURE.TASK_REFUSED;
   return KEYFRAME_FAILURE.UPSTREAM;
 }
 

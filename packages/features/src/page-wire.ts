@@ -66,7 +66,7 @@ export const pageLineSchema = EffectSchema.Struct({
 export type PageLine = typeof pageLineSchema.Type;
 
 /** A plan's pages (GET `/api/plans/{id}/pages`), the most recently written first. */
-export const planPagesAnswerSchema = EffectSchema.Struct({
+export const taskPagesAnswerSchema = EffectSchema.Struct({
   pages: EffectSchema.Array(pageLineSchema),
 });
 

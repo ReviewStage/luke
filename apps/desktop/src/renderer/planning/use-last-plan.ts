@@ -1,5 +1,5 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { Schema } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readKept, writeKept } from "../desktop/folded-groups";
@@ -55,8 +55,8 @@ function withKept(kept: KeptPlans, account: string, planId: string | undefined):
 export function useLastPlan(input: {
   staged: boolean;
   account: string | undefined;
-  plans: readonly PlanSummary[];
-  listStatus: PlanningView["listStatus"];
+  plans: readonly TaskSummary[];
+  listStatus: TasksView["listStatus"];
   openPlanId: string | undefined;
   boundFor: string | undefined;
   select: (planId: string) => void;
@@ -106,7 +106,7 @@ export function useLastPlan(input: {
       setDecided({ account });
       return;
     }
-    if (listStatus !== PLANNING_READ.READY) return;
+    if (listStatus !== TASKS_READ.READY) return;
     const plan = plans.find((each) => each.id === keptPlan && each.archivedAt === undefined);
     if (plan === undefined) {
       if (keptPlan !== undefined) keep((held) => withKept(held, account, undefined));
@@ -121,7 +121,7 @@ export function useLastPlan(input: {
   // sidebar's Try again, rather than the bare ground until the list reads.
   if (staged || account === undefined || openPlanId !== undefined) return false;
   if (decided?.account !== account) {
-    return keptPlan !== undefined && listStatus !== PLANNING_READ.FAILED;
+    return keptPlan !== undefined && listStatus !== TASKS_READ.FAILED;
   }
   return decided.asked !== undefined && boundFor === decided.asked;
 }

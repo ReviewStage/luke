@@ -125,7 +125,7 @@ function escaped(words: string, ends: RegExp): string {
 }
 
 /** A picture's line in a plan's text: its words as its alt text, and the plan's own address for it. */
-export function planPictureLine(words: string, address: string): string {
+export function taskPictureLine(words: string, address: string): string {
   return `![${escaped(words, /[\\[\]]/gu)}](${escaped(address, /[\\()]/gu)})`;
 }
 

@@ -1277,7 +1277,7 @@ export function AgentTab({
   useEffect(() => {
     if (settledEdits <= seenEdits.current) return;
     seenEdits.current = settledEdits;
-    tell(ACT_KIND.PLANNING_REFRESH);
+    tell(ACT_KIND.TASKS_REFRESH);
   }, [settledEdits, tell]);
   // An agent this one started joins the plan's agents only once they are read again, so
   // one that landed after the tab opened has them read; those already there were read with the plan.

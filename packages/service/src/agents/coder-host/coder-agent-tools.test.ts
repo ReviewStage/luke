@@ -11,17 +11,17 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
-import { createPlan } from "@luke/database/models/plan-store";
+import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { plan } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/plan";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
   leaveWorkspace,
   openHostedStoreTestDatabase,
   openWorkspace,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -147,7 +147,7 @@ async function agentOn(userId: string, planId: string): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
-    planId,
+    taskId: planId,
     planSnapshot: "# Teammate invitations",
     prompt: null,
   });
@@ -158,7 +158,7 @@ async function planlessAgentOn(userId: string, workspaceId: string): Promise<Sta
   return claimed(userId, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
-    planId: null,
+    taskId: null,
     organizationId: workspaceId,
     planSnapshot: null,
     prompt: "Sweep the flaky tests.",
@@ -253,12 +253,12 @@ async function openWorkspaces() {
   const bob = await database.createUser();
   const carol = await database.createUser();
   const invitations = await database.run(
-    startPlan(alice, { name: "Teammate invitations", repository: RELAY_FULL_NAME }),
+    startTask(alice, { name: "Teammate invitations", repository: RELAY_FULL_NAME }),
   );
   const workspaceId = invitations.workspaceId;
   await database.run(joinWorkspace(workspaceId, bob));
   const billing = await database.run(
-    createPlan(bob, { organizationId: workspaceId, name: "Billing", repository: RELAY_FULL_NAME }),
+    createTask(bob, { organizationId: workspaceId, name: "Billing", repository: RELAY_FULL_NAME }),
   );
   const caller = await agentOn(alice, invitations.id);
   assert.equal(await database.run(fillCodingAgentTitle(alice, caller.id, CALLER_TITLE)), true);
@@ -269,7 +269,7 @@ async function openWorkspaces() {
   const elsewhere = await database.run(openWorkspace(carol));
   await database.run(joinWorkspace(elsewhere, alice));
   const elsewherePlan = await database.run(
-    createPlan(carol, {
+    createTask(carol, {
       organizationId: elsewhere,
       name: "Elsewhere",
       repository: RELAY_FULL_NAME,
@@ -279,7 +279,7 @@ async function openWorkspaces() {
 
   const stranger = await database.createUser();
   const strangersPlan = await database.run(
-    startPlan(stranger, { name: "Stranger's plan", repository: RELAY_FULL_NAME }),
+    startTask(stranger, { name: "Stranger's plan", repository: RELAY_FULL_NAME }),
   );
   const strangers = await agentOn(stranger, strangersPlan.id);
   return {
@@ -456,7 +456,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
-  assert.equal(stored.planId, plans.invitations);
+  assert.equal(stored.taskId, plans.invitations);
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
   assert.equal(eve.sent.length, 1);
@@ -520,7 +520,7 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   const stored = Option.getOrThrow(
     await database.run(readCodingAgent(caller.userId, started.agent.id)),
   );
-  assert.equal(stored.planId, plans.billing);
+  assert.equal(stored.taskId, plans.billing);
   assert.equal(started.agent.onYourTask, false, "an agent started on another task is said to be");
   assert.equal(eve.sent.length, 1);
   // The same call run again answers the agent it made, and starts nothing.
@@ -536,11 +536,11 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   await database.run(
     Effect.flatMap(Database, (db) =>
       Effect.andThen(
-        db.update(plan).set({ organizationId: elsewhere }).where(eq(plan.id, plans.billing)),
+        db.update(task).set({ organizationId: elsewhere }).where(eq(task.id, plans.billing)),
         db
           .update(codingAgent)
           .set({ organizationId: elsewhere })
-          .where(eq(codingAgent.planId, plans.billing)),
+          .where(eq(codingAgent.taskId, plans.billing)),
       ),
     ),
   );

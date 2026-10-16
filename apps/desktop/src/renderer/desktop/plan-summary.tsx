@@ -741,7 +741,7 @@ function SummaryChevron({
  * a subagent, or a file from its neighbours by nothing a reader could tell
  * at a glance.
  */
-export function PlanSummary({
+export function TaskSummary({
   plans,
   layout,
   cardId,

@@ -26,19 +26,19 @@ const DRIZZLE_KIT_BIN = join(
 const ORIGIN_ID = "00000000-0000-0000-0000-000000000000";
 
 const account = pgTable("account", { id: integer().primaryKey() });
-const plan = pgTable("plan", { id: integer().primaryKey() });
+const task = pgTable("plan", { id: integer().primaryKey() });
 
 const FIXTURE_SCHEMA = {
-  BASE: { account, plan },
+  BASE: { account, task },
   NICKNAME_TEXT: {
     account: pgTable("account", { id: integer().primaryKey(), nickname: text() }),
-    plan,
+    task,
   },
   NICKNAME_NUMBER: {
     account: pgTable("account", { id: integer().primaryKey(), nickname: integer() }),
-    plan,
+    task,
   },
-  PLAN_TITLE: { account, plan: pgTable("plan", { id: integer().primaryKey(), title: text() }) },
+  TASK_TITLE: { account, task: pgTable("plan", { id: integer().primaryKey(), title: text() }) },
 } as const;
 
 /** The fixture schema a migration is generated from: the base's two tables, or a branch's. */
@@ -87,7 +87,7 @@ test("drizzle-kit check passes two branches that change different tables", async
   const run = await checkBranches(
     await temporaryDirectory(t),
     FIXTURE_SCHEMA.NICKNAME_TEXT,
-    FIXTURE_SCHEMA.PLAN_TITLE,
+    FIXTURE_SCHEMA.TASK_TITLE,
   );
   expect(run.status, run.stdout + run.stderr).toBe(0);
 }, 60_000);

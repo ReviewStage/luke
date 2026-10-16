@@ -9,7 +9,7 @@ import {
   PLAN_ATTACHMENT_KEEP,
   readPlanAttachment,
 } from "@luke/database/models/plan-attachments";
-import { createPlan, readPlan, updatePlan } from "@luke/database/models/plan-store";
+import { createTask, readTask, updateTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
@@ -25,9 +25,9 @@ import { CODER } from "./bounds.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   PLAN_EDIT_REFUSAL,
-  PLAN_PICTURE_FILE_REFUSAL,
   planEditRejected,
   recordPlanEdit,
+  TASK_PICTURE_FILE_REFUSAL,
 } from "./plan-edit.js";
 import { CODER_TOOL, opensSandbox } from "./tool-set.js";
 
@@ -80,15 +80,15 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** A plan in a workspace its owner made and a teammate joined, an agent the owner started on it, and an account in neither. */
-const openAgentPlan = Effect.gen(function* () {
+const openAgentTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
   const outsider = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const plan = yield* createPlan(owner, { organizationId: workspace, name: "Invites" });
+  const plan = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
   const started = yield* createCodingAgent(owner, {
-    planId: plan.id,
+    taskId: plan.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
@@ -120,7 +120,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
     "a screenshot lands as its line under its section, kept as a picture every member reads and nobody else does, in a save that is the agent's, and the answer carries none of its bytes",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId, agentId } = yield* openAgentPlan;
+        const { owner, teammate, outsider, planId, agentId } = yield* openAgentTask;
         const sandbox = sandboxWith({ "shots/members.png": SCREENSHOT });
         const input = {
           pictures: pictureCall("shots/members.png").pictures,
@@ -128,7 +128,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         };
 
         const answer = yield* recordPlanEdit(
-          { userId: owner, planId },
+          { userId: owner, taskId: planId },
           { agentId },
           unparsedWire(input),
           0,
@@ -137,7 +137,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
 
         assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         assert.equal(JSON.stringify(answer).includes(Base64.encode(SCREENSHOT)), false);
-        const stored = Option.getOrThrow(yield* readPlan(owner, planId));
+        const stored = Option.getOrThrow(yield* readTask(owner, planId));
         const approach = planSections(stored.text).find(({ heading }) => heading === "Approach");
         const line = approach?.text.split("\n").at(-1) ?? "";
         const [, address] =
@@ -147,7 +147,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         assert.ok(address, line);
         assert.ok(approach?.text.includes("- The members page lists invites.\n\n![Members page"));
         const named = planAttachmentOf(address);
-        assert.equal(named?.planId, planId);
+        assert.equal(named?.taskId, planId);
         if (named === undefined) return;
         for (const member of [owner, teammate]) {
           const read: Option.Option<Picture> = yield* readPlanAttachment(
@@ -177,9 +177,9 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
     "a missing file, a file that is no image, one past the bound, pictures past the plan's bound, and an archived plan each refuse the call, nothing is saved, and no picture kept before the refusal holds a place in the bound",
     () =>
       Effect.gen(function* () {
-        const { owner, planId, agentId } = yield* openAgentPlan;
-        const full = yield* openAgentPlan;
-        const archived = yield* openAgentPlan;
+        const { owner, planId, agentId } = yield* openAgentTask;
+        const full = yield* openAgentTask;
+        const archived = yield* openAgentTask;
         const tooLarge = new Uint8Array(1_500_001);
         tooLarge.set(SCREENSHOT);
         const sandbox = sandboxWith({
@@ -193,11 +193,11 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           const answer = yield* keepPlanAttachment(full.owner, full.planId, picture);
           assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
         }
-        yield* updatePlan(archived.owner, archived.planId, { archived: true });
-        const before = Option.getOrThrow(yield* readPlan(owner, planId)).text;
+        yield* updateTask(archived.owner, archived.planId, { archived: true });
+        const before = Option.getOrThrow(yield* readTask(owner, planId)).text;
         const edit = (at: { owner: string; planId: string; agentId: string }, ...paths: string[]) =>
           recordPlanEdit(
-            { userId: at.owner, planId: at.planId },
+            { userId: at.owner, taskId: at.planId },
             { agentId: at.agentId },
             unparsedWire({
               notes: [],
@@ -218,13 +218,13 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         const lastPlace = yield* edit(full, "shots/members.png");
 
         assert.deepEqual(answers, [
-          planEditRejected(`${PLAN_PICTURE_FILE_REFUSAL.NO_FILE} shots/missing.png`),
-          planEditRejected(`${PLAN_PICTURE_FILE_REFUSAL.NOT_IMAGE} notes.txt`),
-          planEditRejected(`${PLAN_PICTURE_FILE_REFUSAL.TOO_LARGE} huge.png`),
+          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NO_FILE} shots/missing.png`),
+          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} notes.txt`),
+          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} huge.png`),
           planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES),
           planEditRejected(PLAN_EDIT_REFUSAL.ARCHIVED),
         ]);
-        assert.equal(Option.getOrThrow(yield* readPlan(owner, planId)).text, before);
+        assert.equal(Option.getOrThrow(yield* readTask(owner, planId)).text, before);
         assert.deepEqual(lastPlace, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 1,

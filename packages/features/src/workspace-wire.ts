@@ -2,8 +2,8 @@ import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import { sniffImageType } from "./image-signature.js";
 import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
-import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 
 /**
  * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, renames, or gives a photo, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
@@ -27,7 +27,7 @@ import { countedNumber } from "./service-wire.js";
  * suspended or removed one is not. `githubInstallations` is every one, and
  * absent from a service from before there could be several; `github` is
  * the first still active, else the first, or null, as a desktop from
- * before them reads it. A workspace's id is the one a plan's summary names, `plan-wire.ts`'s
+ * before them reads it. A workspace's id is the one a plan's summary names, `task-wire.ts`'s
  * `workspaceIdSchema`.
  *
  * A member of a workspace reads its members; an owner or an admin renames

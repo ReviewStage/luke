@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { PlanEditor } from "@luke/features/plan-wire";
-import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import type { PlanEditor } from "@luke/features/task-wire";
+import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -91,7 +91,7 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   });
   const steering = worker("r", "Also read the build.", { taskId: "worker-0" });
   const started = workTurn(
-    PLAN_WORK_STATE.DONE,
+    TASK_WORK_STATE.DONE,
     [
       workerCall(styling),
       toolCall(
@@ -107,7 +107,7 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   const stop = (id: string, taskId: string) =>
     toolCall(EVE_TOOL.TASK_CANCEL, id, { taskId }, { output: `Stopped ${taskId}.` });
   const stopping = workTurn(
-    PLAN_WORK_STATE.RUNNING,
+    TASK_WORK_STATE.RUNNING,
     [stop("c1", "worker-1"), stop("c2", "worker-0")],
     {
       turnId: "turn-2",
@@ -151,7 +151,7 @@ test("a finished spoken turn is one folded line under the line that asked for it
     ],
   };
   const ended = workTurn(
-    PLAN_WORK_STATE.DONE,
+    TASK_WORK_STATE.DONE,
     [
       toolCall(AGENT_TOOL.END_CALL, "c1", {}, { output: { status: "accepted" } }),
       words("Ending the call as asked."),
@@ -213,7 +213,7 @@ test("the look around a call opens with, a spoken turn no line asked for, stands
     ],
   };
   const explore = workTurn(
-    PLAN_WORK_STATE.DONE,
+    TASK_WORK_STATE.DONE,
     [
       toolCall(AGENT_TOOL.RUN_IN_REPOSITORY, "c1", { command: "ls" }, { output: "README.md" }),
       words("This is Luke, a macOS voice-planning app."),
@@ -248,10 +248,10 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
   const styling = worker("w", "Read the styling setup.", {
     taskId: "worker-1",
     title: "Styling setup",
-    state: PLAN_WORK_STATE.FAILED,
+    state: TASK_WORK_STATE.FAILED,
   });
   const turn = workTurn(
-    PLAN_WORK_STATE.DONE,
+    TASK_WORK_STATE.DONE,
     [
       workerCall(styling),
       toolCall(
@@ -321,7 +321,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
 
 test("on the Call tab, a show_code row says its lines as the Code tab's card says them, hangs the file's card with Luke's note, and opens the file on those lines", () => {
   const ref = { path: "src/invites/accept.ts", startLine: 3, endLine: 5 };
-  const turn = workTurn(PLAN_WORK_STATE.DONE, [
+  const turn = workTurn(TASK_WORK_STATE.DONE, [
     toolCall(AGENT_TOOL.SHOW_CODE, "c", ref, { output: { status: "shown" } }),
   ]);
   const conversation = conversationOf([turn]);

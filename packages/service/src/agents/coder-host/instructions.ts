@@ -101,8 +101,8 @@ const CHECKS_WORDS = {
  * the plan's pages, which a page is saved on; an agent an automation
  * started with no plan has neither, so its instructions leave both out.
  */
-const PLAN_PLACE_WORDS = {
-  onPlan: {
+const TASK_PLACE_WORDS = {
+  onTask: {
     link: ` A \`https://tryluke.dev/<workspace>/plan/<id>\` link names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
     sectionLink:
       ", and a task or one of its plan's sections by the tryluke.dev link it was named to you with",
@@ -113,7 +113,7 @@ const PLAN_PLACE_WORDS = {
 
 When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`,
   },
-  planless: { link: "", sectionLink: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
+  taskless: { link: "", sectionLink: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
 } as const;
 
 /** Whose the agent's commits are: the developer's, ending on the trailer naming Luke's bot as co-author, or the App's bot's where no trailer is handed. */
@@ -133,11 +133,11 @@ export function coderInstructions(
   repository: string,
   brief: CodingAgentBrief,
   ciReadable: boolean,
-  onPlan = true,
+  onTask = true,
   coAuthor: string | undefined = undefined,
 ): string {
   const words = BRIEF_WORDS[brief];
-  const place = onPlan ? PLAN_PLACE_WORDS.onPlan : PLAN_PLACE_WORDS.planless;
+  const place = onTask ? TASK_PLACE_WORDS.onTask : TASK_PLACE_WORDS.taskless;
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
 ## The checkout

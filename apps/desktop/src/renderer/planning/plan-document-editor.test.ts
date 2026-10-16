@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
-import type { PlanningEditAnswer } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -92,14 +92,14 @@ async function settle(): Promise<void> {
  * script, and the names it renamed to; `render` draws another plan, through
  * its own door where given.
  */
-function mount(answers: readonly PlanningEditAnswer[] = []) {
+function mount(answers: readonly TasksEditAnswer[] = []) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const saved: PlanningEditAnswer = { saved: true };
+  const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {
     sent.push(request);
     return Promise.resolve(answers[sent.length - 1] ?? saved);
@@ -108,7 +108,7 @@ function mount(answers: readonly PlanningEditAnswer[] = []) {
     renamed.push(name);
     return Promise.resolve(true);
   };
-  const render = (plan: Plan, door: typeof onEdit = onEdit) =>
+  const render = (plan: Task, door: typeof onEdit = onEdit) =>
     act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit: door, onRename })));
   render(DOCUMENT_PLAN);
   const unmount = () => {
@@ -249,7 +249,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
   const doors: string[] = [];
   const door = (planId: string) => () => {
     doors.push(planId);
-    return Promise.resolve<PlanningEditAnswer>({ saved: true });
+    return Promise.resolve<TasksEditAnswer>({ saved: true });
   };
   const other = { ...DOCUMENT_PLAN, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   render(DOCUMENT_PLAN, door(DOCUMENT_PLAN.id));

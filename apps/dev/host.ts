@@ -25,8 +25,8 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
-  type PlanTool,
-  planToolsOf,
+  type TaskTool,
+  taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -36,8 +36,8 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
-import { showPageRejected } from "@luke/service/plans/page-tool";
-import { type PictureLookResult, pictureNotLooked } from "@luke/service/plans/picture-look";
+import { showPageRejected } from "@luke/service/tasks/page-tool";
+import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -167,14 +167,14 @@ export function relayChildEvent(
 export function offeredPlanTools(
   auth: SessionAuth,
   sessionId: string,
-): Promise<ReadonlySet<PlanTool>> {
+): Promise<ReadonlySet<TaskTool>> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<PlanTool>();
+      if (Result.isFailure(admitted)) return new Set<TaskTool>();
       const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<PlanTool>();
-      return planToolsOf(agent.success);
+      if (Result.isFailure(agent)) return new Set<TaskTool>();
+      return taskToolsOf(agent.success);
     }),
   );
 }

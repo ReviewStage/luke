@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { githubConnectionSchema } from "./planning-view.js";
+import { githubConnectionSchema } from "./tasks-view.js";
 
 /**
  * github-connection-wire.ts -- whether the signed-in account has connected its GitHub, and the browser page that connects it.

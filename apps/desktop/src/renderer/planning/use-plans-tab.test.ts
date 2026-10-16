@@ -7,23 +7,23 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import {
-  IDLE_PLANNING_VIEW,
-  PLAN_CALL_FAILURE,
-  PLAN_WORK_STATE,
-  PLANNING_READ,
-  type PlanCode,
-  type PlanCodeShowing,
-  type PlanningView,
-  type PlanWorkTurn,
-} from "@luke/features/planning-view";
+  IDLE_TASKS_VIEW,
+  TASK_CALL_FAILURE,
+  TASK_WORK_STATE,
+  TASKS_READ,
+  type TaskCode,
+  type TaskCodeShowing,
+  type TasksView,
+  type TaskWorkTurn,
+} from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
-import { type AppInboxPlan, type AppInboxPlanHolding, RUN_PROFILE } from "@luke/host/app-state";
+import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   messageText,
@@ -57,7 +57,7 @@ import {
 } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -67,19 +67,19 @@ const PLAN: Plan = {
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
-const OPEN: PlanningView = {
-  plans: [],
-  listStatus: PLANNING_READ.READY,
+const OPEN: TasksView = {
+  tasks: [],
+  listStatus: TASKS_READ.READY,
   workspaces: [],
-  activePlanId: PLAN.id,
-  document: { status: PLANNING_READ.READY, plan: PLAN },
+  activeTaskId: PLAN.id,
+  document: { status: TASKS_READ.READY, task: PLAN },
 };
 
 /** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
-    inboxPlanId: Schema.NullOr(Schema.String),
+    inboxTaskId: Schema.NullOr(Schema.String),
   }),
 );
 
@@ -90,13 +90,13 @@ const readVoiceCommand = Schema.decodeUnknownOption(
 
 interface Standing {
   shown: boolean;
-  planning: PlanningView;
+  planning: TasksView;
   profile: string;
   fixtureMode: boolean;
   voice: VoiceView;
   unseenAgents: readonly string[];
-  inboxWaiting: readonly AppInboxPlan[];
-  inboxPlans: readonly AppInboxPlanHolding[];
+  inboxWaiting: readonly AppInboxTask[];
+  inboxPlans: readonly AppInboxTaskHolding[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
   /** The signed-in account's email. */
@@ -128,7 +128,7 @@ function mount(
   let restand: ((next: Standing) => void) | undefined;
   let standing: Standing = {
     shown: false,
-    planning: IDLE_PLANNING_VIEW,
+    planning: IDLE_TASKS_VIEW,
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
@@ -161,7 +161,7 @@ function mount(
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
-            shownInboxes.push(shown.inboxPlanId);
+            shownInboxes.push(shown.inboxTaskId);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -243,11 +243,11 @@ function _undoButton(): HTMLButtonElement {
 }
 
 /** A plan with a history: Luke wrote it on a call, over a first version. */
-const _EDITED: PlanningView = {
+const _EDITED: TasksView = {
   ...OPEN,
   document: {
-    status: PLANNING_READ.READY,
-    plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true } },
+    status: TASKS_READ.READY,
+    task: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true } },
   },
 };
 
@@ -317,11 +317,11 @@ const ACME = {
 };
 
 /** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
-const TWO_WORKSPACES: PlanningView = {
-  ...IDLE_PLANNING_VIEW,
-  listStatus: PLANNING_READ.READY,
+const TWO_WORKSPACES: TasksView = {
+  ...IDLE_TASKS_VIEW,
+  listStatus: TASKS_READ.READY,
   workspaces: [PERSONAL, ACME],
-  plans: [
+  tasks: [
     row("notes", 4),
     { ...row("alerts", 3), workspaceId: ACME.id },
     row("billing", 2),
@@ -353,10 +353,10 @@ function namedIn(
 
 /** The workspace each start the tab asked for named. */
 const startedIn = (payloads: Parameters<typeof namedIn>[0]) =>
-  namedIn(payloads, ACT_KIND.PLANNING_START);
+  namedIn(payloads, ACT_KIND.TASKS_START);
 
 const UNSTARTED = {
-  [ACT_KIND.PLANNING_START]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+  [ACT_KIND.TASKS_START]: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
 };
 
 const PLATFORM = {
@@ -371,12 +371,12 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
   const tab = mount(
     { shown: true, planning: OPEN },
     // The service never answers, as when the window signs out with the pin still out.
-    { [ACT_KIND.PLANNING_PIN_REPOSITORY]: () => new Promise<boolean>(() => undefined) },
+    { [ACT_KIND.TASKS_PIN_REPOSITORY]: () => new Promise<boolean>(() => undefined) },
   );
 
   act(() => tab.control().onPinRepository("acme/secret", true));
   const pending = tab.control().pinnedRepositories;
-  tab.stand({ signedIn: false, planning: IDLE_PLANNING_VIEW });
+  tab.stand({ signedIn: false, planning: IDLE_TASKS_VIEW });
   tab.stand({ signedIn: true, planning: { ...OPEN, repositoryPins: [] } });
 
   assert.deepEqual(pending, ["acme/secret"]);
@@ -385,13 +385,13 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
 
 test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {
   const answers = [
-    { failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE },
+    { failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE },
     { planId: OTHER_PLAN_ID },
   ] as const;
   let start = 0;
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_START]: () => Promise.resolve(answers[start++] ?? answers[1]) },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve(answers[start++] ?? answers[1]) },
   );
 
   act(() => tab.control().onNewPlan());
@@ -400,8 +400,8 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   act(() => tab.control().onNewPlanIn("acme/web"));
   assert.equal(tab.control().newPlan.open, true);
   assert.deepEqual(tab.control().newPlan.preset, { repository: "acme/web" });
-  assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT, "the plan behind the dialog stays open");
-  assert.ok(!tab.told.includes(ACT_KIND.PLANNING_CLOSE), "nothing left the plan");
+  assert.equal(tab.control().page, TASKS_PAGE.DOCUMENT, "the plan behind the dialog stays open");
+  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE), "nothing left the plan");
   act(() => tab.control().onNewPlan());
   assert.deepEqual(
     tab.control().newPlan.preset,
@@ -442,7 +442,7 @@ test("a planning worker's tab reads its session as an agent's worker's tab reads
   const tab = mount(
     { shown: true, planning: OPEN },
     {
-      [ACT_KIND.PLANNING_MESSAGES]: (payload) => {
+      [ACT_KIND.TASKS_MESSAGES]: (payload) => {
         asked.push(payload);
         return Promise.resolve(page);
       },
@@ -455,7 +455,7 @@ test("a planning worker's tab reads its session as an agent's worker's tab reads
     callId: "call-0-0",
   });
 
-  assert.deepEqual(asked, [{ planId: "plan-1", after: "0:0", callId: "call-0-0" }]);
+  assert.deepEqual(asked, [{ taskId: "plan-1", after: "0:0", callId: "call-0-0" }]);
   assert.deepEqual(read, page);
 });
 
@@ -479,7 +479,7 @@ function _drawnBoard(number: number): Board {
   };
 }
 
-const CODE: PlanCode = {
+const CODE: TaskCode = {
   ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
   repository: "acme/relay",
   firstLine: 1,
@@ -488,10 +488,10 @@ const CODE: PlanCode = {
 };
 
 /** The code shown on the open plan: one snippet, then a second of the same file. */
-const SHOWN: readonly PlanCodeShowing[] = [
+const SHOWN: readonly TaskCodeShowing[] = [
   { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
-const _SHOWN_AGAIN: readonly PlanCodeShowing[] = [
+const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
   ...SHOWN,
   { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
@@ -499,7 +499,7 @@ const _SHOWN_AGAIN: readonly PlanCodeShowing[] = [
 /** A call in progress about the open plan, which is what puts code on screen. */
 const _ON_CALL: VoiceView = {
   ...IDLE_VOICE_VIEW,
-  callPlanId: PLAN.id,
+  callTaskId: PLAN.id,
   voiceStatus: LIVE_STATUS.LISTENING,
 };
 
@@ -510,22 +510,22 @@ function panelOf(tab: ReturnType<typeof mount>) {
 }
 
 /** One turn of Luke's planning model on the open plan. */
-const TURN: PlanWorkTurn = {
+const TURN: TaskWorkTurn = {
   turnId: "turn-1",
   startedAt: 1,
-  state: PLAN_WORK_STATE.DONE,
+  state: TASK_WORK_STATE.DONE,
   earlierOmitted: false,
   journal: [],
   workers: [],
 };
 
 /** The open plan's calls read back: none, and one with a line said on it. */
-const NO_CALLS: PlanningView["transcript"] = {
-  status: PLANNING_READ.READY,
+const NO_CALLS: TasksView["transcript"] = {
+  status: TASKS_READ.READY,
   transcript: { calls: [], earlierOmitted: false },
 };
-const _ONE_CALL: PlanningView["transcript"] = {
-  status: PLANNING_READ.READY,
+const _ONE_CALL: TasksView["transcript"] = {
+  status: TASKS_READ.READY,
   transcript: {
     calls: [
       {
@@ -541,7 +541,7 @@ const _ONE_CALL: PlanningView["transcript"] = {
 };
 
 /** The open plan read with nothing on it yet: an empty board, no code, no call, no work. */
-const _NOTHING_YET: PlanningView = {
+const _NOTHING_YET: TasksView = {
   ...OPEN,
   board: EMPTY_BOARD,
   shownCode: [],
@@ -570,15 +570,15 @@ async function settle(): Promise<void> {
 
 /** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */
 function _startedAgent(
-  state: typeof PLAN_WORK_STATE.RUNNING | typeof PLAN_WORK_STATE.DONE,
-): PlanWorkTurn {
+  state: typeof TASK_WORK_STATE.RUNNING | typeof TASK_WORK_STATE.DONE,
+): TaskWorkTurn {
   return {
     ...TURN,
     journal: [
       {
         type: "tool-start_coding_agent",
         toolCallId: "call-start-1",
-        state: state === PLAN_WORK_STATE.DONE ? "output-available" : "input-available",
+        state: state === TASK_WORK_STATE.DONE ? "output-available" : "input-available",
         input: {},
       },
     ],
@@ -637,14 +637,14 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
-  tab.stand({ planning: { ...OPEN, activePlanId: OTHER_PLAN_ID } });
+  tab.stand({ planning: { ...OPEN, activeTaskId: OTHER_PLAN_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
   assert.equal(tab.control().boundFor, PLAN.id);
 
   tab.stand({ planning: OPEN });
@@ -655,15 +655,15 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+  const section = { kind: MENTION_KIND.SECTION, taskId: OTHER_PLAN_ID, anchor: "rollout" } as const;
 
   act(() => tab.control().onShowMention(section));
   const first = tab.control().sectionReveal;
   act(() => tab.control().onShowMention(section));
 
-  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
   assert.deepEqual(first, { planId: OTHER_PLAN_ID, reveal: { anchor: "rollout", ask: 1 } });
   assert.deepEqual(tab.control().sectionReveal, {
     planId: OTHER_PLAN_ID,
@@ -835,7 +835,7 @@ test("a Luke link whose slug names no workspace of the account's leaves the list
 test("a Luke link to a task's version opens its version history on that version, and one to its call opens its Call tab", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
 
   act(() =>
@@ -860,7 +860,7 @@ test("a Luke link to a task's version opens its version history on that version,
 test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
 
   act(() =>
@@ -872,8 +872,8 @@ test("a Luke link to a version of a task the service will not hand the reader le
   tab.stand({
     planning: {
       ...OPEN,
-      activePlanId: OTHER_PLAN_ID,
-      document: { status: PLANNING_READ.MISSING },
+      activeTaskId: OTHER_PLAN_ID,
+      document: { status: TASKS_READ.MISSING },
     },
   });
 
@@ -884,9 +884,9 @@ test("a Luke link to a version of a task the service will not hand the reader le
 test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+  const section = { kind: MENTION_KIND.SECTION, taskId: OTHER_PLAN_ID, anchor: "rollout" } as const;
 
   act(() => tab.control().onShowMention(section));
   act(() => tab.control().onShowMention(section));
@@ -925,13 +925,13 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {
   const tab = mount(
     { shown: true, planning: { ...OPEN, shownCode: SHOWN } },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
   act(() => panel().onOpenFile(CODE.ref));
   act(() => panel().onClose({ file: CODE.ref.path }));
 
-  tab.stand({ planning: { ...OPEN, activePlanId: OTHER_PLAN_ID, shownCode: SHOWN } });
+  tab.stand({ planning: { ...OPEN, activeTaskId: OTHER_PLAN_ID, shownCode: SHOWN } });
   act(() => panel().onOpenFile({ ...CODE.ref, startLine: 5, endLine: 9 }, "b2c3d4e"));
   tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
 
@@ -946,20 +946,20 @@ test("a file's tab opens again on the record it closed with, though another plan
 test("a press while a reopen waits on its plan takes no tab of another plan, which opens in its turn", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
-  tab.stand({ planning: { ...OPEN, activePlanId: OTHER_PLAN_ID } });
+  tab.stand({ planning: { ...OPEN, activeTaskId: OTHER_PLAN_ID } });
   act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
   act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
-  tab.stand({ planning: { ...OPEN, activePlanId: THIRD_PLAN_ID } });
+  tab.stand({ planning: { ...OPEN, activeTaskId: THIRD_PLAN_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, OTHER_PLAN_ID);
-  tab.stand({ planning: { ...OPEN, activePlanId: OTHER_PLAN_ID } });
+  tab.stand({ planning: { ...OPEN, activeTaskId: OTHER_PLAN_ID } });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -1034,7 +1034,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   let opens = true;
   const tab = mount(
     { shown: true, planning: TWO_WORKSPACES },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(opens) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(opens) },
   );
 
   opens = false;
@@ -1060,9 +1060,9 @@ test("opening a plan of another workspace lists that workspace once it opened, o
 });
 
 /** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */
-function waitingIn(planId: string, count: number): AppInboxPlan {
+function waitingIn(planId: string, count: number): AppInboxTask {
   return {
-    planId,
+    taskId: planId,
     items: Array.from({ length: count }, (_, index) => ({
       id: `${planId}-item-${index}`,
       agentId: `${planId}-agent`,
@@ -1078,14 +1078,14 @@ test("the Inbox lists the chosen workspace's share of what waits, and a plan the
     planning: TWO_WORKSPACES,
     inboxWaiting: [waitingIn("notes", 1), waitingIn("alerts", 2), waitingIn("unread", 3)],
     inboxPlans: [
-      { planId: "notes", items: 1, updatedAt: 3 },
-      { planId: "alerts", items: 2, updatedAt: 2 },
-      { planId: "unread", items: 3, updatedAt: 1 },
+      { taskId: "notes", items: 1, updatedAt: 3 },
+      { taskId: "alerts", items: 2, updatedAt: 2 },
+      { taskId: "unread", items: 3, updatedAt: 1 },
     ],
   });
   const share = () => ({
-    inbox: tab.control().listed.inbox.map((plan) => plan.planId),
-    inboxPlans: tab.control().listed.inboxPlans.map((holding) => holding.planId),
+    inbox: tab.control().listed.inbox.map((plan) => plan.taskId),
+    inboxPlans: tab.control().listed.inboxPlans.map((holding) => holding.taskId),
   });
 
   const personal = share();
@@ -1130,13 +1130,13 @@ test("a person's page opened in another workspace lists it without reopening its
       planning: {
         ...TWO_WORKSPACES,
         workspaces: [PERSONAL, ACME, PLATFORM],
-        activePlanId: "alerts",
+        activeTaskId: "alerts",
       },
     },
     OPENS,
   );
   tab.stand({
-    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activeTaskId: "notes" },
   });
   const opensBefore = opensAsked(tab.payloads).length;
 
@@ -1151,28 +1151,28 @@ test("a person's page opened in another workspace lists it without reopening its
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads
-    .filter((asked) => asked.kind === ACT_KIND.PLANNING_SELECT)
-    .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.planId);
+    .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
+    .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.taskId);
 }
 
-const readOpened = Schema.decodeUnknownOption(Schema.Struct({ planId: Schema.String }));
+const readOpened = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
 
 /** Main's answers: every open lands, and every leave. */
 const OPENS = {
-  [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
-  [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+  [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+  [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
 };
 
 test("a person's page opened while a plan's open is still out stands when the open answers late, listing nothing over it", async () => {
   let answer: (opened: boolean) => void = () => undefined;
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } },
+    { shown: true, planning: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
     {
-      [ACT_KIND.PLANNING_SELECT]: () =>
+      [ACT_KIND.TASKS_SELECT]: () =>
         new Promise<boolean>((resolve) => {
           answer = resolve;
         }),
-      [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+      [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
     },
   );
 
@@ -1186,12 +1186,12 @@ test("a person's page opened while a plan's open is still out stands when the op
 });
 
 test("a plan opened from another workspace says the window switched, and Back lists the workspace left with the plan that stood open there", async () => {
-  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activeTaskId: "notes" } }, OPENS);
 
   act(() => tab.control().onSelect("alerts"));
   await settle();
   const switched = { workspace: tab.control().workspace?.id, says: newestToastSays() };
-  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "alerts" } });
   const back = newestToastAction() ?? assert.fail("the toast offers a way back");
   const backSays = back.textContent;
   act(() => back.click());
@@ -1207,12 +1207,12 @@ test("Back from a switch made on the home page lists the workspace left and its 
   const fromHome = mount({ shown: true, planning: TWO_WORKSPACES }, OPENS);
   act(() => fromHome.control().onSelect("alerts"));
   await settle();
-  fromHome.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
+  fromHome.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "alerts" } });
   act(() => newestToastAction()?.click());
   await settle();
 
   assert.equal(fromHome.control().workspace?.id, PERSONAL.id);
-  assert.ok(fromHome.told.includes(ACT_KIND.PLANNING_CLOSE), "Back from home returns home");
+  assert.ok(fromHome.told.includes(ACT_KIND.TASKS_CLOSE), "Back from home returns home");
 });
 
 test("a workspace chosen while a plan is open opens the plan last open there, or the home page where none was", async () => {
@@ -1222,30 +1222,27 @@ test("a workspace chosen while a plan is open opens the plan last open there, or
       planning: {
         ...TWO_WORKSPACES,
         workspaces: [PERSONAL, ACME, PLATFORM],
-        activePlanId: "alerts",
+        activeTaskId: "alerts",
       },
     },
     OPENS,
   );
   tab.stand({
-    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activeTaskId: "notes" },
   });
 
   act(() => tab.control().onChooseWorkspace(ACME.id));
   await settle();
   const reopened = opensAsked(tab.payloads);
   tab.stand({
-    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "alerts" },
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activeTaskId: "alerts" },
   });
   act(() => tab.control().onChooseWorkspace(PLATFORM.id));
   await settle();
 
   assert.deepEqual(reopened, ["alerts"]);
   assert.equal(tab.control().workspace?.id, PLATFORM.id);
-  assert.ok(
-    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
-    "a workspace with no plan opened shows home",
-  );
+  assert.ok(tab.told.includes(ACT_KIND.TASKS_CLOSE), "a workspace with no plan opened shows home");
 });
 
 test("a remembered plan that moved to another workspace since, or would not open, gives way to the home page of the workspace chosen", async () => {
@@ -1253,33 +1250,33 @@ test("a remembered plan that moved to another workspace since, or would not open
   const moved = {
     ...TWO_WORKSPACES,
     workspaces: three,
-    plans: TWO_WORKSPACES.plans.map((plan) =>
+    tasks: TWO_WORKSPACES.tasks.map((plan) =>
       plan.id === "alerts" ? { ...plan, workspaceId: PLATFORM.id } : plan,
     ),
   };
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "alerts" } },
     OPENS,
   );
-  tab.stand({ planning: { ...moved, activePlanId: "notes" } });
+  tab.stand({ planning: { ...moved, activeTaskId: "notes" } });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   await settle();
 
   assert.deepEqual(opensAsked(tab.payloads), []);
-  assert.ok(tab.told.includes(ACT_KIND.PLANNING_CLOSE));
+  assert.ok(tab.told.includes(ACT_KIND.TASKS_CLOSE));
   assert.equal(tab.control().workspace?.id, ACME.id);
 
   window.localStorage.clear();
   const refused = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
-    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "alerts" } },
+    { ...OPENS, [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(false) },
   );
-  refused.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+  refused.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "notes" } });
   act(() => refused.control().onChooseWorkspace(ACME.id));
   await settle();
 
   assert.deepEqual(opensAsked(refused.payloads), ["alerts"]);
-  assert.ok(refused.told.includes(ACT_KIND.PLANNING_CLOSE), "the home page stands in for it");
+  assert.ok(refused.told.includes(ACT_KIND.TASKS_CLOSE), "the home page stands in for it");
   assert.equal(refused.control().workspace?.id, ACME.id);
 });
 
@@ -1289,23 +1286,23 @@ test("a workspace chosen is listed at once, and a reopen answered after another 
   const answers: ((opened: boolean) => void)[] = [];
   const held = new Promise<boolean>((answer) => answers.push(answer));
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
-    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => held },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "alerts" } },
+    { ...OPENS, [ACT_KIND.TASKS_SELECT]: () => held },
   );
-  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "notes" } });
 
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const listedAtOnce = tab.control().workspace?.id;
   act(() => tab.control().onChooseWorkspace(PLATFORM.id));
   await settle();
-  const leaves = tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length;
+  const leaves = tab.told.filter((kind) => kind === ACT_KIND.TASKS_CLOSE).length;
   for (const answer of answers) answer(false);
   await settle();
 
   assert.equal(listedAtOnce, ACME.id);
   assert.equal(tab.control().workspace?.id, PLATFORM.id);
   assert.equal(
-    tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length,
+    tab.told.filter((kind) => kind === ACT_KIND.TASKS_CLOSE).length,
     leaves,
     "the refused reopen leaves nothing the newer choice opened",
   );
@@ -1314,12 +1311,12 @@ test("a workspace chosen is listed at once, and a reopen answered after another 
 test("a switch toast's Back does nothing once the window has moved on from the switch it reports", async () => {
   const three = [PERSONAL, ACME, PLATFORM];
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "notes" } },
     OPENS,
   );
   act(() => tab.control().onSelect("alerts"));
   await settle();
-  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activeTaskId: "alerts" } });
   const back = newestToastAction() ?? assert.fail("the toast offers a way back");
   act(() => tab.control().onChooseWorkspace(PLATFORM.id));
   await settle();
@@ -1342,7 +1339,7 @@ test("a workspace chosen from the home page lists it and opens nothing", async (
 
   assert.equal(home.control().workspace?.id, ACME.id);
   assert.deepEqual(
-    [opensAsked(home.payloads), home.told.includes(ACT_KIND.PLANNING_CLOSE)],
+    [opensAsked(home.payloads), home.told.includes(ACT_KIND.TASKS_CLOSE)],
     [[], false],
   );
 });
@@ -1356,7 +1353,7 @@ test("the new-plan page's recent repositories are the chosen workspace's own, an
         { ...PERSONAL, github: { login: "alice", active: true } },
         { ...ACME, github: { login: "acme", active: true } },
       ],
-      plans: [
+      tasks: [
         { ...row("notes", 4), repository: "alice/private" },
         { ...row("alerts", 3), workspaceId: ACME.id, repository: "acme/relay" },
       ],
@@ -1377,7 +1374,7 @@ test("a workspace's recent repositories are only those its GitHub reaches, so a 
     planning: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "ReviewStage", active: true } }],
-      plans: [
+      tasks: [
         { ...row("stranded", 5), repository: "ReviewStage/luke" },
         { ...row("alerts", 4), workspaceId: ACME.id, repository: "reviewstage/luke" },
         { ...row("elsewhere", 3), workspaceId: ACME.id, repository: "octo/site" },
@@ -1407,7 +1404,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     planning: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-      plans,
+      tasks: plans,
     },
   });
   act(() => active.control().onChooseWorkspace(ACME.id));
@@ -1419,7 +1416,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     planning: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: false } }],
-      plans,
+      tasks: plans,
     },
   });
   act(() => suspended.control().onChooseWorkspace(ACME.id));
@@ -1513,7 +1510,7 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   };
   const tab = mount(
     { shown: true, planning: TWO_WORKSPACES },
-    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+    { [ACT_KIND.TASKS_REPOSITORIES]: () => Promise.resolve(listed) },
   );
 
   await tab.control().repositories.read();
@@ -1522,7 +1519,7 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   tab.stand({ planning: { ...OPEN, workspaces: [PERSONAL, ACME] } });
   await tab.control().repositories.read();
 
-  assert.deepEqual(namedIn(tab.payloads, ACT_KIND.PLANNING_REPOSITORIES), [
+  assert.deepEqual(namedIn(tab.payloads, ACT_KIND.TASKS_REPOSITORIES), [
     PERSONAL.id,
     ACME.id,
     PLAN.workspaceId,
@@ -1554,7 +1551,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
         workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
       },
     },
-    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+    { [ACT_KIND.TASKS_REPOSITORIES]: () => Promise.resolve(listed) },
   );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
@@ -1630,9 +1627,9 @@ test("Connect GitHub under a plan opens Settings on the plan's workspace's GitHu
     shown: true,
     planning: {
       ...OPEN,
-      listStatus: PLANNING_READ.FAILED,
+      listStatus: TASKS_READ.FAILED,
       workspaces: [PERSONAL, ACME],
-      document: { status: PLANNING_READ.READY, plan: { ...PLAN, workspaceId: ACME.id } },
+      document: { status: TASKS_READ.READY, task: { ...PLAN, workspaceId: ACME.id } },
     },
   });
 
@@ -1650,16 +1647,16 @@ test("Connect GitHub under a plan opens Settings on the plan's workspace's GitHu
 test("a plan moved lists the workspace it moved to while it is still open, and a move answered after another plan opened leaves the sidebar where it is", async () => {
   const answers: ((answer: { workspaceId: string }) => void)[] = [];
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "billing" } },
-    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+    { shown: true, planning: { ...TWO_WORKSPACES, activeTaskId: "billing" } },
+    { [ACT_KIND.TASKS_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
   );
 
   const staying = tab.control().onMovePlan("billing", ACME.id);
-  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "notes" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "notes" } });
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
   const late = tab.control().workspace?.id;
-  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   const moved = tab.control().onMovePlan("billing", ACME.id);
   answers[1]?.({ workspaceId: ACME.id });
   await settle();
@@ -1676,8 +1673,8 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
 
 test("a refused move says so in a toast, unless its caller says it itself", async () => {
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "billing" } },
-    { [ACT_KIND.PLANNING_MOVE]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }) },
+    { shown: true, planning: { ...TWO_WORKSPACES, activeTaskId: "billing" } },
+    { [ACT_KIND.TASKS_MOVE]: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }) },
   );
 
   const quiet = await tab.control().onMovePlan("billing", ACME.id, { quiet: true });
@@ -1695,12 +1692,12 @@ test("a refused move says so in a toast, unless its caller says it itself", asyn
 test("a move pressed before the workspaces were read still lists the workspace it moved to once they land", async () => {
   const answers: ((answer: { workspaceId: string }) => void)[] = [];
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
-    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activeTaskId: "billing" } },
+    { [ACT_KIND.TASKS_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
   );
 
   const moved = tab.control().onMovePlan("billing", ACME.id);
-  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -1711,12 +1708,12 @@ test("a move pressed before the workspaces were read still lists the workspace i
 test("a workspace chosen while a move is out, even the first chosen after the workspaces land, stays listed when the move lands", async () => {
   const answers: ((answer: { workspaceId: string }) => void)[] = [];
   const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activePlanId: "billing" } },
-    { [ACT_KIND.PLANNING_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [], activeTaskId: "billing" } },
+    { [ACT_KIND.TASKS_MOVE]: () => new Promise((resolve) => answers.push(resolve)) },
   );
 
   const moved = tab.control().onMovePlan("billing", ACME.id);
-  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "billing" } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
@@ -1729,7 +1726,7 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   const own = { ...PERSONAL, personal: true as const };
   const tab = mount({
     shown: true,
-    planning: { ...TWO_WORKSPACES, workspaces: [ACME, own], activePlanId: "billing" },
+    planning: { ...TWO_WORKSPACES, workspaces: [ACME, own], activeTaskId: "billing" },
   });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const chosen = tab.control().workspace?.id;
@@ -1743,7 +1740,7 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   assert.equal(afterListed, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
   assert.equal(
-    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
+    tab.told.includes(ACT_KIND.TASKS_CLOSE),
     true,
     "the open plan is left for the home page",
   );
@@ -1764,49 +1761,49 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
 });
 
 /** The plan as the list names it, archived where `archivedAt` is given. */
-function listed(archivedAt?: number): PlanningView["plans"][number] {
+function listed(archivedAt?: number): TasksView["tasks"][number] {
   const { document: _document, ...summary } = PLAN;
   return archivedAt === undefined ? summary : { ...summary, archivedAt };
 }
 
 /** The view a launch starts on: nothing open, and the list not yet read. */
-const LAUNCHING: PlanningView = { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READING };
+const LAUNCHING: TasksView = { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READING };
 
 /** The view once the list is read with nothing open, holding `plans`. */
-function listRead(plans: PlanningView["plans"]): PlanningView {
-  return { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READY, plans };
+function listRead(plans: TasksView["tasks"]): TasksView {
+  return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks: plans };
 }
 
 /** A select's payload, read back as the act's own schema admits it. */
-const readSelect = Schema.decodeUnknownOption(Schema.Struct({ planId: Schema.String }));
+const readSelect = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
 
 /** The plans the launch asked the host to open, in order. */
 function selected(tab: ReturnType<typeof mount>): string[] {
   return tab.payloads
-    .filter((each) => each.kind === ACT_KIND.PLANNING_SELECT)
-    .flatMap((each) => Option.toArray(readSelect(each.payload)).map((read) => read.planId));
+    .filter((each) => each.kind === ACT_KIND.TASKS_SELECT)
+    .flatMap((each) => Option.toArray(readSelect(each.payload)).map((read) => read.taskId));
 }
 
 /** A run that had the plan open when it quit. */
 function quitWithPlanOpen(account = "dev@example.com") {
-  mount({ shown: true, account, planning: { ...OPEN, plans: [listed()] } });
+  mount({ shown: true, account, planning: { ...OPEN, tasks: [listed()] } });
 }
 
 test("a launch opens the plan the account had open at quit, drawing no home page until the host has it open", () => {
   quitWithPlanOpen();
   const tab = mount(
     { shown: true, planning: LAUNCHING },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  assert.equal(tab.control().page, PLANS_PAGE.HOME);
+  assert.equal(tab.control().page, TASKS_PAGE.HOME);
   assert.equal(tab.control().restoring, true, "the list is still being read");
 
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
   assert.equal(tab.control().restoring, true, "the host has not opened it yet");
 
-  tab.stand({ planning: { ...OPEN, plans: [listed()] } });
-  assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+  tab.stand({ planning: { ...OPEN, tasks: [listed()] } });
+  assert.equal(tab.control().page, TASKS_PAGE.DOCUMENT);
   assert.equal(tab.control().restoring, false);
 });
 
@@ -1835,7 +1832,7 @@ test("a plan the list no longer holds is let go, so it is not opened when it com
 });
 
 test("leaving the plan for the home page lets it go, so the next launch rests on the home page", () => {
-  const before = mount({ shown: true, planning: { ...OPEN, plans: [listed()] } });
+  const before = mount({ shown: true, planning: { ...OPEN, tasks: [listed()] } });
   before.stand({ planning: listRead([listed()]) });
 
   const tab = mount({ shown: true, planning: LAUNCHING });
@@ -1846,7 +1843,7 @@ test("leaving the plan for the home page lets it go, so the next launch rests on
 
 test("a window reloaded over a plan the host still holds asks for nothing", () => {
   quitWithPlanOpen();
-  const tab = mount({ shown: true, planning: { ...OPEN, plans: [listed()] } });
+  const tab = mount({ shown: true, planning: { ...OPEN, tasks: [listed()] } });
   assert.deepEqual(selected(tab), []);
   assert.equal(tab.control().restoring, false);
 });
@@ -1855,7 +1852,7 @@ test("a refused reopen takes its ask back and rests on the home page", async () 
   quitWithPlanOpen();
   const tab = mount(
     { shown: true, planning: LAUNCHING },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(false) },
   );
   tab.stand({ planning: listRead([listed()]) });
   await act(settle);
@@ -1867,9 +1864,9 @@ test("a launch whose list read failed rests on the home page, and opens the plan
   quitWithPlanOpen();
   const tab = mount(
     { shown: true, planning: LAUNCHING },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  tab.stand({ planning: { ...LAUNCHING, listStatus: PLANNING_READ.FAILED } });
+  tab.stand({ planning: { ...LAUNCHING, listStatus: TASKS_READ.FAILED } });
   assert.deepEqual(selected(tab), []);
   assert.equal(tab.control().restoring, false);
 
@@ -1881,10 +1878,10 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   quitWithPlanOpen("other@example.com");
   document.body.innerHTML = "";
   const tab = mount(
-    { shown: true, planning: { ...OPEN, plans: [listed()] } },
-    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+    { shown: true, planning: { ...OPEN, tasks: [listed()] } },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  tab.stand({ signedIn: false, planning: IDLE_PLANNING_VIEW });
+  tab.stand({ signedIn: false, planning: IDLE_TASKS_VIEW });
   tab.stand({ signedIn: true, account: "other@example.com", planning: LAUNCHING });
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
@@ -1938,19 +1935,19 @@ test("Factory and the Inbox stand in the plan's place in turn: opening one puts 
 test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
-    { [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve() },
+    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().onGoHome());
   assert.equal(tab.control().inboxView.open, false);
-  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
+  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
   assert.equal(tab.control().boundFor, undefined);
 
   const home = mount({ shown: true, planning: listRead([]) });
   act(() => home.control().inboxView.onOpen());
   act(() => home.control().onGoHome());
   assert.equal(home.control().inboxView.open, false);
-  assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+  assert.ok(!home.told.includes(ACT_KIND.TASKS_CLOSE));
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {

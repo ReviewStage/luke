@@ -6,7 +6,7 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { EllipsisIcon } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
@@ -151,7 +151,7 @@ interface PlanChase {
  * The plan's last edit: its newest revision, or, from a service before
  * history, the newest save a coding agent made, which was all it could name.
  */
-export function lastEditOf(plan: Plan): PlanLastEdit | undefined {
+export function lastEditOf(plan: Task): PlanLastEdit | undefined {
   if (plan.lastEdit !== undefined) return plan.lastEdit;
   // The journal is oldest first, so the newest save is its last.
   const journaled = plan.agentEdits?.at(-1);
@@ -341,7 +341,7 @@ const CHANGED_CLASS = "plan-changed";
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
-function opened(plan: Plan): Chase {
+function opened(plan: Task): Chase {
   const { body } = plan.document;
   return {
     planId: plan.id,
@@ -356,7 +356,7 @@ function opened(plan: Plan): Chase {
  * plan, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
-function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
+function aimed(chase: Chase, plan: Task, reader: PlanReader): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
   // The reader's own edit lands at once: they watched it being typed already.
@@ -377,7 +377,7 @@ function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan, live: boolean, reader: PlanReader): PlanChase {
+function usePlanChase(plan: Task, live: boolean, reader: PlanReader): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   if (chase.planId !== plan.id || chase.body !== plan.document.body) {
@@ -530,7 +530,7 @@ function SectionMenu({
   // Note that the link is the section's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown.
   const copyLink = () =>
     copy(
-      encodeMention({ kind: MENTION_KIND.SECTION, planId: linked.planId, anchor }, linked.place),
+      encodeMention({ kind: MENTION_KIND.SECTION, taskId: linked.planId, anchor }, linked.place),
       LINK_COPY.COPIED,
     );
   const item: MenuAction = {
@@ -647,7 +647,7 @@ export function PlanBody({
   agents,
   crumb,
 }: {
-  plan: Plan;
+  plan: Task;
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;

@@ -220,7 +220,7 @@ export function codingAgentSummary(
   now: number,
   names: ReadonlyMap<string, string>,
 ): CodingAgentSummary {
-  return { id: agent.id, planId: agent.planId, ...summaryFields(agent, standing, now, names) };
+  return { id: agent.id, planId: agent.taskId, ...summaryFields(agent, standing, now, names) };
 }
 
 /**
@@ -274,7 +274,7 @@ export function codingAgentPage(
 ): CodingAgentPage {
   return {
     id: agent.id,
-    planId: agent.planId,
+    planId: agent.taskId,
     ...summaryFields(agent, standing, now, names),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null

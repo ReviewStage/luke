@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { PLAN_ACTOR } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
@@ -42,7 +42,7 @@ const HELD = [
   ["(", ")"],
 ];
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   id: PLAN_ID,
   repository: REPOSITORY,
@@ -109,7 +109,7 @@ function drawn(node: ReactNode): HTMLElement {
 }
 
 /** A plan's version, read and ready, as the version history draws it, against the version before it where one is given. */
-function Version({ previous = null }: { previous?: Plan["document"] | null } = {}): ReactNode {
+function Version({ previous = null }: { previous?: Task["document"] | null } = {}): ReactNode {
   const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );

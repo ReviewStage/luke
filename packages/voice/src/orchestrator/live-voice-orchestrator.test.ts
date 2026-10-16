@@ -15,7 +15,7 @@ import {
   type LiveVoiceView,
 } from "./live-voice-orchestrator.js";
 
-const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** A call that records the verbs it was asked and answers for its status. */
 let sessions = 0;
@@ -161,8 +161,8 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   orchestrator.surround({ ...SURROUNDINGS, ...surroundings });
   return {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
-    beginTalk: (planId?: string) => orchestrator.beginTalk(planId),
-    talkAboutPlan: (planId: string) => orchestrator.talkAboutPlan(planId),
+    beginTalk: (taskId?: string) => orchestrator.beginTalk(taskId),
+    talkAboutTask: (taskId: string) => orchestrator.talkAboutTask(taskId),
     toggleMicrophone: () => orchestrator.toggleMicrophone(),
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
@@ -196,13 +196,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_TASK), {
         startImmediately: true,
       });
       const call = f.latest();
       assert.ok(call);
       assert.equal(call.opens, 1);
-      assert.deepEqual(call.openings, [{ planId: INVITES_PLAN }]);
+      assert.deepEqual(call.openings, [{ taskId: INVITES_TASK }]);
       assert.equal(call.unmutes, 0);
       call.started();
       yield* Fiber.join(pressed);

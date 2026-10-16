@@ -24,7 +24,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../../core.js";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";

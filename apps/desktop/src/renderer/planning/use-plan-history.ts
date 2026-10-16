@@ -1,5 +1,5 @@
-import type { PlanDocument, PlanRevisionLine } from "@luke/features/plan-wire";
-import type { PlanningRevisionAnswer, PlanningRevisionsAnswer } from "@luke/features/planning-view";
+import type { PlanDocument, PlanRevisionLine } from "@luke/features/task-wire";
+import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@luke/features/tasks-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { revisionOfSave } from "./plan-history-model";
@@ -63,8 +63,8 @@ export interface ViewedVersion {
 
 /** Where the history is read from and written to: main's acts, or a test's own. */
 export interface PlanHistorySource {
-  readPage: (planId: string, before: number | undefined) => Promise<PlanningRevisionsAnswer>;
-  readRevision: (planId: string, seq: number) => Promise<PlanningRevisionAnswer>;
+  readPage: (planId: string, before: number | undefined) => Promise<TasksRevisionsAnswer>;
+  readRevision: (planId: string, seq: number) => Promise<TasksRevisionAnswer>;
   restore: (planId: string, seq: number) => Promise<boolean>;
 }
 
@@ -170,14 +170,14 @@ function withNewestPage(held: HistoryList | undefined, page: HistoryList): Histo
 }
 
 /** A page as the list holds it, or the failure it stands for. */
-function listOf(answer: PlanningRevisionsAnswer): HistoryList {
+function listOf(answer: TasksRevisionsAnswer): HistoryList {
   return "failure" in answer
     ? { kind: HISTORY_READ.FAILED }
     : { kind: HISTORY_READ.READY, revisions: answer.revisions, earlier: answer.earlier };
 }
 
 /** A version's content as the view holds it, or the failure it stands for. */
-function versionOf(answer: PlanningRevisionAnswer): VersionRead {
+function versionOf(answer: TasksRevisionAnswer): VersionRead {
   return "failure" in answer
     ? { kind: HISTORY_READ.FAILED }
     : {

@@ -9,7 +9,7 @@ import {
   queueMacCommand,
   withdrawMacCommand,
 } from "@luke/database/models/mac-command-store";
-import type { PlanStoreEffect } from "@luke/database/models/plan-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   MAC_COMMAND_BOUNDS,
   type MacCommand,
@@ -135,7 +135,7 @@ function notRun(reason: string): MacCommandAnswer {
 }
 
 /** Whether a Mac of the account read for its commands within the freshness window. */
-function macListening(userId: string): PlanStoreEffect<boolean> {
+function macListening(userId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     macListeningSince(
       userId,
@@ -148,7 +148,7 @@ function macListening(userId: string): PlanStoreEffect<boolean> {
 function awaitedResult(
   userId: string,
   queued: MacCommand,
-): PlanStoreEffect<Option.Option<MacCommandResult>> {
+): TaskStoreEffect<Option.Option<MacCommandResult>> {
   const deadline = Duration.sum(
     Duration.seconds(queued.timeoutSeconds),
     MAC_COMMAND_SERVICE.ANSWER_GRACE,
@@ -215,7 +215,7 @@ export function runOnMacTool(
  * answered with every waiting command claimed for it as soon as one waits,
  * or with none once the hold ends.
  */
-export function macCommandsFor(userId: string): PlanStoreEffect<readonly MacCommand[]> {
+export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacCommand[]> {
   const queuedSince = Effect.map(
     Clock.currentTimeMillis,
     (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),

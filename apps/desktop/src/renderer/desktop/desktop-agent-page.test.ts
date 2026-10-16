@@ -155,7 +155,7 @@ beforeEach(() => {
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
         told.push(request);
-        if (request.kind === ACT_KIND.PLANNING_SKILLS) {
+        if (request.kind === ACT_KIND.TASKS_SKILLS) {
           const value = {
             skills: {
               repository: "acme/relay",

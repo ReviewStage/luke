@@ -1,11 +1,11 @@
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
-import type { AppInboxPlan, AppInboxWaitingItem } from "@luke/host/app-state";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import type { AppInboxTask, AppInboxWaitingItem } from "@luke/host/app-state";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { agentStillWriting } from "../planning/coding-agent-model";
 import { INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
@@ -54,15 +54,15 @@ export const FACTORY_WORK = {
 export type FactoryWork =
   | {
       readonly kind: typeof FACTORY_WORK.AGENT;
-      readonly plan: PlanSummary;
-      readonly agent: PlanAgentLine;
+      readonly plan: TaskSummary;
+      readonly agent: TaskAgentLine;
     }
   | {
       readonly kind: typeof FACTORY_WORK.PULL_REQUEST;
-      readonly plan: PlanSummary;
-      readonly pullRequest: PlanPullRequestLine;
+      readonly plan: TaskSummary;
+      readonly pullRequest: TaskPullRequestLine;
     }
-  | { readonly kind: typeof FACTORY_WORK.ONE_OFF; readonly agent: PlanlessAgent };
+  | { readonly kind: typeof FACTORY_WORK.ONE_OFF; readonly agent: TasklessAgent };
 
 /** What stops an agent until the developer acts: an open Inbox item it posted, or its failed turn. */
 export const FACTORY_STOP = {
@@ -77,20 +77,20 @@ export const FACTORY_STOP = {
 export type FactoryStop =
   | {
       readonly kind: typeof FACTORY_STOP.QUESTION;
-      readonly plan: PlanSummary;
+      readonly plan: TaskSummary;
       readonly item: AppInboxWaitingItem;
     }
   | {
       readonly kind: typeof FACTORY_STOP.FAILED;
-      readonly plan: PlanSummary;
-      readonly agent: PlanAgentLine;
+      readonly plan: TaskSummary;
+      readonly agent: TaskAgentLine;
     }
   | {
       readonly kind: typeof FACTORY_STOP.ONE_OFF_QUESTION;
-      readonly agent: PlanlessAgent;
+      readonly agent: TasklessAgent;
       readonly item: AppInboxWaitingItem;
     }
-  | { readonly kind: typeof FACTORY_STOP.ONE_OFF_FAILED; readonly agent: PlanlessAgent };
+  | { readonly kind: typeof FACTORY_STOP.ONE_OFF_FAILED; readonly agent: TasklessAgent };
 
 /** An open item an agent with no task posted, by that agent. */
 export interface FactoryOneOffItem {
@@ -106,27 +106,27 @@ export const FACTORY_BLOCK = {
 
 export interface FactoryBlock {
   readonly kind: (typeof FACTORY_BLOCK)[keyof typeof FACTORY_BLOCK];
-  readonly plan: PlanSummary;
-  readonly pullRequest: PlanPullRequestLine;
+  readonly plan: TaskSummary;
+  readonly pullRequest: TaskPullRequestLine;
 }
 
 /** A pull request merged in the last day, and its task's last activity. */
 export interface FactoryShipped {
-  readonly plan: PlanSummary;
-  readonly pullRequest: PlanPullRequestLine;
+  readonly plan: TaskSummary;
+  readonly pullRequest: TaskPullRequestLine;
   readonly at: number;
 }
 
 /** What the board is read from. */
 export interface FactoryInput {
   /** The plans the sidebar lists. */
-  readonly plans: readonly PlanSummary[];
+  readonly plans: readonly TaskSummary[];
   /** What waits, by plan: every member's open items, as the Inbox reads them (`factoryWaiting`). */
-  readonly waiting: readonly AppInboxPlan[];
+  readonly waiting: readonly AppInboxTask[];
   /** The plan on this Mac's call, or none. */
-  readonly callPlanId: string | undefined;
+  readonly callTaskId: string | undefined;
   /** The listed workspace's agents with no task that stand, not archived (chain D's plan list). */
-  readonly oneOff: readonly PlanlessAgent[];
+  readonly oneOff: readonly TasklessAgent[];
   /** The open items those agents posted, as the Inbox reads them (`factoryOneOffWaiting`). */
   readonly oneOffWaiting: readonly FactoryOneOffItem[];
   readonly now: number;
@@ -135,7 +135,7 @@ export interface FactoryInput {
 /** The board: each station's work, led by what waits on the developer there. */
 export interface FactoryBoard {
   /** The task on this Mac's call with Luke, if it is listed. */
-  readonly talking: readonly PlanSummary[];
+  readonly talking: readonly TaskSummary[];
   /** What stops an agent: the questions, then the failures, each the latest first. */
   readonly stopped: readonly FactoryStop[];
   /** The agents at work, the latest moved first, then the pull requests still being built. */
@@ -148,22 +148,22 @@ export interface FactoryBoard {
   readonly agentsWorking: number;
 }
 
-const STANDING_STATES: ReadonlySet<PlanPullRequestLine["state"]> = new Set([
+const STANDING_STATES: ReadonlySet<TaskPullRequestLine["state"]> = new Set([
   PULL_REQUEST_STATE.OPEN,
   PULL_REQUEST_STATE.DRAFT,
 ]);
 
 /** Checks that leave an open pull request ready: passing, or none to run. */
-const READY_CHECKS: ReadonlySet<PlanPullRequestLine["checks"]> = new Set([
+const READY_CHECKS: ReadonlySet<TaskPullRequestLine["checks"]> = new Set([
   CHECK_SUMMARY.PASSING,
   CHECK_SUMMARY.NONE,
 ]);
 
-function readyToMerge(pullRequest: PlanPullRequestLine): boolean {
+function readyToMerge(pullRequest: TaskPullRequestLine): boolean {
   return pullRequest.state === PULL_REQUEST_STATE.OPEN && READY_CHECKS.has(pullRequest.checks);
 }
 
-function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
+function pullRequestsOf(plan: TaskSummary): readonly TaskPullRequestLine[] {
   return plan.agents?.pullRequests ?? [];
 }
 
@@ -172,7 +172,7 @@ function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
  * newest agent's turn where that is later, which stands for when its pull
  * request moved, since the wire carries no instant of its own for one.
  */
-export function factoryMovedAt(plan: PlanSummary): number {
+export function factoryMovedAt(plan: TaskSummary): number {
   return Math.max(
     taskTime(plan, TASK_ORDER.UPDATED),
     ...(plan.agents?.agents ?? []).map((agent) => agent.at ?? 0),
@@ -185,28 +185,28 @@ export function factoryMovedAt(plan: PlanSummary): number {
  * agent's start, so an agent that failed before its first turn on an old
  * task is as recent as it is.
  */
-export function agentMovedAt(plan: PlanSummary, agent: PlanAgentLine): number {
+export function agentMovedAt(plan: TaskSummary, agent: TaskAgentLine): number {
   return agent.at ?? taskTime(plan, TASK_ORDER.UPDATED);
 }
 
 /** An agent whose turn failed lately, which waits on the developer to retry it. */
-function failedLately(plan: PlanSummary, agent: PlanAgentLine, now: number): boolean {
+function failedLately(plan: TaskSummary, agent: TaskAgentLine, now: number): boolean {
   return (
     agent.status === CODING_AGENT_STATUS.FAILED && now - agentMovedAt(plan, agent) < LOOKBACK_MS
   );
 }
 
 /** Failing checks on an open pull request, which wait on the developer; a draft's are its own work still. */
-function checksFailing(pullRequest: PlanPullRequestLine): boolean {
+function checksFailing(pullRequest: TaskPullRequestLine): boolean {
   return (
     pullRequest.state === PULL_REQUEST_STATE.OPEN && pullRequest.checks === CHECK_SUMMARY.FAILING
   );
 }
 
 /** Where one plan stands: what of it stops, works, blocks, and shipped. */
-function placePlan(plan: PlanSummary, input: FactoryInput) {
+function placePlan(plan: TaskSummary, input: FactoryInput) {
   const agents = plan.agents?.agents ?? [];
-  const items = input.waiting.find((each) => each.planId === plan.id)?.items ?? [];
+  const items = input.waiting.find((each) => each.taskId === plan.id)?.items ?? [];
   const questions = items.map((item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan, item }));
   const failed = agents
     .filter((agent) => failedLately(plan, agent, input.now))
@@ -307,7 +307,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
   ];
   const blockAt = (block: FactoryBlock) => factoryMovedAt(block.plan);
   return {
-    talking: plans.filter((plan) => plan.id === input.callPlanId),
+    talking: plans.filter((plan) => plan.id === input.callTaskId),
     stopped: kindsInOrder(
       stops,
       [
@@ -340,8 +340,8 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
  */
 export function factoryWaiting(
   read: readonly InboxListed[],
-  main: readonly AppInboxPlan[],
-): AppInboxPlan[] {
+  main: readonly AppInboxTask[],
+): AppInboxTask[] {
   const byPlan = new Map<string, Map<string, AppInboxWaitingItem>>();
   const add = (planId: string, item: AppInboxWaitingItem) => {
     const items = byPlan.get(planId) ?? new Map<string, AppInboxWaitingItem>();
@@ -353,8 +353,8 @@ export function factoryWaiting(
     const { id, agentId, title, postedAt } = item;
     add(holder.plan.id, { id, agentId, title, postedAt });
   }
-  for (const { planId, items } of main) for (const item of items) add(planId, item);
-  return [...byPlan].map(([planId, items]) => ({ planId, items: [...items.values()] }));
+  for (const { taskId: planId, items } of main) for (const item of items) add(planId, item);
+  return [...byPlan].map(([planId, items]) => ({ taskId: planId, items: [...items.values()] }));
 }
 
 /**

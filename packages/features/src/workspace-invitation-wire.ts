@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { workspaceIdSchema } from "./plan-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
 
 /**

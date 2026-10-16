@@ -12,8 +12,8 @@ import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect } from "./plan-store.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.
@@ -211,7 +211,7 @@ const rewrapRow = SqlSchema.findAll({
 });
 
 /** The account's stored keys, sealed, in the providers' order. */
-export function listProviderKeyRows(userId: string): PlanStoreEffect<readonly ProviderKeyRow[]> {
+export function listProviderKeyRows(userId: string): TaskStoreEffect<readonly ProviderKeyRow[]> {
   return findRows(userId);
 }
 
@@ -223,7 +223,7 @@ export function saveProviderKey(
   hint: string,
   fastAccess: FastAccess | null,
   now: Date,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return upsertRow({ userId, provider, ...sealed, hint, fastAccess, now });
 }
 
@@ -231,7 +231,7 @@ export function saveProviderKey(
 export function removeProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return deleteRow({ userId, provider });
 }
 
@@ -242,7 +242,7 @@ export function setProviderKeyStatus(
   sealedKey: string,
   status: ProviderKeyStatus,
   now: Date,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return updateStatus({ userId, provider, sealedKey, status, now });
 }
 
@@ -252,12 +252,12 @@ export function setProviderKeyFastAccess(
   provider: ProviderKeyProvider,
   sealedKey: string,
   fastAccess: FastAccess,
-): PlanStoreEffect<void> {
+): TaskStoreEffect<void> {
   return updateFastAccess({ userId, provider, sealedKey, fastAccess });
 }
 
 /** Every stored key of every account, sealed, for the rewrap alone. */
-export function listEveryProviderKeyRow(): PlanStoreEffect<readonly OwnedProviderKeyRow[]> {
+export function listEveryProviderKeyRow(): TaskStoreEffect<readonly OwnedProviderKeyRow[]> {
   return findEveryRow(undefined);
 }
 
@@ -268,7 +268,7 @@ export function listEveryProviderKeyRow(): PlanStoreEffect<readonly OwnedProvide
 export function rewrapProviderKeyRow(
   row: OwnedProviderKeyRow,
   rewrapped: SealedProviderKey,
-): PlanStoreEffect<boolean> {
+): TaskStoreEffect<boolean> {
   return Effect.map(
     rewrapRow({
       userId: row.userId,

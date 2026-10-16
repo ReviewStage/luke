@@ -89,7 +89,7 @@ export interface CodingAgentActsDependencies {
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
-    planningRefresh(): Effect.Effect<void>;
+    tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
@@ -135,7 +135,7 @@ export interface CodingAgentActsDependencies {
     | "observeMessaged"
     | "observeModels"
     | "observePublished"
-    | "observePlanGone"
+    | "observeTaskGone"
     | "shown"
     | "shownInbox"
   >;
@@ -199,7 +199,7 @@ export function codingAgentActRows(
         if ("agent" in value) notices.observeAgents([value.agent]);
       }),
       (value) =>
-        "agent" in value && value.agent.planId === null ? host.planningRefresh() : Effect.void,
+        "agent" in value && value.agent.planId === null ? host.tasksRefresh() : Effect.void,
     );
   return {
     [ACT_KIND.CODING_AGENTS_MODELS]: (_payload, sender) => {
@@ -225,7 +225,7 @@ export function codingAgentActRows(
       return noted(host.codingAgentList(params), (answer) => {
         if ("agents" in answer) notices.observeAgents(answer.agents);
         else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-          notices.observePlanGone(params.planId);
+          notices.observeTaskGone(params.taskId);
         }
       });
     },
@@ -274,7 +274,7 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
       return notedAgent(host.codingAgentPin(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId: inboxPlanId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
       notices.shownInbox(inboxPlanId);

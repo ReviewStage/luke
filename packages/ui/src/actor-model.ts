@@ -6,7 +6,7 @@ import {
   type PlanEditor,
   type PlanLastEdit,
   type PlanSectionEdit,
-} from "@luke/features/plan-wire";
+} from "@luke/features/task-wire";
 import {
   type FormerMember,
   WORKSPACE_ROLE,
@@ -300,11 +300,11 @@ export function accountActor(account: {
  * never a face with no name.
  */
 export function creatorActor(
-  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  task: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
   reader: EditReader,
   account: PersonActor | undefined,
 ): Actor {
-  const { createdBy, ownerId } = plan;
+  const { createdBy, ownerId } = task;
   if (createdBy !== undefined || ownerId === undefined) {
     return personActor(createdBy, reader.members, reader.readerId, reader.former);
   }

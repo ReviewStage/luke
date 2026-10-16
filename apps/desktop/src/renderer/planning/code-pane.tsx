@@ -1,5 +1,5 @@
-import type { CodeRef } from "@luke/features/plan-wire";
-import type { CodeToken, PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
+import type { CodeRef } from "@luke/features/task-wire";
+import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
 import { cssCustomProperties } from "@luke/ui";
 import {
   type CodeFeedCall,
@@ -111,7 +111,7 @@ export function CodeLineNumber({ line }: { line: number | undefined }): React.JS
 }
 
 /** Whether a line holds no text to copy. */
-function isBlank(tokens: PlanCode["lines"][number]): boolean {
+function isBlank(tokens: TaskCode["lines"][number]): boolean {
   return tokens.every((token) => token.text === "");
 }
 
@@ -123,7 +123,7 @@ export function CodeLineRows({
   before,
 }: {
   firstLine: number;
-  lines: PlanCode["lines"];
+  lines: TaskCode["lines"];
   pointed: CodeRef;
   /** What stands before a line, by its number; nothing where absent. */
   before?: ((line: number) => ReactNode) | undefined;
@@ -161,7 +161,7 @@ function revealTop(list: HTMLElement): number {
 }
 
 /** A card's lines. */
-export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+export function CodeLines({ code }: { code: TaskCode }): React.JSX.Element {
   return (
     <div className="code-lines">
       <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
@@ -252,7 +252,7 @@ function CodeCardContent({
   showing,
   onOpenFile,
 }: {
-  showing: PlanCodeShowing;
+  showing: TaskCodeShowing;
   onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
@@ -315,7 +315,7 @@ export function CodePane({
   reveal,
   onRevealed,
 }: {
-  shown: readonly PlanCodeShowing[];
+  shown: readonly TaskCodeShowing[];
   /** The plan's calls as the Call tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */

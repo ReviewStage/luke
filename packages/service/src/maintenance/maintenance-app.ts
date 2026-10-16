@@ -15,9 +15,9 @@ import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "../http/http-effect.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { createLiveUpstream } from "../voice/openai.js";
 import {
   NOTHING_ORPHANED,
@@ -75,8 +75,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     cronSecret: environment.cronSecret,
     purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
     // A call started longer ago than OpenAI's own limit has ended, whether or not its row was closed.
-    purgeDeletedPlanCalls: (now) =>
-      hostedStore().retention.purgeDeletedPlanCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
+    purgeDeletedTaskCalls: (now) =>
+      hostedStore().retention.purgeDeletedTaskCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
     sweepAbandonedTurns: (now) =>
       Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),

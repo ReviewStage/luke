@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import type { PlanStoreFailure } from "@luke/database/models/plan-store";
+import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CONVERSATION_PICTURE_BOUNDS,
@@ -133,7 +133,7 @@ class SetPastBudget extends Data.TaggedError("SetPastBudget") {}
 function keepAll(
   target: ConversationTarget,
   pictures: readonly ReadPicture[],
-): Effect.Effect<Option.Option<readonly KeptPicture[]>, PlanStoreFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<readonly KeptPicture[]>, TaskStoreFailure, DatabaseServices> {
   const all = Effect.gen(function* () {
     const kept: KeptPicture[] = [];
     for (const picture of pictures) {

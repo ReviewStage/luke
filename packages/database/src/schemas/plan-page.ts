@@ -1,6 +1,6 @@
 import { index, integer, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { plan } from "./plan.js";
+import { task } from "./plan.js";
 
 /**
  * plan-page.ts -- a plan's pages, one row per version of a page.
@@ -18,9 +18,9 @@ export const planPageVersion = pgTable(
   {
     /** The version's own id. */
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
+    taskId: uuid("plan_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => task.id, { onDelete: "cascade" }),
     /** The page the version is of, the same on each of its versions. */
     pageId: uuid("page_id").notNull(),
     /** The version's number within its page, from one. */
@@ -33,6 +33,6 @@ export const planPageVersion = pgTable(
   (table) => [
     unique("plan_page_version_page_version").on(table.pageId, table.version),
     // A plan's pages are read together, each by its newest version.
-    index("plan_page_version_plan").on(table.planId),
+    index("plan_page_version_plan").on(table.taskId),
   ],
 );

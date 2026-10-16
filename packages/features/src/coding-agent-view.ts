@@ -28,13 +28,13 @@ import {
   planTemplateRevisionsAnswerSchema,
   planTemplateWriteRequestSchema,
 } from "./plan-document-template.js";
-import { planRevisionSeqSchema } from "./plan-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
+import { planRevisionSeqSchema } from "./task-wire.js";
 
 /**
  * coding-agent-view.ts -- a plan's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -85,7 +85,7 @@ export const CODING_AGENT_CALL_FAILURE = {
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /** The plan is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
-  PLAN_ARCHIVED: "plan-archived",
+  TASK_ARCHIVED: "plan-archived",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -178,7 +178,7 @@ export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;
 
 /** One plan's agents, as the window asks them: the plan, and whether the archived agents are listed among the rest. */
 export const codingAgentListParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
+  taskId: EffectSchema.NonEmptyString,
   includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
@@ -202,7 +202,7 @@ export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 
 /** Starting an agent, as the window asks it: the plan, and the Start request the service takes. */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
+  taskId: EffectSchema.NonEmptyString,
   ...codingAgentStartRequestFields,
 });
 
@@ -341,7 +341,7 @@ export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerView
 
 /** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
 export const codingAgentInboxParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
+  taskId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
 });
 

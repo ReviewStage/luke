@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/plan-wire";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -74,9 +74,9 @@ afterEach(() => {
 function drawn(): HTMLElement {
   const base = plansControl();
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     activePlanId: DOCUMENT_PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: { ...DOCUMENT_PLAN, workspaceId: ACME.id } },
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, workspaceId: ACME.id } },
     workspaces: [ACME],
     history: {
       ...base.history,

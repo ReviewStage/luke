@@ -3,7 +3,7 @@ import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
 import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
-import type { PlanningView } from "@luke/features/planning-view";
+import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useState } from "react";
@@ -111,7 +111,7 @@ function readStanding(
         : { key, title: issue.title, state: issue.state, pullRequest: undefined },
     );
   }
-  return act(ACT_KIND.PLANNING_PULL_REQUEST, {
+  return act(ACT_KIND.TASKS_PULL_REQUEST, {
     workspaceId,
     repository: asked.repository,
     number: asked.number,
@@ -136,12 +136,9 @@ function connectedFor(asked: Asked, workspace: Workspace | undefined): boolean {
 }
 
 /** The workspace the words a chip stands in are of: the plan's, else the one their mentions are written under; none where they name neither. */
-function wordsWorkspace(
-  planning: PlanningView | undefined,
-  where: ChipWhere,
-): Workspace | undefined {
+function wordsWorkspace(planning: TasksView | undefined, where: ChipWhere): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const planWorkspaceId = planning?.plans.find((plan) => plan.id === where.planId)?.workspaceId;
+  const planWorkspaceId = planning?.tasks.find((plan) => plan.id === where.planId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === planWorkspaceId) ??
     workspaces.find((each) => each.slug === where.workspace)
@@ -152,7 +149,7 @@ function wordsWorkspace(
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
   const { act } = useAct();
   const asked = askedOf(mention);
-  const workspace = wordsWorkspace(useAppState()?.planning, where);
+  const workspace = wordsWorkspace(useAppState()?.tasks, where);
   const workspaceId = workspace?.id;
   const connected = asked !== undefined && connectedFor(asked, workspace);
   const [read, setRead] = useState<{

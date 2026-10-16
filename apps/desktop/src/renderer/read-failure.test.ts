@@ -7,7 +7,7 @@ import {
   type CodingAgentChangesAnswerView,
 } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -42,7 +42,7 @@ import { WorkspacePage } from "./settings/workspace-page";
 const ignore = () => undefined;
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-const PLAN: PlanSummary = {
+const PLAN: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
@@ -159,7 +159,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
           retried += 1;
         },
       }),
-      tab: PANEL_TAB.PLANS,
+      tab: PANEL_TAB.TASKS,
       onTabChange: ignore,
       onPressWithin: ignore,
       account: {
@@ -195,7 +195,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
     createElement(DesktopInbox, {
       plans: plansControl({
         plans: [PLAN],
-        inboxPlans: [{ planId: PLAN.id, items: 1, updatedAt: 2 }],
+        inboxPlans: [{ taskId: PLAN.id, items: 1, updatedAt: 2 }],
         inboxView: {
           open: true,
           chosen: undefined,

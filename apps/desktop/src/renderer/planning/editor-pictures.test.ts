@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { Plan } from "@luke/features/plan-wire";
-import { PICTURE_KEEP_FAILURE, type PlanningPictureKeepAnswer } from "@luke/features/planning-view";
+import type { Task } from "@luke/features/task-wire";
+import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { act, createElement, type ReactNode } from "react";
@@ -35,7 +35,7 @@ const PLANNING_CSS = readFileSync(path.join(import.meta.dirname, "../styles/plan
 const PLAN_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   id: PLAN_ID,
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
@@ -78,7 +78,7 @@ beforeEach(() => {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.PLANNING_PICTURE_KEEP) {
+        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
           return new Promise((resolve) => {
             keeping = { resolve };
           });
@@ -159,7 +159,7 @@ async function keepAsked(): Promise<void> {
   assert.ok(keeping, "a keep is asked");
 }
 
-async function answerKeep(value: PlanningPictureKeepAnswer): Promise<void> {
+async function answerKeep(value: TasksPictureKeepAnswer): Promise<void> {
   const held = keeping ?? assert.fail("a keep is asked");
   act(() => held.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }));
   await settle();

@@ -1,5 +1,5 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
-import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -71,7 +71,7 @@ function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
  * included, wherever the window last read the agent (`agent`), and
  * otherwise at rest in the harness it ran in when it was pinned.
  */
-function pinSubject(pin: PinnedTab, agent: PlanAgentLine | undefined): TabSubject {
+function pinSubject(pin: PinnedTab, agent: TaskAgentLine | undefined): TabSubject {
   const { tab } = pin;
   if (isAgentTab(tab)) {
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
@@ -137,9 +137,9 @@ function pinActionGroups(
  */
 function pinAgent(
   pin: PinnedTab,
-  plan: PlanSummary,
+  plan: TaskSummary,
   plans: PlansControl,
-): PlanAgentLine | undefined {
+): TaskAgentLine | undefined {
   const { tab } = pin;
   if (!isAgentTab(tab)) return undefined;
   const open = pin.plan === plans.activePlanId ? plans.agents.agents : undefined;
@@ -191,8 +191,8 @@ function PinnedTabCard({
   onOpenPlan,
 }: {
   pin: PinnedTab;
-  plan: PlanSummary;
-  agent: PlanAgentLine | undefined;
+  plan: TaskSummary;
+  agent: TaskAgentLine | undefined;
   gone: boolean;
   plans: PlansControl;
   onOpenPlan: () => void;
@@ -242,7 +242,7 @@ export function SidebarPinnedTab({
   /** Whether the open plan was opened from this pin, which the sidebar marks in the plan's place. */
   current: boolean;
   /** The plan the tab is of, whose name the row's card carries. */
-  plan: PlanSummary;
+  plan: TaskSummary;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;

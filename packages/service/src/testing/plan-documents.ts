@@ -1,5 +1,5 @@
 import { Database } from "@luke/database/core/query";
-import { plan } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/plan";
 import { eq, sql } from "drizzle-orm";
 
 /**
@@ -27,8 +27,8 @@ export const INVITATIONS_TEXT = [
 ].join("\n");
 
 /** Makes the plan one document holding `text`. */
-export function makeDocumentPlan(planId: string, text: string) {
-  return Database.use((db) => db.update(plan).set({ document: text }).where(eq(plan.id, planId)));
+export function makeDocumentTask(taskId: string, text: string) {
+  return Database.use((db) => db.update(task).set({ document: text }).where(eq(task.id, taskId)));
 }
 
 /**
@@ -36,11 +36,11 @@ export function makeDocumentPlan(planId: string, text: string) {
  * started and before its history began, so its first save records the text
  * as the revision it changed (`earlier`) and its sections read as no one's.
  */
-export function makeSavedDocumentPlan(planId: string, text: string) {
+export function makeSavedDocumentTask(taskId: string, text: string) {
   return Database.use((db) =>
     db
-      .update(plan)
-      .set({ document: text, updatedAt: sql`${plan.createdAt} + interval '1 minute'` })
-      .where(eq(plan.id, planId)),
+      .update(task)
+      .set({ document: text, updatedAt: sql`${task.createdAt} + interval '1 minute'` })
+      .where(eq(task.id, taskId)),
   );
 }

@@ -2,12 +2,12 @@ import { workspaceSeams } from "@luke/database/models/workspace-seams";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { plansApp } from "@luke/service/plans/plans-app";
+import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /** One plan's planning conversation read as a coding agent's transcript is (GET), held open while a turn or a worker runs. The logic lives in `packages/service/src/plans/plans-app.ts`; this file only hands it the deployment's real seams. */
 export default routeFromHttpRouter(
-  plansApp({
+  tasksApp({
     resolveUserId: resolveHostedUserId,
     workspaces: workspaceSeams(auth.api),
     eveOrigin: deploymentEveOrigin,

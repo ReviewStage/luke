@@ -102,11 +102,11 @@ export const workspaceAgentsOf = (
       .slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
     const names = yield* planNamesOf(
       userId,
-      agents.flatMap((agent) => agent.planId ?? []),
+      agents.flatMap((agent) => agent.taskId ?? []),
     );
     const taskOf = (agent: CodingAgent): AgentTask | null => {
-      const named = agent.planId === null ? undefined : names.get(agent.planId);
-      return agent.planId === null || named === undefined ? null : { id: agent.planId, ...named };
+      const named = agent.taskId === null ? undefined : names.get(agent.taskId);
+      return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
     };
     return { agents, taskOf };
   });
@@ -126,9 +126,9 @@ export const agentTaskOf = (
   userId: string,
   agent: CodingAgent,
 ): Effect.Effect<AgentTask | null, StoreFailure, DatabaseServices> =>
-  Effect.map(planNamesOf(userId, agent.planId === null ? [] : [agent.planId]), (names) => {
-    const named = agent.planId === null ? undefined : names.get(agent.planId);
-    return agent.planId === null || named === undefined ? null : { id: agent.planId, ...named };
+  Effect.map(planNamesOf(userId, agent.taskId === null ? [] : [agent.taskId]), (names) => {
+    const named = agent.taskId === null ? undefined : names.get(agent.taskId);
+    return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
   });
 
 /** One agent's task as the model reads it, and whether it is the task of whoever is asking. */

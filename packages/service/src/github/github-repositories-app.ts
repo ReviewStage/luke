@@ -44,7 +44,7 @@ import {
   githubRepositoryFullNameSchema,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
-import { workspaceIdSchema } from "@luke/features/plan-wire";
+import { workspaceIdSchema } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {
@@ -65,9 +65,9 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { readWorkspaceSkills } from "../plans/plan-skills.js";
-import { readRepositoryTree, treeRequestOf } from "../plans/plan-tree.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { readWorkspaceSkills } from "../tasks/task-skills.js";
+import { readRepositoryTree, treeRequestOf } from "../tasks/task-tree.js";
 import { GitHubApp, type GitHubWorkspaceReadFailure } from "./github-app.js";
 import { githubReadOrRefusal } from "./github-refusal.js";
 import { pullRequestByNumber } from "./pull-requests.js";

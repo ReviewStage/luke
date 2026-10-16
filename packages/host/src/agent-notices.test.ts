@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import type {
   AccountFailedRun,
   AccountInboxEntry,
-  AccountPlanlessEntry,
+  AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
@@ -17,7 +17,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
-  type PlanlessAgent,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
@@ -31,11 +31,11 @@ import {
   type FailedRunToast,
   type InboxItemToast,
 } from "./agent-notices.js";
-import type { AppInboxPlan, AppInboxPlanHolding, AppInboxSlice } from "./app-state.js";
+import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-const PLAN_NAME = "Teammate invitations";
+const TASK_NAME = "Teammate invitations";
 const MODEL = "anthropic/claude-opus-5.5";
 const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
 const WATCH = Duration.seconds(30);
@@ -48,7 +48,7 @@ function agent(
 ): CodingAgentSummary {
   return {
     id: AGENT_ID,
-    planId: PLAN_ID,
+    planId: TASK_ID,
     model: MODEL,
     effort: "high",
     title: null,
@@ -93,9 +93,9 @@ function fixture() {
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
-  const waiting: (readonly AppInboxPlan[])[] = [];
-  const holding: (readonly AppInboxPlanHolding[])[] = [];
-  const planless: AppInboxSlice["planless"][] = [];
+  const waiting: (readonly AppInboxTask[])[] = [];
+  const holding: (readonly AppInboxTaskHolding[])[] = [];
+  const planless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   const openedAutomations: string[] = [];
   let automationsOn = true;
@@ -103,7 +103,7 @@ function fixture() {
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
-  const openedPlanless: {
+  const openedTaskless: {
     readonly agentId: string;
     readonly itemId: string;
     readonly workspaceId?: string;
@@ -123,10 +123,10 @@ function fixture() {
     accounts = yield* Queue.unbounded<string | undefined>();
     Queue.offerUnsafe(accounts, signedInAs);
     return yield* createAgentNotices({
-      listAgents: (planId) =>
+      listAgents: (taskId) =>
         Effect.sync(() => {
-          listed.push(planId);
-          const queue = answers.get(planId) ?? [];
+          listed.push(taskId);
+          const queue = answers.get(taskId) ?? [];
           const answer = queue.length > 1 ? queue.shift() : queue[0];
           return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
         }),
@@ -142,7 +142,7 @@ function fixture() {
           readPullRequests.push(agentId);
           return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
         }),
-      planName: (planId) => (planId === PLAN_ID ? PLAN_NAME : undefined),
+      taskName: (taskId) => (taskId === TASK_ID ? TASK_NAME : undefined),
       open: (place) => opened.push(place),
       onUnseenChanged: (next) => unseen.push(next),
       onPanelFocusChanged: (listener) => {
@@ -160,7 +160,7 @@ function fixture() {
           accountChanged = undefined;
         };
       },
-      onPlanAgentsMoved: () => {
+      onTaskAgentsMoved: () => {
         listReads += 1;
       },
       readAccountInbox: (after) =>
@@ -172,14 +172,14 @@ function fixture() {
       accounts: Stream.fromQueue(accounts),
       onInboxChanged: (next) => {
         waiting.push(next.waiting);
-        holding.push(next.plans);
-        planless.push(next.planless);
+        holding.push(next.tasks);
+        planless.push(next.taskless);
         failedRuns.push(next.failedRuns);
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
       automationsOn: () => automationsOn,
       openInbox: (planId) => openedInboxes.push(planId),
-      openPlanlessItem: (item) => openedPlanless.push(item),
+      openTasklessItem: (item) => openedTaskless.push(item),
       watchInterval: WATCH,
       report: () => undefined,
     });
@@ -194,7 +194,7 @@ function fixture() {
     publish: (agentId: string, answer: CodingAgentPullRequestAnswerView) =>
       published.set(agentId, answer),
     opened,
-    openedPlanless,
+    openedTaskless,
     unseen,
     /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
     answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
@@ -223,7 +223,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
-    planless,
+    taskless: planless,
     badges,
     inboxToasted,
     openedInboxes,
@@ -282,7 +282,7 @@ const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): AccountInboxEntry {
   return {
     id,
-    planId: PLAN_ID,
+    planId: TASK_ID,
     agentId: AGENT_ID,
     agentTitle: "Fix invitations",
     agentModel: MODEL,
@@ -344,13 +344,13 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       yield* f.notices;
-      const otherPlan = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+      const otherTask = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
       const otherAgent = "a3e4f5a6-5f4a-4fad-8d88-8b6e9c4a5d43";
       f.answerInbox({
         items: [
           waitingItem(ITEM_A, { title: "Push to the release branch?", postedAt: READ_AT - 60_000 }),
           waitingItem(ITEM_B, {
-            planId: otherPlan,
+            planId: otherTask,
             agentId: otherAgent,
             title: "Which account pays out?",
             postedAt: READ_AT - 3_600_000,
@@ -363,7 +363,7 @@ it.effect(
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), [
         {
-          planId: PLAN_ID,
+          taskId: TASK_ID,
           items: [
             {
               id: ITEM_A,
@@ -380,7 +380,7 @@ it.effect(
           ],
         },
         {
-          planId: otherPlan,
+          taskId: otherTask,
           items: [
             {
               id: ITEM_B,
@@ -399,8 +399,8 @@ const AUTOMATION_NAME = "Morning Sentry triage";
 /** An agent an automation started with no plan, as the plan list carries it, started by the signed-in account unless a test says. */
 function planlessAgent(
   status: CodingAgentStatus,
-  patch: Partial<PlanlessAgent> = {},
-): PlanlessAgent {
+  patch: Partial<TasklessAgent> = {},
+): TasklessAgent {
   return {
     ...agent(status, { title: "Triage overnight issues" }),
     planId: null,
@@ -415,7 +415,7 @@ function planlessAgent(
 }
 
 /** The agent's own page as its read answers it. */
-function pageOf(held: PlanlessAgent): CodingAgentPageAnswerView {
+function pageOf(held: TasklessAgent): CodingAgentPageAnswerView {
   const { automationName: _name, activityAt: _at, ...page } = held;
   return { agent: page };
 }
@@ -430,7 +430,7 @@ it.effect(
       const running = planlessAgent(CODING_AGENT_STATUS.RUNNING);
       f.answerPage(AGENT_ID, pageOf(planlessAgent(CODING_AGENT_STATUS.COMPLETED)));
 
-      notices.observePlanless([running]);
+      notices.observeTaskless([running]);
       yield* TestClock.adjust(WATCH);
 
       assert.deepEqual(f.readAgents, [AGENT_ID]);
@@ -440,7 +440,7 @@ it.effect(
       ]);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
       f.posted[0]?.onClick();
-      assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+      assert.deepEqual(f.opened, [{ taskId: null, agentId: AGENT_ID }]);
     }),
 );
 it.effect(
@@ -451,13 +451,13 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(true);
 
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.FAILED)]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.FAILED)]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.toasted, [
         {
-          place: { planId: null, agentId: AGENT_ID },
+          place: { taskId: null, agentId: AGENT_ID },
           words: "Triage overnight issues failed",
           detail: AUTOMATION_NAME,
           failed: true,
@@ -497,8 +497,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: `${AUTOMATION_NAME} failed` }]);
@@ -513,9 +513,9 @@ it.effect(
       f.focus(false);
       const theirs = { startedBy: { userId: "user-sam", name: "Sam" } };
 
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
       yield* TestClock.adjust(WATCH);
-      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
+      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.readAgents, []);
@@ -567,7 +567,7 @@ it.effect(
     }),
 );
 /** An item of an agent with no plan waiting on the developer, as the account's inbox read carries it. */
-function planlessItem(id: string, patch: Partial<AccountPlanlessEntry> = {}): AccountPlanlessEntry {
+function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
   return {
     id,
     agentId: AGENT_ID,
@@ -595,7 +595,7 @@ it.effect(
 
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        planless: [planlessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" })],
+        planless: [tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" })],
         automations: [
           {
             automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -617,7 +617,7 @@ it.effect(
         { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
       ]);
       f.posted.at(-1)?.onClick();
-      assert.deepEqual(f.openedPlanless, [
+      assert.deepEqual(f.openedTaskless, [
         { agentId: AGENT_ID, itemId: ITEM_B, workspaceId: "workspace-acme" },
       ]);
       assert.deepEqual(
@@ -626,7 +626,7 @@ it.effect(
         "it opens the item in the window's Inbox, not the agent's page",
       );
       assert.deepEqual(
-        f.planless.at(-1)?.map((item) => item.workspaceId),
+        f.taskless.at(-1)?.map((item) => item.workspaceId),
         ["workspace-acme"],
         "the window is told whose workspace's list the item stands in",
       );
@@ -644,7 +644,7 @@ it.effect("an item's title says a link by its name, never its address, in the no
     f.answerInbox({
       items: [],
       planless: [
-        planlessItem(ITEM_B, {
+        tasklessItem(ITEM_B, {
           title:
             "Quarantine [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/flaky.test.ts) per [LUKE-9](https://linear.app/acme/issue/LUKE-9)?",
           updatedAt: READ_AT + 1,
@@ -671,7 +671,7 @@ it.effect(
       yield* f.notices;
       const answer = (automationName: string) => ({
         items: [],
-        planless: [planlessItem(ITEM_A, { automationName })],
+        planless: [tasklessItem(ITEM_A, { automationName })],
         automations: [],
         cursor: "4",
         readAt: READ_AT,
@@ -683,7 +683,7 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(
-        f.planless.at(-1)?.map((item) => item.automationName),
+        f.taskless.at(-1)?.map((item) => item.automationName),
         ["Flake sweep, nightly"],
       );
     }),
@@ -698,7 +698,7 @@ it.effect(
       const answer = (workspaceId: string | undefined) => ({
         items: [],
         planless: [
-          workspaceId === undefined ? planlessItem(ITEM_A) : planlessItem(ITEM_A, { workspaceId }),
+          workspaceId === undefined ? tasklessItem(ITEM_A) : tasklessItem(ITEM_A, { workspaceId }),
         ],
         automations: [],
         cursor: "5",
@@ -711,7 +711,7 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(
-        f.planless.at(-1)?.map((item) => item.workspaceId),
+        f.taskless.at(-1)?.map((item) => item.workspaceId),
         ["workspace-acme"],
       );
     }),
@@ -725,15 +725,15 @@ it.effect(
       yield* f.notices;
       f.focus(false);
       const teammate = "user-charles";
-      const teamPlan = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+      const teamTask = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
       f.answerInbox({
         items: [
           waitingItem(ITEM_A, { startedBy: ACCOUNT_ID }),
-          waitingItem(ITEM_B, { planId: teamPlan, startedBy: teammate }),
+          waitingItem(ITEM_B, { planId: teamTask, startedBy: teammate }),
         ],
         plans: [
-          { planId: PLAN_ID, items: 1, updatedAt: READ_AT },
-          { planId: teamPlan, items: 1, updatedAt: READ_AT },
+          { planId: TASK_ID, items: 1, updatedAt: READ_AT },
+          { planId: teamTask, items: 1, updatedAt: READ_AT },
         ],
         cursor: "1",
         readAt: READ_AT,
@@ -742,12 +742,12 @@ it.effect(
       f.answerInbox({
         items: [
           waitingItem(ITEM_A, { startedBy: ACCOUNT_ID }),
-          waitingItem(ITEM_B, { planId: teamPlan, startedBy: teammate }),
-          waitingItem(ITEM_C, { planId: teamPlan, startedBy: teammate, updatedAt: READ_AT + 1 }),
+          waitingItem(ITEM_B, { planId: teamTask, startedBy: teammate }),
+          waitingItem(ITEM_C, { planId: teamTask, startedBy: teammate, updatedAt: READ_AT + 1 }),
         ],
         plans: [
-          { planId: PLAN_ID, items: 1, updatedAt: READ_AT },
-          { planId: teamPlan, items: 2, updatedAt: READ_AT + 1 },
+          { planId: TASK_ID, items: 1, updatedAt: READ_AT },
+          { planId: teamTask, items: 2, updatedAt: READ_AT + 1 },
         ],
         cursor: "2",
         readAt: READ_AT + 1,
@@ -755,14 +755,14 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(
-        f.waiting.at(-1)?.map((plan) => plan.planId),
-        [PLAN_ID],
+        f.waiting.at(-1)?.map((task) => task.taskId),
+        [TASK_ID],
       );
       assert.equal(f.badges.at(-1), 1);
       assert.deepEqual(f.said(), []);
       assert.deepEqual(
-        f.holding.at(-1)?.map((holding) => holding.planId),
-        [PLAN_ID, teamPlan],
+        f.holding.at(-1)?.map((holding) => holding.taskId),
+        [TASK_ID, teamTask],
       );
     }),
 );
@@ -820,8 +820,8 @@ it.effect(
       f.answerInbox({
         items: [],
         planless: [
-          planlessItem(ITEM_A, { startedBy: ACCOUNT_ID, updatedAt: READ_AT + 1 }),
-          planlessItem(ITEM_B, { startedBy: "user-charles", updatedAt: READ_AT + 1 }),
+          tasklessItem(ITEM_A, { startedBy: ACCOUNT_ID, updatedAt: READ_AT + 1 }),
+          tasklessItem(ITEM_B, { startedBy: "user-charles", updatedAt: READ_AT + 1 }),
         ],
         cursor: "2",
         readAt: READ_AT + 1,

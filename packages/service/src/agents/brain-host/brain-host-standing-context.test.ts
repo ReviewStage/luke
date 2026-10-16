@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { openPlanConversation, savePlanText } from "@luke/database/models/plan-store";
+import { openTaskConversation, savePlanText } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { insertMessage, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { insertMessage, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "../../core.js";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "./bounds.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import { brainHost } from "./host.js";
@@ -21,7 +21,7 @@ import type { BrainHostSeams } from "./production.js";
  */
 
 const NOW = 1_800_000_000_000;
-const PLAN_NAME = "Teammate invitations";
+const TASK_NAME = "Teammate invitations";
 const SAID = "Any member should be able to invite, not only admins.";
 
 const FIRST = "## Open questions\n\n- Who may invite?\n";
@@ -115,20 +115,20 @@ async function said(target: ConversationTarget, words: string): Promise<void> {
 
 test("a turn of a plan's conversation is handed the plan's name and the document saved as it starts, and none of the conversation's words", async () => {
   const userId = await database.createUser();
-  const plan = await database.run(startPlan(userId, { name: PLAN_NAME }));
+  const task = await database.run(startTask(userId, { name: TASK_NAME }));
   const conversationId = Option.getOrThrow(
-    await database.run(openPlanConversation(userId, plan.id)),
+    await database.run(openTaskConversation(userId, task.id)),
   ).conversationId;
   const target = { userId, conversationId };
   await said(target, SAID);
-  await database.run(savePlanText(userId, plan.id, FIRST));
+  await database.run(savePlanText(userId, task.id, FIRST));
 
   const first = await standingContextOf(target);
-  assert.ok(first.includes(`Name: ${PLAN_NAME}`));
+  assert.ok(first.includes(`Name: ${TASK_NAME}`));
   assert.ok(first.includes(handed(FIRST)));
   assert.equal(first.includes(SAID), false);
 
-  await database.run(savePlanText(userId, plan.id, SECOND));
+  await database.run(savePlanText(userId, task.id, SECOND));
 
   const second = await standingContextOf(target);
   assert.ok(second.includes(handed(SECOND)));
@@ -143,11 +143,11 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
     description: "Pick an issue and plan it at once.",
   };
   const userId = await database.createUser();
-  const plan = await database.run(startPlan(userId, { name: issue.title, linearIssue: issue }));
-  const plain = await database.run(startPlan(userId, { name: PLAN_NAME }));
+  const plan = await database.run(startTask(userId, { name: issue.title, linearIssue: issue }));
+  const plain = await database.run(startTask(userId, { name: TASK_NAME }));
   const targetOf = async (planId: string) => ({
     userId,
-    conversationId: Option.getOrThrow(await database.run(openPlanConversation(userId, planId)))
+    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, planId)))
       .conversationId,
   });
 

@@ -1,4 +1,4 @@
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 
 /**
  * document-plan.ts -- a synthetic plan, as a service answers one: its text, and no assumptions beside it.
@@ -22,7 +22,7 @@ const DOCUMENT_TEXT = [
 ].join("\n\n");
 
 /** A plan, its text as `DOCUMENT_TEXT`, nobody's save on it yet. */
-export const DOCUMENT_PLAN: Plan = {
+export const DOCUMENT_PLAN: Task = {
   id: "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13",
   workspaceId: "workspace-personal",
   name: DOCUMENT_NAME,

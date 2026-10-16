@@ -2,9 +2,9 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,8 +12,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import type { MainTab } from "../planning/use-main-tabs";
-import { MAIN_TAB } from "../planning/use-main-tabs";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
@@ -27,7 +26,7 @@ import { DesktopPlans } from "./desktop-plans";
  * tab wears one of its own.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -74,9 +73,9 @@ const TAB_KEEPING = new Set(["Close", "Close others", "Pin tab", "Unpin tab"]);
  */
 function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLElement {
   const control = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     mainTabs: {
       ...plansControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }, { draft: "draft-1" }, MAIN_TAB.INBOX],

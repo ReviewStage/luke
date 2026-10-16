@@ -102,7 +102,7 @@ it.effect(
         { query: "-----BEGIN OPENSSH KEY----- format" },
         { query: "commit 4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345 changelog" },
         { query: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0 decode" },
-        { query: "Stripe idempotency", planId: "plan-1" },
+        { query: "Stripe idempotency", taskId: "plan-1" },
         { query: 42 },
       ];
       const { http, search } = searchWith(unreached);

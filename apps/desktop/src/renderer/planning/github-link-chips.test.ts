@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -50,7 +50,7 @@ const ACME: Workspace = {
 /** Acme with its GitHub App installed. */
 const ACME_WITH_GITHUB: Workspace = { ...ACME, github: { login: "acme", active: true } };
 
-const TASK: PlanSummary = {
+const TASK: TaskSummary = {
   id: PLAN,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
@@ -64,7 +64,7 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   return {
     ...snapshot,
-    planning: { ...IDLE_PLANNING_VIEW, plans: [TASK], workspaces: [workspace] },
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: [workspace] },
   };
 }
 
@@ -106,10 +106,10 @@ async function drawn(text: string, workspace: Workspace) {
       act: (request: Act): Promise<ActOutcome> => {
         asked.push(request);
         const reached =
-          request.kind === ACT_KIND.PLANNING_PULL_REQUEST &&
+          request.kind === ACT_KIND.TASKS_PULL_REQUEST &&
           request.payload.repository === "acme/relay";
         return Promise.resolve(
-          request.kind === ACT_KIND.PLANNING_PULL_REQUEST
+          request.kind === ACT_KIND.TASKS_PULL_REQUEST
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: reached
@@ -166,9 +166,7 @@ test("a pull request's link says its repository, number, title, and state, weari
     ["secret/pull/7", null, undefined],
   ]);
   assert.deepEqual(
-    asked
-      .filter((each) => each.kind === ACT_KIND.PLANNING_PULL_REQUEST)
-      .map((each) => each.payload),
+    asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST).map((each) => each.payload),
     [
       { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
       { workspaceId: "workspace-acme", repository: "acme/relay", number: 42 },
@@ -182,7 +180,7 @@ test("where the workspace has no GitHub App installed, nothing is asked and the 
 
   assert.deepEqual(chips(container), [["relay/pull/42", null, undefined]]);
   assert.deepEqual(
-    asked.filter((each) => each.kind === ACT_KIND.PLANNING_PULL_REQUEST),
+    asked.filter((each) => each.kind === ACT_KIND.TASKS_PULL_REQUEST),
     [],
   );
 });

@@ -25,7 +25,7 @@ import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
 import {
   PERSONAL_WORKSPACE_METADATA,
@@ -55,7 +55,7 @@ import {
  * Whether an account is in a workspace is one condition, its `member` row,
  * which a statement elsewhere joins into its own where clause: a plan is
  * read and written by every member of the workspace it names, so a store
- * gates a plan through `planReachableBy` and `reachablePlan` rather than by
+ * gates a plan through `taskReachableBy` and `reachableTask` rather than by
  * the account that started it.
  * A workspace's photo is the plugin's own `organization.logo`, kept as a
  * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
@@ -504,7 +504,7 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
 }
 
 /** A coding agent row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
-export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
+export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${codingAgent.taskId}))`;
 
 /** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no plan as much as one on a plan. */
 export function agentReachableBy(userId: string): SQL {
@@ -512,13 +512,13 @@ export function agentReachableBy(userId: string): SQL {
 }
 
 /** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
-export function planReachableBy(userId: string): SQL {
-  return memberOfWorkspace(userId, plan.organizationId);
+export function taskReachableBy(userId: string): SQL {
+  return memberOfWorkspace(userId, task.organizationId);
 }
 
 /** The plan under this id, where the account is a member of its workspace; any other id reads as no plan. */
-export function reachablePlan(userId: string, planId: string): SQL | undefined {
-  return and(eq(plan.id, planId), planReachableBy(userId));
+export function reachableTask(userId: string, taskId: string): SQL | undefined {
+  return and(eq(task.id, taskId), taskReachableBy(userId));
 }
 
 /** The account's first workspace, by id; nothing before it was ever ensured. */

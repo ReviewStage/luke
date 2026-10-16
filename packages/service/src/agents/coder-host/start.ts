@@ -9,14 +9,13 @@ import {
   createCodingAgent,
   discardCodingAgent,
 } from "@luke/database/models/coding-agent-store";
-import { readPlan } from "@luke/database/models/plan-store";
+import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -87,7 +86,7 @@ type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEAD
 /** Where a Start puts the agent: on a plan, handed the plan or a prompt in its place and a note after either, or in a workspace with no plan, on a repository, handed a prompt. */
 export type StartPlace =
   | {
-      readonly planId: string;
+      readonly taskId: string;
       readonly prompt: string | undefined;
       /** What the developer said for the agent beyond the plan or the prompt; none where they said nothing more. */
       readonly note?: string | undefined;
@@ -95,7 +94,7 @@ export type StartPlace =
       readonly noteHeading?: StartNoteHeading | undefined;
     }
   | {
-      readonly planId: null;
+      readonly taskId: null;
       readonly organizationId: string;
       readonly repository: string;
       readonly prompt: string;
@@ -160,7 +159,7 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string;
-  readonly plan: Plan | undefined;
+  readonly task: Task | undefined;
   readonly mover: string | undefined;
   readonly place: CodingAgentPlace;
 }
@@ -179,40 +178,40 @@ const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
-  if (place.planId === null) {
+  if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
     if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return {
       workspaceId: place.organizationId,
       repository: place.repository,
-      plan: undefined,
+      task: undefined,
       mover: undefined,
       place: {
-        planId: null,
+        taskId: null,
         organizationId: place.organizationId,
         planSnapshot: null,
         prompt: place.prompt,
       },
     };
   }
-  const read = yield* hostedStoreOrUnavailable(readPlan(userId, place.planId));
+  const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { plan, ownerId } = read.value;
-  if (plan.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  const { task, ownerId } = read.value;
+  if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   return {
-    workspaceId: plan.workspaceId,
-    repository: plan.repository,
-    plan,
+    workspaceId: task.workspaceId,
+    repository: task.repository,
+    task,
     mover: ownerId === userId ? userId : undefined,
     place:
       place.prompt === undefined
         ? {
-            planId: place.planId,
-            planSnapshot: withNote(planMarkdown(plan), place.note, place.noteHeading),
+            taskId: place.taskId,
+            planSnapshot: withNote(planMarkdown(task), place.note, place.noteHeading),
             prompt: null,
           }
         : {
-            planId: place.planId,
+            taskId: place.taskId,
             planSnapshot: null,
             prompt: withNote(place.prompt, place.note, place.noteHeading),
           },
@@ -230,13 +229,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
-  const words = brief.prompt ?? (ask.planId === null ? undefined : ask.note);
+  const words = brief.prompt ?? (ask.taskId === null ? undefined : ask.note);
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
   const reads =
     words === undefined
       ? undefined
-      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
+      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.task));
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
@@ -268,12 +267,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           ? eveContent(
               brief.planSnapshot,
               [],
-              words === undefined ? undefined : mentionedContext(words, landing.plan, reads),
+              words === undefined ? undefined : mentionedContext(words, landing.task, reads),
             )
           : eveContent(
               brief.prompt,
               ask.attachments ?? [],
-              mentionedContext(brief.prompt, landing.plan, reads),
+              mentionedContext(brief.prompt, landing.task, reads),
             ),
     })
     .pipe(

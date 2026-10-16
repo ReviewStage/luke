@@ -1,19 +1,19 @@
 import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
-import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import type { Task, TaskSummary } from "@luke/features/task-wire";
 import {
   type CodeToken,
-  PLAN_WORK_STATE,
-  PLANNING_READ,
-  type PlanCode,
-  type PlanCodeShowing,
-  type PlanningRepositoriesAnswer,
-  type PlanningView,
-  type PlanWorkTurn,
-} from "@luke/features/planning-view";
+  TASK_WORK_STATE,
+  TASKS_READ,
+  type TaskCode,
+  type TaskCodeShowing,
+  type TasksRepositoriesAnswer,
+  type TasksView,
+  type TaskWorkTurn,
+} from "@luke/features/tasks-view";
 import {
-  type PlanTranscript,
+  type TaskTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@luke/features/transcript-wire";
@@ -111,7 +111,7 @@ const FIXTURE_TEXT = [
     "- An invite expires after 7 days.",
 ].join("\n\n");
 
-const FIXTURE_PLAN: Plan = {
+const FIXTURE_PLAN: Task = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   workspaceId: FIXTURE_FIRST.id,
   name: "Teammate invitations",
@@ -121,7 +121,7 @@ const FIXTURE_PLAN: Plan = {
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
-const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
+const FIXTURE_OTHER_PLANS: readonly TaskSummary[] = [
   {
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
     workspaceId: FIXTURE_FIRST.id,
@@ -165,7 +165,7 @@ const FIXTURE_REPOSITORIES = new Map([
 ]);
 
 /** The repositories a fixture run's chip lists for a workspace, read from nowhere; the first workspace's before one is chosen. */
-export function fixtureRepositories(workspaceId: string | undefined): PlanningRepositoriesAnswer {
+export function fixtureRepositories(workspaceId: string | undefined): TasksRepositoriesAnswer {
   return {
     repositories: {
       installed: true,
@@ -175,8 +175,8 @@ export function fixtureRepositories(workspaceId: string | undefined): PlanningRe
   };
 }
 
-const FIXTURE_PLAN_LIST: PlanningView = {
-  plans: [
+const FIXTURE_PLAN_LIST: TasksView = {
+  tasks: [
     {
       id: FIXTURE_PLAN.id,
       workspaceId: FIXTURE_FIRST.id,
@@ -187,10 +187,10 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     },
     ...FIXTURE_OTHER_PLANS,
   ],
-  listStatus: PLANNING_READ.READY,
+  listStatus: TASKS_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
   github: { connected: true, login: null },
-  document: { status: PLANNING_READ.IDLE },
+  document: { status: TASKS_READ.IDLE },
 };
 
 /** The fixture's colours as the host's highlighter gives them, in GitHub's dark and light themes. */
@@ -218,7 +218,7 @@ function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
  * check he is asking about, lines 6 to 9 of an invented file, coloured as
  * the host's highlighter colours TypeScript.
  */
-const FIXTURE_CODE: PlanCode = {
+const FIXTURE_CODE: TaskCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
   repository: "ada/relay",
   firstLine: 1,
@@ -304,7 +304,7 @@ const FIXTURE_CODE: PlanCode = {
 };
 
 /** The fixture's file around lines `startLine` to `endLine`, three either side, as the host keeps a card's lines. */
-function fixtureExcerpt(startLine: number, endLine: number): PlanCode {
+function fixtureExcerpt(startLine: number, endLine: number): TaskCode {
   const firstLine = Math.max(1, startLine - 3);
   return {
     ...FIXTURE_CODE,
@@ -319,7 +319,7 @@ function fixtureExcerpt(startLine: number, endLine: number): PlanCode {
  * three steps, each with his note: where a link lands, the check he is asking
  * about, and the expiry after it.
  */
-const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
+const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
   {
     callId: "fixture-show-1",
     turnId: "fixture-turn-1",
@@ -352,7 +352,7 @@ const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
 /** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place, and by the row the voice wrote for it. */
-const FIXTURE_TRANSCRIPT: PlanTranscript = {
+const FIXTURE_TRANSCRIPT: TaskTranscript = {
   calls: [
     {
       id: "3c5e7a9b-1d2f-4a6c-8e0b-2d4f6a8c0e1a",
@@ -390,12 +390,12 @@ const FIXTURE_TRANSCRIPT: PlanTranscript = {
  * while the notetaker writes, so the capture shows both of the status row's
  * lines.
  */
-const FIXTURE_OPEN_PLAN: PlanningView = {
+const FIXTURE_OPEN_PLAN: TasksView = {
   ...FIXTURE_PLAN_LIST,
-  activePlanId: FIXTURE_PLAN.id,
-  document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
+  activeTaskId: FIXTURE_PLAN.id,
+  document: { status: TASKS_READ.READY, task: FIXTURE_PLAN },
   activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
-  transcript: { status: PLANNING_READ.READY, transcript: FIXTURE_TRANSCRIPT },
+  transcript: { status: TASKS_READ.READY, transcript: FIXTURE_TRANSCRIPT },
   shownCode: FIXTURE_SHOWN_CODE,
 };
 
@@ -471,7 +471,7 @@ const FIXTURE_BOARD: Board = {
 };
 
 /** The open plan on its whiteboard, as the planning-board profile captures it. */
-const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
+const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
 
 /** A call of the fixture's turns, as the AI SDK journals it: answered with `output`, or running where it has none. */
 function fixtureCall(tool: string, id: string, input: WireRecord, output?: WireValue) {
@@ -506,11 +506,11 @@ const FIXTURE_LIVE_SESSION = "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f";
 const FIXTURE_WORKER_TASK =
   "Compare how two invite libraries let an admin revoke a pending invite.";
 
-const FIXTURE_WORK: readonly PlanWorkTurn[] = [
+const FIXTURE_WORK: readonly TaskWorkTurn[] = [
   {
     turnId: "fixture-turn-1",
     startedAt: Date.parse("2026-10-07T16:21:00Z"),
-    state: PLAN_WORK_STATE.DONE,
+    state: TASK_WORK_STATE.DONE,
     earlierOmitted: false,
     // The earlier call's "Any member should be able to." asked for it.
     asked: ["fixture-earlier-2"],
@@ -528,7 +528,7 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
   {
     turnId: "fixture-turn-2",
     startedAt: Date.parse("2026-10-07T16:44:00Z"),
-    state: PLAN_WORK_STATE.RUNNING,
+    state: TASK_WORK_STATE.RUNNING,
     earlierOmitted: false,
     // The call standing now's "who can withdraw an invite?" asked for it, under the service's own row id, which the line heard on the call is matched to by where it began.
     asked: ["fixture-service-1"],
@@ -557,7 +557,7 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
         callId: "fixture-call-3",
         taskId: "worker-fixture",
         task: FIXTURE_WORKER_TASK,
-        state: PLAN_WORK_STATE.RUNNING,
+        state: TASK_WORK_STATE.RUNNING,
         earlierOmitted: false,
         journal: [
           fixtureCall(
@@ -588,7 +588,7 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
 ];
 
 /** The open plan mid-call on its work, as the planning-work profile captures it. */
-const FIXTURE_OPEN_WORK: PlanningView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
+const FIXTURE_OPEN_WORK: TasksView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
 
 /** The side panels the fixture profiles open their plan with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
@@ -607,10 +607,10 @@ const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: fals
  */
 export const FIXTURE_PLANNING_CALL: Pick<
   VoiceView,
-  "voiceStatus" | "callPlanId" | "callTranscript"
+  "voiceStatus" | "callTaskId" | "callTranscript"
 > = {
   voiceStatus: LIVE_STATUS.LISTENING,
-  callPlanId: FIXTURE_PLAN.id,
+  callTaskId: FIXTURE_PLAN.id,
   callTranscript: {
     voiceSessionId: FIXTURE_LIVE_SESSION,
     lines: [
@@ -640,12 +640,12 @@ export const FIXTURE_PLANNING_CALL: Pick<
 export function fixturePlanningView(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
-}): PlanningView | undefined {
+}): TasksView | undefined {
   if (!run.fixtureMode) return undefined;
-  if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_OPEN_PLAN;
-  if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_OPEN_BOARD;
-  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_OPEN_PLAN;
-  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_OPEN_WORK;
+  if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_OPEN_PLAN;
+  if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_OPEN_BOARD;
+  if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_OPEN_PLAN;
+  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_OPEN_WORK;
   return FIXTURE_PLAN_LIST;
 }
 
@@ -662,9 +662,9 @@ export function fixtureSidePanel(run: {
   readonly profile: string;
 }): SidePanelState | undefined {
   if (!run.fixtureMode) return undefined;
-  if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_CODE_PANEL;
-  if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_BOARD_PANEL;
-  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_CALL_PANEL;
-  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_CALL_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_CODE_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_BOARD_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_CALL_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_CALL_PANEL;
   return FIXTURE_CLOSED_PANEL;
 }

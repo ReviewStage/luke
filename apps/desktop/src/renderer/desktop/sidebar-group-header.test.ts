@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -52,7 +52,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function plan(id: string, name: string, repository: string | null): PlanSummary {
+function plan(id: string, name: string, repository: string | null): TaskSummary {
   return { id, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt: 2, repository };
 }
 
@@ -160,7 +160,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
     plansControl({
       inbox: [
         {
-          planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+          taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
           items: [{ id: "item-1", agentId: "agent-1", title: "Retry?", postedAt: 1 }],
         },
       ],

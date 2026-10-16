@@ -5,7 +5,7 @@ import {
   type PlanTemplateRevisionLine,
   type PlanTemplateRevisionsAnswer,
 } from "@luke/features/plan-document-template";
-import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@luke/features/task-wire";
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";

@@ -12,7 +12,7 @@ import {
   mentionMarkdown,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "./attached-files.js";
 import {
@@ -29,7 +29,7 @@ import {
  * alone read back as the developer's. Synthetic plan.
  */
 
-const PLAN: Plan = {
+const TASK: Task = {
   id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -50,19 +50,19 @@ const PLAN: Plan = {
   },
 };
 
-const PLACE: MentionPlace = { workspace: "acme", repository: PLAN.repository };
+const PLACE: MentionPlace = { workspace: "acme", repository: TASK.repository };
 
 const anchorOf = (heading: string) => sectionAnchors([heading])[0] ?? "";
 
 const section = (heading: string) =>
   mentionMarkdown(
-    { kind: MENTION_KIND.SECTION, planId: PLAN.id, anchor: anchorOf(heading) },
+    { kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: anchorOf(heading) },
     heading,
     PLACE,
   );
 
 test("a section the words mention is handed as it stands, under the part's heading", () => {
-  const part = mentionedContext(`Do what ${section("Rollout")} says.`, PLAN);
+  const part = mentionedContext(`Do what ${section("Rollout")} says.`, TASK);
 
   assert.equal(
     part,
@@ -72,8 +72,8 @@ test("a section the words mention is handed as it stands, under the part's headi
 
 test("the whole plan the words mention is handed as an agent started on it is", () => {
   const part = mentionedContext(
-    `Read ${mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE)} first.`,
-    PLAN,
+    `Read ${mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK.id }, TASK.name, PLACE)} first.`,
+    TASK,
   );
 
   assert.match(part ?? "", /The whole plan:\n\n# Teammate invitations\n\n## Goal/u);
@@ -81,46 +81,46 @@ test("the whole plan the words mention is handed as an agent started on it is", 
 });
 
 test("a section the plan no longer holds is named as gone", () => {
-  const part = mentionedContext(`See ${section("Old flow")}.`, PLAN);
+  const part = mentionedContext(`See ${section("Old flow")}.`, TASK);
 
   assert.match(part ?? "", /The section "Old flow": no longer in the plan\./u);
 });
 
 test("a section mentioned in the form written before the link was settled is handed as one in the settled form is", () => {
-  const part = mentionedContext(`Do what [@Rollout](luke://plan/${PLAN.id}#Rollout) says.`, PLAN);
+  const part = mentionedContext(`Do what [@Rollout](luke://plan/${TASK.id}#Rollout) says.`, TASK);
 
-  assert.equal(part, mentionedContext(`Do what ${section("Rollout")} says.`, PLAN));
+  assert.equal(part, mentionedContext(`Do what ${section("Rollout")} says.`, TASK));
   assert.match(part ?? "", /The plan's section "Rollout":/u);
 });
 
 test("a heading the plan bears twice is handed by which of them the anchor names", () => {
-  const plan: Plan = {
-    ...PLAN,
+  const task: Task = {
+    ...TASK,
     document: { body: "## Notes\n\nfirst\n\n## Notes\n\nsecond", assumptions: [] },
   };
   const second = mentionMarkdown(
-    { kind: MENTION_KIND.SECTION, planId: PLAN.id, anchor: "notes-1" },
+    { kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: "notes-1" },
     "Notes",
     PLACE,
   );
 
-  assert.match(mentionedContext(`See ${second}.`, plan) ?? "", /## Notes\n\nsecond$/u);
+  assert.match(mentionedContext(`See ${second}.`, task) ?? "", /## Notes\n\nsecond$/u);
 });
 
 test("words that mention only files, folders, another plan, or nothing are handed nothing more", () => {
   for (const words of [
     "Fix [@a.ts](luke://file/src/a.ts) and look through [@src/](luke://folder/src/).",
     "Fix [@a.ts](https://github.com/acme/relay/blob/HEAD/src/a.ts) as it stands.",
-    `See ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: "another-plan", anchor: "goal" }, "Goal", PLACE)}.`,
+    `See ${mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: "another-plan", anchor: "goal" }, "Goal", PLACE)}.`,
     "No mention here, only [a link](https://example.com).",
     "`[@Rollout](luke://plan/7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d#Rollout)` is code.",
   ]) {
-    assert.equal(mentionedContext(words, PLAN), undefined, words);
+    assert.equal(mentionedContext(words, TASK), undefined, words);
   }
 });
 
 test("a section mentioned twice is handed once", () => {
-  const part = mentionedContext(`${section("Goal")} and again ${section("Goal")}.`, PLAN);
+  const part = mentionedContext(`${section("Goal")} and again ${section("Goal")}.`, TASK);
 
   assert.equal(part?.split('The plan\'s section "Goal"').length, 2);
 });
@@ -128,15 +128,15 @@ test("a section mentioned twice is handed once", () => {
 test("a long section is cut on a line, saying how much was left out, and a full part names what it left out", () => {
   const long = Array.from({ length: 400 }, (_, at) => `- step ${at}: ${"x".repeat(20)}`).join("\n");
   const headings = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"];
-  const plan: Plan = {
-    ...PLAN,
+  const task: Task = {
+    ...TASK,
     document: {
       body: headings.map((heading) => `## ${heading}\n\n${long}`).join("\n\n"),
       assumptions: [],
     },
   };
 
-  const part = mentionedContext(headings.map(section).join(" "), plan) ?? "";
+  const part = mentionedContext(headings.map(section).join(" "), task) ?? "";
 
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
   assert.match(part, /… \(\d+ more characters\)/u);
@@ -145,7 +145,7 @@ test("a long section is cut on a line, saying how much was left out, and a full 
 
 test("a line carrying what it mentioned is matched by eve's receipt of it, and reads back as its words alone", () => {
   const words = `Do what ${section("Rollout")} says.`;
-  const mentioned = mentionedContext(words, PLAN);
+  const mentioned = mentionedContext(words, TASK);
   const handed = eveContent(words, [], mentioned);
   assert.ok(Array.isArray(handed));
   const receipt = receivedMessage({
@@ -168,23 +168,23 @@ test("words that mention nothing of the plan go to eve as the words alone, as ev
 test("however long the headings of what is left out, the part stays inside its bound", () => {
   const long = "x".repeat(3_900);
   const headings = Array.from({ length: 12 }, (_, at) => `${"Heading ".repeat(100)}${at}`);
-  const plan: Plan = {
-    ...PLAN,
+  const task: Task = {
+    ...TASK,
     document: {
       body: headings.map((heading) => `## ${heading}\n\n${long}`).join("\n\n"),
       assumptions: [],
     },
   };
 
-  const part = mentionedContext(headings.map(section).join(" "), plan) ?? "";
+  const part = mentionedContext(headings.map(section).join(" "), task) ?? "";
 
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
 });
 
 test("a plan cut short names every section past the cut, one whose heading earlier words quote included", () => {
   const filler = Array.from({ length: 700 }, (_, at) => `- line ${at} of the context`).join("\n");
-  const plan: Plan = {
-    ...PLAN,
+  const task: Task = {
+    ...TASK,
     document: {
       body: `## Context\n\nSee Rollout below.\n\n${filler}\n\n## Rollout\n\nStore first.`,
       assumptions: [],
@@ -193,8 +193,8 @@ test("a plan cut short names every section past the cut, one whose heading earli
 
   const part =
     mentionedContext(
-      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE),
-      plan,
+      mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK.id }, TASK.name, PLACE),
+      task,
     ) ?? "";
 
   assert.match(part, /The whole plan, cut short/u);
@@ -210,8 +210,8 @@ test("a message whose words happen to open as the mentioned part does still read
 });
 
 test("a section too long for the room left is passed over, and a shorter one after it still goes", () => {
-  const plan: Plan = {
-    ...PLAN,
+  const task: Task = {
+    ...TASK,
     document: {
       body: [
         "## Big",
@@ -230,9 +230,9 @@ test("a section too long for the room left is passed over, and a shorter one aft
   const many = Array.from({ length: 5 }, (_, at) => `## S${at}\n\n${"z".repeat(3_950)}`).join(
     "\n\n",
   );
-  const crowded: Plan = {
-    ...plan,
-    document: { body: `${many}\n\n${plan.document.body}`, assumptions: [] },
+  const crowded: Task = {
+    ...task,
+    document: { body: `${many}\n\n${task.document.body}`, assumptions: [] },
   };
   const words = [
     ...Array.from({ length: 5 }, (_, at) => section(`S${at}`)),
@@ -252,12 +252,12 @@ test("a cut plan with many long headings past the cut is still handed, its list 
     { length: 60 },
     (_, at) => `## ${"Long heading ".repeat(70)}${at}\n\n${"w".repeat(400)}`,
   );
-  const plan: Plan = { ...PLAN, document: { body: sections.join("\n\n"), assumptions: [] } };
+  const task: Task = { ...TASK, document: { body: sections.join("\n\n"), assumptions: [] } };
 
   const part =
     mentionedContext(
-      mentionMarkdown({ kind: MENTION_KIND.PLAN, planId: PLAN.id }, PLAN.name, PLACE),
-      plan,
+      mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK.id }, TASK.name, PLACE),
+      task,
     ) ?? "";
 
   assert.match(part, /The whole plan, cut short/u);
@@ -280,7 +280,7 @@ const LIST_ISSUES = mentionMarkdown(
 test("a server or a tool the words mention is handed as one note naming its connection, in the order mentioned, each once", () => {
   const part = mentionedContext(
     `Use ${LINEAR} and ${LIST_ISSUES} for ${section("Rollout")}, then ${LINEAR} again.`,
-    PLAN,
+    TASK,
   );
 
   const words = part ?? "";
@@ -298,10 +298,10 @@ test("a server or a tool the words mention is handed as one note naming its conn
 
 test("the servers the words mention, by themselves or by a tool, are named each once, and nothing else is", () => {
   assert.deepEqual(
-    mentionedServers(`See ${LIST_ISSUES}, ${LINEAR}, and ${section("Rollout")}.`, PLAN.repository),
+    mentionedServers(`See ${LIST_ISSUES}, ${LINEAR}, and ${section("Rollout")}.`, TASK.repository),
     [INTEGRATION_PROVIDER.LINEAR],
   );
-  assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, PLAN.repository), []);
+  assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, TASK.repository), []);
 });
 
 test("an agent with no plan is handed a server's note, and nothing for a mention of a plan", () => {
@@ -320,20 +320,20 @@ const ISSUE = mentionMarkdown(
 );
 
 test("a page of an integration's the words mention is handed as a note naming its address and its connection, and brings its server in", () => {
-  const part = mentionedContext(`Fix ${ISSUE}, then ${ISSUE} again.`, PLAN) ?? "";
+  const part = mentionedContext(`Fix ${ISSUE}, then ${ISSUE} again.`, TASK) ?? "";
 
   assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
   assert.match(part, /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142\/fix-the-thing/u);
   assert.match(part, /the Linear MCP server \(connection `linear`\)/u);
-  assert.deepEqual(mentionedServers(`Fix ${ISSUE}.`, PLAN.repository), [
+  assert.deepEqual(mentionedServers(`Fix ${ISSUE}.`, TASK.repository), [
     INTEGRATION_PROVIDER.LINEAR,
   ]);
 });
 
 test("a GitHub page that is a file of the plan's repository brings in no server", () => {
-  const file = `[@app.ts](https://github.com/${PLAN.repository}/blob/HEAD/src/app.ts)`;
+  const file = `[@app.ts](https://github.com/${TASK.repository}/blob/HEAD/src/app.ts)`;
 
-  assert.deepEqual(mentionedServers(`See ${file}.`, PLAN.repository), []);
+  assert.deepEqual(mentionedServers(`See ${file}.`, TASK.repository), []);
 });
 
 test("a file's lines the words mention are handed as a note naming the lines and the commit they were read at, and a whole file as nothing", () => {
@@ -345,7 +345,7 @@ test("a file's lines the words mention are handed as a note naming the lines and
   );
   const whole = mentionMarkdown({ kind: MENTION_KIND.FILE, path: "src/app.ts" }, "app.ts", PLACE);
 
-  const part = mentionedContext(`Fix ${lines}, as ${lines} says.`, PLAN) ?? "";
+  const part = mentionedContext(`Fix ${lines}, as ${lines} says.`, TASK) ?? "";
 
   assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
   assert.match(
@@ -353,7 +353,7 @@ test("a file's lines the words mention are handed as a note naming the lines and
     /lines 12–20 of `src\/app\.ts` as they stood at commit `0123456789abcdef0123456789abcdef01234567`/u,
   );
   assert.match(part, /git show 0123456789abcdef0123456789abcdef01234567:src\/app\.ts/u);
-  assert.equal(mentionedContext(`Fix ${whole}.`, PLAN), undefined);
+  assert.equal(mentionedContext(`Fix ${whole}.`, TASK), undefined);
 });
 
 test("a server of an account past its provider's first is pointed at and brought in by its own connection, beside the provider's first", () => {
@@ -367,11 +367,11 @@ test("a server of an account past its provider's first is pointed at and brought
     "Notion · Acme",
     PLACE,
   );
-  const part = mentionedContext(`Move it from ${personal} to ${acme}.`, PLAN) ?? "";
+  const part = mentionedContext(`Move it from ${personal} to ${acme}.`, TASK) ?? "";
 
   assert.match(part, /the Notion MCP server \(connection `notion-2`\)/u);
   assert.match(part, /the Notion MCP server \(connection `notion`\)/u);
-  assert.deepEqual(mentionedServers(`Move it from ${personal} to ${acme}.`, PLAN.repository), [
+  assert.deepEqual(mentionedServers(`Move it from ${personal} to ${acme}.`, TASK.repository), [
     "notion-2",
     INTEGRATION_PROVIDER.NOTION,
   ]);
@@ -384,10 +384,10 @@ const OTHER_AGENT_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b";
 const PAGE_HTML = "<!doctype html>\n<h1>Invites by week</h1>\n<p>Code: ```x```</p>";
 
 const page = (name: string, pageId = PAGE_ID) =>
-  mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: PLAN.id, pageId }, name, PLACE);
+  mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
-const agent = (name: string, agentId = OTHER_AGENT_ID, planId = PLAN.id) =>
-  mentionMarkdown({ kind: MENTION_KIND.AGENT, planId, agentId }, name, PLACE);
+const agent = (name: string, agentId = OTHER_AGENT_ID, planId = TASK.id) =>
+  mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: planId, agentId }, name, PLACE);
 
 const OTHER_AGENT: MentionedAgent = {
   id: OTHER_AGENT_ID,
@@ -406,7 +406,7 @@ const READS = {
 };
 
 test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close, of tildes", () => {
-  const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, PLAN, READS);
+  const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, TASK, READS);
 
   assert.equal(
     part,
@@ -415,7 +415,7 @@ test("a page of the plan the words mention is handed by its id and version, with
 });
 
 test("another agent of the plan the words mention is handed by its id and where its work stands on GitHub, and never its conversation", () => {
-  const part = mentionedContext(`Build on ${agent("Store")}.`, PLAN, READS) ?? "";
+  const part = mentionedContext(`Build on ${agent("Store")}.`, TASK, READS) ?? "";
 
   assert.match(
     part,
@@ -429,7 +429,7 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
   const pushed = { ...OTHER_AGENT, pullRequest: null };
   const fresh = { ...OTHER_AGENT, branch: null, pullRequest: null };
   const read = (standing: MentionedAgent) =>
-    mentionedContext(`See ${agent("Store")}.`, PLAN, {
+    mentionedContext(`See ${agent("Store")}.`, TASK, {
       pages: new Map(),
       agents: new Map([[OTHER_AGENT_ID, standing]]),
     }) ?? "";
@@ -444,12 +444,12 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
 test("a page or an agent the send did not find on the plan is named as gone, and one of another plan is handed nothing", () => {
   const gone = mentionedContext(
     `See ${page("Old chart", "5f5f5f5f-0000-4000-8000-000000000000")} and ${agent("Old", "6a6a6a6a-0000-4000-8000-000000000000")}.`,
-    PLAN,
+    TASK,
     READS,
   );
   const elsewhere = mentionedContext(
     `See ${agent("Store", OTHER_AGENT_ID, "1c1c1c1c-0000-4000-8000-000000000000")}.`,
-    PLAN,
+    TASK,
     READS,
   );
 
@@ -463,7 +463,7 @@ test("a page or an agent the send did not find on the plan is named as gone, and
 test("a long page is cut on a line to its bound, saying how much was left out", () => {
   const long = Array.from({ length: 2_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
   const part =
-    mentionedContext(`See ${page("Rows")}.`, PLAN, {
+    mentionedContext(`See ${page("Rows")}.`, TASK, {
       pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Rows", version: 1, at: 0, html: long }]]),
       agents: new Map(),
     }) ?? "";
@@ -475,7 +475,7 @@ test("a long page is cut on a line to its bound, saying how much was left out", 
 test("a page whose HTML holds a long run of backticks is still handed, its fence and HTML inside the page's bound", () => {
   const ticks = "`".repeat(11_000);
   const part =
-    mentionedContext(`See ${page("Ticks")}.`, PLAN, {
+    mentionedContext(`See ${page("Ticks")}.`, TASK, {
       pages: new Map([
         [PAGE_ID, { id: PAGE_ID, title: "Ticks", version: 1, at: 0, html: `<pre>${ticks}</pre>` }],
       ]),
@@ -490,7 +490,7 @@ test("a page whose HTML holds a long run of backticks is still handed, its fence
 test("a page whose cut-off end holds long runs of both fence characters still hands its kept beginning in a short fence", () => {
   const html = `<h1>Chart</h1>\n${"`".repeat(6_000)}${"~".repeat(6_000)}`;
   const part =
-    mentionedContext(`See ${page("Chart")}.`, PLAN, {
+    mentionedContext(`See ${page("Chart")}.`, TASK, {
       pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Chart", version: 1, at: 0, html }]]),
       agents: new Map(),
     }) ?? "";

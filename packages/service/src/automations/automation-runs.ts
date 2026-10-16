@@ -315,8 +315,8 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
   if ("_tag" in refusal) return AUTOMATION_RUN_REASON.MODEL;
   switch (refusal.error) {
     case HOSTED_API_ERROR.NOT_FOUND:
-    case HOSTED_API_ERROR.PLAN_ARCHIVED:
-      return AUTOMATION_RUN_REASON.PLAN_UNREACHABLE;
+    case HOSTED_API_ERROR.TASK_ARCHIVED:
+      return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.NO_REPOSITORY:
       return AUTOMATION_RUN_REASON.NO_REPOSITORY;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
@@ -337,8 +337,8 @@ function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
     case HOSTED_API_ERROR.NOT_FOUND:
     case HOSTED_API_ERROR.AGENT_RETIRED:
       return AUTOMATION_RUN_REASON.AGENT_GONE;
-    case HOSTED_API_ERROR.PLAN_ARCHIVED:
-      return AUTOMATION_RUN_REASON.PLAN_UNREACHABLE;
+    case HOSTED_API_ERROR.TASK_ARCHIVED:
+      return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
     default:
@@ -558,7 +558,7 @@ const startClaimed = Effect.fnUntraced(function* (
   if (organizationId === null || repository === undefined) {
     const reason =
       organizationId === null
-        ? AUTOMATION_RUN_REASON.PLAN_UNREACHABLE
+        ? AUTOMATION_RUN_REASON.TASK_UNREACHABLE
         : AUTOMATION_RUN_REASON.NO_REPOSITORY;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
@@ -567,7 +567,7 @@ const startClaimed = Effect.fnUntraced(function* (
   const handed = automationStart(automation, run);
   const start = yield* Effect.result(
     startCodingAgent(eveFor(automation.userId), automation.userId, {
-      planId: null,
+      taskId: null,
       organizationId,
       repository,
       idempotencyKey: run.id,

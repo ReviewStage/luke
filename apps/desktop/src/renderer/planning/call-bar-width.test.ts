@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CallStatus } from "@luke/ui/planning-model";
+import type { CallStatus } from "@luke/ui/tasks-model";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -40,7 +40,7 @@ const COMMAND = "grep -rn pending src/members";
 
 const WORKING: CallStatus = {
   voiceWord: "Listening",
-  backend: { planner: { action: COMMAND }, notes: true },
+  backend: { brain: { action: COMMAND }, notes: true },
 };
 
 const ignore = () => undefined;
@@ -106,7 +106,7 @@ test("a bar in a 423px column gives the notetaker's part up, so Luke's command k
 test("with no command pending, a narrow bar still says the notetaker writes", () => {
   const bar = barAt(BAR.MAIN_423, {
     voiceWord: "Listening",
-    backend: { planner: undefined, notes: true },
+    backend: { brain: undefined, notes: true },
   });
   assert.deepEqual(bar.words(), ["Listening", "Notetaker · Writing notes"]);
 });

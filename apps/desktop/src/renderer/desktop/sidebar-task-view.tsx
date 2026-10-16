@@ -1,4 +1,4 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { ArchiveIcon } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
@@ -94,7 +94,7 @@ export function SidebarSectionHead({
 function filteredActor(
   createdBy: string,
   reader: ReturnType<typeof useMemberDirectory>,
-  plans: readonly PlanSummary[],
+  plans: readonly TaskSummary[],
 ): Actor {
   const member = reader.members?.find((each) => each.userId === createdBy);
   if (member !== undefined) return memberActor(member, reader.readerId);
@@ -306,7 +306,7 @@ export function ViewChips({
 }: {
   createdBy: string | undefined;
   /** The listed tasks, which name a creator the members no longer list. */
-  plans: readonly PlanSummary[];
+  plans: readonly TaskSummary[];
   onClearCreatedBy: () => void;
   archive: ArchivedView;
 }): React.JSX.Element | null {

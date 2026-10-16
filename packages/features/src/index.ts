@@ -74,16 +74,8 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  type PlanActivityFrame,
-  type PlanCallEndingFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
-  planActivityFrameFromWire,
-  planCallEndingFrameFromWire,
-  planCodeFrameFromWire,
   planDraftFrameFromWire,
-  planWorkFrameFromWire,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,
@@ -107,6 +99,14 @@ export {
   sessionReportFrameFromWire,
   sessionReportFrameSchema,
   sessionStopFrameSchema,
+  type TaskActivityFrame,
+  type TaskCallEndingFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
+  taskActivityFrameFromWire,
+  taskCallEndingFrameFromWire,
+  taskCodeFrameFromWire,
+  taskWorkFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
@@ -116,12 +116,6 @@ export {
   type HostedMacCommandClientOptions,
 } from "./mac-command-client.js";
 export {
-  HostedPlanClient,
-  type HostedPlanClientOptions,
-  type PlanCallResult,
-  type PlanMarks,
-} from "./plan-client.js";
-export {
   agentMessagesPath,
   agentPullRequestPath,
   agentStopPath,
@@ -130,8 +124,8 @@ export {
   automationRunsPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
-  planAgentsPath,
-  planPath,
+  taskAgentsPath,
+  taskPath,
   VOICE_SERVICE_PATH,
   workspacePhotoPath,
 } from "./service-paths.js";
@@ -146,6 +140,12 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export {
+  HostedTaskClient,
+  type HostedTaskClientOptions,
+  type TaskCallResult,
+  type TaskMarks,
+} from "./task-client.js";
 export {
   HostedTerminalClient,
   type HostedTerminalClientOptions,

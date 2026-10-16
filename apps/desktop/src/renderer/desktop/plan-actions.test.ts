@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan, type PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -23,7 +23,7 @@ import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -33,7 +33,7 @@ const PLAN: Plan = {
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
-const OTHER: PlanSummary = {
+const OTHER: TaskSummary = {
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   workspaceId: "workspace-personal",
   name: "Billing export",
@@ -48,7 +48,7 @@ const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
 /** `PLAN` as Charles started it and Dean last edited it, the minute after. */
-const SHARED_PLAN: Plan = {
+const SHARED_PLAN: Task = {
   ...PLAN,
   createdAt: 60_000,
   updatedAt: 120_000,
@@ -68,7 +68,7 @@ interface Asked {
   /** Each rename asked, as the plan and the name it was given. */
   renamed: string[][];
   /** Each pin or archive asked, as the plan and what was asked of it. */
-  marked: [string, PlanMark][];
+  marked: [string, TaskMark][];
 }
 
 const roots: Root[] = [];
@@ -100,16 +100,16 @@ function openTab(
     renamed: [],
     marked: [],
   };
-  const onRepository = (plan: Plan | PlanSummary) => ({
+  const onRepository = (plan: Task | TaskSummary) => ({
     ...plan,
     repository: repositories[plan.id] ?? null,
   });
   const open = onRepository(PLAN);
   const plans: PlansControl = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [onRepository(PLAN), onRepository(OTHER)],
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, ...open } },
+    region: { kind: DOCUMENT_REGION.READY, task: { ...PLAN, ...open } },
     onOpenOnGitHub: (planId) => asked.openedOnGitHub.push(planId),
     onChangeRepository: (planId) => asked.changed.push(planId),
     onDeletePlan: (planId) => {
@@ -149,7 +149,7 @@ function mountToolbar(plans: PlansControl): HTMLButtonElement {
 
 function sidebarPlan(
   plans: PlansControl,
-  plan: PlanSummary,
+  plan: TaskSummary,
   asked: Asked,
   current = false,
 ): ReactElement {
@@ -169,7 +169,7 @@ function sidebarPlan(
 
 function mountSidebarPlan(
   plans: PlansControl,
-  plan: PlanSummary,
+  plan: TaskSummary,
   asked: Asked,
   current = false,
 ): HTMLButtonElement {
@@ -270,11 +270,11 @@ test("the plan's name reaches the recording only as masked text, never in an att
 function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): PlansControl {
   const base = plansControl();
   return plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     me,
     plans: [SHARED_PLAN, OTHER],
     activePlanId: SHARED_PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: SHARED_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: SHARED_PLAN },
     mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab },
   });
 }
@@ -316,7 +316,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
 
 test("a sidebar task someone else created wears its creator's face before its time, and the reader's own wears none", () => {
   /** The faces each row wears, by the task's name, read as Dean sees them. */
-  const faces = (plan: PlanSummary) => {
+  const faces = (plan: TaskSummary) => {
     const { plans, asked } = openTab();
     const container = mount(
       createElement(MemberDirectory, {
@@ -384,7 +384,7 @@ const STAGE: Workspace = {
 };
 
 /** Dean's plan in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
-const STRANDED: PlanSummary = {
+const STRANDED: TaskSummary = {
   ...OTHER,
   repository: "acme-corp/relay",
   ownerId: DEAN.userId,
@@ -418,7 +418,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
 test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, a teammate owns it, or it is archived", () => {
   const { asked } = openTab();
   const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
-  const cases: [PlanSummary, readonly Workspace[]][] = [
+  const cases: [TaskSummary, readonly Workspace[]][] = [
     [STRANDED, [reaching, STAGE]],
     [STRANDED, [PERSONAL]],
     [{ ...STRANDED, ownerId: CHARLES.userId }, [PERSONAL, STAGE]],
@@ -490,7 +490,7 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
 
 test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
   /** The card's lines under its name, as Dean hears them with the creation's time left off. */
-  const details = (plan: PlanSummary, workspace: Workspace) => {
+  const details = (plan: TaskSummary, workspace: Workspace) => {
     const plans = plansControl({ me: DEAN.userId, workspaces: [workspace] });
     const card = mount(
       createElement(MemberDirectory, {

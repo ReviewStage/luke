@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
@@ -23,7 +23,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * repository.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
 };
@@ -38,7 +38,7 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.PLANNING_TREE
+          request.kind === ACT_KIND.TASKS_TREE
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
@@ -47,8 +47,8 @@ beforeEach(() => {
                     repository: "acme/relay",
                     branch: "main",
                     entries: [
-                      { name: "apps/web/rollout-store.ts", kind: PLAN_TREE_ENTRY.FILE },
-                      { name: "apps/web", kind: PLAN_TREE_ENTRY.FOLDER },
+                      { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+                      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
                     ],
                     truncated: false,
                   },

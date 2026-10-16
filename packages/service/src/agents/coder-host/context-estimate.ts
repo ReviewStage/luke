@@ -3,8 +3,8 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
-import { SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
-import { LOOK_AT_PICTURE_TOOL } from "../../plans/picture-look.js";
+import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,

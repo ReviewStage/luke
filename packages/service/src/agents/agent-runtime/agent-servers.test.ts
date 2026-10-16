@@ -6,7 +6,7 @@ import {
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import {
   INTEGRATION_LABEL_MAX,
   INTEGRATION_PROVIDER,
@@ -89,12 +89,12 @@ function typedSeat(userId: string, conversationId: string): SessionAuth {
 const codingSession = (host: CoderHost) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* startPlan(userId, {
+    const task = yield* startTask(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
     const started = yield* createCodingAgent(userId, {
-      planId: plan.id,
+      taskId: task.id,
       idempotencyKey: `start-${mintSession()}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",

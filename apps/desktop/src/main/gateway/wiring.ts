@@ -47,8 +47,8 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
   // What the host tells its clients of the panel's plans, written to the
   // document every window is told from. The subscription is the scope's, so
   // the close that ends the wiring ends it.
-  const stopPlanning = host.onPlanningChanged((planning) => {
-    state.update({ planning });
+  const stopPlanning = host.onTasksChanged((planning) => {
+    state.update({ tasks: planning });
   });
   yield* Effect.addFinalizer(() => Effect.sync(stopPlanning));
 

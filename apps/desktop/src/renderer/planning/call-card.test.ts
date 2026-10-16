@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanCodeShowing } from "@luke/features/planning-view";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,7 +45,7 @@ const LIVE_CALL: TranscriptCallRow = {
 const CALLS = [ENDED_CALL, LIVE_CALL];
 
 /** A snippet of `src/invoice.ts` shown a minute into the call given. */
-function shownOn(call: TranscriptCallRow, callId: string): PlanCodeShowing {
+function shownOn(call: TranscriptCallRow, callId: string): TaskCodeShowing {
   return {
     callId,
     turnId: `turn-${callId}`,
@@ -139,7 +139,7 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
 });
 
 test("code a turn showed after a call ended stands after that call's closing line, under its own turn's divider, and not inside the call", () => {
-  const after: PlanCodeShowing = {
+  const after: TaskCodeShowing = {
     ...shownOn(ENDED_CALL, "show-after"),
     shownAt: ENDED_START + 15 * MINUTE_MS,
   };

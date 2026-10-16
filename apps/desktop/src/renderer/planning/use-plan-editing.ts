@@ -15,7 +15,7 @@ import {
   editorTyped,
   pendingSave,
 } from "@luke/features/plan-edit-model";
-import type { PlanningEditAnswer } from "@luke/features/planning-view";
+import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +44,7 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
 const ignore = () => undefined;
 
 /** How the document saves an edit: what the words were written from, and the developer's. */
-export type PlanEditDoor = (request: PlanEditRequest) => Promise<PlanningEditAnswer>;
+export type PlanEditDoor = (request: PlanEditRequest) => Promise<TasksEditAnswer>;
 
 /** The blocks of the document that are no section of its text. */
 export const EDITOR_PLACE = {
@@ -107,7 +107,7 @@ export function usePlanEditing(
   const stamp = useRef(0);
   const opening = useRef(0);
   // The save out, which words typed after it wait on as a plan is left.
-  const flight = useRef<Promise<PlanningEditAnswer> | undefined>(undefined);
+  const flight = useRef<Promise<TasksEditAnswer> | undefined>(undefined);
   // The door of the plan last drawn, moved on after each commit, so a
   // cleanup as another plan opens still holds the door of the one it leaves.
   const door = useRef(edit);

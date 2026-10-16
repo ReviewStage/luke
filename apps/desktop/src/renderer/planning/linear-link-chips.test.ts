@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -46,7 +46,7 @@ const ACME: Workspace = {
 /** Acme with its Linear connected. */
 const ACME_WITH_LINEAR: Workspace = { ...ACME, linear: { active: true } };
 
-const TASK: PlanSummary = {
+const TASK: TaskSummary = {
   id: PLAN,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
@@ -60,7 +60,7 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   return {
     ...snapshot,
-    planning: { ...IDLE_PLANNING_VIEW, plans: [TASK], workspaces: [workspace] },
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: [workspace] },
   };
 }
 

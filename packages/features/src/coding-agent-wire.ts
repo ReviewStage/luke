@@ -43,6 +43,10 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
  * exported under its own name.
+ *
+ * Note that `planId` keep the wire's legacy spelling of a task, because a
+ * released desktop sends and reads them; they are renamed with the wire in a
+ * follow-up, with no alias.
  */
 
 export const CODING_AGENT_BOUNDS = {
@@ -567,7 +571,7 @@ export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAg
  * The run that started it is its page's alone, so a list of many carries no
  * prompt.
  */
-export const planlessAgentSchema = EffectSchema.Struct({
+export const tasklessAgentSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
   automationId: codingAgentPageSchema.fields.automationId,
   workspaceId: codingAgentPageSchema.fields.workspaceId,
@@ -578,7 +582,7 @@ export const planlessAgentSchema = EffectSchema.Struct({
   pinnedAt: EffectSchema.optionalKey(countedNumber),
 });
 
-export type PlanlessAgent = typeof planlessAgentSchema.Type;
+export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
 /** The plan's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({

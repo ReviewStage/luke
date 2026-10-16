@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type PlanlessAgent } from "@luke/features/coding-agent-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -103,7 +103,7 @@ function task(
   creator: string,
   times: { createdAt: number; updatedAt: number } = { createdAt: 1, updatedAt: 2 },
   pinnedAt?: number,
-): PlanSummary {
+): TaskSummary {
   return {
     id,
     workspaceId: ACME.id,
@@ -139,7 +139,7 @@ function oneOff(
   starter: string,
   activityAt: number,
   archivedAt?: number,
-): PlanlessAgent {
+): TasklessAgent {
   return {
     id,
     planId: null,
@@ -171,9 +171,9 @@ let pinsAsked: string[] = [];
 /** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
-  plans: readonly PlanSummary[] = TASKS,
-  archived: readonly PlanSummary[] = ARCHIVED,
-  agents: readonly PlanlessAgent[] = [],
+  plans: readonly TaskSummary[] = TASKS,
+  archived: readonly TaskSummary[] = ARCHIVED,
+  agents: readonly TasklessAgent[] = [],
   agentShown?: string,
 ): HTMLElement {
   const container = document.createElement("div");
@@ -357,9 +357,9 @@ test("a workspace nobody shares offers no grouping by creator", () => {
 /** The sidebar once the workspace's members have answered. */
 async function mountRead(
   workspace: Workspace,
-  plans?: readonly PlanSummary[],
-  archived?: readonly PlanSummary[],
-  agents?: readonly PlanlessAgent[],
+  plans?: readonly TaskSummary[],
+  archived?: readonly TaskSummary[],
+  agents?: readonly TasklessAgent[],
 ): Promise<HTMLElement> {
   const sidebar = mountSidebar(workspace, plans, archived, agents);
   await act(async () => undefined);

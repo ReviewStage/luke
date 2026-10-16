@@ -1,4 +1,4 @@
-import type { PlanActor } from "@luke/features/plan-wire";
+import type { PlanActor } from "@luke/features/task-wire";
 import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";

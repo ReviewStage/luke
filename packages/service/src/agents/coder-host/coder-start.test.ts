@@ -91,7 +91,7 @@ const openConnectedWorkspace = Effect.gen(function* () {
 /** A Start in the workspace with no plan, under a fresh key unless one is given. */
 function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: string): StartAsk {
   return {
-    planId: null,
+    taskId: null,
     organizationId: workspaceId,
     repository,
     prompt: TASK,
@@ -117,7 +117,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
         const agent = Option.getOrThrow(yield* readCodingAgent(owner, first.agent.id));
         assert.deepEqual(
-          [agent.planId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
+          [agent.taskId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
           [null, workspaceId, RELAY_REPOSITORY, TASK, null],
         );
         assert.deepEqual(

@@ -337,12 +337,12 @@ function taskLink(workspace: string, planId: string, hash: string): LinkPlace | 
   const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(planId)}${hash}`;
   const mention = decodeMention(written, null);
   // Note that the place is read again as every place is, so a task's id is held to the ids the service mints, as any other's is, where a mention takes any.
-  if (mention?.kind === MENTION_KIND.PLAN) {
-    return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: mention.planId }));
+  if (mention?.kind === MENTION_KIND.TASK) {
+    return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: mention.taskId }));
   }
   if (mention?.kind === MENTION_KIND.SECTION) {
     return Option.getOrUndefined(
-      readPlace({ kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor }),
+      readPlace({ kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor }),
     );
   }
   return undefined;
@@ -408,11 +408,11 @@ function agentPath(planId: string | undefined, agentId: string): readonly string
 export function linkOf(place: LinkPlace, workspace: string): string {
   const where = { workspace, repository: null };
   if (place.kind === LINK_PLACE.TASK) {
-    return encodeMention({ kind: MENTION_KIND.PLAN, planId: place.planId }, where);
+    return encodeMention({ kind: MENTION_KIND.TASK, taskId: place.planId }, where);
   }
   if (place.kind === LINK_PLACE.SECTION) {
     return encodeMention(
-      { kind: MENTION_KIND.SECTION, planId: place.planId, anchor: place.anchor },
+      { kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor },
       where,
     );
   }

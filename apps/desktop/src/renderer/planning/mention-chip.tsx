@@ -141,7 +141,7 @@ export function retargetedMention(
   change: HeadingsChange,
 ): string | undefined {
   const mention = decodeMention(target, place.repository);
-  if (mention?.kind !== MENTION_KIND.SECTION || mention.planId !== planId) return undefined;
+  if (mention?.kind !== MENTION_KIND.SECTION || mention.taskId !== planId) return undefined;
   const was = sectionAnchors(change.before);
   const is = sectionAnchors(change.after);
   const at = was.indexOf(mention.anchor);
@@ -164,7 +164,7 @@ const AGENT_WORDS = "A coding agent on this task";
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
-  if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
+  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== doors.planId) {
     return MENTION_STATE.FOUND;
   }
   return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
@@ -189,7 +189,7 @@ function pressOf(
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
       return undefined;
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
       return () => doors.onOpenPlan(mention);
     case MENTION_KIND.SECTION:
       // A gone section opens the plan it was in, at its top.
@@ -197,7 +197,7 @@ function pressOf(
         doors.onOpenPlan(
           state === MENTION_STATE.FOUND
             ? mention
-            : { kind: MENTION_KIND.PLAN, planId: mention.planId },
+            : { kind: MENTION_KIND.TASK, taskId: mention.taskId },
         );
     // A page or an agent opens its tab as its Luke link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
@@ -224,7 +224,7 @@ function MentionGlyph({
   switch (mention.kind) {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
       return <DocumentIcon />;
     case MENTION_KIND.FILE:
       return <FileTypeIcon name={fileName(mention.path)} />;
@@ -324,8 +324,8 @@ function bareName(
   switch (mention.kind) {
     case MENTION_KIND.LINK:
       return standing === undefined ? written : `${standing.key} ${standing.title}`;
-    case MENTION_KIND.PLAN:
-      return known.plans.get(mention.planId) ?? written;
+    case MENTION_KIND.TASK:
+      return known.plans.get(mention.taskId) ?? written;
     case MENTION_KIND.PAGE:
       return known.pages.get(mention.pageId) ?? written;
     case MENTION_KIND.AGENT:

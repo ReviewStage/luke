@@ -77,7 +77,7 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * reads it (`door.ts` spells the paths the door sees).
  */
 export const EVE_MOUNT = {
-  PLANNING: "/eve",
+  TASKS: "/eve",
   CODER: "/eve/coder",
 } as const;
 
@@ -484,7 +484,7 @@ function sessionsOver<Turn extends BrainHostTurn>(
   options: EveSessionsOptions,
 ): EveSessions<Turn> {
   const identity = callerHeaders(options.caller);
-  const mount = options.mount ?? EVE_MOUNT.PLANNING;
+  const mount = options.mount ?? EVE_MOUNT.TASKS;
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
     postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({

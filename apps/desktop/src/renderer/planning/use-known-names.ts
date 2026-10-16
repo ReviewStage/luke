@@ -21,29 +21,29 @@ export function useKnownNames(automationId?: string): KnownNames {
   const state = useAppState();
   const { members, former } = useMemberDirectory();
   const automation = useAutomation(automationId)?.automation;
-  const planning = state?.planning;
+  const planning = state?.tasks;
   const inbox = state?.inbox;
   const held = useMemo(() => {
-    const plans = new Map(planning?.plans.map((plan) => [plan.id, plan.name]));
+    const plans = new Map(planning?.tasks.map((plan) => [plan.id, plan.name]));
     const agents = new Map<string, string>();
-    for (const plan of planning?.plans ?? []) {
+    for (const plan of planning?.tasks ?? []) {
       for (const agent of plan.agents?.agents ?? []) {
         if (agent.title !== null) agents.set(agent.id, agent.title);
       }
     }
     const automations = new Map<string, string>();
-    for (const agent of planning?.planlessAgents ?? []) {
+    for (const agent of planning?.tasklessAgents ?? []) {
       if (agent.title !== null) agents.set(agent.id, agent.title);
       if (agent.automationId !== null && agent.automationName !== undefined) {
         automations.set(agent.automationId, agent.automationName);
       }
     }
-    for (const item of inbox?.planless ?? []) {
+    for (const item of inbox?.taskless ?? []) {
       if (item.agentTitle !== null) agents.set(item.agentId, item.agentTitle);
     }
     const pages = new Map(planning?.pages?.map((page) => [page.id, page.title]));
     const inboxItems = new Map(
-      [...(inbox?.waiting ?? []).flatMap((plan) => plan.items), ...(inbox?.planless ?? [])].map(
+      [...(inbox?.waiting ?? []).flatMap((plan) => plan.items), ...(inbox?.taskless ?? [])].map(
         (item) => [item.id, item.title],
       ),
     );

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import type { PlanningWorkspacePhotoAnswer } from "@luke/features/planning-view";
+import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { act, createElement } from "react";
@@ -27,7 +27,7 @@ const roots: Root[] = [];
 let sent: { kind: string; payload?: unknown }[] = [];
 
 /** What the host answers a photo read with. */
-let answer: PlanningWorkspacePhotoAnswer = PHOTO;
+let answer: TasksWorkspacePhotoAnswer = PHOTO;
 
 beforeEach(() => {
   sent = [];
@@ -154,7 +154,7 @@ test("a workspace with neither a photo nor a picture draws its letter and reads 
 
 test("a read of a version asked for again lands though an earlier read of it failed after the second was asked", async () => {
   // Each photo read waits until the test answers it, in the order it was asked.
-  const answers: ((value: PlanningWorkspacePhotoAnswer) => void)[] = [];
+  const answers: ((value: TasksWorkspacePhotoAnswer) => void)[] = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {

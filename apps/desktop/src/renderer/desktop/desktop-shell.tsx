@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -140,7 +140,7 @@ function usePlaceCommands(
     APP_COMMAND.NEW_PLAN,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.onNewPlan();
         }
       : undefined,
@@ -150,7 +150,7 @@ function usePlaceCommands(
     APP_COMMAND.HOME,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.onGoHome();
         }
       : undefined,
@@ -159,7 +159,7 @@ function usePlaceCommands(
     APP_COMMAND.INBOX,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.inboxView.onOpen();
         }
       : undefined,
@@ -170,7 +170,7 @@ function usePlaceCommands(
     APP_COMMAND.FACTORY,
     pastGate && plans.signedIn && factoryOn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.factoryView.onOpen();
         }
       : undefined,
@@ -181,7 +181,7 @@ function usePlaceCommands(
     APP_COMMAND.AUTOMATIONS,
     pastGate && plans.signedIn && automationsOn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.automationsView.onOpen();
         }
       : undefined,
@@ -191,7 +191,7 @@ function usePlaceCommands(
     APP_COMMAND.REOPEN_CLOSED_TAB,
     pastGate && plans.signedIn && onReopenClosedTab !== undefined
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           onReopenClosedTab();
         }
       : undefined,
@@ -280,7 +280,7 @@ function transcriptStreaming(plans: PlansControl): boolean {
 function titleSubject(
   tab: PanelTab,
   plans: PlansControl,
-  shownPlan: Plan | undefined,
+  shownPlan: Task | undefined,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = plans;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
@@ -389,8 +389,8 @@ export function DesktopShell({
     plans.factoryView.open ||
     plans.automationsView.open;
   const shownPlan =
-    tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
-      ? region.plan
+    tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
+      ? region.task
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
@@ -412,7 +412,7 @@ export function DesktopShell({
   }
   // Settings takes the whole window, its pages listed where the plans were.
   if (tab === PANEL_TAB.SETTINGS) {
-    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS);
+    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
     return (
       <div className="desktop-shell">
         <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
@@ -458,7 +458,7 @@ export function DesktopShell({
   const pagePerson = plans.personView.userId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
-  const planToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
+  const planToggle = plans.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
   const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar

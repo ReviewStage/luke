@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { VOICE_SECONDS_OUTCOME } from "@luke/database/models/quota";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Option } from "effect";
@@ -231,13 +231,13 @@ interface FakeSessionRow {
 }
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
-  registered: Array<{ userId: string; sessionId: string; planId: string; model: string }>;
+  registered: Array<{ userId: string; sessionId: string; taskId: string; model: string }>;
   /** Each live session's row as the writes that landed left it, by live session id. */
   rows: Map<string, FakeSessionRow>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
   voiceSessionIds: Map<string, string>;
   /** The plans the fake holds, by the account that holds each. */
-  plans: Array<{ userId: string; plan: Plan }>;
+  tasks: Array<{ userId: string; task: Task }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
@@ -253,7 +253,7 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
  * on an open row, and a detach only from the connection that holds the row.
  */
 export function fakeSessionRecord(): FakeSessionRecord {
-  const owners = new Map<string, { userId: string; planId: string }>();
+  const owners = new Map<string, { userId: string; taskId: string }>();
   /** Which connection holds each open row, by live session id. */
   const holders = new Map<string, string>();
   const openRow = (sessionId: string) => {
@@ -264,7 +264,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
     registered: [],
     rows: new Map(),
     voiceSessionIds: new Map(),
-    plans: [],
+    tasks: [],
     usage: [],
     closes: [],
     detachments: [],
@@ -273,11 +273,11 @@ export function fakeSessionRecord(): FakeSessionRecord {
         fake.registered.push({
           userId: input.userId,
           sessionId: input.sessionId,
-          planId: input.planId,
+          taskId: input.taskId,
           model: input.model,
         });
         if (!owners.has(input.sessionId)) {
-          owners.set(input.sessionId, { userId: input.userId, planId: input.planId });
+          owners.set(input.sessionId, { userId: input.userId, taskId: input.taskId });
           fake.voiceSessionIds.set(input.sessionId, randomUUID());
           fake.rows.set(input.sessionId, { closed: false, detached: false });
           holders.set(input.sessionId, input.attachId);
@@ -286,18 +286,18 @@ export function fakeSessionRecord(): FakeSessionRecord {
           ? fake.voiceSessionIds.get(input.sessionId)
           : undefined;
       }),
-    heldPlan: (input) =>
+    heldTask: (input) =>
       Effect.sync(
         () =>
-          fake.plans.find((held) => held.userId === input.userId && held.plan.id === input.planId)
-            ?.plan,
+          fake.tasks.find((held) => held.userId === input.userId && held.task.id === input.taskId)
+            ?.task,
       ),
     owned: (input) =>
       Effect.sync(() => {
         const owner = owners.get(input.sessionId);
         const voiceSessionId = fake.voiceSessionIds.get(input.sessionId);
         return owner?.userId === input.userId && voiceSessionId !== undefined
-          ? { voiceSessionId, planId: owner.planId }
+          ? { voiceSessionId, taskId: owner.taskId }
           : undefined;
       }),
     earlierCalls: () => Effect.succeed([]),
