@@ -23,6 +23,8 @@ import {
 import {
   and,
   asc,
+  type Column,
+  count,
   desc,
   eq,
   exists,
@@ -48,6 +50,7 @@ import {
   chatChannel,
   chatMember,
   chatMessage,
+  chatRead,
   workspaceChat,
 } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -82,8 +85,11 @@ import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
  * planner reads every channel but a DM, and the DMs it is one of. Only a
  * DM's two members post in it. A member's
  * unread is what it may see that someone else posted or changed past its
- * cursor, which reading moves; the one notice a member is told stands until
- * its cursor passes it.
+ * cursor in each channel, the greater of the place it read that channel to
+ * and the floor it read every channel to: a read of one channel moves that
+ * channel's cursor alone, and a read of every channel moves the floor. The
+ * one notice a member is told stands until its cursor in the notice's
+ * channel passes it.
  */
 
 /** What a chat store effect answers: an effect over the ambient database. */
@@ -227,6 +233,18 @@ export interface ChatPosted {
 export interface ChatUnread {
   readonly messages: readonly ChatMessageRow[];
   readonly more: boolean;
+}
+
+/** Where a read of unread looks: one channel, or every channel the member may see where none is named; and a page's size. */
+export interface ChatUnreadQuery {
+  readonly channelId?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
+/** How many messages wait unread in one channel. */
+export interface ChatUnreadCount {
+  readonly channelId: string;
+  readonly unread: number;
 }
 
 /** Where a read of history looks: a channel, a thread by its root's place, and a place to read back from. */
@@ -931,12 +949,42 @@ function visibleMessages(
   );
 }
 
+const ChatUnreadCountSchema = Schema.Struct({ channelId: Schema.String, unread: Schema.Number });
+
+/** How many messages wait unread in each channel the reader may see, past its cursor there; a channel with none is left out. */
+function countUnread(reader: ChatMemberRow): ChatStoreEffect<readonly ChatUnreadCount[]> {
+  return Effect.flatMap(
+    Database.use((db) =>
+      db
+        .select({ channelId: chatMessage.channelId, unread: count() })
+        .from(chatMessage)
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .where(
+          and(
+            eq(chatMessage.organizationId, reader.organizationId),
+            visibleTo(reader),
+            sql`${chatMessage.touchedSeq} > ${cursorIn(reader.id, reader.readSeq, chatMessage.channelId)}`,
+            ne(chatMessage.authorMemberId, reader.id),
+          ),
+        )
+        .groupBy(chatMessage.channelId)
+        .orderBy(asc(chatMessage.channelId)),
+    ),
+    Schema.decodeUnknownEffect(Schema.Array(ChatUnreadCountSchema)),
+  );
+}
+
 const ReadKeySchema = Schema.Struct({
   readerId: Schema.String,
   organizationId: Schema.String,
 });
 
-/** Moves a member's cursor on to the place given, never back, and lets go of the notice it passed. */
+/** Whether a notice outstanding stands past the place given, which a read to that place leaves standing. */
+function noticePast(to: number): SQL {
+  return sql`${chatMember.noticeSeq} > ${to}`;
+}
+
+/** Moves a member's floor, its cursor in every channel, on to the place given, never back, and lets go of the notice it passed. */
 const moveCursor = SqlSchema.void({
   Request: Schema.Struct({ ...ReadKeySchema.fields, to: Schema.Number }),
   execute: (key) =>
@@ -945,7 +993,8 @@ const moveCursor = SqlSchema.void({
         .update(chatMember)
         .set({
           readSeq: sql`greatest(${chatMember.readSeq}, ${key.to})`,
-          noticeSeq: sql`case when ${chatMember.noticeSeq} <= ${key.to} then null else ${chatMember.noticeSeq} end`,
+          noticeSeq: sql`case when ${noticePast(key.to)} then ${chatMember.noticeSeq} end`,
+          noticeChannelId: sql`case when ${noticePast(key.to)} then ${chatMember.noticeChannelId} end`,
         })
         .where(
           and(eq(chatMember.id, key.readerId), eq(chatMember.organizationId, key.organizationId)),
@@ -953,22 +1002,64 @@ const moveCursor = SqlSchema.void({
     ),
 });
 
-/** Stamps the notice told where none is outstanding: none stands, or the cursor has passed it. */
+/** Moves a member's cursor in one channel on to the place given, never back, and lets go of the notice in that channel it passed. */
+const moveChannelCursor = SqlSchema.void({
+  Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, to: Schema.Number }),
+  execute: (key) =>
+    Effect.andThen(
+      Database.use((db) =>
+        db
+          .insert(chatRead)
+          .values({ memberId: key.readerId, channelId: key.channelId, readSeq: key.to })
+          .onConflictDoUpdate({
+            target: [chatRead.memberId, chatRead.channelId],
+            set: { readSeq: sql`greatest(${chatRead.readSeq}, excluded.read_seq)` },
+          }),
+      ),
+      Database.use((db) =>
+        db
+          .update(chatMember)
+          .set({ noticeSeq: null, noticeChannelId: null })
+          .where(
+            and(
+              eq(chatMember.id, key.readerId),
+              eq(chatMember.organizationId, key.organizationId),
+              eq(chatMember.noticeChannelId, key.channelId),
+              sql`${chatMember.noticeSeq} <= ${key.to}`,
+            ),
+          ),
+      ),
+    ),
+});
+
+/** The member's cursor in a channel a statement names: the place it read that channel to, or its floor where that is further. */
+function cursorIn(readerId: string, floor: Column | number, channelId: Column | string): SQL {
+  return sql`greatest(${floor}, coalesce((select ${chatRead.readSeq} from ${chatRead} where ${chatRead.memberId} = ${readerId} and ${chatRead.channelId} = ${channelId}), 0))`;
+}
+
+/**
+ * Stamps the notice told where none is outstanding: none stands, or the
+ * member's cursor in its channel has passed it; and where the member has
+ * not read the told channel past it already.
+ */
 const claimNotice = SqlSchema.findAll({
-  Request: Schema.Struct({ ...ReadKeySchema.fields, seq: Schema.Number }),
+  Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, seq: Schema.Number }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (key) =>
     Database.use((db) =>
       db
         .update(chatMember)
-        .set({ noticeSeq: key.seq })
+        .set({ noticeSeq: key.seq, noticeChannelId: key.channelId })
         .where(
           and(
             eq(chatMember.id, key.readerId),
             eq(chatMember.organizationId, key.organizationId),
             // A notice of something the member has read already is no notice at all.
-            sql`${key.seq} > ${chatMember.readSeq}`,
-            or(isNull(chatMember.noticeSeq), sql`${chatMember.noticeSeq} <= ${chatMember.readSeq}`),
+            sql`${key.seq} > ${cursorIn(key.readerId, chatMember.readSeq, key.channelId)}`,
+            or(
+              isNull(chatMember.noticeSeq),
+              sql`${chatMember.noticeSeq} <= ${cursorIn(key.readerId, chatMember.readSeq, chatMember.noticeChannelId)}`,
+            ),
           ),
         )
         .returning({ id: chatMember.id }),
@@ -1092,6 +1183,17 @@ function visibleTo(reader: ChatMemberRow): SQL {
 function postsIn(author: ChatMemberRow, channel: ChatChannelRow): boolean {
   if (channel.kind !== CHANNEL_KIND.DM) return true;
   return channel.dmAMemberId === author.id || channel.dmBMemberId === author.id;
+}
+
+/** Whether the reader may see the channel, which must be of its workspace: as `visibleTo` reads it. */
+function seesChannel(reader: ChatMemberRow, channelId: string): ChatStoreEffect<boolean> {
+  return Effect.map(
+    findChannelInWorkspace({ organizationId: reader.organizationId, channelId }),
+    Option.match({
+      onNone: () => false,
+      onSome: (channel) => reader.kind === MEMBER_KIND.HUMAN || postsIn(reader, channel),
+    }),
+  );
 }
 
 /** A page's size as asked, held between one and the bound a read answers with. */
@@ -1889,17 +1991,19 @@ export function resolveAsk(
 
 /**
  * What a member has not read: what it may see that someone else posted or
- * changed past its cursor, oldest change first, a page of between one and
- * the bound. The
+ * changed past its cursor in each channel, in one channel where the query
+ * names one, oldest change first, a page of between one and the bound. The
  * cursor moves past what is answered, to the workspace's head where nothing
- * more waits, and lets go of a notice it passes. Nothing where the account
- * is not in the workspace or the member is not of it.
+ * more waits, and lets go of a notice it passes: the channel's cursor for a
+ * read of one channel, the floor for a read of every channel, which has
+ * read every channel to there. Nothing where the account is not in the
+ * workspace, the member is not of it, or the channel is not one it may see.
  */
 export function unreadFor(
   userId: string,
   organizationId: string,
   readerId: string,
-  limit: number = CHAT_BOUNDS.MAX_READ,
+  query: ChatUnreadQuery = {},
 ): ChatStoreEffect<Option.Option<ChatUnread>> {
   return transaction(
     Effect.gen(function* () {
@@ -1907,13 +2011,18 @@ export function unreadFor(
       // Note that the reader's row is held while it reads, because two reads at once must not both take the same page.
       const reader = yield* lockMemberInWorkspace({ organizationId, memberId: readerId });
       if (Option.isNone(reader)) return Option.none();
+      const { channelId } = query;
+      if (channelId !== undefined && !(yield* seesChannel(reader.value, channelId))) {
+        return Option.none();
+      }
       const head = yield* headOf(organizationId);
-      const page = boundedPage(limit);
+      const page = boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ);
       // One past the page is read, so a page that is the last says so.
       const rows = yield* visibleMessages(
         reader.value,
         [
-          gt(chatMessage.touchedSeq, reader.value.readSeq),
+          channelId === undefined ? undefined : eq(chatMessage.channelId, channelId),
+          sql`${chatMessage.touchedSeq} > ${cursorIn(readerId, reader.value.readSeq, chatMessage.channelId)}`,
           ne(chatMessage.authorMemberId, readerId),
         ],
         READ_ORDER.TOUCHED,
@@ -1923,10 +2032,56 @@ export function unreadFor(
       const more = read.length > page;
       const messages = read.slice(0, page);
       const to = more ? (messages.at(-1)?.touchedSeq ?? reader.value.readSeq) : head;
-      yield* moveCursor({ readerId, organizationId, to });
+      yield* channelId === undefined
+        ? moveCursor({ readerId, organizationId, to })
+        : moveChannelCursor({ readerId, organizationId, channelId, to });
       return Option.some({ messages, more });
     }),
   );
+}
+
+/**
+ * Marks the channel read to the place given, never past the workspace's
+ * head and never back, letting go of a notice in it the place passes: what
+ * a window does when the developer has read a channel on screen. Answers
+ * whether the reader may see the channel; false where the account is not
+ * in the workspace, the member is not of it, or the channel is not one it
+ * may see.
+ */
+export function readTo(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  channelId: string,
+  seq: number,
+): ChatStoreEffect<boolean> {
+  return transaction(
+    Effect.gen(function* () {
+      const reader = yield* readerIn(userId, organizationId, readerId);
+      if (Option.isNone(reader) || !(yield* seesChannel(reader.value, channelId))) return false;
+      const to = Math.min(Math.floor(seq), yield* headOf(organizationId));
+      yield* moveChannelCursor({ readerId, organizationId, channelId, to });
+      return true;
+    }),
+  );
+}
+
+/**
+ * How many messages wait unread in each channel the member may see, past
+ * its cursor there, others' posts and changes alone; a channel with none
+ * is left out. Moves no cursor. Nothing where the account is not in the
+ * workspace or the member is not of it.
+ */
+export function unreadCounts(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+): ChatStoreEffect<Option.Option<readonly ChatUnreadCount[]>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    return Option.some(yield* countUnread(reader.value));
+  });
 }
 
 /**
@@ -1969,20 +2124,21 @@ export function history(
 }
 
 /**
- * Stamps a notice told to a member at the place given, where none is
- * outstanding: no notice stands, or its cursor has passed the one that
- * does. Answers whether this call stamped it, which a second before the
+ * Stamps a notice told to a member of a message in the channel at the
+ * place given, where none is outstanding: no notice stands, or its cursor
+ * in that notice's channel has passed it. Answers whether this call stamped it, which a second before the
  * member reads does not.
  */
 export function markNoticed(
   userId: string,
   organizationId: string,
   memberId: string,
+  channelId: string,
   seq: number,
 ): ChatStoreEffect<boolean> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return false;
-    const claimed = yield* claimNotice({ readerId: memberId, organizationId, seq });
+    const claimed = yield* claimNotice({ readerId: memberId, organizationId, channelId, seq });
     return claimed.length > 0;
   });
 }
@@ -2385,7 +2541,7 @@ const dropNotice = SqlSchema.void({
     Database.use((db) =>
       db
         .update(chatMember)
-        .set({ noticeSeq: null })
+        .set({ noticeSeq: null, noticeChannelId: null })
         .where(
           and(
             eq(chatMember.id, key.readerId),
@@ -2674,6 +2830,21 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
   });
 }
 
+/** Lets go of every member's cursor in the channel and every notice outstanding in it. */
+const forgetChannelReads = SqlSchema.void({
+  Request: Schema.Struct({ channelId: Schema.String }),
+  execute: ({ channelId }) =>
+    Effect.andThen(
+      Database.use((db) => db.delete(chatRead).where(eq(chatRead.channelId, channelId))),
+      Database.use((db) =>
+        db
+          .update(chatMember)
+          .set({ noticeSeq: null, noticeChannelId: null })
+          .where(eq(chatMember.noticeChannelId, channelId)),
+      ),
+    ),
+});
+
 /**
  * Moves a plan's chat to the workspace the plan moved to, as the plan's own
  * move already gated: its channel, named apart where the new workspace holds
@@ -2683,7 +2854,8 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
  * minted again there, and their members in the workspace the plan left let
  * go of them and are stamped as having left; every author, mention, and
  * answerer of a moved message is the member they are in the new workspace.
- * DMs, threads, and posts elsewhere stay where they were. Nothing where the
+ * Every cursor in the channel and every notice outstanding in it are let
+ * go of, since their places are the old sequence's. DMs, threads, and posts elsewhere stay where they were. Nothing where the
  * plan has no channel or it stands in that workspace already.
  */
 export function movePlanChat(planId: string, organizationId: string): ChatStoreEffect<void> {
@@ -2726,6 +2898,8 @@ export function movePlanChat(planId: string, organizationId: string): ChatStoreE
         (candidate) => held.has(candidate) || candidate === GENERAL_CHANNEL,
       );
       yield* moveChannel({ channelId: channel.value.id, organizationId, name });
+      // Places read in the sequence the channel left mean nothing in the one it joins.
+      yield* forgetChannelReads({ channelId: channel.value.id });
       const head = (yield* headOf(organizationId)) + 1;
       const byTouch = messages.toSorted((a, b) => a.touchedSeq - b.touchedSeq);
       for (const [at, row] of messages.entries()) {
