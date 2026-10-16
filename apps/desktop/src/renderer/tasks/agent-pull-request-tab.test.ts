@@ -107,7 +107,7 @@ const OVERVIEW: CodingAgentOverview = {
     check("build", CHECK_STATE.PENDING),
     check("test", CHECK_STATE.PASSED),
   ],
-  author: { login: "luke[bot]", bot: true, luke: true },
+  author: { login: "luke-agent[bot]", bot: true },
   reviewers: [{ by: CHARLES_ON_GITHUB, state: REVIEW_STATE.CHANGES_REQUESTED }],
   conversation: [
     {
@@ -267,6 +267,13 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.equal(
     tab.querySelector(".pull-request-merge")?.getAttribute("data-merge-tone"),
     "blocked",
+  );
+  const opener =
+    tab.querySelector(".pull-request-people .actor-ref") ?? assert.fail("who opened it is named");
+  assert.deepEqual(
+    [opener.querySelector(".actor-ref-name")?.textContent, opener.getAttribute("data-kind")],
+    ["luke-agent", "github"],
+    "Luke's own App's bot opened it, an App's bot on GitHub like any other",
   );
 
   const checks = tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks stand");

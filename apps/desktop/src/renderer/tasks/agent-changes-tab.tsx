@@ -22,7 +22,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
+import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import {
   CHANGES_WORDS,
   changedFolders,
@@ -304,7 +304,6 @@ export function ChangesCard({
   onOpenAgent: () => void;
 }): React.JSX.Element {
   const count = pullRequest.changedFiles;
-  const agent = { subject, models };
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
@@ -324,12 +323,12 @@ export function ChangesCard({
       </CardNote>
       {people?.author === undefined ? null : (
         <CardNote oneLine>
-          <OpenedBy person={people.author} writtenAs={people.writtenAs} agent={agent} />
+          <OpenedBy person={people.author} />
         </CardNote>
       )}
       {reviewers.length === 0 ? null : (
         <CardNote>
-          <ReviewersLine reviewers={reviewers} agent={agent} />
+          <ReviewersLine reviewers={reviewers} />
         </CardNote>
       )}
     </HoverCard>
@@ -377,11 +376,6 @@ export function AgentChangesTab({
   );
   const shownFile =
     pullRequest?.files.find((file) => file.path === chosen) ?? pullRequest?.files[0];
-  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
-  const named = {
-    subject: agentSubject(control, agentId, NOTHING_HELD, false),
-    models: control.models,
-  };
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={CHANGES_WORDS.READING} />;
@@ -400,7 +394,7 @@ export function AgentChangesTab({
   if (shownFile === undefined) {
     return (
       <div className="file-view ph-no-capture">
-        <PullRequestPeople people={pullRequest} agent={named} />
+        <PullRequestPeople people={pullRequest} />
         <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
       </div>
     );
@@ -428,7 +422,7 @@ export function AgentChangesTab({
         menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} />}
         tree={room.toggles}
       />
-      <PullRequestPeople people={pullRequest} agent={named} />
+      <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>
