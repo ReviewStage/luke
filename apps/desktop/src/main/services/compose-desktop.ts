@@ -236,6 +236,7 @@ export function composeDesktop(
       // every change after it.
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
+        readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
         planName: (planId) => noticePlanTitle(state.snapshot().planning, planId),
         open: (place) => {
@@ -283,6 +284,24 @@ export function composeDesktop(
             },
             report: config.report,
           }),
+        ),
+      );
+      // The agents with no plan each list read carries are the notices' to
+      // hold, as every answer naming an agent is. A note that throws is
+      // reported rather than left to end the fiber, which would never resume.
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Stream.changes(Stream.map(state.changes, (document) => document.planning.planlessAgents)),
+          (agents) =>
+            Effect.catchDefect(
+              Effect.sync(() => notices.observePlanless(agents ?? [])),
+              (defect) =>
+                Effect.sync(() =>
+                  config.report(
+                    `the agents with no plan could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+                  ),
+                ),
+            ),
         ),
       );
       // A panel coming forward reads the account's workspaces again, which

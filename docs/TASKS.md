@@ -517,7 +517,12 @@ panel.
   forward on it. A Stop is the developer's own and is not announced, and an
   agent first seen already ended, as after a relaunch, is not either. The
   "opened #N" wording waits on a read of the agent's pull request, and a
-  Settings toggle for the notifications is a follow-up.
+  Settings toggle for the notifications is a follow-up. An agent an
+  automation started with no task is held from the task list, which carries
+  the account's own beside the tasks, and while it works it is read again by
+  itself on the same clock; its end is told the same way, titled with the
+  automation's name, and its click or its toast's View opens the agent's
+  own page.
 - **Privacy.** Every word is the agent's or the plan's, so the tab carries
   `ph-no-capture`, as the Transcript tab does.
 
