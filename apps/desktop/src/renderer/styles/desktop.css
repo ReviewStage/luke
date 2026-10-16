@@ -1897,6 +1897,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  container: sidebar-foot / inline-size;
 }
 
 /* The account: photo and name, one press target the height of a plan row so
@@ -1961,6 +1962,21 @@ ul.actor-stack {
 .sidebar-update svg {
   width: 13px;
   height: 13px;
+}
+
+/* A sidebar too narrow for the pill's word beside a name that reads draws
+   the pill as its glyph alone in a round as tall as the pill, so the name
+   keeps the room. The button's label and its hint still say what it does. */
+@container sidebar-foot (width < 220px) {
+  .sidebar-update {
+    aspect-ratio: 1;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-update-word {
+    display: none;
+  }
 }
 
 /* Work column ------------------------------------------------------------- */
@@ -4259,6 +4275,12 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--list-gap);
 }
 
+/* Note that the agent's crumb gives way as the task's does, because the
+   breadcrumbs keep their last crumb whole, and the path's clip would cut it. */
+.inbox-crumbs li.inbox-crumb {
+  flex-shrink: 1;
+}
+
 .inbox-crumb:active {
   background: var(--raised-strong);
   color: var(--text-primary);
@@ -4342,6 +4364,70 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  container: inbox-item / inline-size;
+}
+
+/* An item standing alone narrower than its bar's crumbs, the way back, and
+   the pager, drops the task's crumb, and the agent's keeps enough of its
+   name to read; its hover card names it whole. Narrower still the way back
+   draws its glyph alone, named still, beside the pager, and the crumbs take
+   a line of their own under them, where both fit again, sharing it. */
+@container inbox-item (width < 560px) {
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: none;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      8ch +
+      var(--tab-end)
+    );
+  }
+}
+
+@container inbox-item (width < 360px) {
+  .inbox-view-items > .desktop-toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-4);
+  }
+
+  .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .inbox-back {
+    width: var(--control-height);
+    padding: 0;
+  }
+
+  .inbox-back-word {
+    display: none;
+  }
+
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: flex;
+  }
+
+  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
+  .inbox-crumbs li.inbox-crumb:first-child {
+    flex-shrink: 4;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      3.5ch +
+      var(--tab-end)
+    );
+  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -4396,8 +4482,10 @@ body:has(.app-stage[data-capture="true"])
    by a hairline. The stations stretch to one height and fill the room, so
    the line reads as one piece, and the arrows between them carry the flow
    in the tertiary ink, past 3:1 against the ground in both appearances.
-   With too little room for three side by side the stations stack, and the
-   arrows turn down. */
+   A station with nothing in it keeps to its words, so the busy ones share
+   the room. Where three busy cards could not each hold a readable row,
+   about 300px apiece, the stations stack, the arrows turn down, and an idle
+   station is one line. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4411,7 +4499,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--content-inset) var(--space-32);
-  container-type: inline-size;
+  container: factory / inline-size;
 }
 
 .factory-summary {
@@ -4438,15 +4526,15 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .factory-line-up {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
   align-items: stretch;
-  column-gap: var(--space-8);
+  gap: var(--space-8);
 }
 
 .factory-step {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   padding: var(--space-8) var(--space-4) var(--space-6);
   border: 1px solid var(--hairline-strong);
@@ -4457,8 +4545,13 @@ body:has(.app-stage[data-capture="true"])
 /* An arrow stands level with the stations' heads, where the eye reads the
    line, rather than halfway down the longest list, which may stand below the
    window's foot. */
+.factory-step[data-idle] {
+  flex: none;
+}
+
 .factory-arrow {
   display: flex;
+  flex: none;
   align-self: start;
   margin-top: var(--space-12);
   color: var(--text-tertiary);
@@ -4546,14 +4639,27 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-tertiary);
 }
 
-@container (width < 720px) {
+@container factory (width < 960px) {
   .factory-line-up {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--space-6);
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .factory-step {
+    flex: none;
+  }
+
+  .factory-step[data-idle] {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .factory-step[data-idle] .factory-idle {
+    padding: 0 var(--row-inset);
   }
 
   .factory-arrow {
-    justify-self: center;
+    align-self: center;
     margin-top: 0;
     transform: rotate(90deg);
   }
@@ -7234,9 +7340,12 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
+/* What the row is about keeps a floor beside a long title, so the title is
+   what gives way and the context is never cut to a letter or a sliver. Past
+   the floor it takes what the title leaves. */
 .home-row-context {
   overflow: hidden;
-  min-width: 0;
+  min-width: min(16ch, 35%);
   flex: 1;
   color: var(--text-tertiary);
   font-size: 12.5px;
@@ -7251,11 +7360,14 @@ button.automation-run:hover {
   visibility: visible;
 }
 
+/* The time ends the row whether a context fills up to it or not, so the
+   times stand in one column down a station or a section. */
 .home-row .sidebar-plan-time {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-6);
+  margin-left: auto;
 }
 
 .home-row-picture {

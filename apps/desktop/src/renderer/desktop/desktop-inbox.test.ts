@@ -1375,6 +1375,69 @@ test("an item's box on a card a 220px column wide leaves out its quiet line and 
   }
 });
 
+test("a box answered in words holds its Send at the field's end on a card a 220px column wide, so the field keeps to one line; a box answered by presses keeps them under its field", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  /** Where the open item's Send stands on a card this wide: at its field's end, or under it. */
+  const sendAt = (width: number) => {
+    const style = layContainersAt({ composer: width });
+    const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("a box");
+    const place = getComputedStyle(foot).position === "absolute" ? "field's end" : "under";
+    style.remove();
+    return place;
+  };
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  assert.deepEqual([sendAt(178), sendAt(678)], ["field's end", "under"]);
+  act(() => rowNamed(page, "Turn on the flag").click());
+  assert.deepEqual([sendAt(178), sendAt(678)], ["under", "under"]);
+});
+
+test("one column wide, an item's bar too narrow for both crumbs beside the way back and the pager keeps the agent's; narrower still, the way back draws its glyph alone, named still, and both crumbs share a line under it", async () => {
+  const { page } = mount();
+  await settle();
+  layOut(page, 800);
+  const bar =
+    page.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) > .desktop-toolbar") ??
+    assert.fail("the item's bar stands");
+  /** The bar as drawn on an item this wide: its crumbs drawn, the way back's word, and whether the crumbs wrap under the rest. */
+  const barAt = (width: number) => {
+    const style = layContainersAt({ "inbox-item": width });
+    const crumbs = [...bar.querySelectorAll<HTMLElement>(".inbox-crumb")]
+      .filter(shown)
+      .map((crumb) => crumb.textContent);
+    const back = backToList(bar);
+    const word = back.querySelector(".inbox-back-word") ?? assert.fail("the way back has a word");
+    const drawn = {
+      crumbs,
+      back: `${back.getAttribute("aria-label")}${shown(word) ? " (word)" : " (glyph)"}`,
+      wraps: getComputedStyle(bar).flexWrap === "wrap",
+    };
+    style.remove();
+    return drawn;
+  };
+
+  assert.deepEqual(barAt(700), {
+    crumbs: ["Billing usage alerts", "Alerts"],
+    back: "Inbox (word)",
+    wraps: false,
+  });
+  assert.deepEqual(barAt(420), { crumbs: ["Alerts"], back: "Inbox (word)", wraps: false });
+  assert.deepEqual(barAt(220), {
+    crumbs: ["Billing usage alerts", "Alerts"],
+    back: "Inbox (glyph)",
+    wraps: true,
+  });
+});
+
 test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
   const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
     ...item(id, title, at),
