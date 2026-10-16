@@ -85,6 +85,8 @@ export interface TabDoors {
   onRename?: (() => void) | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell, for an agent's where a panel takes the tab. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Runs the agent's work on this Mac, shows its checkout, and deletes it, for an agent's where a panel draws the run (`run-on-mac.tsx`). */
+  runOnMac?: readonly MenuAction[] | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
@@ -105,7 +107,7 @@ interface ContentActions {
  * and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, archive, copyLink } = doors;
+  const { onCopy, onRename, onOpenTerminal, runOnMac, archive, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -120,6 +122,7 @@ function contentActions(doors: TabDoors): ContentActions {
               // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
               ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
             },
+            ...(runOnMac ?? []),
           ],
     copies: [
       ...(copyLink === undefined ? [] : [copyLink]),

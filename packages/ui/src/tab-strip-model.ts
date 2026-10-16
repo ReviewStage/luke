@@ -37,10 +37,8 @@ export const TAB_WORDS = {
   TERMINAL: "Terminal",
 } as const;
 
-/** A pull request run tab's name: the word for what it shows, and the pull request's number. */
-export function prRunLabelOf(number: number): string {
-  return `Run #${number}`;
-}
+/** A run tab's name: the word for what it shows. */
+export const PR_RUN_LABEL = "Run on this Mac";
 
 /** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
 export function changesLabelOf(agentLabel: string): string {
@@ -91,16 +89,15 @@ export interface PageStripTab {
 }
 
 /**
- * One agent's pull request run on this Mac, named by the agent that
- * published the pull request, with the pull request it runs: its
- * workspace, repository, and number.
+ * One coding agent's work run on this Mac, named by the agent, with what
+ * the run is named by: the agent, its workspace, and its repository.
  */
 export interface PrRunStripTab {
   readonly prRun: string;
-  readonly pullRequest: {
+  readonly target: {
     readonly workspaceId: string;
     readonly repository: string;
-    readonly number: number;
+    readonly agentId: string;
   };
 }
 
@@ -154,7 +151,7 @@ export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
 }
 
-/** Whether a tab is one agent's pull request run on this Mac. */
+/** Whether a tab is one agent's work run on this Mac. */
 export function isPrRunTab(tab: StripTab): tab is PrRunStripTab {
   return tab instanceof Object && "prRun" in tab;
 }

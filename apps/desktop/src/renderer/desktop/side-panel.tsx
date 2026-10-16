@@ -24,8 +24,8 @@ import {
   isSubagentTab,
   isTerminalTab,
   type PageStripTab,
+  PR_RUN_LABEL,
   type PrRunStripTab,
-  prRunLabelOf,
   type StripTab,
   type SubagentStripTab,
   sameTab,
@@ -677,12 +677,12 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A pull request run's tab names the pull request; closing it stops the run, whichever way it closes.
+  // A run's tab names the agent's repository; closing it stops the run, whichever way it closes.
   const prRunTabs = prRuns.map((tab) => ({
     tab,
     look: look(tab, {
-      ...tabLook({ kind: TAB_KIND.PR_RUN, number: tab.pullRequest.number }),
-      detail: tab.pullRequest.repository,
+      ...tabLook({ kind: TAB_KIND.PR_RUN }),
+      detail: tab.target.repository,
     }),
     close: () => {
       onClosePrRun(tab);
@@ -808,7 +808,7 @@ function PanelTabs({
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
     onOpenAgent,
     shownAgent,
-    onClosePrRun: (tab) => tell(ACT_KIND.PR_RUN_CLOSE, tab.pullRequest),
+    onClosePrRun: (tab) => tell(ACT_KIND.PR_RUN_CLOSE, tab.target),
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -1774,7 +1774,7 @@ export function SidePanel({
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
                 : isPrRunTab(tab)
-                  ? prRunLabelOf(tab.pullRequest.number)
+                  ? PR_RUN_LABEL
                   : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),

@@ -75,36 +75,39 @@ import { type RunShell, runPullRequestCommand } from "./pr-run-process.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-pr-runs.ts -- a pull request run on this Mac: fetched into Luke's own checkout of it, its repository's run command run from that checkout's root, and what it prints handed to the one panel that asked.
+ * compose-pr-runs.ts -- a coding agent's work run on this Mac: its sandbox's working tree copied into Luke's own checkout of it, the repository's setup and run commands run from that checkout's root, and what they print handed to the one panel that asked.
  *
- * A repository's run command is set in Settings and kept for the account
- * signed in, by workspace and repository (`SettingsStore`); a run never takes
- * one from the pull request, and a repository with none set is refused with
- * where to set it. A run is asked by a panel under a connection main minted
- * for it, whose port is already standing, so nothing the run prints is
- * printed before something can draw it. Each run asks the service once for
- * the pull request's head and a contents-read token for its repository
- * (`HostedPrFetchClient`), fetches `refs/pull/<number>/head` from GitHub with
- * that token served to Git through a private socket (`pr-run-credential.ts`),
- * and holds what it fetched to the head the service read, asking again a
- * bounded number of times where the pull request moved in between; the
- * token's socket is closed and the token revoked before the checkout is
- * touched, so nothing the pull request holds ever runs while it stands. The
- * checkout is refreshed as `pr-run-checkout.ts` allows and the command run
- * from its root (`pr-run-process.ts`).
+ * A repository's setup and run commands are the workspace's, shared by
+ * every member and read afresh for each run (`repository-run-wire.ts`); a
+ * run never takes them from the agent, and a repository with no run command
+ * is refused with where to fill one in. A run is asked by a panel under a
+ * connection main minted for it, whose port is already standing, so nothing
+ * the run prints is printed before something can draw it. Each run asks the
+ * service for the agent's working tree (`HostedRunSnapshotClient`), asking
+ * again every two seconds, for about a minute and a half, while its sandbox
+ * wakes. The answer is the commit the agent's work starts from, a patch of
+ * everything since, uncommitted work included, and a contents-read token for
+ * the repository. The starting commit is fetched from GitHub with that
+ * token served to Git through a private socket (`pr-run-credential.ts`), the
+ * patch is applied to it in a scratch index of the clone, and the token is
+ * revoked before any worktree is touched, so nothing the agent wrote ever
+ * runs while it stands. The checkout is refreshed as `pr-run-checkout.ts`
+ * allows; setup runs where it needs to, then the run command, with a free
+ * port in `LUKE_PORT` (`pr-run-process.ts`).
  *
- * The runs of one pull request are serialized: a second Run while one is
- * still preparing joins it, under the newer panel's connection, and a Run
- * while one runs or after one ended stops the old one, its process group
- * ended, before the checkout is touched again. Runs of different pull
- * requests stand side by side. Stop ends the run and keeps the checkout; a
- * panel letting its connection go (a closed tab, a page gone) is a Stop. A
- * sign-out stops every run (`reset`), and quitting closes the scope every
- * run's fiber lives in, which ends every process group. What a run prints is
- * handed up as `PR_RUN_OUTPUT` events named by the connection and let go:
- * never kept, logged, counted, or answered. It is paced to what the tab has
- * drawn: past `PAUSE_ABOVE_BYTES` unacked the command's output is no longer
- * read, so it backs up into the command rather than into this process.
+ * The runs of one agent are serialized: a second Run while one is still
+ * preparing joins it, under the newer panel's connection, and a Run while
+ * one runs or after one ended stops the old one, its process group ended,
+ * before the checkout is touched again. Runs of different agents stand side
+ * by side, and the runs that change one repository's clone take turns at it.
+ * Stop ends the run and keeps the checkout; a panel letting its connection
+ * go (a closed tab, a page gone) is a Stop. A sign-out stops every run
+ * (`reset`), and quitting closes the scope every run's fiber lives in, which
+ * ends every process group. What a run prints is handed up as
+ * `PR_RUN_OUTPUT` events named by the connection and let go: never kept,
+ * logged, counted, or answered. It is paced to what the tab has drawn: past
+ * `PAUSE_ABOVE_BYTES` unacked the command's output is no longer read, so it
+ * backs up into the command rather than into this process.
  */
 
 /** The shell a run command runs in where the environment names none: macOS's own default. */
@@ -352,6 +355,13 @@ function composed(
         if ("waking" in outcome)
           return { refused: snapshotRefusal(RUN_SNAPSHOT_REFUSAL.UNANSWERED, target) };
         const { snapshot } = outcome;
+        // Note that a task moved to another repository since its agent started runs nothing, because the checkout is the task's repository's.
+        if (snapshot.repository.toLowerCase() !== target.repository.toLowerCase()) {
+          yield* revoke(snapshot.token);
+          return {
+            refused: `The coding agent works in ${snapshot.repository}, not in ${target.repository}.`,
+          };
+        }
         // Note that a token that arrived after the account changed is given up unused, because it is the earlier account's.
         if (accountEmail() !== owner) {
           yield* revoke(snapshot.token);

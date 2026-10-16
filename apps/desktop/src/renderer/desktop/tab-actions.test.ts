@@ -197,6 +197,9 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
       [
         "Rename",
         "Open terminal",
+        "Run on this Mac",
+        "Show in Finder",
+        "Delete Local Checkout",
         "Copy link",
         "Copy concise transcript",
         "Copy full transcript",

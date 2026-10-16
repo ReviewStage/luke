@@ -42,8 +42,6 @@ const snapshotSchema = EffectSchema.Struct({
   expiresAt: EffectSchema.String,
 });
 
-export type RunSnapshot = typeof snapshotSchema.Type;
-
 export const runSnapshotAnswerSchema = EffectSchema.Union([
   wakingSchema,
   tooLargeSchema,

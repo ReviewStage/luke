@@ -29,7 +29,7 @@ import { type MainPrRunPort, type PrRunActsDependencies, prRunActRows } from "./
 const PULL_REQUEST: PrRunTarget = {
   workspaceId: "ws_fixture",
   repository: "octocat/relay",
-  number: 7,
+  agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
 };
 
 // SAFETY: the rows read a sender by identity alone; one inert object is one window.
@@ -177,7 +177,10 @@ it.effect(
       yield* router.performAct({ kind: ACT_KIND.PR_RUN_START, payload: PULL_REQUEST }, panel);
       yield* router.performAct({ kind: ACT_KIND.PR_RUN_CLOSE, payload: PULL_REQUEST }, panel);
       yield* router.performAct(
-        { kind: ACT_KIND.PR_RUN_START, payload: { ...PULL_REQUEST, number: 8 } },
+        {
+          kind: ACT_KIND.PR_RUN_START,
+          payload: { ...PULL_REQUEST, agentId: "9d2b7b5f-4e3f-4e9c-9c77-7f5d8b3f4c32" },
+        },
         panel,
       );
       pageGone(panel.sender);

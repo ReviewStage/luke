@@ -20,7 +20,6 @@ import { EmptyState } from "../empty-state";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import type { RunOnMacDoors } from "../planning/agent-published";
 import { AgentCard, agentSubject } from "../planning/agent-ref";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { agentActor, agentTabLabel } from "../planning/coding-agent-model";
@@ -44,6 +43,7 @@ import { planLinkPlace } from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
+import type { RunOnMacDoors } from "../planning/run-on-mac";
 import { SkillFiles } from "../planning/skill-chip";
 import { TerminalCommands, useOpenTerminal } from "../planning/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
@@ -505,21 +505,25 @@ function PlanDocument({
   // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
   const openChanges = (agentId: string) =>
     sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
-  // An agent's pull request runs on this Mac in a tab of the side panel's own,
+  // An agent's work runs on this Mac in a tab of the side panel's own,
   // which starts the run asked of it once it stands (`pr-run-tab.tsx`).
-  const runOnMac = (agentId: string): RunOnMacDoors => ({
-    workspaceId: plan.workspaceId,
-    run: (pullRequest) => {
-      registry.update(runsAsked(agentId), (asked) => asked + 1);
-      sidePanel.onChoose({ prRun: agentId, pullRequest });
-    },
-    showInFinder: (pullRequest) => {
-      act(ACT_KIND.PR_RUN_SHOW_IN_FINDER, pullRequest).catch((refused: Error) =>
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
-      );
-    },
-    deleteCheckout: (pullRequest) => act(ACT_KIND.PR_RUN_DELETE_CHECKOUT, pullRequest),
-  });
+  const runOnMac =
+    plan.repository === null
+      ? undefined
+      : (agentId: string): RunOnMacDoors => ({
+          workspaceId: plan.workspaceId,
+          repository: plan.repository ?? "",
+          run: (target) => {
+            registry.update(runsAsked(agentId), (asked) => asked + 1);
+            sidePanel.onChoose({ prRun: agentId, target });
+          },
+          showInFinder: (target) => {
+            act(ACT_KIND.PR_RUN_SHOW_IN_FINDER, target).catch((refused: Error) =>
+              toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+            );
+          },
+          deleteCheckout: (target) => act(ACT_KIND.PR_RUN_DELETE_CHECKOUT, target),
+        });
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -628,6 +632,7 @@ function PlanDocument({
                       inbox={inbox.board.open.length}
                       actionsSlot={actionsSlot}
                       onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                      runOnMac={runOnMac}
                     />
                   }
                 >
@@ -776,7 +781,6 @@ function PlanDocument({
                         views={views}
                         onOpenDelegation={openDelegation}
                         onOpenChanges={openChanges}
-                        runOnMac={runOnMac}
                         onOpenTarget={openTarget}
                         cards={cards}
                       />

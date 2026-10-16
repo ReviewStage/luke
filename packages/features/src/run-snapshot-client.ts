@@ -61,12 +61,17 @@ export interface HostedRunSnapshotClientOptions extends AccountToken {
 }
 
 /** The refusals this client names, by the service's own word for each. */
-const REFUSALS: Readonly<Record<string, RunSnapshotRefusal>> = {
-  [HOSTED_API_ERROR.NOT_FOUND]: RUN_SNAPSHOT_REFUSAL.NOT_FOUND,
-  [HOSTED_API_ERROR.AGENT_NOT_READY]: RUN_SNAPSHOT_REFUSAL.NOT_READY,
-  [HOSTED_API_ERROR.AGENT_RETIRED]: RUN_SNAPSHOT_REFUSAL.RETIRED,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: RUN_SNAPSHOT_REFUSAL.NOT_REACHABLE,
-};
+const REFUSALS = new Map<string, RunSnapshotRefusal>([
+  [HOSTED_API_ERROR.NOT_FOUND, RUN_SNAPSHOT_REFUSAL.NOT_FOUND],
+  [HOSTED_API_ERROR.AGENT_NOT_READY, RUN_SNAPSHOT_REFUSAL.NOT_READY],
+  [HOSTED_API_ERROR.AGENT_RETIRED, RUN_SNAPSHOT_REFUSAL.RETIRED],
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, RUN_SNAPSHOT_REFUSAL.NOT_REACHABLE],
+]);
+
+/** The refusal the service's word names, where this client names one. */
+function refusalOf(word: string | undefined): RunSnapshotRefusal {
+  return (word === undefined ? undefined : REFUSALS.get(word)) ?? RUN_SNAPSHOT_REFUSAL.UNANSWERED;
+}
 
 const readAnswer = readServiceAnswer(runSnapshotAnswerSchema);
 const readRefusal = readServiceAnswer(hostedErrorSchema);
@@ -98,7 +103,7 @@ export class HostedRunSnapshotClient {
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (!answer.response.ok) {
         const refusal = Result.getOrUndefined(readRefusal(payload));
-        return { refused: (refusal && REFUSALS[refusal]) ?? RUN_SNAPSHOT_REFUSAL.UNANSWERED };
+        return { refused: refusalOf(refusal) };
       }
       const read = Result.getOrUndefined(readAnswer(payload));
       if (read === undefined) return { refused: RUN_SNAPSHOT_REFUSAL.UNANSWERED };

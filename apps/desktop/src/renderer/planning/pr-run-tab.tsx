@@ -20,16 +20,16 @@ import { TERMINAL_LOAD_FAILED, terminalModuleAtom } from "./terminal-bundle";
 import { useOpenLink } from "./use-open-link";
 
 /**
- * pr-run-tab.tsx -- a pull request run on this Mac: the live output of the repository's run command, from Luke's own checkout of the pull request, and its Stop.
+ * pr-run-tab.tsx -- a coding agent's work run on this Mac: the live output of the repository's setup and run commands, from Luke's own checkout of the agent's working tree, and its Stop.
  *
- * The tab is the Terminal tab's frame: a bar naming the pull request, the
- * commit it runs, and where the run stands, with Stop while it prepares or
- * runs and Run again once it has ended; then the run's output on the
+ * The tab is the Terminal tab's frame: a bar naming the agent's repository,
+ * the commit it runs, and where the run stands, with Stop while it prepares
+ * or runs and Run again once it has ended; then the run's output on the
  * terminal's screen, read-only, which fills the rest. A run is started by
- * Run on this Mac in the pull request's menu, which opens this tab and asks
- * it once (`pr-run-store.ts`); the tab starts it once its screen stands, so
- * the port the output comes on is listening first. Drawn again without an
- * ask, the tab shows the run that stands, from where it is now; taken out of
+ * Run on this Mac in the agent tab's menu, which opens this tab and asks it
+ * once (`pr-run-store.ts`); the tab starts it once its screen stands, so the
+ * port the output comes on is listening first. Drawn again without an ask,
+ * the tab shows the run that stands, from where it is now; taken out of
  * sight, it lets the run go on unwatched. Closing the tab stops the run
  * (`side-panel.tsx`), and the checkout stays. What the run prints reaches
  * this screen and nowhere else, so the whole tab is left out of the screen
@@ -38,9 +38,9 @@ import { useOpenLink } from "./use-open-link";
 
 const readOutbound = Schema.decodeUnknownOption(prRunPortOutboundSchema);
 
-/** The pull request in the words its tab names it by. */
-function pullRequestWords(pullRequest: PrRunTarget): string {
-  return `${pullRequest.repository} #${pullRequest.number}`;
+/** The run in the words its tab names it by: the agent's repository. */
+function targetWords(target: PrRunTarget): string {
+  return target.repository;
 }
 
 /** Where a run stands, in a word or two. */
@@ -65,13 +65,9 @@ function underWay(state: PrRunState | undefined): boolean {
   return state?.phase === PR_RUN_PHASE.PREPARING || state?.phase === PR_RUN_PHASE.RUNNING;
 }
 
-/** The same pull request, its repository's name read without case. */
-function samePullRequest(a: PrRunTarget, b: PrRunTarget): boolean {
-  return (
-    a.workspaceId === b.workspaceId &&
-    a.repository.toLowerCase() === b.repository.toLowerCase() &&
-    a.number === b.number
-  );
+/** The same run, which the agent alone names. */
+function sameTarget(a: PrRunTarget, b: PrRunTarget): boolean {
+  return a.agentId === b.agentId;
 }
 
 /** What the tab holds between renders: the port it draws from, its screen, and the bytes drawn since the last ack. */
@@ -89,7 +85,7 @@ export function PrRunTab({
   /** Whether the tab is on screen, the one moment it draws the run. */
   shown: boolean;
 }): React.JSX.Element {
-  const { pullRequest, prRun: agentId } = tab;
+  const { target, prRun: agentId } = tab;
   const { act } = useAct();
   const registry = useContext(RegistryContext);
   const openLink = useOpenLink();
@@ -121,11 +117,11 @@ export function PrRunTab({
     };
   }, [module, element, openLink]);
 
-  // The run's port, which main posts to this window alone; the newest for this pull request is the one drawn from.
+  // The run's port, which main posts to this window alone; the newest for this agent is the one drawn from.
   useEffect(
     () =>
       onPrRunPort((ticket, port) => {
-        if (!samePullRequest(ticket, pullRequest)) return;
+        if (!sameTarget(ticket, target)) return;
         const held = live.current;
         held.port?.close();
         held.port = port;
@@ -150,32 +146,32 @@ export function PrRunTab({
         };
         port.start();
       }),
-    [pullRequest],
+    [target],
   );
 
   const start = useCallback(() => {
     live.current.handle?.reset();
     setRefusal(undefined);
     setState(undefined);
-    act(ACT_KIND.PR_RUN_START, pullRequest).catch((refused: Error) => setRefusal(refused.message));
-  }, [act, pullRequest]);
+    act(ACT_KIND.PR_RUN_START, target).catch((refused: Error) => setRefusal(refused.message));
+  }, [act, target]);
 
   const stop = useCallback(() => {
-    act(ACT_KIND.PR_RUN_STOP, pullRequest).catch((refused: Error) => setRefusal(refused.message));
-  }, [act, pullRequest]);
+    act(ACT_KIND.PR_RUN_STOP, target).catch((refused: Error) => setRefusal(refused.message));
+  }, [act, target]);
 
   // Drawn, the tab starts each run asked of it, or shows the run that stands; out of sight, it sets the run aside.
   useEffect(() => {
     if (!shown || handle === undefined) return;
     if (registry.get(runsAsked(agentId)) === 0) {
-      act(ACT_KIND.PR_RUN_ATTACH, pullRequest).catch(() => undefined);
+      act(ACT_KIND.PR_RUN_ATTACH, target).catch(() => undefined);
     }
     return () => {
       live.current.port?.close();
       live.current.port = undefined;
-      act(ACT_KIND.PR_RUN_DETACH, pullRequest).catch(() => undefined);
+      act(ACT_KIND.PR_RUN_DETACH, target).catch(() => undefined);
     };
-  }, [shown, handle, registry, agentId, act, pullRequest]);
+  }, [shown, handle, registry, agentId, act, target]);
 
   useEffect(() => {
     if (!shown || handle === undefined || asked === 0) return;
@@ -189,7 +185,7 @@ export function PrRunTab({
     <div className="terminal-tab pr-run-tab file-view ph-no-capture" data-phase={state?.phase}>
       <header className="file-view-bar">
         <span className="terminal-tab-title">
-          <span className="terminal-tab-agent">{pullRequestWords(pullRequest)}</span>
+          <span className="terminal-tab-agent">{targetWords(target)}</span>
           <span className="terminal-tab-standing">
             · this Mac · {standingWords(refusal === undefined ? state : undefined)}
             {sha === undefined ? null : <> · {sha.slice(0, 7)}</>}

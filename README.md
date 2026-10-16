@@ -64,7 +64,7 @@ from it.
 
 ## Code access
 
-Nothing reads code on your Mac unless you run a pull request there yourself
+Nothing reads code on your Mac unless you run an agent's work there yourself
 (below). Luke's service checks the task's repository
 out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
 repository and sets at the sandbox's firewall, never inside it, and Luke
@@ -72,14 +72,15 @@ runs commands such as `ls`, `grep`, or `cat` there. A coding
 agent you start works in a sandbox of its own, on a full checkout, and pushes
 its branch and pull request through the same App, as the App's own bot.
 
-You can also run a coding agent's pull request on your Mac: Run on this Mac,
-in the pull request's menu, fetches its newest commit into a clone Luke keeps
-under its application data, with a one-repository read token the same App
-mints and Luke gives back once the fetch ends, and runs the repository's
-setup and run commands, shared by the workspace under Settings › Workspace ›
-Repositories, from the pull request's own checkout, its output live in a tab
-of its own. Nothing runs until you press it, and the pull request never
-chooses the commands. See [PRIVACY.md](PRIVACY.md) for details.
+You can also run a coding agent's work on your Mac: Run on this Mac, in the
+agent tab's menu, copies the agent's working tree from its sandbox, pushed or
+not, into a clone Luke keeps under its application data, fetching the commit
+it starts from with a one-repository read token the same App mints and Luke
+gives back once the fetch ends, and runs the repository's setup and run
+commands, shared by the workspace under Settings › Workspace › Repositories,
+from the agent's own checkout, its output live in a tab of its own. Nothing
+runs until you press it, and the agent never chooses the commands. See
+[PRIVACY.md](PRIVACY.md) for details.
 
 ## Contributing
 

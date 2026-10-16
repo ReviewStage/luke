@@ -13,13 +13,13 @@ import { useAppCommand } from "../app-commands";
 import { type DraftTabs, useDraftedTabs } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
 import { DraftMark } from "../draft-mark";
-import type { RunOnMacDoors } from "../planning/agent-published";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
+import { type RunOnMacDoors, useRunOnMac } from "../planning/run-on-mac";
 import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
 import type { ToolTarget } from "../planning/tool-call-model";
 import {
@@ -185,7 +185,7 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, renamed in place from its menu while its plan is not archived, and archived from it (`agent-archive.tsx`). */
+/** An agent's tab, renamed in place from its menu while its plan is not archived, run on this Mac from it (`run-on-mac.tsx`), and archived from it (`agent-archive.tsx`). */
 function AgentMenuTab({
   agent,
   agents,
@@ -193,6 +193,7 @@ function AgentMenuTab({
   doors,
   shown,
   slot,
+  runOnMac,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -200,20 +201,24 @@ function AgentMenuTab({
   doors: TabDoors;
   shown: boolean;
   slot: HTMLElement | null;
+  /** Running the agent's work on this Mac; none where no panel draws the run. */
+  runOnMac?: RunOnMacDoors | undefined;
 }): React.JSX.Element {
   const rename = usePlanRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
+  const onMac = useRunOnMac(agent, runOnMac, shown);
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, archive: archive.action }}
+        doors={{ ...doors, runOnMac: onMac.actions, archive: archive.action }}
         // A rename still open when the plan is archived elsewhere is let go unsaved.
         rename={agents.onUnarchive === undefined ? rename : undefined}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
       />
       {archive.dialog}
+      {onMac.dialog}
     </>
   );
 }
@@ -415,6 +420,7 @@ export function MainTabStrip({
   inbox,
   actionsSlot,
   onOpenTerminal,
+  runOnMac,
 }: {
   plan: TaskSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
@@ -442,6 +448,8 @@ export function MainTabStrip({
   actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
   onOpenTerminal: (agentId: string) => void;
+  /** Running an agent's work on this Mac, by the agent; none where the task names no repository. */
+  runOnMac?: ((agentId: string) => RunOnMacDoors) | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const drafted = useDraftedTabs(plan.id);
@@ -562,6 +570,7 @@ export function MainTabStrip({
               doors={doorsOf(entry)}
               shown={shown}
               slot={actionsSlot}
+              runOnMac={runOnMac?.(entry.agent.id)}
             />
           ),
         )}
@@ -617,7 +626,6 @@ export function MainTabContent({
   onOpenChanges,
   onOpenTarget,
   cards,
-  runOnMac,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -636,8 +644,6 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
-  /** Running an agent's pull request on this Mac, by the agent, in a tab of the side panel's own; none where no panel draws the run. */
-  runOnMac?: ((agentId: string) => RunOnMacDoors) | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -661,7 +667,6 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
-      runOnMac={runOnMac?.(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
