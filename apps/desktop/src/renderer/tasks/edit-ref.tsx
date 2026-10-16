@@ -215,8 +215,9 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
  * Luke during [Charles] Charles Pan’s call", "[Luke] Luke during your call",
  * "[Charles] Charles Pan". `sentence` names the reader "you" inside a line
  * that leads with other words. With `faceOnly` it is the writer's face
- * alone, their name and whose call it was said in the card it hangs, for a
- * section's byline, which keeps to a heading's end. Drawn inside an
+ * alone, their name and whose call it was said in the card it hangs and to
+ * a screen reader, as words, for a section's byline, which keeps to a
+ * heading's end. Drawn inside an
  * `.actor-line`, whose words carry their own spaces. Nothing for the plan
  * before history.
  */
@@ -235,7 +236,11 @@ export function EditedBy({
   return (
     <>
       <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />
-      {edit.duringCall && !faceOnly ? <CallOwner edit={edit} place={place} /> : null}
+      {!edit.duringCall ? null : faceOnly ? (
+        <span className="visually-hidden">{` during ${callWords(editCallOwner(edit, place.reader))}`}</span>
+      ) : (
+        <CallOwner edit={edit} place={place} />
+      )}
     </>
   );
 }

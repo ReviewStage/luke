@@ -196,7 +196,7 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
   const dean = await draw(editedAs(onCharlesCall), { readerId: DEAN.userId });
   assert.deepEqual(editedLines(dean), [
     "Edited by Luke during Charles Pan’s call · now",
-    "Luke now",
+    "Luke during Charles Pan’s call now",
   ]);
   assert.deepEqual(
     [...dean.querySelectorAll(".plan-edit-note .actor-mark")].map((mark) =>
@@ -206,7 +206,10 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
   );
 
   const charles = await draw(editedAs(onCharlesCall), { readerId: CHARLES.userId });
-  assert.equal(editedLines(charles)[0], "Edited by Luke during your call · now");
+  assert.deepEqual(editedLines(charles), [
+    "Edited by Luke during your call · now",
+    "Luke during your call now",
+  ]);
   assert.equal(charles.querySelectorAll(".plan-edit-note .actor-mark").length, 1);
 });
 
