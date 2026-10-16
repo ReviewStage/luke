@@ -1775,7 +1775,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a page and another agent of the plan hands eve the page by its id with its HTML and the agent by its id and branch, never its conversation",
+    "a message mentioning a page and another agent of the plan hands eve the page by its id and version with how to read it, never its HTML, and the agent by its id and branch, never its conversation",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1801,10 +1801,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(
           part.text,
           new RegExp(
-            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*<h1>Invites by week</h1>`,
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*with \`read_page\`, \`pageId: "${shown.value.id}"\`, and \`version: 1\``,
             "u",
           ),
         );
+        assert.ok(!part.text.includes("<h1>Invites by week</h1>"), part.text);
         assert.match(
           part.text,
           new RegExp(

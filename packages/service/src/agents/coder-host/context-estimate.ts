@@ -10,6 +10,7 @@ import {
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
+  READ_PAGE_TOOL,
   START_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
@@ -136,6 +137,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_PAGE]: {
+    description: READ_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(READ_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.RUN_ON_MAC]: {
     description: RUN_ON_MAC_TOOL.description,

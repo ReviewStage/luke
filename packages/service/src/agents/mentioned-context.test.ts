@@ -381,8 +381,6 @@ const PAGE_ID = "3b9a0c1d-2e4f-4a6b-8c0d-1e2f3a4b5c6d";
 
 const OTHER_AGENT_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b";
 
-const PAGE_HTML = "<!doctype html>\n<h1>Invites by week</h1>\n<p>Code: ```x```</p>";
-
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
@@ -406,18 +404,16 @@ const OTHER_AGENT: MentionedAgent = {
 };
 
 const READS = {
-  pages: new Map([
-    [PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000, html: PAGE_HTML }],
-  ]),
+  pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000 }]]),
   agents: new Map([[OTHER_AGENT_ID, OTHER_AGENT]]),
 };
 
-test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close, of tildes", () => {
+test("a page of the plan the words mention is handed by its title, id, and version, with how to read it and how to revise it, and never its HTML", () => {
   const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, TASK, READS);
 
   assert.equal(
     part,
-    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place. Its HTML as it stands:\n\n~~~html\n${PAGE_HTML}\n~~~`,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. Read it as the developer saw it with \`read_page\`, \`pageId: "${PAGE_ID}"\`, and \`version: 3\`, or leave the version out for its newest. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place.`,
   );
 });
 
@@ -502,44 +498,6 @@ test("a page the send did not find on the plan is named as gone, an agent it did
     `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe coding agent "Old": not found in your workspace.`,
   );
   assert.equal(elsewhere, undefined);
-});
-
-test("a long page is cut on a line to its bound, saying how much was left out", () => {
-  const long = Array.from({ length: 2_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
-  const part =
-    mentionedContext(`See ${page("Rows")}.`, TASK, {
-      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Rows", version: 1, at: 0, html: long }]]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
-  assert.match(part, /\n… \(\d+ more characters\)\n```$/u);
-});
-
-test("a page whose HTML holds a long run of backticks is still handed, its fence and HTML inside the page's bound", () => {
-  const ticks = "`".repeat(11_000);
-  const part =
-    mentionedContext(`See ${page("Ticks")}.`, TASK, {
-      pages: new Map([
-        [PAGE_ID, { id: PAGE_ID, title: "Ticks", version: 1, at: 0, html: `<pre>${ticks}</pre>` }],
-      ]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.match(part, /the page "Ticks"/u);
-  assert.match(part, /\n~~~html\n<pre>`+<\/pre>\n~~~$/u);
-  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
-});
-
-test("a page whose cut-off end holds long runs of both fence characters still hands its kept beginning in a short fence", () => {
-  const html = `<h1>Chart</h1>\n${"`".repeat(6_000)}${"~".repeat(6_000)}`;
-  const part =
-    mentionedContext(`See ${page("Chart")}.`, TASK, {
-      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Chart", version: 1, at: 0, html }]]),
-      agents: new Map(),
-    }) ?? "";
-
-  assert.match(part, /\n```html\n<h1>Chart<\/h1>\n… \(\d+ more characters\)\n```$/u);
 });
 
 test("an agent whose task is archived is handed as taking no message, and one mentioned in upper case is found as the store holds it", () => {

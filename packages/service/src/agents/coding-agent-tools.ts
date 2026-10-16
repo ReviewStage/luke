@@ -5,12 +5,14 @@ import {
   type CodingAgent,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
+  planNamesOf,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
   unarchiveCodingAgentFrom,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
+import { readPageById } from "@luke/database/models/plan-pages";
 import { listTasks } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
@@ -67,7 +69,7 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
-import { workspaceStepOf, writtenMention } from "./written-mentions.js";
+import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
  * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
@@ -116,7 +118,12 @@ import { workspaceStepOf, writtenMention } from "./written-mentions.js";
  * lock, which every turn queued and every message handed over takes; an
  * agent never archives itself, and an unarchive brings back only the
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
- * a call eve runs again does nothing twice. Each tool reaches eve as the deployment acting for the caller's member,
+ * a call eve runs again does nothing twice.
+ * A page read finds a page an agent showed on any task of the caller's
+ * workspace by the page's id, as the caller's member could open it in the
+ * side panel, and answers its HTML cut on a line to a bound, which a
+ * mention of the page now points the agent at rather than carrying it.
+ * Each tool reaches eve as the deployment acting for the caller's member,
  * which the coder channel's table admits for exactly this
  * (`coder-host/channel.ts`). Every answer is data the model reads, never a
  * credential.
@@ -188,6 +195,17 @@ export const ARCHIVE_AGENT_REFUSAL = {
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+} as const;
+
+/** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
+const READ_PAGE_CHARS = 40_000;
+
+/** Why a page read answered nothing, in words the model can act on. */
+export const READ_PAGE_REFUSAL = {
+  UNREADABLE:
+    "Not read: name the page by its id, and a version as a whole number from 1, or none for the newest.",
+  NO_PAGE:
+    "Not read: no page of a task of your workspace has that id, or that page has no such version.",
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
@@ -427,6 +445,34 @@ export const UNARCHIVE_AGENT_TOOL = {
     "developer asks for. Answers `accepted`, also for an agent not archived, or `rejected` " +
     "and why.",
   inputSchema: READ_AGENT_INPUT,
+} as const;
+
+const READ_PAGE_INPUT = Schema.Struct({
+  pageId: describeWire(
+    wireUuidSchema,
+    `The page's id, as a mention of it, ${AGENT_TOOL.SHOW_PAGE}'s answer, or a link to it names.`,
+  ),
+  version: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+      "The version to read, by its number; leave it out for the newest.",
+    ),
+  ),
+});
+
+const readPageAsked = Schema.decodeUnknownResult(READ_PAGE_INPUT);
+
+export const READ_PAGE_TOOL = {
+  name: AGENT_TOOL.READ_PAGE,
+  description:
+    "Read a page an agent showed on a task of your workspace, by its id: its title, the " +
+    "version read (the newest unless you name one) and the newest there is, its task and " +
+    "whether that is the task you work on, its mention ready to write, and its HTML as it " +
+    "stands, cut on a line at " +
+    `${READ_PAGE_CHARS} characters with how many were left out. Read a page the developer ` +
+    "pointed you at, or one another agent showed, before you build on it or revise it; to " +
+    `revise a page of your own task, show it again with ${AGENT_TOOL.SHOW_PAGE} and its id.`,
+  inputSchema: READ_PAGE_INPUT,
 } as const;
 
 /** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
@@ -1135,6 +1181,73 @@ export function runListTasks(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         tasks,
         nextOffset: next < matching.length ? next : null,
+      };
+    }),
+  );
+}
+
+/** A page's HTML as a read answers it, and how many characters of it were left out. */
+interface PageCut {
+  readonly html: string;
+  readonly leftOutChars: number;
+}
+
+/** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */
+function pageCut(html: string): PageCut {
+  if (html.length <= READ_PAGE_CHARS) return { html, leftOutChars: 0 };
+  const lineEnd = html.lastIndexOf("\n", READ_PAGE_CHARS);
+  const kept = html.slice(0, lineEnd > 0 ? lineEnd : READ_PAGE_CHARS);
+  return { html: kept, leftOutChars: html.length - kept.length };
+}
+
+/** One call of `read_page`: a version of a page of a task of the caller's workspace, its HTML cut to the bound, or why there is none. */
+export function runReadPage(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readPageAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(READ_PAGE_REFUSAL.UNREADABLE));
+  }
+  const { caller } = call;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(caller);
+      if (Option.isNone(workspace)) {
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      }
+      const userId = callerUserId(caller);
+      const found = yield* readPageById(userId, asked.success.pageId, asked.success.version);
+      // A page of a task of another workspace, even one the member is also in, is none of the caller's.
+      if (Option.isNone(found) || !(yield* taskOfCallerWorkspace(caller, found.value.taskId))) {
+        return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
+      }
+      const { taskId, page, newestVersion } = found.value;
+      const names = yield* planNamesOf(userId, [taskId]);
+      const step = yield* taskStepOf(userId, taskId);
+      const cut = pageCut(page.html);
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        page: {
+          id: page.id,
+          title: page.title,
+          version: page.version,
+          newestVersion,
+          task: { id: taskId, name: names.get(taskId)?.name ?? null },
+          isYourTask: taskId === callerTask(caller),
+          // The page's mention, ready to write, wherever its task's workspace reads for the member.
+          ...(Option.isNone(step)
+            ? undefined
+            : {
+                mention: writtenMention(
+                  { kind: MENTION_KIND.PAGE, taskId, pageId: page.id },
+                  page.title,
+                  step.value,
+                ),
+              }),
+          html: cut.html,
+          leftOutChars: cut.leftOutChars,
+        },
       };
     }),
   );
