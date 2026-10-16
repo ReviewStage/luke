@@ -14,7 +14,7 @@ import {
   FUNCTION_METAFILE,
   functionBundlePlan,
   importChain,
-  packageNameOf,
+  undeclaredImports,
 } from "../server/function-bundles.js";
 import {
   bundlePath,
@@ -81,18 +81,10 @@ const task = await functionBundlePlan(WEB);
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
 const result = await build({ ...withSentrySourceMaps(task.options), metafile: true, write: true });
 
-/** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
-const ESBUILD_RUNTIME = "<runtime>";
-const undeclared = new Set<string>();
-for (const input of Object.values(result.metafile.inputs)) {
-  for (const imported of input.imports) {
-    if (!imported.external || imported.path === ESBUILD_RUNTIME) continue;
-    if (!task.externalPackages.has(packageNameOf(imported.path))) undeclared.add(imported.path);
-  }
-}
-if (undeclared.size > 0) {
+const undeclared = undeclaredImports(result.metafile, WEB, task.externalPackages);
+if (undeclared.length > 0) {
   throw new Error(
-    `bundled routes reach dependencies apps/web does not declare: ${[...undeclared].sort().join(", ")}`,
+    `bundled routes reach dependencies apps/web does not declare: ${undeclared.join(", ")}`,
   );
 }
 
