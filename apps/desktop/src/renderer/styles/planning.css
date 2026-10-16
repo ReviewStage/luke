@@ -1143,8 +1143,10 @@ button.file-ref:hover .file-ref-path {
    over the tab's right edge, shut until its own toggle opens it, a press
    beside it or Escape closing it again; the toggle at the bar's end opens
    it there, and its count stands under the tab. One width drives every
-   tab's narrow layout: a side panel under 420px. */
-@container side-panel (max-width: 419px) {
+   tab's narrow layout: a side panel under 360px, below the panel's default
+   width (`SIDE_PANEL_WIDTH.DEFAULT`), so a panel left as it opens keeps
+   its tab and pane side by side and only a panel dragged narrower folds. */
+@container side-panel (max-width: 359px) {
   .file-view :is(.file-tree-pane, .terminal-shells) {
     position: absolute;
     z-index: 1;
@@ -1212,7 +1214,7 @@ button.file-ref:hover .file-ref-path {
   display: none;
 }
 
-@container side-panel (max-width: 419px) {
+@container side-panel (max-width: 359px) {
   .page-view-version-words {
     display: none;
   }
@@ -1296,7 +1298,7 @@ button.file-ref:hover .file-ref-path {
 /* A narrow panel numbers a diff's lines on the new side alone, so the
    code keeps the room a second gutter would take; a removed line, which
    has no new number, still reads by its tint. */
-@container side-panel (max-width: 419px) {
+@container side-panel (max-width: 359px) {
   .code-line[data-diff] > .code-line-number:first-child {
     display: none;
   }
@@ -1685,7 +1687,7 @@ button.file-ref:hover .file-ref-path {
 
 /* A narrow panel's note says its age in the link's pill, and the link
    draws the Code tab's glyph alone, named still. */
-@container side-panel (max-width: 419px) {
+@container side-panel (max-width: 359px) {
   .file-note-time,
   .file-note-show-words {
     display: none;
@@ -2758,7 +2760,7 @@ button.attached-file-face:hover img {
 
 /* A narrow panel leaves out the word "sandbox" the tab's name already
    implies, so the agent's name keeps more of the bar. */
-@container side-panel (max-width: 419px) {
+@container side-panel (max-width: 359px) {
   .terminal-tab-sandbox {
     display: none;
   }
@@ -3667,7 +3669,7 @@ button.subagent-line:hover {
 
 /* A narrow panel's Call tab gives a subagent's job two lines before it
    cuts it, so the time and marks beside it leave more than a word of it. */
-@container side-panel (max-width: 419px) {
+@container side-panel (max-width: 359px) {
   .subagent-line {
     height: auto;
     min-height: 28px;
