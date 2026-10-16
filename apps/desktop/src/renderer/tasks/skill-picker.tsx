@@ -14,6 +14,8 @@ import {
   useState,
 } from "react";
 import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
+import { Tooltip } from "../tooltip";
+import { SkillCard } from "./skill-ref";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the plan's repository keeps, and the chips the chosen ones are drawn as.
@@ -188,7 +190,7 @@ function BoxChip({
   onOpen: ((skill: SkillOption) => void) | undefined;
 }): React.JSX.Element {
   const opens = skill !== undefined && onOpen !== undefined;
-  return (
+  const chip = (
     // biome-ignore lint/a11y/noStaticElementInteractions: the pill is a word of the box's text, which the keyboard edits rather than presses; its press is the pointer's shortcut to the file, as a sent message's chip button is.
     // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
     <span
@@ -198,6 +200,16 @@ function BoxChip({
     >
       {skillWord(name)}
     </span>
+  );
+  // A skill the repository holds hangs its card in the box as a sent chip of it does.
+  if (skill === undefined) return chip;
+  return (
+    <Tooltip
+      label={skill.path}
+      card={<SkillCard subject={{ skill, onOpen: () => onOpen?.(skill) }} />}
+    >
+      {chip}
+    </Tooltip>
   );
 }
 
