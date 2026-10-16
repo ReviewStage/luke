@@ -750,7 +750,8 @@ function callbackUrl(requestUrl: string, state: string): string {
 /**
  * The account a Connect signs in: a new one where `add=true` asks for it,
  * under a minted subject and the next free name, where the provider offers
- * more than one and the account holds fewer than the most; otherwise the
+ * more than one and the account holds fewer than the most, letting go of
+ * every sign-in at the provider left past its window; otherwise the
  * account named, which must stand unless it is the provider's first, which
  * asks under the account's own user id as every account did before a second
  * was possible.
@@ -770,9 +771,19 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (held.length >= INTEGRATION_ACCOUNTS_MAX) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
+    // Note that a sign-in left past its window is let go first, so its name is free again and no read takes it for an account.
+    const left = providerRows(rows, provider).filter((row) => !holdsAccountPlace(seams, row));
+    yield* Effect.forEach(
+      left,
+      (row) =>
+        row.state === undefined
+          ? Effect.void
+          : hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
+      { discard: true },
+    );
     const name = mintIntegrationConnectionName(
       provider,
-      rows.map((row) => row.connectionName),
+      rows.filter((row) => !left.includes(row)).map((row) => row.connectionName),
     );
     return {
       provider,

@@ -669,7 +669,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "sign-ins left past their window hold no account place, so the provider is addable again and takes another",
+    "sign-ins left past their window hold no account place and are let go when another account is added, which takes the provider's own name",
     () =>
       Effect.gen(function* () {
         const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, { declines: true });
@@ -686,7 +686,11 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
 
         assert.equal(accountsIn(read.body).length, 0);
         assert.ok(addableIn(read.body).includes(NOTION));
-        assert.equal((yield* add("&add=true")).status, HOSTED_HTTP_STATUS.OK);
+        // The sign-ins left behind are let go, so the account added takes the provider's own name and stands first.
+        assert.deepEqual((yield* add("&add=true")).body, {
+          url: GRANTING_SIGN_IN_URL,
+          connection: NOTION,
+        });
       }),
   );
 
