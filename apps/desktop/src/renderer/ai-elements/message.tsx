@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "@luke/ui";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
@@ -126,8 +127,10 @@ export function MessageAction({
 /**
  * Markdown drawn at the panel's own scale. Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
- * are a note's, a step above the words around them and no more, and a
- * list keeps to the column's own indent.
+ * are a note's, a step above the words around them and no more, a
+ * list keeps to the column's own indent, and a quote is the one every
+ * Markdown in the window draws (`@luke/ui/quote-face`) rather than
+ * Streamdown's, which stood the browser's 40px in from the column.
  */
 export const PANEL_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className="mt-3 mb-1 text-[15px] font-semibold">{children}</h1>,
@@ -139,6 +142,7 @@ export const PANEL_MARKDOWN_COMPONENTS: Components = {
   ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
   li: ({ children }) => <li className="my-0.5">{children}</li>,
+  blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
