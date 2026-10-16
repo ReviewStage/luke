@@ -6781,7 +6781,9 @@ button.automation-run:hover {
 
 /* Narrower than 72px, a tab other than the chosen one is its
    glyph alone, centred: its label, its detail, its end mark, and its × give
-   way, and its hint says its name. */
+   way, and its hint says its name. Note that under the pointer it wears no
+   fade at its end, because the fade makes room for a × it no longer has,
+   and is wider than the glyph's whole side of the pill. */
 @container tab (width < 72px) {
   .tab-strip .tab:not([data-selected="true"]) :is(.tab-label, .tab-end-mark, .tab-close) {
     display: none;
@@ -6790,6 +6792,10 @@ button.automation-run:hover {
   .tab-strip .tab:not([data-selected="true"]) .tab-button {
     justify-content: center;
     padding: 0;
+  }
+
+  .tab-strip .tab[data-closable="true"][data-selected="false"]:hover .tab-button {
+    mask-image: none;
   }
 }
 

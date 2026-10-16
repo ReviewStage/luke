@@ -15,10 +15,10 @@ import { Tab, TabStrip } from "./tab-strip";
  * Safari's tab bar does: however many tabs it holds and however it is
  * narrowed, chosen, or scrolled, it draws every tab and no list of hidden
  * ones, and settles with no loop of renders; a tab other than the chosen one
- * narrower than 72px stands as its glyph alone, the chosen keeping its label
- * and its ×; the strip asks room for its tabs by their count; and a tab
- * chosen past its end is scrolled into its own place, the strip's scroll
- * alone. The plan's column and the side panel draw this one strip, so this
+ * narrower than 72px stands as its glyph alone, and keeps it under the
+ * pointer, the chosen keeping its label and its ×; the strip asks room for
+ * its tabs by their count; and a tab chosen past its end is scrolled into its
+ * own place, the strip's scroll alone. The plan's column and the side panel draw this one strip, so this
  * holds for both. jsdom lays nothing out, so a width is the stylesheets'
  * container queries resolved for a tab that wide (`#testing/container-width`),
  * and a test that scrolls lays the strip's boxes out itself. Synthetic
@@ -87,6 +87,26 @@ function pill(container: HTMLElement, label: string): HTMLElement {
 /** Whether an element is drawn, by its own display. */
 function shown(element: Element | null): boolean {
   return element !== null && getComputedStyle(element).display !== "none";
+}
+
+/** The mark a test sets on the box the pointer is over, which jsdom, keeping no pointer, never says is `:hover`. */
+const HOVERED = "data-hovered";
+
+/** Reads the laid stylesheets' `:hover` as `HOVERED`, so a box the test marks wears what the pointer over it would. */
+function hoverable(style: HTMLStyleElement): void {
+  style.textContent = (style.textContent ?? "").replaceAll(":hover", `[${HOVERED}]`);
+}
+
+/** Whether an element is seen: drawn, and neither it nor any box around it faded out, made invisible, or masked. */
+function visible(element: Element): boolean {
+  for (let at: Element | null = element; at !== null; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+      return false;
+    }
+    if (!["", "none"].includes(style.getPropertyValue("mask-image"))) return false;
+  }
+  return true;
 }
 
 /**
@@ -162,6 +182,22 @@ test("narrower than 72px a tab other than the chosen one stands as its glyph alo
   assert.equal(shown(pill(narrow, "Tab 2").querySelector(".tab-label")), true);
   assert.equal(shown(pill(narrow, "Tab 2").querySelector(".tab-close")), true);
   assert.equal(shown(pill(narrow, "Tab 1").querySelector(".tab-label")), false);
+});
+
+test("a tab standing as its glyph alone keeps its glyph under the pointer, naming itself, and shows no ×", async () => {
+  hoverable(layContainersAt({ tab: 60 }));
+  const narrow = await drawn(3);
+  const other = pill(narrow, "Tab 2");
+  const glyph = other.querySelector(".tab-icon") ?? assert.fail("its glyph stands");
+  act(() => {
+    other.setAttribute(HOVERED, "");
+    other
+      .querySelector('[role="tab"]')
+      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(visible(glyph), true);
+  assert.equal(shown(other.querySelector(".tab-close")), false);
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
 });
 
 test("at 72px and wider every tab keeps its label", async () => {
