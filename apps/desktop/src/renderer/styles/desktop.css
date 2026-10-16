@@ -7730,6 +7730,28 @@ button.automation-run:hover {
   margin-right: auto;
 }
 
+/* New task's head: the title and its workspace chip, then the Plan switch
+   at the row's end. */
+.new-plan-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+/* New task's Plan switch stands at the title's end with its word, the word
+   part of its label so a press on either turns it, leaving the foot's room
+   to the repository chip. */
+.new-plan-planning {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
 /* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
    a tile and two lines each, the chosen one ringed and one that cannot take
    the plan dimmed, then what the move does in a well under them. The rows

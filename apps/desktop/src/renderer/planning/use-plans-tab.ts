@@ -504,11 +504,12 @@ export interface PlansControl {
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the plan starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
+      planning: boolean,
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
@@ -1772,11 +1773,15 @@ export function usePlansTab(input: {
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
-  // which main leaves for this question to end or keep.
+  // which main leaves for this question to end or keep. A start without
+  // planning opens no call, so it asks nothing about the one standing; it
+  // names its planning only where it is off, so a request with planning is
+  // the one every service has read.
   const startPlan = (
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
+    planning: boolean,
     linearIssueId?: string,
   ): Promise<string | undefined> =>
     act(ACT_KIND.TASKS_START, {
@@ -1784,13 +1789,14 @@ export function usePlansTab(input: {
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(linearIssueId === undefined ? undefined : { linearIssueId }),
+      ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
         if ("failure" in answer) return startFailureNote(answer.failure);
         setNewPlanAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (callingNow.current) {
+        if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
         }
@@ -1814,6 +1820,7 @@ export function usePlansTab(input: {
               taskNameOfIssue(issue),
               repositoriesIn(listedLinear.id).recent[0] ?? null,
               listedLinear.id,
+              true,
               issue.id,
             ),
         };

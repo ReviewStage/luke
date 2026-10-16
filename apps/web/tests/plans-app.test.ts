@@ -430,6 +430,22 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
+  it.effect("a start opens as the template, and one without planning opens empty", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const documentOf = (answer: Answer) =>
+        readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).plan.document;
+
+      const planned = yield* ask(request(PLANS, owner, { method: "POST", body: RELAY }));
+      const unplanned = yield* ask(
+        request(PLANS, owner, { method: "POST", body: { ...LEDGER, planning: false } }),
+      );
+
+      assert.equal(documentOf(planned).body, DEFAULT_PLAN_TEMPLATE);
+      assert.deepEqual(documentOf(unplanned), { body: "", assumptions: [] });
+    }),
+  );
+
   it.effect("a start that names no workspace lands in the account's personal one", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
