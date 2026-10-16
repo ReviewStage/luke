@@ -48,7 +48,7 @@ test("Retry is the keyboard's next stop, and Enter and Space press it as the poi
     ),
   );
   const retry = page.getByRole("button", { name: "Retry" });
-  (page.getByRole("button", { name: "Before" }).element() as HTMLElement).focus();
+  await page.getByRole("button", { name: "Before" }).click();
   await userEvent.keyboard("{Tab}");
   await expect.element(retry).toHaveFocus();
   await userEvent.keyboard("{Enter}");
