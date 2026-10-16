@@ -11,7 +11,7 @@
  * autosuspend connects where failing fast only mailed a failure; every other
  * error still fails at once.
  */
-import { Duration, Effect, Schedule } from "effect";
+import { Cause, Duration, Effect, Schedule } from "effect";
 
 /** Neon's own words for the refusal, matched within an error's message. */
 const COMPUTE_LIMIT_WORDS = "concurrently active endpoints";
@@ -25,12 +25,18 @@ const NEON_COMPUTE_LIMIT_WAIT = {
 /** How deep beneath the error its causes are read, past any a driver would nest. */
 const CAUSE_DEPTH = 8;
 
-/** Whether the error, or any cause beneath it, is Neon refusing a compute for the limit. */
+/**
+ * Whether the error, or any cause beneath it, is Neon refusing a compute for
+ * the limit. Note that a cause may be an Effect `Cause` rather than an error,
+ * as Drizzle's `EffectDrizzleQueryError` carries the statement's failure, so
+ * the walk reads on through what that `Cause` squashes to.
+ */
 function isNeonComputeLimit(error: Error): boolean {
   let current: Error["cause"] = error;
   for (let depth = 0; depth < CAUSE_DEPTH && current instanceof Error; depth += 1) {
     if (current.message.includes(COMPUTE_LIMIT_WORDS)) return true;
-    current = current.cause;
+    const beneath: Error["cause"] = current.cause;
+    current = Cause.isCause(beneath) ? Cause.squash(beneath) : beneath;
   }
   return false;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Clock, Duration, Effect, Exit, Fiber } from "effect";
+import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors";
+import { Cause, Clock, Duration, Effect, Exit, Fiber } from "effect";
 import { ConnectionError, SqlError, SqlSyntaxError } from "effect/sql/SqlError";
 import { TestClock } from "effect/testing";
 import { waitingOutNeonComputeLimit } from "../neon-compute-limit.js";
@@ -50,6 +51,26 @@ describe("waitingOutNeonComputeLimit", () => {
       yield* TestClock.adjust(Duration.minutes(7));
       const exit = yield* Fiber.join(fiber);
       assert.deepEqual(exit, Exit.fail(refused));
+    }),
+  );
+
+  it.effect("a refusal Drizzle carries beneath a statement's failure is waited out too", () =>
+    Effect.gen(function* () {
+      let refusals = 1;
+      const statement = Effect.suspend(() => {
+        if (refusals === 0) return Effect.succeed("applied");
+        refusals -= 1;
+        return Effect.fail(
+          new EffectDrizzleQueryError({
+            query: "select 1",
+            params: [],
+            cause: Cause.fail(refused),
+          }),
+        );
+      });
+      const fiber = yield* Effect.forkChild(waitingOutNeonComputeLimit(statement));
+      yield* TestClock.adjust(Duration.minutes(1));
+      assert.equal(yield* Fiber.join(fiber), "applied");
     }),
   );
 
