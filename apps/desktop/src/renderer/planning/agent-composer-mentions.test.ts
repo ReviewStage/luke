@@ -73,10 +73,29 @@ const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: 
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
-/** The files each repository holds, as the plan's tree answers them. */
-const TREES: ReadonlyMap<string, string> = new Map([
-  ["acme/relay", "apps/web/rollout-store.ts"],
-  ["acme/next", "apps/web/rollout-next.ts"],
+/** A file of the repository's tree. */
+function treeFile(name: string) {
+  return { name, kind: TASK_TREE_ENTRY.FILE };
+}
+
+/** Sixty invitation files under `apps/web`, more than a narrowed list shows. */
+const INVITES = Array.from({ length: 60 }, (_, at) =>
+  treeFile(`apps/web/invite-${String(at + 1).padStart(2, "0")}.ts`),
+);
+
+/** The paths each repository holds, as the plan's tree answers them. */
+const TREES = new Map([
+  ["acme/relay", [treeFile("apps/web/rollout-store.ts")]],
+  ["acme/next", [treeFile("apps/web/rollout-next.ts")]],
+  [
+    "acme/wide",
+    [
+      { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
+      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+      ...INVITES,
+      treeFile("README.md"),
+    ],
+  ],
 ]);
 
 /** Linear connected, and every other integration unavailable. */
@@ -213,9 +232,7 @@ beforeEach(() => {
                           path: "",
                           repository: standing,
                           branch: "main",
-                          entries: [
-                            { name: TREES.get(standing) ?? "", kind: TASK_TREE_ENTRY.FILE },
-                          ],
+                          entries: TREES.get(standing) ?? [],
                           truncated: false,
                         },
                       },
@@ -346,6 +363,14 @@ function carryingTarget(container: HTMLElement): string | undefined {
   return [...container.querySelectorAll("*")]
     .flatMap((element) => [...element.attributes])
     .find((attribute) => !masked.has(attribute.name) && attribute.value.includes("://"))?.name;
+}
+
+/** The list's groups, each by its label with its rows' names. */
+function groupsListed(container: HTMLElement): [string | null, string[]][] {
+  return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
+    group.getAttribute("aria-label"),
+    [...group.querySelectorAll(".plan-compose-menu-name")].map((name) => name.textContent ?? ""),
+  ]);
 }
 
 /** The rows the list draws, by name. */
@@ -486,7 +511,7 @@ test("an @ in the box offers the account's connected MCP servers, and once a wor
 
   typeInComposer(container, "Use @");
   await settle();
-  const servers = listed(container);
+  const servers = groupsListed(container).find(([group]) => group === "MCP servers");
   typeInComposer(container, "list");
   await settle();
   const tools = listed(container);
@@ -495,7 +520,7 @@ test("an @ in the box offers the account's connected MCP servers, and once a wor
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(servers, ["Goal", "Rollout", "Invitations", "Linear"]);
+  assert.deepEqual(servers, ["MCP servers", ["Linear"]]);
   assert.deepEqual(tools, ["Linear · list_issues"]);
   assert.deepEqual(sent, [
     `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
@@ -634,14 +659,6 @@ test("off a plan's page a sent message's page of an integration's is still its c
   assert.equal(carryingTarget(container), undefined);
 });
 
-/** The list's groups, each by its label with its rows' names. */
-function groupsListed(container: HTMLElement): [string | null, string[]][] {
-  return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
-    group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".plan-compose-menu-name")].map((name) => name.textContent ?? ""),
-  ]);
-}
-
 test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, and not the agent whose box it is", async () => {
   const { container } = await box(taskPage());
 
@@ -654,6 +671,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["Pages", ["Invites by week"]],
     ["Agents", ["Wire the desktop"]],
     ["MCP servers", ["Linear"]],
+    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Linear"]],
   ]);
   assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
 });
@@ -939,4 +957,180 @@ test("a page's address pasted in the app's own scheme is called by the name the 
     [PAGE.title, "Agent"],
   );
   assert.deepEqual(sent, [`Build [@${PAGE.title}](${page}) on [@Agent](${agent}) in ${file}`]);
+});
+
+/** The repository with folders and more files than a narrowed list shows, as the plan's page names it. */
+const WIDE: MentionPlace = { workspace: "acme", repository: "acme/wide" };
+
+/** The box on a plan whose repository is the wide one. */
+async function wideBox() {
+  standing = "acme/wide";
+  return box(planPage([], "acme/wide"));
+}
+
+/** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
+function crumb(container: HTMLElement): string | undefined {
+  return (
+    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
+    undefined
+  );
+}
+
+/** The keys the list's foot names. */
+function footKeys(container: HTMLElement): string[] {
+  return [...container.querySelectorAll(".mention-menu-foot span")].map(
+    (key) => key.textContent ?? "",
+  );
+}
+
+/** The "Mention from" rows, each by its name and its detail. */
+function kindsListed(container: HTMLElement): [string, string][] {
+  return [
+    ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
+  ].map((row) => [
+    row.querySelector(".plan-compose-menu-name")?.textContent ?? "",
+    row.querySelector(".mention-row-detail")?.textContent ?? "",
+  ]);
+}
+
+/** ↓ pressed until the row named, in the group given, holds the highlight. */
+function highlightRow(container: HTMLElement, group: string, name: string): void {
+  const held = () => {
+    const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
+    return (
+      row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
+      row.querySelector(".plan-compose-menu-name")?.textContent === name
+    );
+  };
+  for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
+  assert.ok(held(), `${name} in ${group} holds the highlight`);
+}
+
+test("a bare @ ends in a row for each kind the place offers, and → on one narrows the list to that kind under its crumb", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  const kinds = kindsListed(container);
+  const wideKeys = footKeys(container);
+  highlightRow(container, "Mention from", "Pages");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+
+  assert.deepEqual(kinds, [
+    ["Files and folders", "acme/relay"],
+    ["Plan", "2 sections"],
+    ["Pages", "1 page"],
+    ["Agents", "acme"],
+    ["Linear", "MCP server"],
+  ]);
+  assert.deepEqual(wideKeys, ["↑↓ Move", "↵ Mention", "→ Open", "esc Close"]);
+  assert.equal(crumb(container), "Pages");
+  assert.deepEqual(groupsListed(container), [["Pages", ["Invites by week"]]]);
+  assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
+});
+
+test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  highlightRow(container, "Mention from", "Files and folders");
+  pressInComposer(container, "Enter");
+  await settle();
+  const narrowed = groupsListed(container);
+  const narrowedCrumb = crumb(container);
+  const backspace = pressInComposer(container, "Backspace");
+  await settle();
+
+  assert.equal(narrowedCrumb, "Files and folders");
+  assert.deepEqual(narrowed, [["Files and folders", ["apps/", "README.md"]]]);
+  assert.equal(backspace.defaultPrevented, true);
+  assert.equal(composerEditor(container).textContent, "See @");
+  assert.equal(crumb(container), undefined);
+  assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
+});
+
+test("typing @files: narrows the list to the repository's paths, listing up to fifty where the wide list shows four", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @invite");
+  await settle();
+  const wide = groupsListed(container).find(([group]) => group === "Files and folders");
+  typeInComposer(container, " and @files:invite");
+  await settle();
+
+  assert.equal(wide?.[1].length, 4);
+  assert.equal(crumb(container), "Files and folders");
+  assert.equal(listed(container).length, 50);
+  assert.ok(listed(container).every((name) => name.startsWith("invite-")));
+});
+
+test("→ on a folder walks into it, its first row the folder and the rest what it holds, and ⌫ climbs back out", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @files:");
+  await settle();
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const inApps = [crumb(container), listed(container)];
+  highlightRow(container, "apps", "web/");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const inWeb = [crumb(container), listed(container).slice(0, 3), listed(container).length];
+  const keys = footKeys(container);
+  pressInComposer(container, "Backspace");
+  await settle();
+
+  assert.deepEqual(inApps, ["apps", ["apps/", "web/"]]);
+  assert.deepEqual(inWeb, ["apps/web", ["web/", "invite-01.ts", "invite-02.ts"], 50]);
+  assert.deepEqual(keys, ["↑↓ Move", "↵ Mention", "→ Open", "⌫ Up", "esc Close"]);
+  assert.deepEqual([crumb(container), listed(container)], ["apps", ["apps/", "web/"]]);
+  assert.equal(composerEditor(container).textContent, "See @files:");
+});
+
+test("a file or a folder picked from a narrowed list is sent as the same link the wide list writes", async () => {
+  const { container, sent } = await wideBox();
+
+  typeInComposer(container, "Ship @invite-07");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  typeInComposer(container, "and @files:");
+  await settle();
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  highlightRow(container, "apps", "web/");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  typeInComposer(container, "invite-07");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  typeInComposer(container, "in @files:");
+  await settle();
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/invite-07.ts" },
+    "invite-07.ts",
+    WIDE,
+  );
+  const folder = mentionMarkdown({ kind: MENTION_KIND.FOLDER, path: "apps" }, "apps/", WIDE);
+  assert.deepEqual(sent, [`Ship ${file} and ${file} in ${folder}`]);
+});
+
+test("typing a server's provider and a colon narrows the list to that server, its tools listed before a word is typed", async () => {
+  const { container } = await box(planPage([]));
+
+  typeInComposer(container, "Use @linear:");
+  await settle();
+
+  assert.equal(crumb(container), "Linear");
+  assert.deepEqual(listed(container), ["Linear", "Linear · list_issues", "Linear · get_issue"]);
 });

@@ -1,3 +1,4 @@
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -9,7 +10,7 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, ProviderMark } from "@luke/ui";
+import { ArrowLeftIcon, ChevronRightIcon, DocumentIcon, ProviderMark } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -63,6 +64,17 @@ import { AgentMark } from "./tab-look";
  * agent it is sent to is handed what it needs to read by
  * (`packages/service/src/agents/mentioned-context.ts`).
  *
+ * Nothing typed after the `@`, the list ends in a row for each kind the
+ * place offers ("Mention from"): → or Enter on one narrows the list to that
+ * kind, as typing its word and a colon does (`@files:`, `@agents:`, a
+ * server's provider such as `@linear:`). A narrowed list stands under a
+ * crumb naming the kind, lists up to fifty rows, and searches that kind
+ * alone; ⌫ on its empty words widens it again. Narrowed to files and
+ * folders, → on a folder walks into it: its first row mentions the folder,
+ * the rest are what it holds, from the tree already read, and ⌫ on empty
+ * words climbs back out. Narrowing changes only what the list offers; a
+ * pick writes the same mention it would have written from the wide list.
+ *
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of
  * the word; the name is the file's or folder's own name, the heading, the
@@ -78,7 +90,38 @@ const MENTION_GROUP = {
   AGENTS: "Agents",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
+  FROM: "Mention from",
 } as const;
+
+/** The kinds a list may be narrowed to, each but a server by its own word typed before a colon after the `@`. */
+const MENTION_FROM = {
+  FILES: "files",
+  PLAN: "plan",
+  PAGES: "pages",
+  AGENTS: "agents",
+  SKILLS: "skills",
+  SERVER: "server",
+} as const;
+
+type MentionFrom = (typeof MENTION_FROM)[keyof typeof MENTION_FROM];
+
+/** The kind a list is narrowed to: one of the place's own, or one connected server by its connection, wearing its provider's mark. */
+type Narrow =
+  | { readonly from: Exclude<MentionFrom, typeof MENTION_FROM.SERVER> }
+  | {
+      readonly from: typeof MENTION_FROM.SERVER;
+      readonly connection: string;
+      readonly provider: IntegrationProvider;
+    };
+
+/** One kind the place offers, as its row under "Mention from" and its narrowed list's crumb name it. */
+interface MentionKind {
+  readonly narrow: Narrow;
+  readonly name: string;
+  readonly detail: string | undefined;
+  /** The word that, typed before a colon after the `@`, narrows the list to it; none for a server past its provider's first. */
+  readonly keyword: string | undefined;
+}
 
 /** What a page's row says beside its title. */
 const PAGE_DETAIL = "Page";
@@ -119,6 +162,9 @@ const NO_SERVERS: readonly NamedServer[] = [];
 /** The most rows one group lists. */
 const PER_GROUP = 4;
 
+/** The most rows a list narrowed to one kind lists. */
+const PER_KIND = 50;
+
 /** The least of cmdk's scores the list counts as a match, as ⌘K counts one. */
 const LEAST_SCORE = 0.01;
 
@@ -128,8 +174,21 @@ const MENU_LABEL = "Mention";
 /** What the list says where it has no row. */
 const NO_MATCH = "Nothing matches";
 
-/** The keys the list hears, said at its foot. */
-const MENU_KEYS = ["↑↓ Move", "↵ Mention", "esc Close"] as const;
+/** The keys the list hears, said at its foot as far as it hears them now. */
+const MENU_KEY = {
+  MOVE: "↑↓ Move",
+  MENTION: "↵ Mention",
+  OPEN: "→ Open",
+  WIDEN: "⌫ All kinds",
+  UP: "⌫ Up",
+  CLOSE: "esc Close",
+} as const;
+
+/** What a narrowed list's back arrow is read by: back to every kind, or up out of a folder. */
+const BACK_LABEL = {
+  WIDEN: "All kinds",
+  UP: "Up",
+} as const;
 
 /** The gap between the word's line and the list under it. */
 const MENU_GAP = 4;
@@ -150,7 +209,7 @@ type MentionRow = {
   readonly terms: string;
   /** An agent's tile, which its row wears as its tab does; none for any other row. */
   readonly actor?: Actor | undefined;
-} & ({ readonly mention: Mention } | { readonly skill: string });
+} & ({ readonly mention: Mention } | { readonly skill: string } | { readonly from: MentionKind });
 
 interface MentionGroup {
   readonly label: string;
@@ -168,6 +227,109 @@ interface Highlight {
   readonly start: number;
   readonly query: string;
   readonly at: number;
+}
+
+/** A folder the list walked into: its path, and the words as they stood then, past which the words typed search it. */
+interface Walked {
+  readonly path: string;
+  readonly entry: string;
+}
+
+/**
+ * A narrowing a key made, held against the word it was made in: the kind,
+ * the words as they stood then (or the `kind:` typed before it), whether
+ * the kind was typed rather than opened, and the folders walked into since.
+ */
+interface Held {
+  readonly start: number;
+  readonly narrow: Narrow;
+  readonly entry: string;
+  readonly typed: boolean;
+  readonly walked: readonly Walked[];
+}
+
+/** Where the list stands for the word: every kind, or one kind, its folders walked, and the words that search it. */
+interface Scope {
+  readonly kind: MentionKind | undefined;
+  /** The words as they stood when the kind was narrowed to, or the `kind:` typed. */
+  readonly entry: string;
+  /** Whether the kind was typed (`@files:`), which ⌫ widens by deleting the colon rather than by a key the list takes. */
+  readonly typed: boolean;
+  readonly walked: readonly Walked[];
+  readonly term: string;
+}
+
+/** Whether two narrowings name the same kind. */
+function sameNarrow(first: Narrow, second: Narrow): boolean {
+  if (first.from !== MENTION_FROM.SERVER || second.from !== MENTION_FROM.SERVER) {
+    return first.from === second.from;
+  }
+  return first.connection === second.connection;
+}
+
+/**
+ * Where the list stands for the word: the narrowing held for it, as long as
+ * the words still begin as they did when it was made and the place still
+ * offers its kind, its walk cut back to the folders whose words still
+ * stand; else the kind whose word the words begin with, typed before a
+ * colon; else every kind, searched by the words whole.
+ */
+function scopeOf(
+  trigger: ComposerTrigger,
+  held: Held | undefined,
+  kinds: readonly MentionKind[],
+): Scope {
+  const { query } = trigger;
+  const kept =
+    held?.start === trigger.start && query.startsWith(held.entry)
+      ? kinds.find((kind) => sameNarrow(kind.narrow, held.narrow))
+      : undefined;
+  if (held !== undefined && kept !== undefined) {
+    const standing = held.walked.findIndex((level) => !query.startsWith(level.entry));
+    const walked = standing === -1 ? held.walked : held.walked.slice(0, standing);
+    const from = walked.at(-1)?.entry ?? held.entry;
+    return {
+      kind: kept,
+      entry: held.entry,
+      typed: held.typed,
+      walked,
+      term: query.slice(from.length),
+    };
+  }
+  const typed = /^([^\s:]+):/u.exec(query);
+  const word = typed?.[1]?.toLowerCase();
+  const kind = word === undefined ? undefined : kinds.find((each) => each.keyword === word);
+  if (typed === null || kind === undefined) {
+    return { kind: undefined, entry: "", typed: false, walked: [], term: query };
+  }
+  return { kind, entry: typed[0], typed: true, walked: [], term: query.slice(typed[0].length) };
+}
+
+/**
+ * Where back takes a narrowed list: out of the folder walked into, else to
+ * every kind where a key narrowed it; nowhere for a wide list, or one whose
+ * kind was typed, whose colon ⌫ deletes in the editor instead.
+ */
+function backFrom(
+  scope: Scope | undefined,
+  start: number,
+): { readonly to: Held | undefined } | undefined {
+  if (scope?.kind === undefined) return undefined;
+  const { kind, entry, typed, walked } = scope;
+  if (walked.length > 0) {
+    return { to: { start, narrow: kind.narrow, entry, typed, walked: walked.slice(0, -1) } };
+  }
+  return typed ? undefined : { to: undefined };
+}
+
+/** A count and its noun, as a kind's row says it. */
+function counted(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Whether → opens the row: a kind's, which narrows the list, or a folder's, which walks into it. */
+function opens(row: MentionRow): boolean {
+  return "from" in row || ("mention" in row && row.mention.kind === MENTION_KIND.FOLDER);
 }
 
 /** A path's row: its own name, its folder after it, found by the whole path. */
@@ -268,11 +430,11 @@ function agentRows(
   return rows;
 }
 
-/** Each connected server's row, and once a word is typed each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
+/** Each connected server's row, and where asked each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
 function serverRows(
   servers: readonly NamedServer[],
   reads: IntegrationToolsReads,
-  query: string,
+  withTools: boolean,
 ): MentionRow[] {
   return servers.flatMap(({ provider, connection, name }) => {
     // An account past its provider's first is named by its connection; the first by the provider alone, as it always was.
@@ -284,7 +446,7 @@ function serverRows(
       terms: name,
     };
     const read = reads[connection];
-    if (query.trim() === "" || read === undefined || !("tools" in read)) return [server];
+    if (!withTools || read === undefined || !("tools" in read)) return [server];
     // Note that a tool whose name no mention can carry is left out, since its pick would name nothing.
     const tools = read.tools.flatMap((tool): MentionRow[] => {
       const mention: Mention = { kind: MENTION_KIND.TOOL, provider, ...account, tool: tool.name };
@@ -312,46 +474,132 @@ function skillRows(skills: readonly SkillOption[]): MentionRow[] {
   }));
 }
 
-/** The rows matching the query, best first, as many as a group lists; every row in order for no query. */
-function best(rows: readonly MentionRow[], query: string): readonly MentionRow[] {
-  if (query.trim() === "") return rows.slice(0, PER_GROUP);
+/** The rows matching the query, best first, as many as `most`; the first rows in order for no query. */
+function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
+  if (query.trim() === "") return rows.slice(0, most);
   return rows
     .map((row) => ({ row, score: defaultFilter(row.terms, query) }))
     .filter((each) => each.score >= LEAST_SCORE)
     .sort((first, second) => second.score - first.score)
-    .slice(0, PER_GROUP)
+    .slice(0, most)
     .map((each) => each.row);
 }
 
-/** Every row of each kind but the repository's paths, which are offered only once a word is typed. */
+/**
+ * The repository's paths a list narrowed to them offers: for no words, the
+ * folder walked into, then what it holds, its folders first, or what the
+ * repository's root holds where none was; else the best of every path
+ * under the folder by the words.
+ */
+function fileRows(
+  paths: readonly RepositoryPath[],
+  folder: string | undefined,
+  term: string,
+): readonly MentionRow[] {
+  const under =
+    folder === undefined ? paths : paths.filter((entry) => entry.path.startsWith(`${folder}/`));
+  if (term.trim() !== "") return best(under.map(pathRow), term, PER_KIND);
+  // Note that a folder's own entries are said without the folder, which the crumb already names.
+  const entries = under
+    .filter((entry) => (fileFolder(entry.path) ?? "") === (folder ?? ""))
+    .sort((first, second) => Number(second.folder) - Number(first.folder))
+    .map((entry) => ({ ...pathRow(entry), detail: undefined }));
+  const itself = folder === undefined ? [] : [pathRow({ path: folder, folder: true })];
+  return [...itself, ...entries].slice(0, PER_KIND);
+}
+
+/** Every row of each kind but the repository's paths, found by the list's words. */
 interface KindRows {
   readonly plan: readonly MentionRow[];
   readonly pages: readonly MentionRow[];
   readonly agents: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
+  /** The connected servers' rows, or the one server's the list is narrowed to. */
   readonly servers: readonly MentionRow[];
 }
 
-/** The groups the list offers for the word: every kind's first few but the files for no query, else each kind's best, files and folders first. */
-function groupsFor(
-  query: string,
+/** Up to fifty of one kind's rows, found by the words; a folder's where one was walked into. */
+function narrowedRows(
+  kind: MentionKind,
+  folder: string | undefined,
+  term: string,
   paths: readonly RepositoryPath[] | undefined,
   rows: KindRows,
+): readonly MentionRow[] {
+  switch (kind.narrow.from) {
+    case MENTION_FROM.FILES:
+      return paths === undefined ? [] : fileRows(paths, folder, term);
+    case MENTION_FROM.PLAN:
+      return best(rows.plan, term, PER_KIND);
+    case MENTION_FROM.PAGES:
+      return best(rows.pages, term, PER_KIND);
+    case MENTION_FROM.AGENTS:
+      return best(rows.agents, term, PER_KIND);
+    case MENTION_FROM.SKILLS:
+      return best(rows.skills, term, PER_KIND);
+    case MENTION_FROM.SERVER:
+      return best(rows.servers, term, PER_KIND);
+  }
+}
+
+/** A kind's row under "Mention from", which opens its narrowed list. */
+function kindRow(kind: MentionKind): MentionRow {
+  return { from: kind, name: kind.name, detail: kind.detail, terms: kind.name };
+}
+
+/**
+ * The groups the list offers for the word. Every kind at once: their first
+ * few but the files, and a row for each kind, for no words; else each kind's
+ * best, files and folders first. One kind: up to fifty of its rows, a
+ * folder's where one was walked into.
+ */
+function groupsFor(
+  scope: Scope,
+  paths: readonly RepositoryPath[] | undefined,
+  rows: KindRows,
+  kinds: readonly MentionKind[],
 ): readonly MentionGroup[] {
-  const files = query.trim() === "" || paths === undefined ? [] : best(paths.map(pathRow), query);
+  const { kind, term } = scope;
+  if (kind !== undefined) {
+    const folder = scope.walked.at(-1)?.path;
+    const narrowed = narrowedRows(kind, folder, term, paths, rows);
+    return narrowed.length === 0 ? [] : [{ label: folder ?? kind.name, rows: narrowed }];
+  }
+  const bare = term.trim() === "";
+  const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
   return [
     { label: MENTION_GROUP.FILES, rows: files },
-    { label: MENTION_GROUP.PLAN, rows: best(rows.plan, query) },
-    { label: MENTION_GROUP.PAGES, rows: best(rows.pages, query) },
-    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, query) },
-    { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, query) },
-    { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, query) },
+    { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
+    { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
+    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
+    { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
+    { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, term, PER_GROUP) },
+    { label: MENTION_GROUP.FROM, rows: bare ? kinds.map(kindRow) : [] },
   ].filter((group) => group.rows.length > 0);
+}
+
+/** A kind's glyph, as its rows wear theirs. */
+function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
+  switch (kind.narrow.from) {
+    case MENTION_FROM.FILES:
+      return <FolderIcon aria-hidden="true" />;
+    case MENTION_FROM.PLAN:
+      return <DocumentIcon />;
+    case MENTION_FROM.PAGES:
+      return <AppWindowIcon aria-hidden="true" />;
+    case MENTION_FROM.AGENTS:
+      return <AgentMark provider={undefined} />;
+    case MENTION_FROM.SKILLS:
+      return <BookOpenIcon aria-hidden="true" />;
+    case MENTION_FROM.SERVER:
+      return <ProviderMark provider={kind.narrow.provider} />;
+  }
 }
 
 /** A row's glyph, as its chip wears it. */
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
+  if ("from" in row) return <KindGlyph kind={row.from} />;
   const { mention } = row;
   switch (mention.kind) {
     case MENTION_KIND.FILE:
@@ -382,18 +630,54 @@ function optionId(listId: string, index: number): string {
   return `${listId}-${index}`;
 }
 
-/** The list itself: each group's heading and rows, the highlighted one washed, and the keys at its foot. */
+/** What a narrowed list stands under: its kind, the folder walked into, and the way back, where a key made it. */
+interface Crumb {
+  readonly kind: MentionKind;
+  readonly folder: string | undefined;
+  readonly back: (() => void) | undefined;
+}
+
+/** A narrowed list's crumb: back, the kind's glyph or a folder's, and the kind's name or the folder's path, as an MCP server's page stands under its own. */
+function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
+  const { kind, folder, back } = crumb;
+  return (
+    <div className="agent-servers-page-head mention-menu-crumb">
+      {back === undefined ? null : (
+        <button
+          type="button"
+          tabIndex={-1}
+          className="icon-button agent-servers-back"
+          aria-label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={back}
+        >
+          <ArrowLeftIcon />
+        </button>
+      )}
+      <span className="menu-item-glyph">
+        {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
+      </span>
+      <span className="agent-servers-page-title">{folder ?? kind.name}</span>
+    </div>
+  );
+}
+
+/** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
   id,
+  crumb,
   groups,
   at,
+  keys,
   place,
   onHover,
   onChoose,
 }: {
   id: string;
+  crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
+  keys: readonly string[];
   place: MenuPlace;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
@@ -401,6 +685,7 @@ function MentionMenu({
   let index = -1;
   return (
     <div className="menu-surface searchable-menu mention-menu" style={place}>
+      {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       {/* Note that a press on a row keeps the caret in the editor, where the keys are read. */}
       <div
         id={id}
@@ -412,15 +697,22 @@ function MentionMenu({
         {groups.map((group) => (
           // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
           <div key={group.label} role="group" aria-label={group.label}>
-            <div className="menu-heading" aria-hidden="true">
-              {group.label}
-            </div>
+            {/* A narrowed list's one group is named by its crumb. */}
+            {crumb === undefined ? (
+              <div className="menu-heading" aria-hidden="true">
+                {group.label}
+              </div>
+            ) : null}
             {group.rows.map((row) => {
               index += 1;
               const mine = index;
               return (
                 <button
-                  key={"skill" in row ? row.skill : JSON.stringify(row.mention)}
+                  key={
+                    "skill" in row
+                      ? row.skill
+                      : JSON.stringify("from" in row ? row.from.narrow : row.mention)
+                  }
                   id={optionId(id, mine)}
                   type="button"
                   role="option"
@@ -437,6 +729,11 @@ function MentionMenu({
                   {row.detail === undefined ? null : (
                     <span className="menu-item-hint mention-row-detail">{row.detail}</span>
                   )}
+                  {"from" in row ? (
+                    <span className="menu-item-end">
+                      <ChevronRightIcon />
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -445,7 +742,7 @@ function MentionMenu({
         {groups.length === 0 ? <p className="plan-compose-menu-note">{NO_MATCH}</p> : null}
       </div>
       <div className="plan-compose-menu-foot mention-menu-foot" aria-hidden="true">
-        {MENU_KEYS.map((key) => (
+        {keys.map((key) => (
           <span key={key}>{key}</span>
         ))}
       </div>
@@ -529,6 +826,80 @@ function treeKey(
 }
 
 /**
+ * The kinds the place offers, in the list's order: its repository's files
+ * and folders where it names one, the plan and its pages where a plan
+ * stands, the workspace's agents where it reads them, the repository's
+ * skills where the words go to an agent, and each connected server, the
+ * first of each provider narrowed to by the provider's own word.
+ */
+function kindsOf(
+  source: MentionSource,
+  self: string | undefined,
+  skills: MentionSkills | undefined,
+  servers: readonly NamedServer[],
+): readonly MentionKind[] {
+  const { planId, repository } = source;
+  const pages = planId === NO_PLAN ? 0 : (source.pages ?? NO_PAGES).length;
+  const agents =
+    source.readAgents !== undefined ||
+    (planId !== NO_PLAN && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
+  const known = skills?.known ?? [];
+  const own: MentionKind[] = [
+    ...(repository === null || treeKey(planId, source.workspaceId, repository) === undefined
+      ? []
+      : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
+    ...(planId === NO_PLAN
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PLAN,
+            name: MENTION_GROUP.PLAN,
+            detail: counted(planSections(source.text()).length, "section", "sections"),
+          },
+        ]),
+    ...(pages === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PAGES,
+            name: MENTION_GROUP.PAGES,
+            detail: counted(pages, "page", "pages"),
+          },
+        ]),
+    ...(agents
+      ? [
+          {
+            from: MENTION_FROM.AGENTS,
+            name: MENTION_GROUP.AGENTS,
+            detail: source.workspace || undefined,
+          },
+        ]
+      : []),
+    ...(known.length === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.SKILLS,
+            name: MENTION_GROUP.SKILLS,
+            detail: counted(known.length, "skill", "skills"),
+          },
+        ]),
+  ].map(({ from, name, detail }) => ({ narrow: { from }, name, detail, keyword: from }));
+  const named = new Set<IntegrationProvider>();
+  const connected = servers.map(({ provider, connection, name }): MentionKind => {
+    const first = !named.has(provider);
+    named.add(provider);
+    return {
+      narrow: { from: MENTION_FROM.SERVER, connection, provider },
+      name,
+      detail: SERVER_DETAIL,
+      keyword: first ? provider : undefined,
+    };
+  });
+  return [...own, ...connected];
+}
+
+/**
  * The `@` list for an editor on a plan's page: its rows read from the
  * plan's words as they stand and the repository's paths, placed by the word
  * in `room`, and a pick handed to `onChoose` as the mention's node; a list
@@ -560,6 +931,7 @@ export function useMentionPicker({
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  const [narrowing, setNarrowing] = useState<Held | undefined>(undefined);
   const [paths, setPaths] = useState<{
     planId: string;
     workspaceId: string | undefined;
@@ -574,8 +946,11 @@ export function useMentionPicker({
   const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
   // A word closed with Escape stays closed only while the caret is in it.
   const inWord = trigger !== undefined;
+  // So does a narrowing a key made.
   useEffect(() => {
-    if (!inWord) setClosedAt(undefined);
+    if (inWord) return;
+    setClosedAt(undefined);
+    setNarrowing(undefined);
   }, [inWord]);
 
   // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
@@ -617,12 +992,17 @@ export function useMentionPicker({
     if (askedAt !== undefined) askSkills?.();
   }, [askedAt, askSkills]);
 
+  // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
+  const kinds = open ? kindsOf(source, self, skills, servers) : [];
+  const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
+  const term = scope?.term ?? "";
+
   // The workspace's newest agents are read as each `@` word opens the list, and once a word is
   // typed the service finds those it names, archived ones among them, however many the workspace
   // holds; each read is kept while its word stands, and the last one shown until the next lands.
   const readAgents = source?.readAgents;
   const wordAt = open ? trigger.start : undefined;
-  const words = open && trigger.query.trim() !== "" ? trigger.query.trim() : undefined;
+  const words = open && term.trim() !== "" ? term.trim() : undefined;
   const [workspaceAgents, setWorkspaceAgents] = useState<{
     readonly reader: MentionAgentsReader;
     readonly wordAt: number;
@@ -649,21 +1029,36 @@ export function useMentionPicker({
   const tools = useIntegrationTools(
     (open ? servers : NO_SERVERS).map((server) => server.connection),
   );
-  const groups = open
-    ? groupsFor(trigger.query, read, {
-        plan: planRows(planId, source.planName, source.text()),
-        pages: pageRows(planId, source.pages ?? NO_PAGES),
-        agents: agentRows(
-          planId,
-          source.agents ?? NO_AGENTS,
-          agentsRead?.agents ?? NO_AGENTS,
-          self,
-          trigger.query,
-        ),
-        skills: skillRows(skills?.known ?? []),
-        servers: serverRows(servers, tools, trigger.query),
-      })
-    : [];
+  const narrow = scope?.kind?.narrow;
+  const groups =
+    scope === undefined || source === undefined
+      ? []
+      : groupsFor(
+          scope,
+          read,
+          {
+            plan: planRows(planId, source.planName, source.text()),
+            pages: pageRows(planId, source.pages ?? NO_PAGES),
+            agents: agentRows(
+              planId,
+              source.agents ?? NO_AGENTS,
+              agentsRead?.agents ?? NO_AGENTS,
+              self,
+              term,
+            ),
+            skills: skillRows(skills?.known ?? []),
+            // A list narrowed to one server offers its tools before a word is typed.
+            servers:
+              narrow?.from === MENTION_FROM.SERVER
+                ? serverRows(
+                    servers.filter((server) => server.connection === narrow.connection),
+                    tools,
+                    true,
+                  )
+                : serverRows(servers, tools, term.trim() !== ""),
+          },
+          kinds,
+        );
   const rows = groups.flatMap((group) => group.rows);
   const held =
     highlight !== undefined &&
@@ -673,17 +1068,50 @@ export function useMentionPicker({
       ? highlight.at
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
-  // A skill is written as the `/name` chip its own list writes; anything else as its mention.
-  const choose = (row: MentionRow) =>
-    "skill" in row
-      ? skills?.onChoose(row.skill)
-      : onChoose({ name: row.name, target: encodeMention(row.mention, place) });
+  // The list narrowed or widened by a key starts again at its first row.
+  const narrowTo = (next: Held | undefined) => {
+    if (trigger === undefined) return;
+    setNarrowing(next);
+    setHighlight({ start: trigger.start, query: trigger.query, at: 0 });
+  };
+  // A kind's row narrows the list to it; a folder's walks into it, narrowing a wide list to files and folders.
+  const openRow = (row: MentionRow) => {
+    if (trigger === undefined || scope === undefined) return;
+    const { start, query } = trigger;
+    if ("from" in row) {
+      narrowTo({ start, narrow: row.from.narrow, entry: query, typed: false, walked: [] });
+      return;
+    }
+    if (!("mention" in row) || row.mention.kind !== MENTION_KIND.FOLDER) return;
+    const within = scope.kind?.narrow.from === MENTION_FROM.FILES;
+    const walked = { path: row.mention.path, entry: query };
+    narrowTo({
+      start,
+      narrow: { from: MENTION_FROM.FILES },
+      entry: within ? scope.entry : query,
+      typed: within && scope.typed,
+      walked: within ? [...scope.walked, walked] : [walked],
+    });
+  };
+  const backTo = trigger === undefined ? undefined : backFrom(scope, trigger.start);
+  const back = backTo === undefined ? undefined : () => narrowTo(backTo.to);
+  // A skill is written as the `/name` chip its own list writes; a kind's row opens; anything else is written as its mention.
+  const choose = (row: MentionRow) => {
+    if ("from" in row) openRow(row);
+    else if ("skill" in row) skills?.onChoose(row.skill);
+    else onChoose({ name: row.name, target: encodeMention(row.mention, place) });
+  };
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!open) return false;
     if (event.key === "Escape") {
       event.stopPropagation();
       setClosedAt(trigger.start);
+      return true;
+    }
+    const bare = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
+    if (event.key === "Backspace" && bare && term === "" && back !== undefined) {
+      back();
       return true;
     }
     const row = rows[at];
@@ -693,12 +1121,25 @@ export function useMentionPicker({
       setHighlight({ start: trigger.start, query: trigger.query, at: (at + step) % rows.length });
       return true;
     }
+    if (event.key === "ArrowRight" && bare && opens(row)) {
+      openRow(row);
+      return true;
+    }
     if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
       choose(row);
       return true;
     }
     return false;
   };
+
+  // The foot names the keys the list hears now: → where a row opens, ⌫ where the list is narrowed.
+  const keys = [
+    MENU_KEY.MOVE,
+    MENU_KEY.MENTION,
+    ...(rows.some(opens) ? [MENU_KEY.OPEN] : []),
+    ...(scope?.kind === undefined ? [] : [scope.walked.length > 0 ? MENU_KEY.UP : MENU_KEY.WIDEN]),
+    MENU_KEY.CLOSE,
+  ];
 
   // The list stands by the word's line, on the side asked, inside the room's width.
   const box = room.current;
@@ -713,8 +1154,14 @@ export function useMentionPicker({
     !open || box === null || placed === undefined ? null : (
       <MentionMenu
         id={listId}
+        crumb={
+          scope?.kind === undefined
+            ? undefined
+            : { kind: scope.kind, folder: scope.walked.at(-1)?.path, back }
+        }
         groups={groups}
         at={at}
+        keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}

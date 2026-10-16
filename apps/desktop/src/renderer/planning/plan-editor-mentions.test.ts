@@ -26,6 +26,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 
 const PLAN: Task = {
   ...DOCUMENT_PLAN,
+  repository: "acme/relay",
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
 };
 
@@ -50,6 +51,7 @@ beforeEach(() => {
                     entries: [
                       { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
                       { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+                      { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
                     ],
                     truncated: false,
                   },
@@ -68,13 +70,13 @@ afterEach(() => {
 });
 
 /** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: PlanMentionsValue) {
+async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const body = createElement(PlanBody, {
-    plan: PLAN,
+    plan,
     live: false,
     onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
     sectionLinks: {
@@ -164,7 +166,10 @@ test("an @ typed in the plan offers the plan's sections and, as the word is type
   const empty = listed(plan.container);
   await plan.typeAtEnd("roll");
 
-  assert.deepEqual(empty, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
+  assert.deepEqual(empty, [
+    ["Plan", ["Goal", "Rollout", "Teammate invitations"]],
+    ["Mention from", ["Files and folders", "Plan"]],
+  ]);
   assert.deepEqual(listed(plan.container), [
     ["Files and folders", ["rollout-store.ts"]],
     ["Plan", ["Rollout"]],
@@ -243,7 +248,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
 
   assert.deepEqual(
     listed(plan.container).map(([group]) => group),
-    ["Plan", "Pages", "Agents"],
+    ["Plan", "Pages", "Agents", "Mention from"],
   );
 });
 
@@ -298,4 +303,66 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
     chips.map((chip) => chip.textContent),
     ["Goal"],
   );
+});
+
+/** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
+function crumb(container: HTMLElement): string | undefined {
+  return (
+    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
+    undefined
+  );
+}
+
+test("a plan with no repository offers no files and folders to narrow to", async () => {
+  const plan = await opened(undefined, { ...PLAN, repository: null });
+
+  await plan.typeAtEnd(" See @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Mention from"),
+    ["Mention from", ["Plan"]],
+  );
+});
+
+test("a bare @ in the plan narrows by its kind's row to the repository's paths, where → walks into a folder, ⌫ climbs out, and Enter writes the folder", async () => {
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See @");
+  plan.press("ArrowDown");
+  plan.press("ArrowDown");
+  plan.press("ArrowDown");
+  plan.press("ArrowRight");
+  await act(async () => undefined);
+  const narrowed = [crumb(plan.container), listed(plan.container)];
+  plan.press("ArrowRight");
+  plan.press("ArrowDown");
+  plan.press("ArrowRight");
+  const inWeb = [crumb(plan.container), listed(plan.container)];
+  plan.press("Backspace");
+  const climbed = [crumb(plan.container), listed(plan.container)];
+  plan.press("ArrowDown");
+  plan.press("Enter");
+  await act(async () => undefined);
+
+  assert.deepEqual(narrowed, ["Files and folders", [["Files and folders", ["apps/"]]]]);
+  assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
+  assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
+  assert.deepEqual(
+    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+      (chip) => chip.textContent,
+    ),
+    ["web/"],
+  );
+});
+
+test("@plan: typed in the plan narrows the list to the plan, searched by the words after the colon", async () => {
+  const plan = await opened();
+
+  await plan.typeAtEnd(" See @plan:");
+  const all = listed(plan.container);
+  await plan.typeAtEnd("roll");
+
+  assert.equal(crumb(plan.container), "Plan");
+  assert.deepEqual(all, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
+  assert.deepEqual(listed(plan.container), [["Plan", ["Rollout"]]]);
 });

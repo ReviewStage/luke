@@ -529,6 +529,13 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   text-overflow: ellipsis;
 }
 
+/* A narrowed list stands under its kind's crumb, as an MCP server's page
+   stands under its own; a kind typed with its colon has no back arrow, so
+   its glyph keeps the rows' inset. */
+.mention-menu-crumb:not(:has(.agent-servers-back)) {
+  padding-left: calc(var(--row-inset) + var(--menu-inset));
+}
+
 .mention-menu .mention-menu-foot {
   display: flex;
   gap: var(--space-12);
