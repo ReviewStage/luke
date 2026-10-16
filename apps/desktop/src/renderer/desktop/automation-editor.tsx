@@ -96,6 +96,7 @@ import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
+import { PaneGlide } from "./pane-motion";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
@@ -1532,6 +1533,8 @@ export function AutomationEditor({
   // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
+  // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
+  const editorLayout = useRef<HTMLDivElement>(null);
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
@@ -1635,7 +1638,7 @@ export function AutomationEditor({
         onRunNow={runNow}
         runsPanel={runsPanel}
       />
-      <div className="automation-editor-layout">
+      <div ref={editorLayout} className="automation-editor-layout">
         <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
             <input
@@ -1682,6 +1685,7 @@ export function AutomationEditor({
           onRetry={runs.reload}
           onOpenAgent={onOpenAgent}
         />
+        <PaneGlide root={editorLayout} layout={{ runsOpen: runsPanel.open }} />
       </div>
       <ConfirmDialog
         confirm={leaving}
