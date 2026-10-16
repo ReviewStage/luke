@@ -1,0 +1,92 @@
+/* layout.css -- Stack and Inline: a flex box whose gap is a role and whose
+   alignment is a word. A list keeps none of the user agent's markers or
+   indent, since an arrangement that is a list says so to a reader by its
+   element, not by its bullets. */
+
+@layer components {
+  :is(.luke-stack, .luke-inline) {
+    display: flex;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .luke-stack {
+    flex-direction: column;
+  }
+
+  .luke-inline[data-wrap="true"] {
+    flex-wrap: wrap;
+  }
+
+  /* An item may give way below its content's width, so a long label
+     shrinks or wraps before the row overflows. */
+  :is(.luke-stack, .luke-inline) > * {
+    min-width: 0;
+  }
+
+  [data-gap="none"]:is(.luke-stack, .luke-inline) {
+    gap: 0;
+  }
+
+  [data-gap="tight"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-4);
+  }
+
+  [data-gap="icon"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-icon-gap);
+  }
+
+  [data-gap="control"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-control-gap);
+  }
+
+  [data-gap="field"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-field-gap);
+  }
+
+  [data-gap="section"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-section-gap);
+  }
+
+  [data-gap="loose"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-24);
+  }
+
+  [data-align="start"]:is(.luke-stack, .luke-inline) {
+    align-items: flex-start;
+  }
+
+  [data-align="center"]:is(.luke-stack, .luke-inline) {
+    align-items: center;
+  }
+
+  [data-align="end"]:is(.luke-stack, .luke-inline) {
+    align-items: flex-end;
+  }
+
+  [data-align="baseline"]:is(.luke-stack, .luke-inline) {
+    align-items: baseline;
+  }
+
+  [data-align="stretch"]:is(.luke-stack, .luke-inline) {
+    align-items: stretch;
+  }
+
+  [data-justify="start"]:is(.luke-stack, .luke-inline) {
+    justify-content: flex-start;
+  }
+
+  [data-justify="center"]:is(.luke-stack, .luke-inline) {
+    justify-content: center;
+  }
+
+  [data-justify="end"]:is(.luke-stack, .luke-inline) {
+    justify-content: flex-end;
+  }
+
+  [data-justify="between"]:is(.luke-stack, .luke-inline) {
+    justify-content: space-between;
+  }
+}
