@@ -1,5 +1,10 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
-/* Motion tokens first, so base.css can spend them without restating the springs
+/* The shared tokens first, `@luke/ui`'s scale, the desktop profile's roles,
+   its palette, and the window's old names for them, keyed on the root's
+   `data-luke-profile` and `data-luke-theme` (index.html, call.html), so every
+   sheet below reads them. */
+@import "@luke/ui/tokens.css";
+/* Motion tokens next, so base.css can spend them without restating the springs
    or the duration set. */
 @import "@luke/brand/motion-tokens.css";
 /* Before base.css: `.settings-input` is equal specificity to the tweaks
