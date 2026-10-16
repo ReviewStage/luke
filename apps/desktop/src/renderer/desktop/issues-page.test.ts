@@ -13,7 +13,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
 import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
@@ -69,6 +69,8 @@ let reads: string[] = [];
 let changes: unknown[] = [];
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
+/** The filings held unanswered, each answered by its resolver, where filings are held at all. */
+let heldCreates: (() => void)[] | undefined;
 /** Whether a change is refused. */
 let changeRefused = false;
 
@@ -84,6 +86,7 @@ beforeEach(() => {
   reads = [];
   changes = [];
   heldChanges = undefined;
+  heldCreates = undefined;
   changeRefused = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -104,12 +107,18 @@ beforeEach(() => {
             const value = { failure: ISSUE_CALL_FAILURE.INVALID };
             return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
           }
+          const { title, status, priority } = request.payload;
           const made = issue(standing.length + 1, {
-            title: request.payload.title,
+            title,
             updatedAt: 1_000,
+            ...(status === undefined ? undefined : { status }),
+            ...(priority === undefined ? undefined : { priority }),
           });
           standing = [made, ...standing];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } });
+          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+          const held = heldCreates;
+          if (held === undefined) return Promise.resolve(done);
+          return new Promise((resolve) => held.push(() => resolve(done)));
         }
         if (request.kind === ACT_KIND.ISSUES_READ) {
           reads.push(request.payload.issueId);
@@ -164,6 +173,12 @@ afterEach(() => {
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
+/** The window's keymap, which hears a key as the window does. */
+function Keymap(): null {
+  useAppKeymap(true);
+  return null;
+}
+
 /** The Issues pages over the workspace given, standing on the page each press opens. */
 function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const [place, setPlace] = useState<IssuesPlace>({ kind: ISSUES_PAGE.LIST });
@@ -186,6 +201,7 @@ function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
     null,
     createElement(IssuesPage, { tasks: plans }),
     createElement(ToastHost),
+    createElement(Keymap),
   );
 }
 
@@ -312,17 +328,39 @@ function type(field: HTMLTextAreaElement, words: string): void {
   });
 }
 
-/** Types into the new issue's field and presses Return. */
-function file(page: HTMLElement, title: string): void {
-  const field = page.querySelector<HTMLInputElement>("input[aria-label='New issue title']");
-  assert.ok(field, "the field stands");
+/** The new issue's title field, on the card standing over the window. */
+function composerField(): HTMLInputElement | null {
+  return document.querySelector<HTMLInputElement>(
+    "[role=dialog] input[aria-label='New issue title']",
+  );
+}
+
+/** Types into a field as the developer would. */
+function typeInto(field: HTMLInputElement, words: string): void {
   act(() => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    set?.call(field, title);
+    set?.call(field, words);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+/** Opens the new issue's card from its button, types the title, and presses Return. */
+function file(title: string): void {
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  typeInto(field, title);
   act(() => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+}
+
+/** A key pressed where the keyboard is, as the window's keymap hears it. */
+function press(key: string, target: EventTarget = document.activeElement ?? document.body): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key, code: `Key${key.toUpperCase()}`, bubbles: true }),
+    );
   });
 }
 
@@ -344,38 +382,89 @@ test("the listed workspace's issues stand under a heading for each status, the w
   ]);
 });
 
-test("a title typed and Return files the issue in the listed workspace, which lands under Backlog and empties the field", async () => {
+test("New issue opens a card like New task's, whose title, status, and priority Return files in the listed workspace, landing in its group as the card closes", async () => {
   standing = [issue(1, { status: ISSUE_STATUS.TODO })];
   const page = mount();
   await settle();
 
-  file(page, "  Flaky checkout test ");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  assert.equal(document.activeElement, field);
+  typeInto(field, "  Flaky checkout test ");
+  pick(document.body, "Status", "Todo");
+  pick(document.body, "Priority", "High");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
   await settle();
 
-  assert.deepEqual(creates, [{ workspaceId: WORKSPACE.id, title: "Flaky checkout test" }]);
-  assert.deepEqual(groups(page), [
-    ["Todo1", ["ACME-1 Issue 1"]],
-    ["Backlog1", ["ACME-2 Flaky checkout test"]],
+  assert.deepEqual(creates, [
+    {
+      workspaceId: WORKSPACE.id,
+      title: "Flaky checkout test",
+      status: ISSUE_STATUS.TODO,
+      priority: ISSUE_PRIORITY.HIGH,
+    },
   ]);
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='New issue title']")?.value,
-    "",
-  );
+  assert.equal(composerField(), null, "the card closes once the issue is kept");
+  assert.deepEqual(groups(page), [["Todo2", ["ACME-2 Flaky checkout test", "ACME-1 Issue 1"]]]);
 });
 
-test("a filing the service refused keeps the title typed and says so", async () => {
-  createRefused = true;
+test("Escape puts the card away unfiled, and the Issues page stands", async () => {
   const page = mount();
   await settle();
 
-  file(page, "Flaky checkout test");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  typeInto(field, "Never mind");
+  press("Escape", field);
   await settle();
 
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='New issue title']")?.value,
-    "Flaky checkout test",
-  );
+  assert.equal(composerField(), null);
+  assert.deepEqual(creates, []);
+  assert.equal(closed, 0);
+  assert.ok(page.querySelector("[aria-label='Issues']"));
+});
+
+test("a filing the service refused keeps the card and its title and says so", async () => {
+  createRefused = true;
+  mount();
+  await settle();
+
+  file("Flaky checkout test");
+  await settle();
+
+  assert.equal(composerField()?.value, "Flaky checkout test");
   assert.match(document.body.textContent ?? "", /Couldn't create the issue/u);
+});
+
+test("C pressed on the page opens the card, and a c typed into the card's title, an issue's title, or its description is only a letter", async () => {
+  standing = [issue(1)];
+  const page = mount();
+  await settle();
+
+  press("c", document.body);
+  const field = composerField();
+  assert.ok(field, "C opens the card");
+  press("c", field);
+  assert.equal(document.querySelectorAll("[role=dialog]").length, 1, "no second card");
+  press("Escape", field);
+  await settle();
+
+  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
+  assert.ok(row);
+  act(() => row.click());
+  await settle();
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
+  press("c", title);
+  const description = openDescription(page);
+  press("c", description);
+
+  assert.equal(document.querySelectorAll("[role=dialog]").length, 0, "no card opened while typing");
 });
 
 test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
@@ -523,45 +612,17 @@ test("a read that did not land is said with a retry, which asks again and draws 
 });
 
 test("a title typed and not yet filed is dropped once another workspace is listed, so it is never filed there", async () => {
-  const page = mount();
+  mount();
   await settle();
-  const field = page.querySelector<HTMLInputElement>("input[aria-label='New issue title']");
-  assert.ok(field, "the field stands");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    set?.call(field, "Meant for Acme");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  typeInto(field, "Meant for Acme");
 
   list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
   await settle();
 
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='New issue title']")?.value,
-    "",
-  );
-});
-
-test("while a filing is out the title's field takes no typing, so the title it empties is the one it sent", async () => {
-  mount();
-  await settle();
-
-  const field = document.querySelector<HTMLInputElement>("input[aria-label='New issue title']");
-  assert.ok(field, "the field stands");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    set?.call(field, "Flaky checkout test");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-  const lockedWhileOut = field.readOnly;
-  await settle();
-
-  assert.ok(lockedWhileOut, "the field takes no typing while the filing is out");
-  assert.equal(field.readOnly, false);
-  assert.equal(field.value, "");
+  assert.equal(composerField()?.value ?? "", "");
 });
 
 test("an issue's page whose workspace is no longer the one listed says the issue is not in this workspace", async () => {
@@ -720,4 +781,42 @@ test("a refused rename answered while the title is written again puts nothing ba
   await settle();
 
   assert.equal(titleOf(page), "Second try, still typing");
+});
+
+test("while a new issue is being filed its card's chips take no pick", async () => {
+  mount();
+  await settle();
+  heldCreates = [];
+  const held = heldCreates;
+
+  file("Flaky checkout test");
+  await settle();
+  const chips = [
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+  ];
+  const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
+  act(() => held[0]?.());
+  await settle();
+
+  assert.ok(lockedWhileOut, "both chips are disabled while the filing is out");
+  assert.equal(composerField(), null);
+});
+
+test("a filing answered once another workspace is listed puts away no card of the workspace listed now", async () => {
+  mount();
+  await settle();
+  heldCreates = [];
+  const held = heldCreates;
+
+  file("Meant for Acme");
+  await settle();
+  list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+  await settle();
+  const field = composerField();
+  assert.ok(field, "the card stands, fresh, for the workspace listed now");
+  typeInto(field, "Meant for Initech");
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(composerField()?.value, "Meant for Initech");
 });
