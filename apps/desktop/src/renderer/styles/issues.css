@@ -174,3 +174,37 @@
   color: var(--text-tertiary);
   font-size: 13px;
 }
+
+/* The description at rest is a press away from its field: the Markdown it
+   is, washed on hover so the press is found. */
+.issue-description {
+  margin: 0 calc(var(--space-8) * -1);
+  padding: var(--space-4) var(--space-8);
+  border-radius: 8px;
+  cursor: text;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.issue-description:hover {
+  background: var(--input-fill);
+}
+
+.issue-description-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* The field stands at least a few lines tall and grows by the developer's hand. */
+.issue-description-field {
+  min-height: 160px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.issue-description-refused {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12px;
+}

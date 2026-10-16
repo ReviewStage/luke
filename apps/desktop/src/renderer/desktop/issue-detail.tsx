@@ -4,16 +4,16 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { MarkdownMessage } from "../markdown-message";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import { TaskNameField, useTaskRename } from "./task-name-field";
 import type { IssueChange } from "./use-issues";
 
 /**
- * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, its status and priority changed from their chips, its description, and its archive.
+ * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, its status and priority changed from their chips, its description written in place, and its archive.
  *
  * Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
@@ -24,9 +24,6 @@ import type { IssueChange } from "./use-issues";
 
 /** What the ⋯ menu is called. */
 const ACTIONS_LABEL = "Issue actions";
-
-/** What the description says where there is none. */
-const NO_DESCRIPTION = "No description";
 
 /** The toolbar: the way back to the list, the issue's identifier, and its ⋯ menu. */
 function DetailToolbar({
@@ -141,11 +138,10 @@ export function IssueDetail({
               onPick={(priority) => void onChange({ priority })}
             />
           </div>
-          {issue.description === "" ? (
-            <p className="issue-description-empty">{NO_DESCRIPTION}</p>
-          ) : (
-            <MarkdownMessage words={issue.description} className="issue-description" />
-          )}
+          <IssueDescription
+            description={issue.description}
+            onSave={(description) => onChange({ description })}
+          />
         </article>
       </div>
       <ConfirmDialog
