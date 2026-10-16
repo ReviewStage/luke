@@ -34,6 +34,7 @@ import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { CHIP_LOOK, Chip } from "../chip";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
@@ -695,10 +696,17 @@ function ServersPopover({
 export function AgentServersButton({
   servers,
   statuses,
+  face,
 }: {
   servers: AgentServersControl;
   /** Where every connection stands, as the composer around the button reads it. */
   statuses: IntegrationStatuses;
+  /**
+   * What a form row's button shows in place of the MCP mark, which draws it
+   * as a Settings picker's field chip, chevron and all; the composer's
+   * button leaves it out.
+   */
+  face?: React.ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
@@ -711,23 +719,28 @@ export function AgentServersButton({
     setOpen(false);
     trigger.current?.focus();
   };
+  const press = {
+    ref: trigger,
+    "aria-label": SERVERS_LABEL,
+    "aria-haspopup": "dialog",
+    "aria-expanded": open,
+    "aria-controls": open ? popoverId : undefined,
+    onClick: () => setOpen(!open),
+  } as const;
 
   return (
     <div className="agent-servers" ref={root}>
-      <Tooltip label={SERVERS_LABEL}>
-        <button
-          ref={trigger}
-          type="button"
-          className="icon-button agent-servers-button"
-          aria-label={SERVERS_LABEL}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? popoverId : undefined}
-          onClick={() => setOpen(!open)}
-        >
-          <McpIcon />
-        </button>
-      </Tooltip>
+      {face === undefined ? (
+        <Tooltip label={SERVERS_LABEL}>
+          <button type="button" className="icon-button agent-servers-button" {...press}>
+            <McpIcon />
+          </button>
+        </Tooltip>
+      ) : (
+        <Chip look={CHIP_LOOK.FIELD} chevron className="settings-picker-chip" {...press}>
+          {face}
+        </Chip>
+      )}
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ServersPopover

@@ -4652,10 +4652,11 @@ body:has(.app-stage[data-capture="true"])
   border-radius: var(--control-radius);
 }
 
-/* The servers left on, by their marks, beside the servers button. */
+/* The servers left on, by their marks, inside the servers row's field chip. */
 .automation-servers {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .automation-servers > .provider-mark {

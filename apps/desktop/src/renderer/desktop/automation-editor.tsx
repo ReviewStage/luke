@@ -298,11 +298,13 @@ function OwnerRow({
 
 /**
  * Which of the owner's connected MCP servers a run's new agent is handed:
- * the marks of those left on, beside the agent box's own servers button,
- * whose switches, search, and way to Settings › Integrations are the ones a
- * task's Start offers. Every server is on until switched off. Note that a
- * run starts on its creator's connections, so only its creator is shown
- * them to switch; anyone else reads which the creator switched off.
+ * a field chip like its neighbours', holding the marks of those left on and
+ * opening the agent box's own servers popover, whose switches, search, and
+ * way to Settings › Integrations are the ones a task's Start offers, with the
+ * row's words naming those switched off. Every server is on until switched
+ * off. Note that a run starts on its creator's connections, so only its
+ * creator is shown them to switch; anyone else reads which the creator
+ * switched off.
  */
 function ServersRow({
   mine,
@@ -331,7 +333,17 @@ function ServersRow({
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
 }
 
-/** The servers row as the automation's creator sees it: their connections, switched by the agent box's own button. */
+/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion and Sentry". */
+function namesSaid(providers: readonly IntegrationProvider[]): string {
+  const names = providers.map((provider) => INTEGRATION_NAME[provider]);
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
+const SERVERS_CHIP_MARKS = 4;
+
+/** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
 function OwnServersRow({
   disabled,
   onSwitch,
@@ -345,29 +357,42 @@ function OwnServersRow({
     (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
   );
   const on = connected.filter((provider) => !disabled.includes(provider));
+  const off = connected.filter((provider) => disabled.includes(provider));
+  const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <div className="settings-row">
       <span className="settings-copy">
         <strong>MCP servers</strong>
         <small>
           {connected.length === 0
-            ? "None connected. A run's agent is handed the servers you connect."
-            : `${on.length} of ${connected.length} on. A run's agent is handed the servers left on.`}
+            ? "None connected yet."
+            : off.length === 0
+              ? "Every connected server is on."
+              : `${namesSaid(off)} off.`}
         </small>
       </span>
-      <span className="automation-row-controls automation-servers">
-        {on.map((provider) => (
-          <ProviderMark key={provider} provider={provider} />
-        ))}
-        <AgentServersButton
-          servers={{
-            disabled,
-            onSwitch,
-            onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
-          }}
-          statuses={statuses}
-        />
-      </span>
+      <AgentServersButton
+        servers={{
+          disabled,
+          onSwitch,
+          onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+        }}
+        statuses={statuses}
+        face={
+          on.length === 0 ? (
+            <span className="chip-name">None</span>
+          ) : (
+            <span className="automation-servers">
+              {shown.map((provider) => (
+                <ProviderMark key={provider} provider={provider} />
+              ))}
+              {on.length > shown.length ? (
+                <span className="chip-name">{`+${on.length - shown.length}`}</span>
+              ) : null}
+            </span>
+          )
+        }
+      />
     </div>
   );
 }
