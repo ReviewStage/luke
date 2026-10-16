@@ -178,7 +178,7 @@ export function LinesChanged({
   );
 }
 
-/** The row at the end of a finished transcript: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it. */
+/** The row at the end of a finished transcript: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it. A narrow row gives up the checks' word, then the lines, before the number (planning.css). */
 export function PublishedRow({
   pullRequest,
   openGitHub,
@@ -198,8 +198,11 @@ export function PublishedRow({
         onClick={() => openGitHub(pullRequest.url)}
       >
         <PullRequestMark pullRequest={pullRequest} />
-        <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
-          {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
+        <span className="agent-published-name">
+          <span className="agent-published-number">{pullRequestNumberLabel(pullRequest)} ·</span>
+          <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
+            {pullRequest.title}
+          </span>
         </span>
         {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
           <span className="agent-published-checks">{CHECKS_FAILING}</span>

@@ -155,6 +155,7 @@ function CallCard({
           }}
           speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
           stop={{ shown: true, onPress: controls.onEnd }}
+          titled={inWindow}
         />
       </div>
     </section>

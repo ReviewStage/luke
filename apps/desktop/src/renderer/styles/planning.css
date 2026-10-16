@@ -1741,6 +1741,19 @@ button.file-ref:hover .file-ref-path {
   font-size: 12.5px;
 }
 
+/* Note that it keeps the gap the log's `space-y-3` leaves under every block
+   but its last, which the reset above takes, so a failure's press never
+   touches the pull request's row under it. */
+[role="log"] > .agent-end-line:not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+
+/* A finished turn's line (`working-time.tsx`) breaks between how long it
+   worked and when it ended, never inside either. */
+[data-worked] > :is([data-worked-length], time) {
+  white-space: nowrap;
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */
@@ -3274,8 +3287,12 @@ button.agent-ref:hover .agent-ref-name {
    whole of it the button that opens the pull request, drawn as the
    subagent's row is and for the same reason written here. The lines it
    adds and removes read in the success green and the danger red, in
-   tabular numerals so a count does not shift as it grows. */
+   tabular numerals so a count does not shift as it grows. The row answers
+   its own width, as the composer does, so it holds in the main column and
+   the side panel alike, and clips, so nothing it draws paints past its
+   edge. */
 .agent-published-row {
+  container: published-row / inline-size;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -3287,6 +3304,7 @@ button.agent-ref:hover .agent-ref-name {
   border-radius: 8px;
   background: none;
   color: var(--text-primary);
+  overflow: hidden;
   font-size: 12.5px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -3296,11 +3314,38 @@ button.agent-ref:hover .agent-ref-name {
   background: var(--raised);
 }
 
-.agent-published-title {
+/* The number, never cut, then the title, which gives way first. */
+.agent-published-name {
+  display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  gap: 0.3em;
   white-space: nowrap;
+}
+
+.agent-published-number {
+  flex: none;
+}
+
+.agent-published-title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Too narrow for the checks' word: the mark's red still says they failed,
+   and its label says so to a reader. */
+@container published-row (max-width: 359px) {
+  .agent-published-checks {
+    display: none;
+  }
+}
+
+/* Too narrow for the lines as well: they go, so the title keeps a few
+   words beside the number. The Changes tab and GitHub still count them. */
+@container published-row (max-width: 259px) {
+  .agent-published-lines {
+    display: none;
+  }
 }
 
 .agent-published-state {
@@ -3360,8 +3405,10 @@ svg.lucide {
    whole of it the button that opens the subagent's tab, with the same hover
    fill and the focus ring every button of ours draws. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
-   colour outside the utilities' layer. */
+   colour outside the utilities' layer. It answers its own width, so the job,
+   the one thing naming the subagent, keeps the room in a narrow column. */
 .subagent-line {
+  container: subagent-row / inline-size;
   height: 28px;
   padding: 0 4px;
   border-radius: 6px;
@@ -3380,6 +3427,15 @@ button.subagent-line:hover {
 .subagent-job {
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Too narrow for the job beside the model and effort: they go first, as
+   the subagent's card still names them, and the working mark and its
+   count stay. */
+@container subagent-row (max-width: 319px) {
+  .subagent-line > [data-subagent-pair] {
+    display: none;
+  }
 }
 
 /* Inbox ----------------------------------------------------------------------- */
