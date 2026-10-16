@@ -51,8 +51,6 @@ export interface IntegrationConnectionRow {
   readonly connectionName: string;
   /** The account's name at the provider, or the developer's own for it; nothing until either is known. */
   readonly label: string | undefined;
-  /** Whether the developer made this the provider's primary account. */
-  readonly primary: boolean;
   readonly status: IntegrationRowStatus;
   /** The sign-in under way's own state, which only it may complete under; nothing when none is. */
   readonly state: string | undefined;
@@ -78,7 +76,6 @@ const IntegrationRowSchema = Schema.Struct({
   connectSubject: Schema.String,
   connectionName: Schema.String,
   label: Schema.NullOr(Schema.String),
-  primary: Schema.Boolean,
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
@@ -93,7 +90,6 @@ const ROW_COLUMNS = {
   connectSubject: integrationConnection.connectSubject,
   connectionName: integrationConnection.connectionName,
   label: integrationConnection.label,
-  primary: integrationConnection.primary,
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
@@ -109,7 +105,6 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     connectSubject: row.connectSubject,
     connectionName: row.connectionName,
     label: row.label ?? undefined,
-    primary: row.primary,
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
@@ -193,7 +188,6 @@ const BeginSchema = Schema.Struct({
   provider: integrationProviderSchema,
   connectionName: Schema.String,
   connectSubject: Schema.String,
-  primary: Schema.Boolean,
   state: Schema.String,
   verifier: Schema.String,
   at: Schema.Date,
@@ -202,25 +196,14 @@ const BeginSchema = Schema.Struct({
 /**
  * Note that the conflicting update leaves the status alone, because an
  * account signing in again stays as connected, or as expired, as it was
- * until the new sign-in completes; it keeps its id, subject, label, and
- * primary flag for the same reason. It takes only a row under the same
- * subject, so a sign-in for another account that minted the same name
+ * until the new sign-in completes; it keeps its id, subject, and label for
+ * the same reason. It takes only a row under the same subject, so a sign-in for another account that minted the same name
  * meanwhile never puts its state on a row whose grant it would not settle.
  */
 const upsertSignIn = SqlSchema.findAll({
   Request: BeginSchema,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({
-    id,
-    userId,
-    provider,
-    connectionName,
-    connectSubject,
-    primary,
-    state,
-    verifier,
-    at,
-  }) =>
+  execute: ({ id, userId, provider, connectionName, connectSubject, state, verifier, at }) =>
     Database.use((db) =>
       db
         .insert(integrationConnection)
@@ -230,7 +213,6 @@ const upsertSignIn = SqlSchema.findAll({
           provider,
           connectSubject,
           connectionName,
-          primary,
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
@@ -250,8 +232,7 @@ const upsertSignIn = SqlSchema.findAll({
  * Records a sign-in under way for one account at a provider, under the
  * state only its callback carries back and the handle Connect answered it
  * with; answers whether it took, which it does not where the name already
- * stands for another subject's account. A first row at the provider is its
- * primary account.
+ * stands for another subject's account.
  */
 export function beginIntegrationSignIn(
   userId: string,
@@ -261,17 +242,12 @@ export function beginIntegrationSignIn(
 ): IntegrationStoreEffect<boolean> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
-    const rows = yield* readIntegrationConnections(userId);
-    const primary = !rows.some(
-      (row) => row.provider === account.provider && row.connectionName !== account.connectionName,
-    );
     const taken = yield* upsertSignIn({
       id: randomUUID(),
       userId,
       provider: account.provider,
       connectionName: account.connectionName,
       connectSubject: account.connectSubject,
-      primary,
       state,
       verifier: Redacted.value(verifier),
       at,
@@ -373,51 +349,6 @@ export function renameIntegrationConnection(
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
     Effect.map(updateLabel({ userId, connectionName, label, at }), (rows) => rows.length > 0),
   );
-}
-
-const PrimarySchema = Schema.Struct({
-  userId: Schema.String,
-  provider: integrationProviderSchema,
-  connectionName: Schema.String,
-  at: Schema.Date,
-});
-
-const updatePrimary = SqlSchema.void({
-  Request: PrimarySchema,
-  execute: ({ userId, provider, connectionName, at }) =>
-    Database.use((db) =>
-      db
-        .update(integrationConnection)
-        .set({
-          primary: sql`${integrationConnection.connectionName} = ${connectionName}`,
-          updatedAt: at,
-        })
-        .where(
-          and(
-            eq(integrationConnection.userId, userId),
-            eq(integrationConnection.provider, provider),
-          ),
-        ),
-    ),
-});
-
-/**
- * Makes one account its provider's primary and every other account there
- * not, in one statement, so a provider never stands with two; answers
- * whether the account held such a row, and changes nothing where it did not.
- */
-export function makeIntegrationPrimary(
-  userId: string,
-  provider: IntegrationProvider,
-  connectionName: string,
-): IntegrationStoreEffect<boolean> {
-  return Effect.gen(function* () {
-    const row = yield* readIntegrationConnection(userId, connectionName);
-    if (row?.provider !== provider) return false;
-    const at = yield* DateTime.nowAsDate;
-    yield* updatePrimary({ userId, provider, connectionName, at });
-    return true;
-  });
 }
 
 const updateExpired = SqlSchema.void({

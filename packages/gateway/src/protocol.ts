@@ -180,8 +180,6 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** One account made its provider's primary on the service; the account as it then stands. */
-  INTEGRATIONS_PRIMARY: "integrations.primary",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */

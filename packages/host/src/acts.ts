@@ -87,7 +87,6 @@ import {
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
-  integrationAccountParamsSchema,
   integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationProviderParamsSchema,
@@ -260,9 +259,8 @@ export const ACT_KIND = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
   INTEGRATIONS_TOOLS: "integrations.tools",
-  /** One account at a provider named as the developer calls it, and one made its provider's primary. */
+  /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  INTEGRATIONS_PRIMARY: "integrations.primary",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   /** One experiment turned on or off for the signed-in account, answering the settings as they then stand. */
@@ -1081,11 +1079,6 @@ export const ACT = {
     payload: actSchema(integrationRenameParamsSchema),
     result: wireResult<IntegrationAccountView>(isReadable(integrationAccountViewSchema)),
     refusal: "Could not rename that account on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_PRIMARY]: {
-    payload: actSchema(integrationAccountParamsSchema),
-    result: wireResult<IntegrationAccountView>(isReadable(integrationAccountViewSchema)),
-    refusal: "Could not make that account primary on this system.",
   },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,

@@ -1,7 +1,7 @@
 /**
  * integrations-app.ts -- the integrations group: an account's connections read, begun, ended, and settled.
  *
- * Seven endpoints the signed-in desktop calls with its bearer, and one
+ * Six endpoints the signed-in desktop calls with its bearer, and one
  * browser navigation that carries none. A Luke account may hold more than
  * one account at a provider, each its own row and grant under its own
  * connection name; every route about one account reads it from the
@@ -30,9 +30,7 @@
  *   sign-in settles, and its label is its name at the provider where
  *   Connect's grant carries one.
  * - `POST /api/account/integrations/{provider}/rename` names one account
- *   as the developer calls it, and `…/primary` makes one the provider's
- *   primary, which only what the agents are told of it reads; each answers
- *   the account as it then stands.
+ *   as the developer calls it, and answers the account as it then stands.
  * - `POST /api/account/integrations/{provider}/cancel` ends the sign-in
  *   under way, if one still is, and nothing else: a first sign-in's row
  *   goes, any other row keeps its status, and no grant is revoked, so a
@@ -161,8 +159,6 @@ const INTEGRATIONS_PATH = {
   TOOLS: "/api/account/integrations/tools",
   /** POST names one account; the rewrite moves the path's provider into the `provider` query. */
   RENAME: "/api/account/integrations/rename",
-  /** POST makes one account its provider's primary; the rewrite moves the path's provider into the `provider` query. */
-  PRIMARY: "/api/account/integrations/primary",
   /** GET is Connect's return from any provider's sign-in. */
   CONNECTED: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
 } as const;
@@ -220,28 +216,12 @@ function providerRows(
     .toSorted((a, b) => placeOf(a) - placeOf(b));
 }
 
-/**
- * The provider's primary account among its rows: the one the developer
- * made primary, or the first in place where none stands so, which a
- * provider whose primary was disconnected falls back to.
- */
-function primaryOf(
-  rows: readonly IntegrationConnectionRow[],
-): IntegrationConnectionRow | undefined {
-  return rows.find((row) => row.primary) ?? rows[0];
-}
-
 /** One account as the wire answers it, standing as given. */
-function accountOf(
-  row: IntegrationConnectionRow,
-  status: IntegrationStatus,
-  primary: boolean,
-): IntegrationAccount {
+function accountOf(row: IntegrationConnectionRow, status: IntegrationStatus): IntegrationAccount {
   return {
     provider: row.provider,
     connection: row.connectionName,
     ...(row.label !== undefined ? { label: row.label } : undefined),
-    primary,
     status,
   };
 }
@@ -288,12 +268,6 @@ export interface IntegrationsAppSeams {
     userId: string,
     connectionName: string,
     label: string,
-  ) => IntegrationStoreEffect<boolean>;
-  /** Makes one account its provider's primary; answers whether the account held it. */
-  makePrimary: (
-    userId: string,
-    provider: IntegrationProvider,
-    connectionName: string,
   ) => IntegrationStoreEffect<boolean>;
   /** A fresh subject for another account's grant at Connect; random in production, fixed in a test. */
   mintSubject: () => string;
@@ -503,7 +477,6 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   rows: readonly IntegrationConnectionRow[],
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices> {
   const held = providerRows(rows, provider);
-  const primary = primaryOf(held);
   const settled = yield* Effect.forEach(held, (row) =>
     Effect.map(standingStatus(seams, connector, row), (standing) => ({ row, standing })),
   );
@@ -512,7 +485,7 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     status: first?.standing.status ?? INTEGRATION_STATUS.DISCONNECTED,
     accounts: settled
       .filter(({ standing }) => standing.status !== INTEGRATION_STATUS.DISCONNECTED)
-      .map(({ row, standing }) => accountOf(row, standing.status, row === primary)),
+      .map(({ row, standing }) => accountOf(row, standing.status)),
     failures: settled.flatMap(({ row, standing }) =>
       standing.failure === undefined
         ? []
@@ -939,7 +912,7 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
 /** The most a rename's body may carry, in bytes: one label, well past its own bound. */
 const MAXIMUM_RENAME_BYTES = 2048;
 
-/** The account as it stands after a rename or a Make primary, read again so the answer is what is stored. */
+/** The account as it stands after a rename, read again so the answer is what is stored. */
 const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   userId: string,
@@ -953,7 +926,7 @@ const accountAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = held.find((each) => each.connectionName === connectionName);
   if (row === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    account: accountOf(row, rowStatus(row), row === primaryOf(held)),
+    account: accountOf(row, rowStatus(row)),
   });
 });
 
@@ -979,22 +952,6 @@ const renameEndpoint = /* @__PURE__ */ Effect.fn("web/integrationRenameEndpoint"
     seams.renameConnection(userId, connectionName, asked.success.label),
   );
   if (!renamed) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return yield* accountAnswer(seams, userId, provider, connectionName);
-});
-
-/** POST: makes one account its provider's primary, and every other there not; one the account does not hold is not found. */
-const primaryEndpoint = /* @__PURE__ */ Effect.fn("web/integrationPrimaryEndpoint")(function* (
-  seams: IntegrationsAppSeams,
-): Effect.fn.Return<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices
-> {
-  yield* hostedMethod(HTTP_METHOD.POST);
-  const { provider, connectionName } = yield* requestedAccount();
-  const userId = yield* resolvedUserId(seams);
-  const made = yield* hostedStoreOrUnavailable(seams.makePrimary(userId, provider, connectionName));
-  if (!made) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return yield* accountAnswer(seams, userId, provider, connectionName);
 });
 
@@ -1079,7 +1036,7 @@ function refusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** The group: the eight paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the seven paths, one of them the browser's, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
 ): WebRoutes<DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient> {
@@ -1091,7 +1048,6 @@ export function integrationsApp(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CANCEL, refusing(cancelEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.RENAME, refusing(renameEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.PRIMARY, refusing(primaryEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECTED, connectedEndpoint(seams)),
     hostedNotFoundRoute,
   );

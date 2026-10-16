@@ -31,9 +31,11 @@
  * Linear is the one provider a workspace may connect for every member
  * (`linear-issues.ts`): where the conversation's plan or coding agent
  * belongs to a workspace whose Linear stands connected, every member's
- * Linear tools run on that grant, under whichever of their Linear accounts
- * the connection is named for, and an account's own is read only where the
- * workspace has none.
+ * Linear tools run on that grant: a turn is handed Linear once, under the
+ * provider's own name (`../agents/agent-runtime/servers.ts`), and an
+ * account's own is read only where the workspace has none. An account past
+ * the first a turn was handed before the workspace connected keeps its own
+ * grant, so a call that names it never lands in the workspace's Linear.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
@@ -249,7 +251,11 @@ export function integrationAccessToken(
     if (Result.isFailure(admitted)) {
       return Result.fail(integrationUnavailable(provider).NO_ACCOUNT);
     }
-    const workspace = yield* workspaceToken(provider, admitted.success.target.conversationId);
+    // Note that the workspace's grant answers the provider's own name alone, so an account past the first a turn was handed keeps its own.
+    const workspace =
+      account.connectionName === provider
+        ? yield* workspaceToken(provider, admitted.success.target.conversationId)
+        : undefined;
     if (workspace !== undefined) return workspace;
     return yield* connectedToken(account, admitted.success.caller);
   }).pipe(

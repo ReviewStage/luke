@@ -49,14 +49,6 @@ export const integrationProviderParamsSchema = EffectSchema.Struct({
 
 export type IntegrationProviderParams = typeof integrationProviderParamsSchema.Type;
 
-/** One account a Make primary is about, as the window names it to the host. */
-export const integrationAccountParamsSchema = EffectSchema.Struct({
-  provider: integrationProviderSchema,
-  connection: integrationConnectionNameSchema,
-});
-
-export type IntegrationAccountParams = typeof integrationAccountParamsSchema.Type;
-
 /** One account a rename names, and the label it is to carry, as the window names it to the host. */
 export const integrationRenameParamsSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
@@ -101,7 +93,7 @@ export const integrationConnectViewSchema = EffectSchema.Union([
 
 export type IntegrationConnectView = typeof integrationConnectViewSchema.Type;
 
-/** One account as a rename or a Make primary left it, as the window hears it, or why there is no answer. */
+/** One account as a rename left it, as the window hears it, or why there is no answer. */
 export const integrationAccountViewSchema = EffectSchema.Union([
   integrationAccountAnswerSchema,
   failed,

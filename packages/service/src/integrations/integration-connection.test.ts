@@ -369,7 +369,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
   );
 
   it.effect(
-    "in a plan of a workspace with Linear connected, a member's second Linear account reads the workspace's token too",
+    "in a plan of a workspace with Linear connected, a turn is handed Linear once, on the workspace's grant, and a second account handed before keeps its own",
     () =>
       Effect.gen(function* () {
         const host = yield* planningHost;
@@ -402,12 +402,29 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           [session.workspaceId, {}],
         ]);
 
-        const read = yield* integrationAccessToken(
-          { provider: LINEAR, connectionName: "linear-2" },
-          host.admit(session.auth, session.sessionId),
-        ).pipe(Effect.provide(connectLayer(grants)));
-        assert.ok(Result.isSuccess(read));
-        assert.equal(read.success.token, tokenOf(session.workspaceId));
+        const admission = host.admit(session.auth, session.sessionId);
+        const standing = yield* turnServers(admission, CONNECTION_POLICY.ALWAYS_ON).pipe(
+          Effect.provide(integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" })),
+        );
+        const tokenOfAccount = (connectionName: string) =>
+          Effect.map(
+            integrationAccessToken({ provider: LINEAR, connectionName }, admission).pipe(
+              Effect.provide(connectLayer(grants)),
+            ),
+            (answer) => (Result.isSuccess(answer) ? answer.success.token : answer.failure),
+          );
+
+        assert.ok(standing.on);
+        assert.deepEqual(
+          standing.connections
+            .filter(({ provider }) => provider === LINEAR)
+            .map(({ connectionName, accountNote }) => ({ connectionName, accountNote })),
+          [{ connectionName: LINEAR, accountNote: undefined }],
+        );
+        assert.deepEqual(
+          [yield* tokenOfAccount(LINEAR), yield* tokenOfAccount("linear-2")],
+          [tokenOf(session.workspaceId), tokenOf(subject)],
+        );
       }),
   );
 

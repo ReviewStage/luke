@@ -42,8 +42,13 @@ export const integrationConnection = pgTable(
     connectionName: text("connection_name").notNull(),
     /** The account's name at the provider ("Acme"), or the developer's own for it; null until either is known. */
     label: text("label"),
-    /** Whether the developer made this the provider's primary account, which only what a model is told of it reads. */
-    primary: boolean("is_primary").notNull().default(false),
+    /**
+     * Unread. An account was once its provider's primary; no code reads or
+     * writes this now, and it stays only until the deployment that stopped
+     * reading it has drained, so a build still serving that read it does not
+     * fail. The migration after this one's deployment drops it.
+     */
+    retiredPrimary: boolean("is_primary").notNull().default(false),
     /** `integration-store.ts`'s `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
     status: text("status").notNull(),
     /** The sign-in under way's own value, which only its callback carries back; null when none is. */
