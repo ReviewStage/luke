@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inbox items as threads</title>
+<style>
+:root{
+  --ground:#0c0c0e; --sidebar:#111114; --well:#0f0f12; --code:#0a0a0c;
+  --t1:rgba(255,255,255,.95); --t2:rgba(255,255,255,.56); --t3:rgba(255,255,255,.5); --body:rgba(255,255,255,.86);
+  --raised:rgba(255,255,255,.05); --raised2:rgba(255,255,255,.09); --selected:rgba(255,255,255,.2); --edge:rgba(255,255,255,.32);
+  --hair:rgba(255,255,255,.08); --hair2:rgba(255,255,255,.12); --accent:#0071e3; --agent:#e8704a; --bubble:#26262b;
+  --ok:#4ade80; --warn:#f5a524;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#08080a;color:var(--body);font-size:14px;line-height:1.5}
+.page{max-width:1180px;margin:0 auto;padding:32px 28px 64px}
+h1{font-size:26px;color:var(--t1);margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:18px;color:var(--t1);margin:40px 0 12px}
+h3{font-size:14.5px;color:var(--t1);margin:0 0 6px}
+p{margin:0 0 10px}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12.5px;background:var(--raised2);padding:1px 5px;border-radius:5px}
+.lede{color:var(--t2);max-width:820px}
+.muted{color:var(--t2)}
+
+/* findings table */
+table.find{width:100%;border-collapse:collapse;font-size:13px}
+table.find th{text-align:left;color:var(--t2);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--hair2)}
+table.find td{padding:10px;border-bottom:1px solid var(--hair);vertical-align:top}
+table.find td:first-child{color:var(--t1);font-weight:500;width:17%}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:8px 0 14px}
+.seg{display:inline-flex;background:var(--raised);border-radius:9px;padding:2px;gap:2px}
+.seg button{all:unset;cursor:pointer;padding:5px 12px;border-radius:7px;color:var(--t2);font-size:13px}
+.seg button[aria-pressed=true]{background:var(--raised2);color:var(--t1);box-shadow:inset 0 0 0 1px var(--hair2)}
+.seg-label{color:var(--t3);font-size:12px;margin-right:6px}
+.variant-note{background:var(--raised);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px}
+.variant-note b{color:var(--t1)}
+.new{display:inline-block;font-size:10.5px;font-weight:600;line-height:16px;padding:0 6px;border-radius:4px;background:rgba(0,113,227,.2);color:#93c5fd;margin-left:6px;vertical-align:1px}
+
+/* window */
+.win{display:flex;height:660px;border-radius:12px;overflow:hidden;border:1px solid var(--hair2);background:var(--ground);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.list{width:300px;flex:none;background:var(--ground);border-right:1px solid var(--hair);display:flex;flex-direction:column}
+.bar{height:44px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--hair);flex:none}
+.bar .title{font-weight:600;color:var(--t1);font-size:14px}
+.lights{display:flex;gap:7px;margin-right:8px}.lights i{width:11px;height:11px;border-radius:50%;display:block}
+.icon{width:16px;height:16px;flex:none;color:var(--t2)}
+.grp{padding:12px 12px 4px 20px;font-size:12.5px;color:var(--t2);display:flex;align-items:center;gap:8px}
+.row{margin:1px 10px;padding:6px 10px;border-radius:8px;display:flex;gap:8px;align-items:center;cursor:default}
+.row.on{background:var(--raised2)}
+.row .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--body);font-size:13px}
+.row.unread .name{color:var(--t1);font-weight:600}
+.row .time{font-size:11.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+
+/* thread rows */
+.trow{position:relative;cursor:default;margin:1px 10px;padding:8px 10px 8px 6px;border-radius:9px;display:grid;grid-template-columns:10px 18px 1fr auto;column-gap:8px;row-gap:1px}
+.trow.on{background:var(--raised2)}
+.trow:hover:not(.on){background:var(--raised)}
+.trow .gut{grid-row:1/3;display:flex;align-items:flex-start;padding-top:6px;justify-content:center}
+.trow .mk{grid-row:1/3;padding-top:1px}
+.trow .name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t2);font-size:13px}
+.trow.unread .name,.trow.bneeds .name{color:var(--t1);font-weight:600}
+.trow .time{font-size:11.5px;color:var(--t3);display:flex;align-items:center;gap:6px}
+.trow .snip{grid-column:3/5;font-size:12px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .snip b{font-weight:500;color:var(--t2)}
+.trow.unread .snip,.trow.bneeds .snip{color:var(--body)}
+.trow .tm{display:flex;align-items:center;justify-content:flex-end;min-width:30px}
+.att{width:13px;height:13px;border-radius:50%;background:#c4620c;color:#fff;display:inline-grid;place-items:center;flex:none;margin-right:6px}
+.att svg{width:11px;height:11px}
+.trow:hover .tm .att,.trow.hov .tm .att{display:none}
+.trow:hover .tm .time,.trow.hov .tm .time{display:none}
+.rbtn{display:none;width:22px;height:22px;border-radius:6px;place-items:center;color:var(--t2);cursor:pointer;margin:-3px -4px -3px 0}
+.rbtn:hover{background:var(--raised2);color:var(--t1)}
+.rbtn svg{width:14px;height:14px}
+.trow:hover .rbtn,.trow.hov .rbtn{display:grid}
+.ldot{width:7px;height:7px;border-radius:50%;flex:none}
+.ldot.need{background:var(--accent)}
+
+/* swipe: a short swipe opens the button, a long one does the action */
+.sw{position:relative;margin:1px 10px;border-radius:9px;overflow:hidden;touch-action:pan-y;user-select:none}
+.sw .trow{margin:0;background:var(--ground);transition:transform .32s cubic-bezier(.2,.9,.3,1.12)}
+.sw .trow.on{background:#1d1d21}
+.sw .trow:hover:not(.on){background:#141417}
+.sw.dragging .trow{transition:none}
+.swbg{position:absolute;inset:0;opacity:0}
+.sw.moving .swbg,.sw.open .swbg{opacity:1}
+.swbtn{position:absolute;inset:0;background:var(--accent);cursor:pointer}
+.swbtn.armed{background:#2b8ef5}
+.swlab{position:absolute;left:0;top:0;bottom:0;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#fff;font-size:11px;font-weight:500;transition:transform .32s cubic-bezier(.2,.9,.3,1.12)}
+.sw.dragging .swlab{transition:none}
+.swlab svg{width:17px;height:17px}
+.swmeter{position:absolute;left:0;right:0;bottom:-16px;height:2px}
+
+/* tuning strip */
+.tune{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 2px 0;font-size:12.5px;color:var(--t2)}
+.tune input{accent-color:var(--accent);width:110px;vertical-align:middle}
+.tune b{color:var(--t1);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* menus and buttons */
+.ibtn{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--t2);cursor:pointer;position:relative}
+.ibtn:hover{background:var(--raised2);color:var(--t1)}
+.ibtn svg{width:15px;height:15px}
+.menu{position:fixed;z-index:20;min-width:210px;background:var(--sidebar);border:1px solid var(--hair2);border-radius:10px;padding:4px;box-shadow:0 12px 32px rgba(0,0,0,.5);font-size:13px}
+.menu .mi{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px;color:var(--t1);cursor:pointer}
+.menu .mi:hover{background:var(--raised2)}
+.menu .mi .kb{margin-left:auto;color:var(--t3);font-size:12px}
+.menu .mi .ck{width:14px;color:var(--t1);display:inline-grid;place-items:center}
+.menu .mi .ck svg{width:14px;height:14px}
+.menu hr{border:0;height:1px;background:var(--hair);margin:4px 2px}
+.menu.static{position:static;display:inline-block}
+
+/* option grids and matrix */
+.optgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.opt3{background:var(--sidebar);border:1px solid var(--hair);border-radius:12px;padding:14px}
+.opt3.pick{border-color:rgba(0,113,227,.55);box-shadow:0 0 0 1px rgba(0,113,227,.35)}
+.opt3 h3 .tag{margin-left:6px;vertical-align:1px}
+.opt3 p{font-size:12.5px;color:var(--t2);margin:6px 0 10px}
+.mini{background:var(--ground);border:1px solid var(--hair);border-radius:10px;padding:6px 0}
+.mini .trow{margin:0 6px}
+.mini .sw{margin:1px 6px}
+.mini .lab{font-size:11px;color:var(--t3);padding:4px 16px 2px;display:flex;justify-content:space-between}
+.mini .sub{font-size:11.5px;color:var(--t2);padding:6px 16px 2px;display:flex;align-items:center;gap:6px}
+.cell .sw .trow,.mini .sw .trow{margin:0}
+.answer{background:var(--raised);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13.5px}
+.answer b{color:var(--t1)}
+.matrix{display:grid;grid-template-columns:150px 1fr 1fr;gap:10px;align-items:stretch}
+.matrix .hd{color:var(--t2);font-size:12.5px;font-weight:500;align-self:end;padding:0 4px}
+.matrix .rh{color:var(--t1);font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+.cell{background:var(--ground);border:1px solid var(--hair);border-radius:10px;padding:6px 0 10px}
+.cell .trow{margin:0 6px}
+.cell .why{font-size:12px;color:var(--t2);padding:6px 16px 0}
+.ways{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.way{background:var(--sidebar);border:1px solid var(--hair);border-radius:12px;padding:14px}
+.way.wide{grid-column:span 2}
+.way h3{display:flex;align-items:center;gap:8px}
+.way p{font-size:13px;margin:0}
+.way p + p{margin-top:8px}
+.stages{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.stage{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:center}
+.stage .cap{font-size:12px;color:var(--t2)}
+.stage .cap b{color:var(--t1);font-weight:500}
+kbd{font-family:inherit;font-size:11.5px;border:1px solid var(--hair2);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--t1);background:var(--raised)}
+.legend{display:flex;gap:22px;flex-wrap:wrap;margin:10px 2px 0;font-size:12.5px;color:var(--t2)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend b{color:var(--t1);font-weight:600}
+.legend .ic{width:15px;height:15px;color:var(--t1);display:inline-grid}
+.legend .ic svg{width:15px;height:15px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:0 6px;border-radius:5px;line-height:17px;background:var(--raised2);color:var(--t2)}
+.pill.need{background:rgba(0,113,227,.18);color:#7db7ff}
+
+.mark{width:16px;height:16px;border-radius:4px;display:inline-grid;place-items:center;flex:none}
+.mark svg{width:16px;height:16px}
+.disc{width:20px;height:20px;border-radius:50%;background:#f0a35e;color:#3a1d05;font-size:11px;font-weight:700;display:inline-grid;place-items:center;flex:none}
+.disc.sm{width:16px;height:16px;font-size:9.5px}
+
+.pane{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.crumbs{display:flex;align-items:center;gap:6px;color:var(--t2);font-size:13px;min-width:0}
+.crumbs span.c{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:7px;white-space:nowrap}
+.crumbs span.c.link{cursor:pointer}
+.crumbs span.c.link:hover{background:var(--raised2);color:var(--t1)}
+.crumbs .sep{color:var(--t3)}
+.bar .spacer{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:12.5px}
+.tbtn:hover{background:var(--raised2);color:var(--t1)}
+.board{flex:1;overflow:auto;padding:20px 0 170px}
+.board.settled{padding-bottom:28px}
+.col{max-width:680px;margin:0 auto;padding:0 28px}
+
+/* shared message pieces */
+.code{border:1px solid var(--hair);border-radius:10px;background:var(--code);overflow:hidden;margin:8px 0;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px}
+.code .h{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--hair);color:var(--t1);font-size:12px}
+.code .h .ln{color:var(--t3);font-family:-apple-system,system-ui,sans-serif}
+.code .l{display:flex;gap:14px;padding:1px 12px;white-space:pre;color:#c9d1d9}
+.code .l .n{color:var(--t3);width:14px;text-align:right}
+.code .l.hit{background:rgba(56,139,253,.15);box-shadow:inset 2px 0 0 #388bfd}
+.k{color:#ff7b72}.s{color:#a5d6ff}.c2{color:#8b949e}.f{color:#d2a8ff}.v{color:#79c0ff}
+.opt{display:flex;flex-direction:column;gap:2px;padding:6px 12px;border-radius:8px;background:var(--raised);color:var(--t1);margin-top:4px;font-size:13px}
+.opt .d{color:var(--t2)}
+.opt .hd{display:flex;justify-content:space-between;gap:8px;width:100%}
+.opt.pressed{background:var(--raised2);box-shadow:inset 0 0 0 1px var(--edge)}
+.opt.out{background:none;box-shadow:inset 0 0 0 1px var(--hair);color:var(--t2)}
+.rec{font-size:10.5px;font-weight:560;line-height:16px;padding:0 6px;border-radius:4px;background:var(--accent);color:#fff;flex:none;margin-top:2px}
+.rec.quiet{background:var(--raised2);color:var(--t2)}
+.ubub{margin-left:auto;width:fit-content;max-width:85%;background:var(--bubble);border-radius:12px;padding:7px 11px;color:var(--t1);font-size:13.5px}
+.meta{font-size:11.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.meta a{color:var(--t2);text-decoration:none}
+.composer{position:absolute;left:0;right:0;bottom:0;padding:0 0 14px;background:linear-gradient(transparent,var(--ground) 30%)}
+.composer .box{max-width:680px;margin:0 auto;padding:0 28px}
+.composer .well{border:1px solid var(--hair2);background:var(--well);border-radius:14px;padding:11px 14px 8px}
+.composer .ph{color:var(--t3);font-size:13.5px;min-height:38px}
+.composer .ft{display:flex;align-items:center;gap:8px}
+.composer .ft .q{flex:1;color:var(--t3);font-size:12px}
+.send{width:28px;height:28px;border-radius:50%;background:var(--t1);color:#000;display:grid;place-items:center}
+.send.off{background:var(--raised2);color:var(--t3)}
+
+/* Today */
+.today .byline{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--t2)}
+.today .byline b{color:var(--t1);font-weight:500}
+.today .ind{padding-left:24px}
+.today h4{margin:4px 0 2px;color:var(--t1);font-size:15px;font-weight:500}
+
+/* A: transcript thread */
+.subject{font-size:20px;font-weight:600;color:var(--t1);letter-spacing:-.01em;margin:0 0 4px;line-height:1.3}
+.submeta{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--t2);flex-wrap:wrap}
+.submeta .sep{color:var(--t3)}
+.aname{color:var(--t1);cursor:pointer;border-radius:4px}
+.aname:hover{text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--t3)}
+.hr{height:1px;background:var(--hair);margin:14px 0 14px}
+.fold{display:flex;align-items:center;gap:8px;color:var(--t2);font-size:13px;padding:5px 0;cursor:pointer}
+.fold svg{width:14px;height:14px}
+.ctx{border-left:2px solid var(--hair2);padding-left:12px;margin:4px 0 12px;color:var(--t2);font-size:13px}
+.amsg{margin:6px 0 4px}
+.amsg + .meta{margin-bottom:16px}
+.picked{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:var(--t1);background:rgba(255,255,255,.08);border-radius:6px;padding:1px 7px;margin-bottom:4px}
+.pick-line{display:block}
+.event{display:flex;align-items:center;gap:10px;color:var(--t3);font-size:12px;margin:18px 0}
+.event:before,.event:after{content:"";flex:1;height:1px;background:var(--hair)}
+.cont{display:flex;align-items:center;gap:10px;border:1px solid var(--hair);border-radius:10px;padding:8px 12px;margin-top:12px;font-size:13px;color:var(--t2)}
+.cont b{color:var(--t1);font-weight:500}
+.cont .go{margin-left:auto;color:var(--t1)}
+
+/* B: comment thread */
+.thr{position:relative}
+.ent{display:grid;grid-template-columns:24px 1fr;column-gap:12px;position:relative;padding-bottom:18px}
+.ent:not(:last-child):before{content:"";position:absolute;left:11px;top:28px;bottom:2px;width:2px;background:var(--hair)}
+.ent .av{padding-top:1px}
+.ent .who{font-size:13px;color:var(--t1);font-weight:500;display:flex;gap:6px;align-items:baseline}
+.ent .who span{color:var(--t3);font-weight:400;font-size:12px}
+.ent .who .aname{color:var(--t1);font-size:13px;font-weight:500}
+.ent .bd{margin-top:3px}
+.ent.ev .who{font-weight:400;color:var(--t2)}
+.bigmark{width:24px;height:24px;border-radius:7px;background:rgba(232,112,74,.14);display:grid;place-items:center}
+.bigmark svg{width:16px;height:16px}
+.disc24{width:24px;height:24px;font-size:11.5px}
+.evdot{width:24px;height:24px;display:grid;place-items:center;color:var(--t3)}
+.reply{display:grid;grid-template-columns:24px 1fr;column-gap:12px}
+.reply .well{border:1px solid var(--hair2);background:var(--well);border-radius:12px;padding:9px 12px 7px}
+
+/* suggestions */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.card{background:var(--sidebar);border:1px solid var(--hair);border-radius:12px;padding:16px}
+.card .tags{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.tag{font-size:11px;padding:1px 7px;border-radius:5px;background:var(--raised2);color:var(--t2)}
+.tag.s{background:rgba(74,222,128,.13);color:#86efac}.tag.m{background:rgba(245,165,36,.14);color:#fcd34d}.tag.l{background:rgba(248,113,113,.14);color:#fca5a5}
+.tag.ui{background:rgba(0,113,227,.16);color:#93c5fd}
+.card p{font-size:13px}
+.card .why{color:var(--t2);font-size:12.5px;margin:0}
+ol.order{padding-left:20px}
+ol.order li{margin-bottom:6px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--sidebar);border:1px solid var(--hair2);border-radius:9px;padding:7px 12px;font-size:12.5px;color:var(--t1);box-shadow:0 12px 32px rgba(0,0,0,.5);z-index:30}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Inbox items as threads</h1>
+  <p class="lede">An Inbox item is one question from an agent and one answer from you. Today the pane draws it as a <i>form</i> inside a message: a byline nothing else in the window uses, an indented title, an outlined list of options that stays after you pick, and a thread that stops at your answer. Below: what reads as off, the chosen direction (<b>B · Comment thread</b>), how a row shows both <i>unread</i> and <i>needs you</i>, how you mark items read and unread (swipe included), the alternative, and the individual changes ranked by effort.</p>
+  <div class="variant-note" style="max-width:820px"><b>This version:</b> swiping is two-stage (a short swipe opens a button, a long swipe does it), the read and unread actions use the standard mail icons (an open envelope to mark read, a closed one to mark unread), and the thread's bar drops <b>Open agent</b>: the agent's name opens its tab, as every agent name does elsewhere.</div>
+
+  <h2>What reads as off today</h2>
+  <table class="find">
+    <tr><th>Piece</th><th>The Inbox today</th><th>The rest of the window</th></tr>
+    <tr><td>Who's speaking</td><td>A byline on every message, <code>[mark] Agent name asked 24m</code>, with the words indented 21px under it (<code>.inbox-indent</code>, <code>Byline</code> in inbox-pane.tsx). No other surface has it.</td><td>The agent tab draws the agent's words full width with no byline and puts <code>Worked for 19m · Today, 5:17 PM</code> <i>under</i> the turn. The plan puts <code>[avatar] Name · 4m ago</code> right-aligned on the section's heading.</td></tr>
+    <tr><td>The subject</td><td>The item's title is an <code>h3</code> inside the agent's message, so the thread has no subject. The bar shows breadcrumbs instead.</td><td>A plan, an agent tab, and a pull request each lead with a title, then a muted line of who and when.</td></tr>
+    <tr><td>Options</td><td><code>.inbox-option</code> rows. The stylesheet calls them "the one control of the tab with no kin elsewhere". Once you answer they <b>all stay</b>, outlined, and your pick is said twice: "✓ Your pick" on the option, then again in your bubble and in "You chose 7 days".</td><td>Transcript folds and tool rows collapse what's done to one line you can open.</td></tr>
+    <tr><td>Where it ends</td><td>The thread ends at your bubble and "Sent to Add teammate invitations". You can't see what the agent did with your answer without opening its tab.</td><td>The agent tab is a running conversation: your message, then the agent's reply.</td></tr>
+    <tr><td>Context</td><td>The item stands alone. The agent's own transcript draws the same post as a collapsed <code>post_to_inbox</code> tool row (<code>CALL_KIND.INBOX_POST</code>), and your answer comes back there as a user message starting "Inbox answer". So one exchange looks two different ways.</td><td>—</td></tr>
+    <tr><td>The list</td><td>One line per item: mark, title, time, dot. Nothing tells you who's waiting on whom or what was said last.</td><td>Mail and Slack thread lists show sender, a preview, and reply state. Home's Needs-you rows already add a context line (<code>home-row-context</code>).</td></tr>
+  </table>
+
+  <h2>Click through it</h2>
+  <div class="controls">
+    <div><span class="seg-label">Design</span><span class="seg" id="vSeg">
+      <button type="button" data-v="today">Today</button>
+      <button type="button" data-v="b" aria-pressed="true">B · Comment thread (chosen)</button>
+      <button type="button" data-v="a">A · Transcript thread</button>
+    </span></div>
+    <div><span class="seg-label">Item</span><span class="seg" id="sSeg">
+      <button type="button" data-s="open">Waiting on you</button>
+      <button type="button" data-s="answered" aria-pressed="true">Answered</button>
+      <button type="button" data-s="withdrawn">Withdrawn</button>
+    </span></div>
+  </div>
+  <div class="variant-note" id="note"></div>
+  <div class="win">
+    <nav class="list">
+      <div class="bar"><span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span><span class="title">Inbox</span><span class="spacer" style="flex:1"></span><span class="ibtn" id="viewBtn" title="View options"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span></div>
+      <div id="listBody" style="overflow:auto;flex:1;padding-bottom:12px"></div>
+    </nav>
+    <section class="pane">
+      <div class="bar" id="paneBar"></div>
+      <div class="board" id="board"></div>
+      <div class="composer" id="composer"></div>
+    </section>
+  </div>
+
+  <div class="legend" id="legend"></div>
+  <p class="muted" style="font-size:12.5px;margin-top:10px">Try it in the window above: <b>drag a row a little to the right</b> to open its button, or <b>drag it most of the way</b> to mark it at once (a two-finger swipe on a trackpad does the same). Hover a row and press the button where its time was, right-click a row, press <kbd>U</kbd> to toggle the open item, or use <b>Mark all as read</b> under the list's view options.</p>
+  <div class="tune" id="tune">
+    <span>Tune the swipe:</span>
+    <label>Button opens past <b id="minV"></b> <input type="range" id="minR" min="12" max="60" step="2"></label>
+    <label>Action fires past <b id="fullV"></b> of the row <input type="range" id="fullR" min="40" max="85" step="5"></label>
+  </div>
+
+  <h2>Two states, one row</h2>
+  <div class="answer">
+    <p><b>Should a needs-you item show read and unread too? Yes.</b> The two marks answer different questions. <i>Unread</i> asks "what's new since I last looked?", which is what you check when you come back. <i>Needs you</i> asks "what do I owe an answer?", which is what you work through. A new question should catch your eye even with three older ones still waiting, and one you've read and put off shouldn't look brand new forever. Mail keeps the same two apart: unread versus flagged.</p>
+    <p><b>An earlier version got this wrong, in two ways.</b> Its CSS made every needs-you row semibold, so read and unread needs-you rows looked the same. That's the "Before" grid below. And the blue dot meant "needs you", but a swipe or <kbd>U</kbd> flips the dot, and needs-you isn't yours to flip: it belongs to the agent, and only answering clears it.</p>
+    <p style="margin:0"><b>So: the blue dot means unread, and needs you gets the app's attention mark.</b> A swipe, the hover button, <kbd>U</kbd>, and Mark all as read all act on the dot, exactly as in Mail. Needs you becomes the orange "!" disc (<code>attention-mark.tsx</code>), which the window already uses for "something wants your hand". It sits beside the row's time, where a task row already wears it for a repository of another workspace (<code>.task-mark-attention</code>).</p>
+  </div>
+  <div class="optgrid" id="opts"></div>
+
+  <h3 style="margin-top:26px">The recommended rows, every combination</h3>
+  <div class="matrix" id="matrix"></div>
+
+  <h2>Marking read and unread</h2>
+  <div class="ways">
+    <div class="way wide"><h3>Swipe right: a little opens, a lot does it<span class="new">Updated</span></h3>
+      <p>Mail's two-stage swipe. Drag a row right, or two-finger swipe right on the trackpad:</p>
+      <p><b style="color:var(--t1)">A short swipe</b> (past about 24px) and letting go leaves the row resting open on a blue <b style="color:var(--t1)">Read</b> or <b style="color:var(--t1)">Unread</b> button. Click it to flip the dot; click anywhere else, swipe back, or open another row and it closes. Nothing happens by accident: a nudge only shows you the action.</p>
+      <p><b style="color:var(--t1)">A long swipe</b> (past about 60% of the row) brightens the button, its label jumps to ride along the row's edge, and letting go flips the dot straight away, with no click. Drag back under the line before letting go and it settles open instead. The row springs back on <code>transform</code> alone, as DESIGN.md requires. Swiping left does nothing for now: an item has nothing safe to throw away, and an Archive would be its own decision.</p>
+      <div class="stages" id="stages"></div>
+      <p style="margin-top:12px" class="muted">Try both on these two rows:</p>
+      <div style="margin-top:6px;max-width:380px" class="mini" id="swipeDemo"></div></div>
+    <div class="way"><h3>Opening marks it read</h3><p>Opening an item marks it read. Anything new in the thread later (the agent's reply, a withdrawal, a repost under its key) makes it unread again. The attention mark is untouched: only answering clears it.</p></div>
+    <div class="way"><h3>Hover button</h3><p>On hover, the row's time and attention mark give way to one button, Mark as read (open envelope) or Mark as unread (closed envelope), as Pin and Archive take a sidebar row's time slot today.</p></div>
+    <div class="way"><h3>Right-click</h3><p>The row's menu, which today holds Copy link, gains <b>Mark as read / Mark as unread</b> at the top, with its key beside it.</p>
+      <div style="margin-top:10px" id="menuDemo"></div></div>
+    <div class="way"><h3><kbd>U</kbd> toggles</h3><p>A plain <kbd>U</kbd> toggles the open item, next to the Inbox's existing <kbd>J</kbd>/<kbd>K</kbd>, which are plain letters too. (<kbd>⇧⌘U</kbd> is taken by Automations.) Marking the open item unread keeps it on screen in the unread look until you move off it.</p></div>
+    <div class="way"><h3>From the thread<span class="new">Updated</span></h3><p>The thread's bar holds the crumbs, the same envelope toggle, and the "3 of 9" count, nothing else. <b>Open agent</b> is gone: the agent's name in the crumbs and on its comments opens its tab, the way an agent's name does everywhere else in the window, and the settled thread ends in "Continue in agent".</p></div>
+    <div class="way"><h3>Mark all as read</h3><p>The list's view-options menu, under the grouping choices, gets <b>Mark all as read</b>. It clears the blue dots only; every attention mark stays.</p></div>
+  </div>
+
+  <h2>The changes, one at a time</h2>
+  <p class="muted" style="font-size:13px">Size is a rough PR size. "Data" says whether the desktop already holds what it needs or the service has to send more.</p>
+  <div class="cards" id="cards"></div>
+
+  <h2>Suggested order</h2>
+  <ol class="order">
+    <li><b>The comment thread</b> (1, 2, 3): one comment layout with a thread line, the subject header with a bar that drops Open agent, and the options folded once answered with the pick as a chip. Desktop only.</li>
+    <li><b>Thread rows: the attention mark for needs you, the blue dot for unread</b> (5), then <b>marking read and unread</b> (10). The attention mark and the preview are desktop only. Read status needs the seen marker per item. Swipe comes last: the hover button, the menu, and <kbd>U</kbd> cover it first.</li>
+    <li><b>The agent's reply after yours</b> (4), then <b>earlier context</b> (6). These make it actually feel like a thread. They need the agent's transcript read for the item's agent, which the agent tab already does.</li>
+    <li><b>One card in both places</b> (8). The agent tab draws the Inbox's card where it now draws the <code>post_to_inbox</code> row, so the item looks the same wherever you meet it.</li>
+  </ol>
+</div>
+
+<script>
+const AGENT = '<svg viewBox="0 0 16 16"><path fill="#e8704a" d="M3 3h2v1h6V3h2v2h1v2h1v4h-2V9h-1v2h-2v1H9v-2H7v2H5v-1H3V9H2v2H0V7h1V5h2zm2 3v2h2V6zm4 0v2h2V6z"/></svg>';
+const DOC = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 12h5M9.5 15.5h5"/></svg>';
+const CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>';
+const CHEVD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>';
+const CHECK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5 9-10"/></svg>';
+const UP = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
+const OUT = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg>';
+// The standard mail glyphs (Lucide's mail-open and mail, the set the desktop already draws from):
+// an open envelope marks an item read, a closed one marks it unread.
+const I_READ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"/><path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"/></svg>';
+const I_UNREAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+const ATT = '<span class="att" title="Needs you"><svg viewBox="0 0 16 16" fill="none"><path d="M8 4.25v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="11.6" r="1.15" fill="currentColor"/></svg></span>';
+const mk = `<span class="mark">${AGENT}</span>`;
+const NAME = 'Add teammate invitations';
+const TITLE = 'Invite links expire after 7 days or 14?';
+const BODY = 'The plan leaves this open. I set 7 days, its assumption, so the tests have something to hold; your answer changes this one line.';
+const CODE = `<div class="code"><div class="h"><span style="color:#3b82f6;font-size:10px;font-weight:700">TS</span>src/members/invite.ts <span class="ln">Lines 5–6</span></div>
+<div class="l"><span class="n">4</span></div>
+<div class="l hit"><span class="n">5</span><span class="c2">// How long an invite link stays good: the plan's open question.</span></div>
+<div class="l hit"><span class="n">6</span><span><span class="k">export const</span> <span class="v">INVITE_TTL_MS</span> = <span class="v">7</span> * <span class="v">DAY_MS</span>;</span></div>
+<div class="l"><span class="n">7</span></div>
+<div class="l"><span class="n">8</span><span><span class="k">export async function</span> <span class="f">inviteMember</span>(workspaceId: <span class="v">string</span>) {</span></div></div>`;
+const OPTS = [
+  {l:'7 days', d:'Matches password reset links; a forwarded link goes stale sooner.', rec:true},
+  {l:'14 days', d:'Fewer resends for teammates slow to join, but a forwarded link works for two weeks.'}
+];
+const NOTE = 'Matching password resets. Admins can resend if someone misses the window.';
+const FOLLOW = 'Keeping 7 days. <code>INVITE_TTL_MS</code> stays as it is; I added a test that an expired link reads “This invite is no longer valid” and moved on to the admin resend button.';
+const WHY = 'The plan now says 7 days, so I no longer need this.';
+
+let V='b', S='answered', GROUP=true;
+
+function options(mode){ // mode: open | out | today-settled
+  return OPTS.map((o,i)=>{
+    let cls='opt', extra='';
+    if(mode==='open' && i===0) cls+=' pressed';
+    if(mode==='out') cls+=' out';
+    if(mode==='today-settled'){ cls+= i===0?' pressed':' out'; if(i===0) extra=` <span class="muted" style="font-size:12px;font-weight:400">${CHECK} Your pick</span>`; }
+    const rec = o.rec ? `<span class="rec ${mode==='open'?'':'quiet'}">Recommended</span>`:'';
+    return `<div class="${cls}"><span class="hd"><span><b style="font-weight:500">${o.l}</b>${extra}</span>${rec}</span><span class="d">${o.d}</span></div>`;
+  }).join('');
+}
+
+/* ---------- list ---------- */
+const ITEMS = [
+  {g:'Teammate invitations'},
+  {t:'Add POSTMARK_SERVER_TOKEN to Vercel', time:'3m', open:true, snipOpen:'To-do · Add the token under Production', unread:true},
+  {t:'What should an expired invite link offer?', time:'16m', open:true, snipOpen:'Choice · 3 options, one recommended'},
+  {t:TITLE, time:'19m', me:true},
+  {t:'Who may withdraw a pending invite?', time:'27m', snip:'You: Admins and whoever sent it'},
+  {g:'Usage-based billing'},
+  {t:"Backfill last month's API usage on staging?", time:'4m', snip:'Agent: Backfilled 41,208 rows; staging totals match', unread:true},
+  {t:'Bill overage per 1,000 calls or per call?', time:'1h', snip:'You: Per 1,000, rounded up'},
+  {g:'Webhook retries'},
+  {t:'Retry a failed delivery how many times?', time:'12m', snip:'Withdrawn: the plan settled on 5', unread:true},
+  {t:'Run the webhook_deliveries migration?', time:'3h', snip:'You approved · Sent to agent'},
+];
+const DEMO = [
+  {t:'Retry a failed delivery how many times?', time:'12m', snip:'Withdrawn: the plan settled on 5', unread:true},
+  {t:'Bill overage per 1,000 calls or per call?', time:'1h', snip:'You: Per 1,000, rounded up', unread:false},
+];
+function itemFor(key){ return key[0]==='l' ? ITEMS[+key.slice(1)] : DEMO[+key.slice(1)]; }
+function snipFor(it){
+  if(it.me) return S==='open' ? 'Choice · 2 options, 7 days recommended' : S==='answered' ? 'Agent: Keeping 7 days. INVITE_TTL_MS stays as it is…' : `Withdrawn: ${WHY}`;
+  return it.open ? it.snipOpen : it.snip;
+}
+function list(){
+  return ITEMS.map((it,i)=>{
+    if(it.g) return GROUP ? `<div class="grp">${DOC}${it.g}</div>` : '';
+    const open = it.me ? S==='open' : !!it.open;
+    if(V==='today'){
+      return `<div class="row ${it.me?'on':''} ${open?'unread':''}">${mk}<span class="name">${it.t}</span><span class="time">${it.time}</span>${open?'<span class="dot"></span>':''}</div>`;
+    }
+    return swRow(`l${i}`, {t:it.t, time:it.time, snip:snipFor(it), open, unread:!!it.unread, on:!!it.me});
+  }).join('');
+}
+
+// enc: 'rec' (dot = unread, attention mark = needs you), 'before' (dot = needs you, and needs-you rows always semibold), 'plain' (dot = unread, no needs-you mark)
+function trow(r, enc='rec'){
+  let dot='', need='', cls='';
+  if(enc==='before'){ dot = r.open ? '<span class="ldot need"></span>' : ''; if(r.open) cls='bneeds'; }
+  else { dot = r.unread ? '<span class="ldot need" title="Unread"></span>' : ''; if(r.open && enc==='rec') need = ATT; }
+  const act = r.unread ? ['Mark as read', I_READ] : ['Mark as unread', I_UNREAD];
+  return `<div class="trow ${r.on?'on':''} ${cls} ${r.unread?'unread':''} ${r.hov?'hov':''}" style="${r.x?`transform:translateX(${r.x}px)`:''}"><span class="gut">${dot}</span><span class="mk">${mk}</span><span class="name">${r.t}</span><span class="tm">${need}<span class="time">${r.time}</span><span class="rbtn" title="${act[0]} (U)" data-act="toggle">${act[1]}</span></span><span class="snip">${r.snip}</span></div>`;
+}
+
+/* ---------- swipe ---------- */
+const REVEAL = 72;   // where a short swipe leaves the row resting, the button's width
+const LW = 56;       // the label's width inside the button
+let MIN_OPEN = 24;   // a release past this opens the button
+let FULL = 0.6;      // a release past this share of the row does the action
+function labX(x, armed){ return armed ? x - LW - 8 : (Math.min(x, REVEAL) - LW) / 2; }
+function swbg(unread, x=0, armed=false){
+  const lab = unread ? 'Read' : 'Unread';
+  return `<div class="swbg"><div class="swbtn ${armed?'armed':''}" data-act="swbtn" title="${unread?'Mark as read':'Mark as unread'}"><span class="swlab" style="transform:translateX(${labX(x,armed)}px);opacity:${Math.min(1, x/REVEAL)}">${unread?I_READ:I_UNREAD}<span>${lab}</span></span></div></div>`;
+}
+function swRow(key, r, x=0, armed=false, extra=''){
+  const cls = key ? '' : (x ? (armed ? 'moving' : 'open') : '');
+  return `<div class="sw ${cls}" ${key?`data-key="${key}"`:''} ${extra}>${swbg(r.unread, x, armed)}${trow({...r, x})}</div>`;
+}
+function fullAt(sw){ return sw.clientWidth * FULL; }
+function setX(sw, x, anim){
+  const row = sw.querySelector('.trow'), lab = sw.querySelector('.swlab'), btn = sw.querySelector('.swbtn');
+  const armed = x >= fullAt(sw);
+  sw.classList.toggle('dragging', !anim);
+  if(x > 0) sw.classList.add('moving');
+  btn.classList.toggle('armed', armed);
+  row.style.transform = x ? `translateX(${x}px)` : '';
+  lab.style.transform = `translateX(${labX(x, armed)}px)`;
+  lab.style.opacity = Math.min(1, x / REVEAL);
+  sw._x = x;
+}
+let openSw = null;
+function closeSw(sw){
+  if(!sw) return;
+  sw.classList.remove('open');
+  setX(sw, 0, true);
+  if(openSw === sw) openSw = null;
+  setTimeout(()=>{ if(!sw._x) sw.classList.remove('moving'); }, 340);
+}
+function flipRowNow(sw){ // flip the dot in place so the change shows while the row springs back
+  const it = itemFor(sw.dataset.key);
+  it.unread = !it.unread;
+  const row = sw.querySelector('.trow');
+  row.classList.toggle('unread', it.unread);
+  row.querySelector('.gut').innerHTML = it.unread ? '<span class="ldot need" title="Unread"></span>' : '';
+  setTimeout(renderRows, 360);
+}
+function settle(sw){
+  // A row the list redrew under a pending swipe is gone; its swipe does nothing.
+  if(!sw.isConnected) return;
+  const x = sw._x || 0;
+  if(x >= fullAt(sw)){ // long swipe: do it
+    sw.classList.remove('dragging');
+    sw.querySelector('.trow').style.transform = '';
+    sw._x = 0;
+    if(openSw === sw) openSw = null;
+    flipRowNow(sw);
+  } else if(x >= MIN_OPEN){ // short swipe: rest open on the button
+    setX(sw, REVEAL, true);
+    sw.classList.add('open');
+    openSw = sw;
+  } else closeSw(sw);
+}
+let drag = null, swallowClick = false;
+document.addEventListener('pointerdown', e=>{
+  closeMenu(e);
+  const sw = e.target.closest('.sw[data-key]');
+  if(openSw && openSw !== sw) closeSw(openSw);
+  if(!sw || e.button !== 0 || e.target.closest('.swbtn')) return;
+  drag = {sw, x0:e.clientX, y0:e.clientY, base:sw._x||0, live:false, id:e.pointerId};
+});
+document.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if(!drag.live){
+    if(Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    if(Math.abs(dy) > Math.abs(dx)){ drag = null; return; }
+    drag.live = true;
+    try{ drag.sw.setPointerCapture(drag.id); }catch(_){}
+  }
+  setX(drag.sw, Math.max(0, drag.base + dx), false);
+});
+function endDrag(){
+  if(!drag) return;
+  if(drag.live){ swallowClick = true; setTimeout(()=>swallowClick=false, 0); settle(drag.sw); }
+  else if(drag.base > 0) closeSw(drag.sw); // a click on an open row closes it
+  drag = null;
+}
+document.addEventListener('pointerup', endDrag);
+// A cancelled pointer is not a release: the row closes and nothing flips.
+document.addEventListener('pointercancel', ()=>{
+  if(!drag) return;
+  if(drag.live) closeSw(drag.sw);
+  drag = null;
+});
+// Two-finger swipe on a trackpad: horizontal wheel deltas move the row; it settles once they stop.
+document.addEventListener('wheel', e=>{
+  const sw = e.target.closest('.sw[data-key]');
+  if(!sw) return;
+  if(!sw._wheel && Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  if(!sw._wheel){ if(openSw && openSw !== sw) closeSw(openSw); sw._wheel = {x: sw._x||0}; }
+  sw._wheel.x = Math.max(0, sw._wheel.x - e.deltaX);
+  setX(sw, sw._wheel.x, false);
+  clearTimeout(sw._wt);
+  sw._wt = setTimeout(()=>{ sw._wheel = null; settle(sw); }, 140);
+}, {passive:false});
+
+/* ---------- clicks, menus, keys ---------- */
+function toggleKey(key){ const it = itemFor(key); it.unread = !it.unread; renderRows(); }
+function meKey(){ return `l${ITEMS.findIndex(i=>i.me)}`; }
+document.addEventListener('click', e=>{
+  if(swallowClick){ e.stopPropagation(); return; }
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  const act = btn.dataset.act;
+  if(act === 'swbtn'){
+    const sw = btn.closest('.sw[data-key]'); if(!sw) return;
+    flipRowNow(sw); closeSw(sw);
+  } else if(act === 'toggle'){
+    const sw = btn.closest('.sw[data-key]'); if(sw) toggleKey(sw.dataset.key);
+  } else if(act === 'me'){
+    toggleKey(meKey());
+  } else if(act === 'agent'){
+    toast(`Opens ${NAME}'s tab`);
+  }
+}, true);
+let menuEl = null;
+function closeMenu(e){ if(menuEl && !(e && menuEl.contains(e.target))){ menuEl.remove(); menuEl = null; } }
+function showMenu(x, y, items){
+  closeMenu();
+  menuEl = document.createElement('div');
+  menuEl.className = 'menu';
+  menuEl.innerHTML = items.map((m,i)=> m==='hr' ? '<hr>' : `<div class="mi" data-i="${i}"><span class="ck">${m.ck?CHECK:(m.ic||'')}</span>${m.l}${m.kb?`<span class="kb">${m.kb}</span>`:''}</div>`).join('');
+  menuEl.style.left = `${x}px`; menuEl.style.top = `${y}px`;
+  menuEl.onclick = e=>{ const mi = e.target.closest('.mi'); if(!mi) return; const m = items[+mi.dataset.i]; closeMenu(); m.fn?.(); };
+  document.body.appendChild(menuEl);
+}
+function rowMenu(it){ return [
+  {l: it.unread ? 'Mark as read' : 'Mark as unread', kb:'U', ic: it.unread ? I_READ : I_UNREAD},
+  'hr',
+  {l:'Copy link'},
+]; }
+document.addEventListener('contextmenu', e=>{
+  const sw = e.target.closest('.sw[data-key]');
+  if(!sw) return;
+  e.preventDefault();
+  const key = sw.dataset.key, items = rowMenu(itemFor(key));
+  items[0].fn = ()=>toggleKey(key);
+  items[2].fn = ()=>toast('Link copied');
+  showMenu(e.clientX, e.clientY, items);
+});
+document.getElementById('viewBtn').onclick = e=>{
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  showMenu(r.left, r.bottom + 4, [
+    {l:'Group by task', ck:GROUP, fn:()=>{GROUP=true; renderRows();}},
+    {l:'No grouping', ck:!GROUP, fn:()=>{GROUP=false; renderRows();}},
+    'hr',
+    {l:'Mark all as read', ic:I_READ, fn:()=>{ ITEMS.forEach(i=>{ if(!i.g) i.unread=false; }); renderRows(); toast('Marked all as read · attention marks stay'); }},
+  ]);
+};
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape'){ closeMenu(); if(openSw) closeSw(openSw); }
+  if((e.key === 'u' || e.key === 'U') && !e.metaKey && !e.ctrlKey && !e.altKey && V !== 'today'){ toggleKey(meKey()); }
+});
+let toastT;
+function toast(msg){
+  let t = document.querySelector('.toast');
+  if(!t){ t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; clearTimeout(toastT); toastT = setTimeout(()=>t.remove(), 1600);
+}
+
+/* ---------- static demos ---------- */
+const CELLS = {
+  'need-unread': {t:'Add POSTMARK_SERVER_TOKEN to Vercel', time:'3m', snip:'To-do · Add the token under Production', open:true, unread:true, why:'A new question you haven\'t opened.'},
+  'need-read': {t:'What should an expired invite link offer?', time:'16m', snip:'Choice · 3 options, one recommended', open:true, unread:false, why:'You read it and haven\'t answered: still owed, no longer new.'},
+  'quiet-unread': {t:"Backfill last month's API usage on staging?", time:'4m', snip:'Agent: Backfilled 41,208 rows; staging totals match', open:false, unread:true, why:'Answered, then something new: the agent replied, withdrew it, or posted a note that asks nothing.'},
+  'quiet-read': {t:'Bill overage per 1,000 calls or per call?', time:'1h', snip:'You: Per 1,000, rounded up', open:false, unread:false, why:'Settled, and you\'ve seen everything in it.'},
+};
+function miniFour(enc){
+  return `<div class="mini">${['need-unread','need-read','quiet-unread','quiet-read'].map(k=>`<div class="lab"><span>${k.startsWith('need')?'Needs you':'Doesn\'t need you'} · ${k.endsWith('unread')?'unread':'read'}</span></div>${trow(CELLS[k],enc)}`).join('')}</div>`;
+}
+function opts(){
+  const section = `<div class="mini"><div class="sub">Needs you · 2</div>${trow(CELLS['need-unread'],'plain')}${trow(CELLS['need-read'],'plain')}<div class="sub" style="margin-top:4px">Everything else</div>${trow(CELLS['quiet-unread'],'plain')}${trow(CELLS['quiet-read'],'plain')}</div>`;
+  return `<div class="opt3"><h3>Before</h3><p>Blue dot = needs you, semibold = unread. But needs-you rows were always semibold, so "unread" and "read" needs-you rows (the first two) look the same, and the dot can't be swiped.</p>${miniFour('before')}</div>
+  <div class="opt3 pick"><h3>Dot = unread, ! = needs you <span class="tag ui">Recommended</span></h3><p>The blue dot and semibold mean unread, as in every mail app, and are what you swipe. The orange attention mark beside the time means needs you, in the window's existing "wants your hand" color.</p>${miniFour('rec')}</div>
+  <div class="opt3"><h3>Needs you as a section</h3><p>The dot means unread, and needs-you items gather in a "Needs you" group at the top, so no mark is needed. It's the clearest triage, but it fights Group by task, and an item jumps sections when you answer it.</p>${section}</div>`;
+}
+function matrix(){
+  const c = k => `<div class="cell">${trow(CELLS[k])}<div class="why">${CELLS[k].why}</div></div>`;
+  const hov = (k, why) => `<div class="cell">${trow({...CELLS[k], hov:true})}<div class="why">${why}</div></div>`;
+  const short = `<div class="cell"><div style="margin:0 6px">${swRow('', CELLS['quiet-unread'], REVEAL, false, 'style="margin:0"')}</div><div class="why">Short swipe, let go: the row rests open on its button. Click <b style="color:var(--t1)">Read</b> to mark it.</div></div>`;
+  const long = `<div class="cell"><div style="margin:0 6px">${swRow('', CELLS['quiet-unread'], 300, true, 'style="margin:0"')}</div><div class="why">Long swipe, past the line: the button brightens and its label rides the row's edge. Let go to mark it read.</div></div>`;
+  return `<span></span><span class="hd">Unread</span><span class="hd">Read</span>
+  <span class="rh">${ATT}Needs you</span>${c('need-unread')}${c('need-read')}
+  <span class="rh">Doesn't need you</span>${c('quiet-unread')}${c('quiet-read')}
+  <span class="rh" style="color:var(--t2)">Hovered</span>${hov('need-unread','The time and the mark give way to the open envelope: Mark as read.')}${hov('quiet-read','The closed envelope: Mark as unread.')}
+  <span class="rh" style="color:var(--t2)">Swiped</span>${short}${long}`;
+}
+function stages(){
+  const r = {...CELLS['quiet-unread']};
+  const s = (x, armed, cap) => `<div class="stage"><div class="mini" style="padding:6px 0">${swRow('', r, x, armed, 'style="margin:0 6px"')}</div><div class="cap">${cap}</div></div>`;
+  return s(30, false, '<b>Dragging, a little.</b> The button peeks in at the left, its label fading up.')
+       + s(REVEAL, false, '<b>Let go: open.</b> The row rests on the Read button until you click it or anything else.')
+       + s(200, true, '<b>Past the line.</b> The button brightens and its label follows the row. Let go and it\'s read.');
+}
+
+/* ---------- bars ---------- */
+function bar(){
+  const agent = V==='today' ? `<span class="c">${mk}${NAME}</span>` : `<span class="c link" data-act="agent" title="Open ${NAME}">${mk}${NAME}</span>`;
+  const crumbs = `<span class="crumbs"><span class="c">${DOC}Teammate invitations</span><span class="sep">›</span>${agent}</span>`;
+  if(V==='today') return `${crumbs}<span class="spacer"></span><span class="tbtn">Open agent ${OUT}</span>`;
+  const me = ITEMS.find(i=>i.me);
+  const act = me.unread ? ['Mark as read', I_READ] : ['Mark as unread', I_UNREAD];
+  return `${crumbs}<span class="spacer"></span><span class="ibtn" title="${act[0]} (U)" data-act="me">${act[1]}</span><span class="tbtn" style="font-variant-numeric:tabular-nums">3 of 9</span>`;
+}
+
+/* ---------- Today ---------- */
+function today(){
+  let h = `<div class="col today"><div class="byline">${mk}<b>${NAME}</b> asked 24m</div>
+  <div class="ind"><h4>${TITLE}</h4><p>${BODY}</p>${CODE}<p>Either way an expired link reads “This invite is no longer valid”, and an admin can send a fresh one from <b>Settings › Members</b>.</p>
+  ${S==='open'?options('open'):S==='answered'?options('today-settled'):options('out')}</div>`;
+  if(S==='answered') h += `<div style="margin-top:14px" class="ubub">${NOTE}</div><div class="meta" style="text-align:right;margin-top:4px">You chose 7 days · 19m · Sent to ${NAME}</div>`;
+  if(S==='withdrawn') h += `<div class="byline" style="margin-top:16px">${mk}<b>${NAME}</b> withdrew this 2m</div><p class="ind" style="margin-top:2px">${WHY}</p>`;
+  return `${h}</div>`;
+}
+
+/* ---------- A: transcript thread ---------- */
+const AN = `<span class="aname" data-act="agent">${NAME}</span>`;
+function head(){
+  const state = S==='open' ? `<span style="display:inline-flex;align-items:center;color:var(--t1)">${ATT}Needs you</span>` : S==='answered' ? '<span class="pill">Answered</span>' : '<span class="pill">Withdrawn</span>';
+  const n = S==='answered' ? ' · <span>2 replies</span>' : '';
+  return `<div class="subject">${TITLE}</div>
+  <div class="submeta">${mk}${AN}<span class="sep">·</span>asked 24m ago${n}<span class="sep">·</span>${state}</div>`;
+}
+function a(){
+  let h = `<div class="col">${head()}<div class="hr"></div>
+  <div class="fold">${CHEV}<span>3 earlier messages from ${NAME}</span></div>
+  <div class="ctx">…the invite route and its email are in. One thing the plan leaves open, so I've put it in your Inbox and carried on with the resend button.</div>
+  <div class="amsg"><p>${BODY}</p>${CODE}<p style="margin-top:8px">Either way an expired link reads “This invite is no longer valid”, and an admin can send a fresh one from <b>Settings › Members</b>.</p>`;
+  if(S==='open') h += `${options('open')}</div><div class="meta" style="margin-top:6px">Asked 24m ago · Choice</div>`;
+  else h += `<div class="fold" style="margin-top:4px">${CHEV}<span>2 options${S==='answered'?' · you picked <span style="color:var(--t1)">7 days</span> (recommended)':' offered'}</span></div></div><div class="meta">Asked 24m ago</div>`;
+  if(S==='answered'){
+    h += `<div style="margin-top:18px" class="ubub"><span class="picked">${CHECK} 7 days</span><span class="pick-line">${NOTE}</span></div>
+    <div class="meta" style="text-align:right;margin-top:4px">You · 19m ago · Sent to agent</div>
+    <div class="amsg" style="margin-top:16px"><p>${FOLLOW}</p></div><div class="meta">17m ago</div>
+    <div class="cont">${mk}<span><b>${NAME}</b> is working on the resend button</span><span class="go" data-act="agent">Continue in agent ${OUT}</span></div>`;
+  }
+  if(S==='withdrawn') h += `<div class="event">${NAME} withdrew this · 2m ago</div><div class="amsg"><p>${WHY}</p></div>`;
+  return `${h}</div>`;
+}
+
+/* ---------- B: comment thread ---------- */
+function b(){
+  const agentAv = `<span class="av"><span class="bigmark">${AGENT}</span></span>`;
+  let h = `<div class="col">${head()}<div class="hr"></div><div class="thr">
+  <div class="ent ev"><span class="av"><span class="evdot">${CHEVD}</span></span><div><div class="who">3 earlier messages from the agent</div></div></div>
+  <div class="ent">${agentAv}<div><div class="who">${AN}<span>24m</span></div><div class="bd"><p>${BODY}</p>${CODE}
+  ${S==='open'?options('open'):`<div class="fold">${CHEV}<span>2 options${S==='answered'?' · you picked <span style="color:var(--t1)">7 days</span>':' offered'}</span></div>`}</div></div></div>`;
+  if(S==='answered'){
+    h += `<div class="ent"><span class="av"><span class="disc disc24">D</span></span><div><div class="who">You<span>19m · sent to agent</span></div><div class="bd"><span class="picked">${CHECK} 7 days</span><p>${NOTE}</p></div></div></div>
+    <div class="ent">${agentAv}<div><div class="who">${AN}<span>17m</span></div><div class="bd"><p>${FOLLOW}</p><div class="cont" style="margin-top:8px">${mk}<span><b>${NAME}</b> is working on the resend button</span><span class="go" data-act="agent" style="cursor:pointer">Continue in agent ${OUT}</span></div></div></div></div>`;
+  }
+  if(S==='withdrawn'){
+    h += `<div class="ent">${agentAv}<div><div class="who">${AN}<span>withdrew this · 2m</span></div><div class="bd"><p>${WHY}</p></div></div></div>`;
+  }
+  h += `</div>`;
+  if(S!=='open') h += `<div class="reply" style="margin-top:2px"><span class="disc disc24" style="opacity:.5">D</span><div class="well"><span class="muted" style="font-size:13px">${S==='answered'?'Reply to the agent…':'Reply anyway…'}</span></div></div>`;
+  return `${h}</div>`;
+}
+
+/* ---------- composer ---------- */
+function composer(){
+  if(S!=='open') return '';
+  if(V==='today') return `<div class="box"><div class="well"><div class="ph">Add a note, or answer in your own words</div><div class="ft"><span class="q"></span><span class="send">${UP}</span></div></div></div>`;
+  return `<div class="box"><div class="well"><div class="ph">Reply to ${NAME}…</div><div class="ft"><span class="q">Picked: 7 days</span><span class="send">${UP}</span></div></div></div>`;
+}
+
+const NOTES = {
+  today: '<b>Today</b>, as <code>inbox-pane.tsx</code> draws it: a byline and an indent no other surface has, the title inside the message, options left outlined after you pick, the thread stopping at your answer, and an Open agent button in the bar.',
+  a: '<b>A · Transcript thread.</b> The alternative. The item reads like the agent tab, because it <i>is</i> a slice of that conversation. It leads with the subject and a muted meta line, as a plan does. The agent\'s words run full width with no byline, and "Asked 24m ago" sits under the turn the way "Worked for…" does. Options fold to one line once you answer, and your pick becomes a chip in your bubble. The agent\'s next message follows, ending in a "Continue in agent" row.',
+  b: '<b>B · Comment thread (chosen).</b> Linear and GitHub style: every message has an avatar, a name, and a time, joined down the left by a thread line, with a reply box at the end that stays even after the item is settled. The subject leads, with a muted line of who, when, and state. Once answered, the options fold to one line and your pick rides in your comment as a chip. <b>The bar holds only the crumbs, the envelope toggle, and the count:</b> the agent\'s name, in the crumbs and on its comments, opens its tab (try it), so there\'s no Open agent button.'
+};
+
+const CARDS = [
+  {n:1,t:'One comment layout, joined by a thread line',tags:['s','ui','Desktop only'],p:'Every message in the item, the agent\'s and yours, draws as a comment: a 24px avatar (the agent\'s mark or your disc), the name and a muted time on one line, the words under it, and a 2px line down the left joining one comment to the next. <code>Byline</code> and <code>.inbox-indent</code> go. A settled item ends in a reply box that stays.',why:'Takes out the one pattern nothing else in the window uses, and makes the item read as a conversation.'},
+  {n:2,t:'Give the thread a subject, and trim the bar',tags:['s','ui','Desktop only'],p:'Move the item\'s title out of the message into a header above it, at the plan title\'s weight, with a muted line under: agent mark and name · asked 24m ago · reply count · its state (the attention mark and "Needs you", or Answered / Withdrawn). The bar keeps the crumbs, the envelope toggle, and "3 of 9". <b>Open agent goes:</b> the agent\'s name, in the crumbs and on its comments, opens its tab, as an agent\'s name does everywhere else (the hover card already offers no Open agent for that reason).',why:'A thread has a subject and then messages. Today the subject is inside the first message, and the bar repeats a way in the name already gives.'},
+  {n:3,t:'Fold the options once answered, and put the pick in your comment',tags:['s','ui','Desktop only'],p:'A settled item\'s options collapse to one fold: "2 options · you picked 7 days", which opens to the outlined list <code>Proposal</code> draws today. Your comment leads with a check chip for the pick, then your note, and its time line reads "19m · sent to agent".',why:'Says the pick once instead of three times, and closes the finished part the way the transcript closes a finished tool call.'},
+  {n:4,t:'Show the agent\'s reply after yours',tags:['m','Needs the agent\'s transcript'],p:'Once the answer reaches the agent as an "Inbox answer" message, draw the agent\'s next assistant message from its transcript as the next comment. End with a row: "[mark] Agent is working on X · Continue in agent ↗". Where the answer was only kept for the agent to read, the row says that instead.',why:'This is what makes it a thread and not a form with a receipt. The agent tab already reads that transcript; the pane would read the turn after the answer.'},
+  {n:5,t:'Thread rows: the blue dot for unread, the attention mark for needs you',tags:['s','ui','Needs a seen marker per item'],p:'Two lines per row: the title and time, then a muted preview of the last word in the thread ("You: Per 1,000, rounded up", "Agent: Backfilled 41,208 rows", "Withdrawn: …"). The blue dot in the left gutter and a semibold title mean unread. The orange "!" disc from <code>attention-mark.tsx</code>, beside the time, means needs you, and only answering clears it.',why:'The list reads like a mail thread list, you can triage without opening anything, and the two states never hide each other. The preview and the mark are desktop only; unread needs the service to remember what you\'ve seen.'},
+  {n:6,t:'Earlier context, folded',tags:['m','Needs the agent\'s transcript'],p:'Above the question, a fold: "3 earlier messages from the agent", which opens to the agent\'s messages before the post. This is the transcript slice ending at the <code>post_to_inbox</code> call.',why:'Answers "why is it asking me this?" without leaving the Inbox.'},
+  {n:7,t:'Quick replies over the box',tags:['s','ui','Desktop only'],p:'A choice\'s options also show as pill chips above the composer, and an approval\'s Approve / Decline do too. The box stays a plain "Reply to &lt;agent&gt;…" with Send, so it matches the agent composer and holds no presses in its footer.',why:'The box looks exactly like the agent tab\'s, and picking stays one click.'},
+  {n:8,t:'One card in both places',tags:['l','Desktop only'],p:'The agent tab draws the Inbox\'s card, answerable in place, where it draws the collapsed <code>post_to_inbox</code> row today. The user message "Inbox answer…" draws as the same comment with the pick chip.',why:'One exchange, one look, wherever you meet it.'},
+  {n:9,t:'Show when an item was revised',tags:['s','Data exists: revision'],p:'An item reposted under its key (<code>revision</code> > 1) gets an "Edited" event in the thread, the way the plan says "Edited by". Showing what changed would need the service to keep earlier versions; the marker alone doesn\'t.',why:'Today a repost replaces the item without a trace, which a thread never does.'},
+  {n:10,t:'Mark read and unread',tags:['m','Needs a seen marker per item'],p:'Opening marks read. The hover button, the row menu, plain <kbd>U</kbd>, the bar\'s toggle, and Mark all as read flip the dot, each with the open envelope for Mark as read and the closed one for Mark as unread. Then the two-stage swipe: a short swipe right opens a Read / Unread button the row rests on, and a long swipe past about 60% of the row does it on release. Pointer drags and trackpad two-finger swipes both drive it, on <code>transform</code> alone.',why:'Lets you keep something as "come back to this" without leaving it unanswered forever, the way mail does. The swipe stays reversible at every step short of the line.'},
+];
+
+function renderRows(){
+  openSw = null;
+  document.getElementById('listBody').innerHTML = list();
+  document.getElementById('paneBar').innerHTML = bar();
+  document.getElementById('swipeDemo').innerHTML = DEMO.map((r,i)=>swRow(`d${i}`, r)).join('');
+  const me = ITEMS.find(i=>i.me);
+  document.getElementById('menuDemo').innerHTML = `<div class="menu static">${rowMenu(me).map(m=> m==='hr' ? '<hr>' : `<div class="mi"><span class="ck">${m.ic||''}</span>${m.l}${m.kb?`<span class="kb">${m.kb}</span>`:''}</div>`).join('')}</div>`;
+}
+function render(){
+  document.querySelectorAll('#vSeg button').forEach(b=>{ b.setAttribute('aria-pressed', b.dataset.v===V); });
+  document.querySelectorAll('#sSeg button').forEach(b=>{ b.setAttribute('aria-pressed', b.dataset.s===S); });
+  document.getElementById('note').innerHTML = NOTES[V];
+  renderRows();
+  const board = document.getElementById('board');
+  board.className = `board${S==='open'?'':' settled'}`;
+  board.innerHTML = V==='today'?today():V==='a'?a():b();
+  board.scrollTop = 0;
+  document.getElementById('composer').innerHTML = composer();
+}
+document.getElementById('vSeg').onclick = e=>{ if(e.target.dataset.v){V=e.target.dataset.v;render();} };
+document.getElementById('sSeg').onclick = e=>{ if(e.target.dataset.s){S=e.target.dataset.s;render();} };
+document.getElementById('legend').innerHTML = `<span><span class="ldot need"></span><b>Unread</b> — yours to flip</span><span>${ATT.replace('margin-right:6px','')}<b>Needs you</b> — clears only when you answer</span><span><span class="ic">${I_READ}</span><b>Mark as read</b></span><span><span class="ic">${I_UNREAD}</span><b>Mark as unread</b></span>`;
+document.getElementById('opts').innerHTML = opts();
+document.getElementById('matrix').innerHTML = matrix();
+document.getElementById('stages').innerHTML = stages();
+document.getElementById('cards').innerHTML = CARDS.map(c=>`<div class="card"><div class="tags">${c.tags.map(t=>t==='s'?'<span class="tag s">Small</span>':t==='m'?'<span class="tag m">Medium</span>':t==='l'?'<span class="tag l">Large</span>':t==='ui'?'<span class="tag ui">Visual</span>':`<span class="tag">${t}</span>`).join('')}</div><h3>${c.n}. ${c.t}</h3><p>${c.p}</p><p class="why">${c.why}</p></div>`).join('');
+const minR = document.getElementById('minR'), fullR = document.getElementById('fullR');
+function tuneLabels(){ document.getElementById('minV').textContent = `${MIN_OPEN}px`; document.getElementById('fullV').textContent = `${Math.round(FULL*100)}%`; }
+minR.value = MIN_OPEN; fullR.value = FULL*100; tuneLabels();
+minR.oninput = ()=>{ MIN_OPEN = +minR.value; tuneLabels(); };
+fullR.oninput = ()=>{ FULL = fullR.value/100; tuneLabels(); };
+render();
+</script>
+</body>
+</html>

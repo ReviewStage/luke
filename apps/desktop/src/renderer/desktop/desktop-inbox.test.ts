@@ -679,6 +679,28 @@ test("an image an item shows is drawn as a plan's picture is, no wider than its 
   styles.remove();
 });
 
+test("an image that lands before its item's own read does is drawn all the same", async () => {
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c71",
+    alt: "The sandbox's window",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [shot] }, RETRY]);
+  // The list's read of the plan answers, while the pane's own read of it is held.
+  let billingReads = 0;
+  startRead = (taskId) =>
+    taskId === BILLING.id && billingReads++ > 0 ? new Promise(() => undefined) : undefined;
+  const { page } = mount();
+  await settle();
+  assert.ok(page.querySelector("[data-inbox-image]"), "the item is drawn from the list's read");
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
+    "The sandbox's window",
+  );
+});
+
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
@@ -1660,6 +1682,31 @@ test("once the chosen plan's own held read fails, the list's read of that plan s
   );
   await settle();
   assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
+});
+
+test("once the chosen plan's own held read fails, an image the list's read draws since still lands", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const { page } = mount();
+  await settle();
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72",
+    alt: "The retry schedule",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, blocks: [shot] }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
+    "The retry schedule",
+  );
 });
 
 test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {

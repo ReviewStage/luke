@@ -528,6 +528,16 @@ function PlanDocument({
   // Its pull request's chip opens the same tab on the pull request's overview.
   const openPullRequest = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.OVERVIEW);
+  // Run opens the agent's terminal of this Mac in the side panel at once;
+  // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
+  const { repository } = task;
+  const openOnMac =
+    repository === null
+      ? undefined
+      : (agentId: string) => {
+          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
+          showSide();
+        };
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -638,6 +648,7 @@ function PlanDocument({
                       inbox={inbox.board.open.length}
                       actionsSlot={actionsSlot}
                       onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                      onOpenOnMac={openOnMac}
                     />
                   }
                 >

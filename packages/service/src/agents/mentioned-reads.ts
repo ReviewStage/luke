@@ -7,17 +7,19 @@ import { listPages } from "@luke/database/models/plan-pages";
 import type { PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
 import { Effect, Option, Schema } from "effect";
+import { listMembers } from "../accounts/workspace-members.js";
 import { wireUuidSchema } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import {
   type MentionedAgent,
+  type MentionedPerson,
   type MentionedReads,
   mentionedIds,
   NO_MENTIONED_READS,
 } from "./mentioned-context.js";
 
 /**
- * mentioned-reads.ts -- the pages a message mentions on its agent's own plan, and the coding agents it mentions anywhere in its agent's workspace, read as the sender at the send, for `mentioned-context.ts` to hand.
+ * mentioned-reads.ts -- the pages a message mentions on its agent's own plan, and the coding agents and people it mentions anywhere in its agent's workspace, read as the sender at the send, for `mentioned-context.ts` to hand.
  *
  * A page is read as its newest version names it, title and number and no
  * HTML, through the read the plan's side panel lists them by, so the sender is handed nothing of the plan they could
@@ -26,9 +28,11 @@ import {
  * read opening its tab makes (`listPublishedCodingAgentsById`), so the
  * sender is handed only an agent they could open; and only one of the
  * workspace the message's agent stands in, so an agent of another
- * workspace, even one the sender is also in, is handed nothing. Nothing is
- * read where the words mention no page of the plan and no agent, which is
- * nearly every message.
+ * workspace, even one the sender is also in, is handed nothing. A person is
+ * read among the members of that same workspace, through the read its
+ * Members list makes, so someone of another workspace is handed nothing
+ * either. Nothing is read where the words mention no page of the plan, no
+ * agent, and no person, which is nearly every message.
  */
 
 /** Where a message lands: the plan its agent works on, if any, and the workspace its agent stands in. */
@@ -81,7 +85,19 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
     return found;
   });
 
-/** What the words mention of the plan's pages and the workspace's agents, read as `userId`; nothing read where they mention none. */
+/** Each person named who is a member of the workspace, by their account's id, with their name and role. */
+const readPeople = (workspaceId: string, named: readonly string[]) =>
+  Effect.map(
+    listMembers(workspaceId),
+    (members) =>
+      new Map<string, MentionedPerson>(
+        members
+          .filter((member) => named.includes(member.userId))
+          .map(({ userId, name, role }) => [userId, { userId, name, role }]),
+      ),
+  );
+
+/** What the words mention of the plan's pages and the workspace's agents and people, read as `userId`; nothing read where they mention none. */
 export function readMentioned(
   userId: string,
   words: string,
@@ -89,7 +105,7 @@ export function readMentioned(
 ): Effect.Effect<MentionedReads, StoreFailure, DatabaseServices> {
   const { task } = place;
   const named = mentionedIds(words, task);
-  if (named.pages.length === 0 && named.agents.length === 0) {
+  if (named.pages.length === 0 && named.agents.length === 0 && named.people.length === 0) {
     return Effect.succeed(NO_MENTIONED_READS);
   }
   return Effect.all({
@@ -98,5 +114,9 @@ export function readMentioned(
         ? Effect.succeed(new Map<string, PageLine>())
         : readPages(userId, task.id, named.pages),
     agents: readAgents(userId, place.workspaceId, named.agents),
+    people:
+      named.people.length === 0
+        ? Effect.succeed(new Map<string, MentionedPerson>())
+        : readPeople(place.workspaceId, named.people),
   });
 }

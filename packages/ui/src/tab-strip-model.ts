@@ -35,6 +35,7 @@ export const TAB_WORDS = {
   CODING_AGENT: "Coding agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
+  MAC_TERMINAL: "This Mac",
 } as const;
 
 /** A Pull request tab's name for its agent's: the agent's own, after the word for what it shows. */
@@ -90,6 +91,17 @@ export interface PageStripTab {
   readonly page: string;
 }
 
+/**
+ * A terminal of this Mac run on an agent's pushed branch, named by the
+ * agent, with its repository and when Run was last pressed for it, which
+ * has the tab read the agent's branch again.
+ */
+export interface MacTerminalStripTab {
+  readonly macTerminal: string;
+  readonly repository: string;
+  readonly asked: number;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -99,7 +111,8 @@ export type StripTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | MacTerminalStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -132,6 +145,11 @@ export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
 /** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
+}
+
+/** Whether a tab is a terminal of this Mac. */
+export function isMacTerminalTab(tab: StripTab): tab is MacTerminalStripTab {
+  return tab instanceof Object && "macTerminal" in tab;
 }
 
 /** Whether a tab is one page's. */
@@ -177,6 +195,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
+  if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
   return a === b;
 }
 
@@ -206,6 +225,7 @@ function terminalKey(agentId: string): string {
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
+  if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;

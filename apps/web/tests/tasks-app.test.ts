@@ -26,6 +26,7 @@ import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
 } from "@luke/features/coding-agent-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
 import { PLAN_HEADING } from "@luke/features/plan-template";
@@ -1246,7 +1247,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
         const page = Option.getOrThrow(
-          yield* writePage(owner, taskId, { title: "Invite funnel", html: "<p>v1</p>" }),
+          yield* writePage(
+            owner,
+            taskId,
+            { title: "Invite funnel", html: "<p>v1</p>" },
+            { kind: PAGE_SHOWER.LUKE },
+          ),
         );
         const version = (asker: string, pageId: string, number: string, method?: string) =>
           ask(

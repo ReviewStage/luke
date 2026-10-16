@@ -1,0 +1,57 @@
+/* text.css -- the type roles: each role's size, leading, and weight from the
+   profile, and its ink from the palette. The element a caller chooses keeps
+   none of the user agent's own heading sizes or margins, so an `h1` set as a
+   caption looks like a caption. Outer spacing is the container's. */
+
+@layer components {
+  .luke-text {
+    margin: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-text[data-variant="body"] {
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-text[data-variant="label"] {
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-text[data-variant="caption"] {
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-text[data-variant="section"] {
+    font-size: var(--luke-type-section-size);
+    line-height: var(--luke-type-section-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-text[data-variant="dialog"] {
+    font-size: var(--luke-type-dialog-size);
+    line-height: var(--luke-type-dialog-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-text[data-variant="title"] {
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+  }
+
+  .luke-text[data-tone="muted"] {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-text[data-tone="subtle"] {
+    color: var(--luke-color-text-subtle);
+  }
+}

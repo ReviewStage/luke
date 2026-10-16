@@ -17,6 +17,7 @@
     "./chart": "./src/chart/chart.js",
     "./theme.css": "./src/theme.css",
     "./tokens.css": "./src/tokens/tokens.css",
+    "./styles.css": "./src/styles.css",
     "./testing/browser": "./src/testing/browser.js",
     "./testing/browser-setup": "./src/testing/browser-setup.js",
     "./search-tokens": "./src/search-tokens.js",

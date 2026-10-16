@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import type { PageLine } from "@luke/features/page-wire";
+import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -61,4 +61,34 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "false", "the new version is hidden until it loads");
   load();
   assert.equal(preview()?.dataset.loaded, "true");
+});
+
+test("the head says who showed the version beside it, wherever the card hangs: Luke, an agent by the name the window holds, or a coding agent it holds none of, and nothing for a version from before", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const subOf = (page: PageLine) => {
+    act(() =>
+      root.render(onRegistry(AtomRegistry.make(), createElement(PageCard, { taskId: TASK, page }))),
+    );
+    return container.querySelector(".card-sub")?.textContent;
+  };
+
+  assert.deepEqual(
+    [
+      subOf({ ...FUNNEL, shownBy: { kind: PAGE_SHOWER.LUKE } }),
+      subOf({ ...FUNNEL, version: 1, shownBy: { kind: PAGE_SHOWER.LUKE } }),
+      subOf({
+        ...FUNNEL,
+        shownBy: { kind: PAGE_SHOWER.AGENT, agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+      }),
+      subOf(FUNNEL),
+    ],
+    [
+      "Version 2 · Shown by Luke",
+      "Shown by Luke",
+      "Version 2 · Shown by a coding agent",
+      "Version 2",
+    ],
+  );
 });

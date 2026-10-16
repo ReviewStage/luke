@@ -7071,6 +7071,13 @@ button.automation-run:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Words under a card's name wrap anywhere rather than run past the card
+   or under its corner, as a long agent's name on a page's card would. */
+.card-sub > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .card-corner {
   flex: none;
   color: var(--text-tertiary);
