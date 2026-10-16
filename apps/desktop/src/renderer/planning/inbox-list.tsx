@@ -4,6 +4,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
@@ -18,6 +19,7 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
+import { EmptyState } from "../empty-state";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, planlessSubject } from "./agent-ref";
 import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
@@ -64,7 +66,10 @@ import { cardTitle } from "./tool-call-model";
  * developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
- * checked; both are kept across launches. A task's own Inbox lists one
+ * checked; both are kept across launches. Where Needs you leaves out every
+ * item listed, the list says so in the Inbox's empty state, with Show all to
+ * turn the filter off, as a mail app's empty unread view does; the item the
+ * pane shows keeps its place there, though no row. A task's own Inbox lists one
  * task's items in one run, so its head offers Needs you alone, kept apart
  * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
@@ -363,6 +368,37 @@ function NeedsYouOnly({
   );
 }
 
+/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off and keeps the list standing where the Inbox shows one column. */
+export function NeedsYouEmpty({
+  needsYou,
+  onList,
+}: {
+  needsYou: InboxWaitingOnly;
+  /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
+  onList: () => void;
+}): React.JSX.Element {
+  return (
+    <EmptyState
+      icon={<InboxIcon />}
+      title={NEEDS_YOU.NONE}
+      action={
+        <button
+          type="button"
+          className="toolbar-button"
+          onClick={() => {
+            onList();
+            needsYou.onWaitingOnly(false);
+          }}
+        >
+          {NEEDS_YOU_PRESS.ALL}
+        </button>
+      }
+    >
+      {NEEDS_YOU.ANSWERED}
+    </EmptyState>
+  );
+}
+
 /**
  * The list's head: the Inbox's name, and Needs you and, on the window's
  * Inbox, the view's menu at the list's top right; a task's own Inbox lists
@@ -407,6 +443,45 @@ export interface InboxListHead {
   readonly waiting: boolean;
 }
 
+/** What the list wears to keep the keyboard: its element, and its handlers for focus arriving and leaving. */
+interface RowFocus {
+  readonly ref: React.RefObject<HTMLElement | null>;
+  readonly onFocus: (event: React.FocusEvent) => void;
+  readonly onBlur: () => void;
+}
+
+/**
+ * Keeps the keyboard in the list when the row holding it is no longer
+ * drawn, as Needs you leaves out an item answered on another Mac while its
+ * row is focused: the keyboard goes to Needs you, the control that left it
+ * out. Note that a removed row fires no blur, so the row last focused is
+ * remembered and looked for after every render.
+ */
+function useRowFocusKept(): RowFocus {
+  const ref = useRef<HTMLElement | null>(null);
+  const focusedRow = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const row = focusedRow.current;
+    if (list === null || row === undefined || list.hidden) return;
+    const rows = list.querySelectorAll<HTMLElement>("[data-item-id]");
+    if ([...rows].some((each) => each.dataset.itemId === row)) return;
+    focusedRow.current = undefined;
+    if (document.activeElement !== null && document.activeElement !== document.body) return;
+    list.querySelector<HTMLElement>(".inbox-needs-you-only")?.focus();
+  });
+  return {
+    ref,
+    onFocus: (event) => {
+      focusedRow.current =
+        event.target instanceof HTMLElement ? event.target.dataset.itemId : undefined;
+    },
+    onBlur: () => {
+      focusedRow.current = undefined;
+    },
+  };
+}
+
 /** The list: its head where it has one, then each plan's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
@@ -434,6 +509,7 @@ export function InboxList({
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
+  const rowFocus = useRowFocusKept();
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -455,9 +531,12 @@ export function InboxList({
   );
   return (
     <nav
+      ref={rowFocus.ref}
       className="inbox-plans"
       aria-label="Inbox items"
       hidden={columns === INBOX_COLUMNS.ITEM}
+      onFocus={rowFocus.onFocus}
+      onBlur={rowFocus.onBlur}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} />

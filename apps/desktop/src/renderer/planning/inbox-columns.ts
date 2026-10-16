@@ -6,8 +6,9 @@
  * and the one it shows is the item: the chosen one, the whole Inbox wide,
  * under a way back to the list, which Back's chord and Escape take as well,
  * so an Inbox holding one item is that item rather than a list of one row.
- * The list stands alone only once the way back was taken, or while nothing
- * is chosen, and a row pressed there opens its item again. An Inbox whose
+ * The list stands alone only once the way back was taken or Show all
+ * pressed, or while nothing is chosen, and a row pressed there opens its
+ * item again. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a plan's own Inbox tab stand in
@@ -54,6 +55,8 @@ export interface InboxColumns {
   readonly onOpen: (itemId: string) => void;
   /** Goes back from the item to the list, while the item stands alone and the list holds more. */
   readonly onBack: (() => void) | undefined;
+  /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
+  readonly onList: () => void;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -87,6 +90,8 @@ function shownColumns(
 export function useInboxColumns(chosen: string | undefined, backable: boolean): InboxColumns {
   const [single, setSingle] = useState(false);
   const [listAsked, setListAsked] = useState(false);
+  // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
+  const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
   const ref = useCallback((element: HTMLElement | null) => {
@@ -113,7 +118,7 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
       focused instanceof HTMLElement &&
       held.contains(focused) &&
       focused.closest("[hidden]") !== null;
-    if (!pressed.current && !stranded) return;
+    if (!pressed.current && !stranded && showAlls === 0) return;
     pressed.current = false;
     // The item's bar leads with its way back, or with its crumbs where it has none.
     if (shown === INBOX_COLUMNS.ITEM) {
@@ -121,10 +126,12 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     }
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
     if (shown === INBOX_COLUMNS.ITEM) return;
-    // An item chosen that the list holds no row for, as a link's missing item, hands the keyboard to the first row instead.
+    // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
     const rows = [...held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]")];
-    (rows.find((row) => row.dataset.itemId === chosen) ?? rows[0])?.focus();
-  }, [shown, chosen]);
+    const row = rows.find((each) => each.dataset.itemId === chosen) ?? rows[0];
+    (row ?? held.querySelector<HTMLElement>(".inbox-plans .inbox-needs-you-only"))?.focus();
+    setShowAlls(0);
+  }, [shown, chosen, showAlls]);
 
   const back =
     shown === INBOX_COLUMNS.ITEM && backable
@@ -144,5 +151,10 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
       setListAsked(false);
     },
     onBack: back,
+    onList: () => {
+      pressed.current = true;
+      setListAsked(true);
+      setShowAlls((count) => count + 1);
+    },
   };
 }

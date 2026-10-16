@@ -18,7 +18,7 @@ import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList, ItemMark } from "../planning/inbox-list";
+import { InboxList, ItemMark, NeedsYouEmpty } from "../planning/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -45,7 +45,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type PlansControl } from "../planni
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useExperiment } from "../use-app-state";
-import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
+import { type InboxWaitingOnly, useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
 import { planCardOf } from "./plan-card";
 
 /**
@@ -67,7 +67,9 @@ import { planCardOf } from "./plan-card";
  * that waits stands chosen, else the first listed. The pane's crumbs open
  * the plan or the agent's tab, and a code block's Open its file, each
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
- * glyph (`empty-state.tsx`). Escape leaves it for the plan it stood over,
+ * glyph (`empty-state.tsx`); with Needs you leaving out every item, the list
+ * says so and offers Show all, while the pane goes on showing the item
+ * chosen, answered, though the list draws it no row. Escape leaves it for the plan it stood over,
  * and so does any row of the sidebar. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
  * item, whose way back, Back's chord, or Escape gives the list, and a press
@@ -91,12 +93,14 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((plan) => plan.id === holding.planId));
 }
 
-/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, or the filter's empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
   empty,
   alone,
+  filteredOut,
+  onList,
   onRetry,
 }: {
   failed: boolean;
@@ -104,6 +108,10 @@ function ListNote({
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
+  /** Needs you, where it leaves out every item the Inbox holds, for its empty state to turn off. */
+  filteredOut: InboxWaitingOnly | undefined;
+  /** Asks for the list, so Show all leaves it standing. */
+  onList: () => void;
   onRetry: () => void;
 }): React.JSX.Element | null {
   if (failed) {
@@ -115,6 +123,7 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
+  if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
@@ -228,12 +237,16 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     ...planEntries,
     ...planlessGroups([...plans.inboxPlanless, ...settledAgent], planlessRead, plans.workspace?.id),
   ];
-  const list = inboxList(entries, {
-    grouping: choices.grouping,
-    waitingOnly: choices.waitingOnly,
-    chosen: asked?.itemId,
-  });
-  const chosen = listedItems(list).find(({ item }) => item.id === asked?.itemId);
+  const filter = { grouping: choices.grouping, waitingOnly: choices.waitingOnly };
+  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
+  const list = inboxList(entries, { ...filter, chosen: undefined });
+  const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
+  const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
+  // Note that Needs you leaving out every item listed is said apart from an Inbox holding none.
+  const filteredOut =
+    choices.waitingOnly &&
+    listedItems(list).length === 0 &&
+    entries.some(({ items }) => items.length > 0);
   // Note that a chosen item whose plan or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
   // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
@@ -289,12 +302,12 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     choose(listed);
     columns.onOpen(listed.item.id);
   };
-  const pager = useInboxPager(list, chosen?.item.id, choose, {
+  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: plans.shown,
     folded: folds.folded,
   });
   const next = inboxNext(
-    list,
+    steps,
     chosen,
     ({ holder, item }) => (
       <ItemMark holder={holder} agentId={item.agentId} models={named.models} readerId={plans.me} />
@@ -345,6 +358,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
                   reading={reading}
                   empty={listedItems(list).length === 0}
                   alone={columns.shown === INBOX_COLUMNS.LIST}
+                  filteredOut={filteredOut ? choices : undefined}
+                  onList={columns.onList}
                   onRetry={onRetry}
                 />
               }
@@ -372,7 +387,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
                       )
                     }
                   />
-                ) : reading ? null : (
+                ) : reading || filteredOut ? null : (
+                  // Note that the list says what the filter left out, so the pane beside it stands bare.
                   <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
                 )}
               </section>

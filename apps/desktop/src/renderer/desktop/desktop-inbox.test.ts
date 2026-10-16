@@ -1047,6 +1047,117 @@ function readTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
 }
 
+/** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
+  const empty = page.querySelector(".inbox-plans:not([hidden]) .empty-state");
+  if (empty === null) return null;
+  return [
+    empty.querySelector("h3")?.textContent,
+    empty.querySelector("p")?.textContent,
+    empty.querySelector("button")?.textContent,
+  ];
+}
+
+test("with only settled items, Needs you pressed on lists no row, the item read still shown beside the list, which says nothing needs you and offers Show all; Show all turns the filter off", async () => {
+  const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered }]);
+  inboxes.set(BILLING.id, [RETRY]);
+  const { page } = mount();
+  await settle();
+  const button = () => {
+    const found = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+    assert.ok(found, "the head offers Needs you");
+    return found;
+  };
+  const everything = [
+    "# Billing usage alerts",
+    "▸ How is a failed email retried?",
+    "# Invites",
+    "Expire after 7 days?",
+  ];
+  assert.deepEqual(listed(page), everything);
+
+  act(() => button().click());
+  assert.equal(button().getAttribute("aria-pressed"), "true");
+  assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
+  assert.deepEqual(needsYouEmpty(page), [
+    "Nothing needs you",
+    "You've answered everything",
+    "Show all",
+  ]);
+  assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+
+  // One column wide, the item read stands alone with nothing to page to, and its way back reaches the empty list.
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(pagerOf(page), null);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
+
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-plans .empty-state button");
+  assert.ok(showAll, "the empty state offers Show all");
+  act(() => showAll.click());
+  assert.equal(button().getAttribute("aria-pressed"), "false");
+  assert.deepEqual(
+    columnsShown(page),
+    ["list"],
+    "Show all leaves the rows it brings back standing",
+  );
+  assert.ok(
+    document.activeElement === rowNamed(page, "How is a failed email retried?"),
+    "the keyboard lands on the row of the item read, not on the button Show all took away",
+  );
+  assert.deepEqual(listed(page), everything);
+  assert.equal(needsYouEmpty(page), null);
+});
+
+test("one column wide, an answered item that Needs you draws no row for shows no count in its pager, though its arrows still step to the rows either side, which count only the rows drawn", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  assert.deepEqual(listed(page), [
+    "# Invites",
+    "*Expire after 7 days?",
+    "# Billing usage alerts",
+    "*Alert at 80%?",
+  ]);
+  layOut(page, 800);
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(pagerOf(page), null, "no row, so no count");
+  assert.equal(arrowNamed(page, "Previous item").disabled, true);
+  act(() => arrowNamed(page, "Next item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 2"]);
+});
+
+test("with Needs you on, a focused row whose item is answered on another Mac leaves the keyboard on Needs you rather than nowhere", async () => {
+  const { page } = mount();
+  await settle();
+  const needsYou = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+  assert.ok(needsYou, "the head offers Needs you");
+  act(() => needsYou.click());
+  rowNamed(page, "Expire after 7 days?").focus();
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.ok(document.activeElement === needsYou, "the keyboard is on Needs you");
+});
+
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
   const { page } = mount();
   await settle();
