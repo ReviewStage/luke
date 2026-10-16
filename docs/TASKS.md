@@ -609,17 +609,25 @@ written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
-- `replace` corrects a phrase copied exactly from the text, standing once in
-  it and touching no heading, and `remove` strikes the line holding one.
+- `replace` is the one generic edit: it replaces text copied exactly from
+  the plan, standing once in it, from a phrase to whole sections, headings
+  included, with what it becomes; an empty replacement deletes, and a line
+  it leaves empty is taken out.
 
-A note naming a phrase the plan does not hold is passed over, reported, and
-never guessed into another; a note that does not read under the schema is
-passed over alone. The rest save.
+A note's words may open headings of their own, so the notes can rename,
+split, merge, move, and drop sections, a move being a deletion and a
+replacement or an addition. The notes of one answer save together or not
+at all: one naming text or a heading the plan does not hold exactly
+once, or one that does not read under the schema, is reported, never guessed
+into another, and saves nothing of the answer, whose lines the next run is
+handed again over the plan as it then stands.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into
 the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
-the instant, and the notes as taken; the agent is named at read time from its
+the instant, and the notes as taken, a deletion kept as a `remove` and a
+replaced text cut to 500 characters so the deployment before reads it; a call whose notes do not all land saves
+nothing and answers the plan as it stands, to retry from. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" Luke is handed both say what the row
 says now.
@@ -837,12 +845,19 @@ known by its heading's words (`planSections`). Who last changed each section
 is read off the plan's revisions by heading (`sectionWritersOf`,
 `sectionEdits` on the wire), each against the one before it, so a heading
 renamed with nothing beneath it changed is the same section under its new
-words. Luke's notes land under the
-developer's headings (`applyNotesToText` in `plan-template.ts`): an addition
-at the end of its section, or as a new section at the end of the text where
-the text has none; a correction or a strike names a phrase standing once in
-the whole text and touching no heading, since the headings are the
-developer's. Every plan the fixed template once kept as fields was carried
+words. Luke's notes, the notetaker's and a coding agent's alike, may land
+anywhere in the text (`applyNotesToText` in `plan-template.ts`): an addition
+at the end of the one section under its heading, or as a new section at the
+end of the text where the text has none; a replacement names text standing
+once in the whole text, headings and whole sections among it, so a heading
+is renamed, and a section moved or struck, by replacing it, an empty
+replacement deleting; and a note's words may open headings of their own. One answer's notes are taken together or not at all,
+under the plan's lock: where one names a phrase or a heading the text does
+not hold exactly once, the developer having rewritten it meanwhile among the
+reasons, nothing is saved, so a move never strikes without placing. The
+notetaker's next run is handed the same lines over the text as it then
+stands; a coding agent's `edit_plan` answers the text as it stands, to retry
+from. Every plan the fixed template once kept as fields was carried
 over to its text by a one-time backfill (34 plans and 32 revisions in
 production), each field's words under its heading.
 

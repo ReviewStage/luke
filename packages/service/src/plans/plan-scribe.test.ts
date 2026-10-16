@@ -152,4 +152,38 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
         }),
       ),
   );
+
+  it.effect(
+    "an answer with one note naming text the plan does not hold saves none of its notes, and its lines are handed to the next run",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
+            {
+              notes: [
+                added(PLAN_HEADING.CONTEXT, PROBLEM),
+                { kind: NOTE_KIND.REPLACE, find: "## Rollout", text: "" },
+              ],
+            },
+            { notes: [added(PLAN_HEADING.GOAL, OUTCOME)] },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_000));
+          yield* quiet;
+          yield* settledRead(
+            Effect.sync(() => reports.length),
+            (count) => count > 0,
+          );
+          assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
+
+          scribe.observe(heard("Members should invite.", 5_000, 6_000));
+          yield* quiet;
+
+          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
+          assert.equal(body.includes(PROBLEM), false);
+          assert.ok(asked[1]?.includes("Only admins can add people."));
+        }),
+      ),
+  );
 });

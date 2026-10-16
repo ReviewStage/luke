@@ -20,7 +20,7 @@ import {
 } from "@luke/features/integration-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { PlanNote } from "@luke/features/plan-template";
+import type { PlanAgentEdit } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
@@ -197,16 +197,24 @@ export function loadedSkill(input: WireValue | undefined): string | undefined {
 }
 
 /**
- * What a plan note of each kind did, in the row's words, keyed by the
- * template's kinds. Note that the keys are held to the template's type and
- * not read from its module, because the template reaches Effect's Schema,
- * which the renderer bundle does not carry for one table of words.
+ * What a plan note of each kind did, in the row's words, keyed by the kinds
+ * the agents' journal keeps, a deletion among them as a strike. Note that the
+ * keys are held to the template's type and not read from its module, because
+ * the template reaches Effect's Schema, which the renderer bundle does not
+ * carry for one table of words.
  */
 const NOTE_VERB = {
   add: "added",
   replace: "corrected",
   remove: "struck",
-} as const satisfies Record<PlanNote["kind"], string>;
+} as const satisfies Record<PlanAgentEdit["notes"][number]["kind"], string>;
+
+/** What one note of a call's input did, by its kind: a replacement with no words is a strike. */
+function noteKind(note: WireValue): string {
+  const kind = stringAt(note, "kind") ?? "";
+  const text = stringAt(note, "text");
+  return kind === "replace" && text !== undefined && text.trim() === "" ? "remove" : kind;
+}
 
 /** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
 function planEditSummary(input: WireValue | undefined): string {
@@ -216,7 +224,7 @@ function planEditSummary(input: WireValue | undefined): string {
   const pictures = pictured !== undefined && isWireArray(pictured) ? pictured.length : 0;
   return Object.entries(NOTE_VERB)
     .flatMap(([kind, verb]) => {
-      const count = notes.filter((note) => stringAt(note, "kind") === kind).length;
+      const count = notes.filter((note) => noteKind(note) === kind).length;
       return count === 0 ? [] : [`${count} ${verb}`];
     })
     .concat(pictures === 0 ? [] : [`${pictures} ${pictures === 1 ? "picture" : "pictures"} added`])

@@ -135,7 +135,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           sandbox,
         );
 
-        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2, missed: [] });
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         assert.equal(JSON.stringify(answer).includes(Base64.encode(SCREENSHOT)), false);
         const stored = Option.getOrThrow(yield* readPlan(owner, planId));
         const approach = planSections(stored.text).find(({ heading }) => heading === "Approach");
@@ -228,7 +228,6 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         assert.deepEqual(lastPlace, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 1,
-          missed: [],
         });
       }),
   );

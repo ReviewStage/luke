@@ -268,14 +268,15 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
     },
     { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
     { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+    { kind: "replace", find: "## Assumptions\n\n- Invites expire.", text: "" },
   ];
   const view = toolCallView({
     tool: "edit_plan",
     input: { notes },
-    output: { status: "accepted", taken: 3, missed: [] },
+    output: { status: "accepted", taken: 4 },
   });
   assert.equal(view.kind, CALL_KIND.EDIT_PLAN);
-  assert.equal(view.subject, "2 added, 1 corrected");
+  assert.equal(view.subject, "2 added, 1 corrected, 1 struck");
   const pictured = toolCallView({
     tool: "edit_plan",
     input: {

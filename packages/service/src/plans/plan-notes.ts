@@ -36,10 +36,14 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * are a planning call's notetaker (`plans/plan-scribe.ts`) and a coding
  * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
  * notes (`@luke/features/plan-template`): a point added under a heading, a
- * phrase corrected, or a line struck. They are taken in order over the text
- * as it stands, and a note that names a phrase the text does not hold is
- * passed over while the rest are saved; a text past the plan's bound is
- * refused before anything is written. Every save names its writer, the
+ * phrase corrected, a line struck, or a section struck or moved, anywhere in
+ * the text, its headings among it. They are taken in order over the text as
+ * it stands under the plan's lock, and taken whole or not at all: a note that
+ * names a phrase or a heading the text does not hold exactly once, the
+ * developer having rewritten it meanwhile among the reasons, answers as a
+ * conflict with the text as it stands and nothing saved, so a restructure
+ * never lands half; a text past the plan's bound is refused before anything
+ * is written. Every save names its writer, the
  * notetaker on its call, a coding agent, or the developer, and a save that
  * changed the text is kept as a revision under that writer
  * (`plan-revisions.ts`), in the same transaction, so the plan and its history
@@ -63,7 +67,8 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * deleted meanwhile answers as gone and is not written back into being, and
  * a save that fails answers as not saved with the prior text standing. Every
  * outcome is a result, never a failure: an unsaved change leaves the
- * notetaker's lines for its next run.
+ * notetaker's lines for its next run, over the text as it then stands, and a
+ * coding agent retries from the text its conflict answered.
  *
  * An archived plan takes no new edit or restore of the developer's, read
  * under the same lock as the save, so an older desktop or an archive racing
@@ -85,7 +90,7 @@ export interface PlanNoteAuthor {
 
 export const PLAN_SAVE_STATUS = {
   SAVED: "saved",
-  /** The developer's edit no longer lands in the text as it stands; nothing was saved. */
+  /** The developer's edit, or a batch of notes, no longer lands in the text as it stands; nothing was saved. */
   CONFLICT: "conflict",
   NOT_SAVED: "not-saved",
 } as const;
@@ -106,17 +111,23 @@ export type PlanSaveResult =
       readonly document: PlanDocument;
       /** Epoch milliseconds of the save. */
       readonly savedAt: number;
-      /** The notes that could not be taken, passed over while the rest were saved. */
-      readonly missed: readonly PlanNote[];
       /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
       readonly moved: boolean;
       /** The save that last changed each section, this one among them. */
       readonly sectionEdits: readonly PlanSectionEdit[];
     }
+  | NotesConflict
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
       readonly reason: string;
     };
+
+/** A batch of notes one of which no longer lands in the text as it stands: that note, and the text; nothing was saved. */
+interface NotesConflict {
+  readonly status: typeof PLAN_SAVE_STATUS.CONFLICT;
+  readonly current: string;
+  readonly missed: PlanNote;
+}
 
 /** A save that saved nothing, and why. */
 type PlanNotSaved = Extract<PlanSaveResult, { status: typeof PLAN_SAVE_STATUS.NOT_SAVED }>;
@@ -250,32 +261,39 @@ export function saveNotes(
   writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, DatabaseServices> {
   const take = (stored: StoredPlan, now: number) =>
-    Effect.map(readStartedText(binding.userId, stored.plan.createdAt), (started) => {
-      const noted = applyNotesToText(stored.text, notes, started);
-      const taken = notes.filter((note) => !noted.missed.includes(note));
-      // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
-      const journaled =
-        writer.actor === PLAN_ACTOR.AGENT && taken.length > 0
-          ? {
-              agentEdits: withAgentEdit(stored.agentEdits, {
-                agentId: writer.agentId,
-                at: now,
-                notes: taken,
-              }),
-            }
-          : undefined;
-      return Result.succeed({ ...noted, changes: taken.length, ...journaled });
-    });
-  // Notes never refuse the plan they find: one naming a phrase the plan does not hold is passed over.
+    Effect.map(
+      readStartedText(binding.userId, stored.plan.createdAt),
+      (started): Result.Result<TextTaken, NotesConflict> => {
+        const noted = applyNotesToText(stored.text, notes, started);
+        if (noted.missed !== undefined) {
+          return Result.fail({
+            status: PLAN_SAVE_STATUS.CONFLICT,
+            current: stored.text,
+            missed: noted.missed,
+          });
+        }
+        // An agent's save is journaled with its notes; one that took none changed nothing to journal.
+        const journaled =
+          writer.actor === PLAN_ACTOR.AGENT && notes.length > 0
+            ? {
+                agentEdits: withAgentEdit(stored.agentEdits, {
+                  agentId: writer.agentId,
+                  at: now,
+                  notes,
+                }),
+              }
+            : undefined;
+        return Result.succeed({ text: noted.text, changes: notes.length, ...journaled });
+      },
+    );
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
-    if (result.status === PLAN_SAVE_STATUS.NOT_SAVED) return result;
-    const { plan, taken } = result;
+    if (result.status !== PLAN_SAVE_STATUS.SAVED) return result;
+    const { plan } = result;
     return {
       status: PLAN_SAVE_STATUS.SAVED,
       document: plan.document,
       sectionEdits: plan.sectionEdits ?? [],
       savedAt: plan.updatedAt,
-      missed: taken.missed,
       moved: result.moved,
     };
   });
