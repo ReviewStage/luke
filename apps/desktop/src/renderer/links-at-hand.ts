@@ -46,6 +46,7 @@ const LINK_THING = {
   AUTOMATION: "automation",
   FACTORY: "Factory",
   SETTINGS: "settings page",
+  PERSON: "profile",
 } as const;
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
@@ -179,6 +180,12 @@ function linksAtHand(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
     const page = at.pageWorkspace;
     const home = page?.agentId === agentId ? slugOf(plans.workspaces, page.workspaceId) : listed;
     return [at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home)];
+  }
+  // A person's page is theirs in the workspace it opened in, which their link names.
+  const { userId, workspaceId } = plans.personView;
+  if (userId !== undefined) {
+    const home = workspaceId === undefined ? listed : slugOf(plans.workspaces, workspaceId);
+    return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
   if (plans.inboxView.open) {
     const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);

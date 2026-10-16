@@ -219,6 +219,8 @@ interface PersonViewControl {
   readonly userId: string | undefined;
   /** The name the place that opened the page knew them by, which names someone the page finds nowhere else. */
   readonly name: string | undefined;
+  /** The workspace the page is the person's in, which their link names. */
+  readonly workspaceId: string | undefined;
   /** Opens their page in `workspaceId`, the window listing it first where it lists another; in the listed workspace where none is named. */
   readonly onOpen: (userId: string, name?: string, workspaceId?: string) => void;
   readonly onClose: () => void;
@@ -1839,6 +1841,20 @@ export function usePlansTab(input: {
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
         else showColumnTab(place.planId, { agent: place.agentId });
         return;
+      case LINK_PLACE.PERSON: {
+        // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
+        const home = viewed.workspaces.find(
+          (each) => each.slug === workspace || each.id === workspace,
+        );
+        navigations.current += 1;
+        listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.PERSON,
+          userId: place.userId,
+          workspaceId: home?.id ?? listedWorkspace?.id,
+        });
+        return;
+      }
       case LINK_PLACE.INBOX:
         listLinked(workspace);
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
@@ -2181,6 +2197,7 @@ export function usePlansTab(input: {
     personView: {
       userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
       name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
+      workspaceId: standIn?.kind === STAND_IN.PERSON ? standIn.workspaceId : undefined,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
         setHistoryFor(undefined);
         // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen

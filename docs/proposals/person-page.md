@@ -91,7 +91,7 @@ tasks in sidebar**, which calls #2899's `onCreatedBy`. ⋯ holds:
 |---|---|
 | A teammate | Their page in the listed workspace |
 | You | Your page, with You, "Waiting on you", and Edit profile (Settings › Profile) |
-| A former member | Their page, read-only: Former member, whatever of theirs is still in the workspace, no email, no ⋯ |
+| A former member | Their page, read-only: Former member, whatever of theirs is still in the workspace, no email, and ⋯ holding only Copy link |
 | A GitHub user who isn't a member | Their GitHub profile in the browser (↗), by the login GitHub names them by |
 | A GitHub login linked to a member | That member's page (`githubActor` already resolves the `userId`) |
 | Your personal workspace | Your page lists that workspace alone, with no sidebar filter |

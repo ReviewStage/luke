@@ -112,6 +112,7 @@ test("a person's page is a step of its own, which Back from a plan opened after 
       personView: {
         userId,
         name: undefined,
+        workspaceId: undefined,
         onOpen: (id) => reopened.push(id),
         onClose: () => undefined,
       },
@@ -137,6 +138,7 @@ test("a person's page is theirs in the workspace it stood in, so once another is
       personView: {
         userId,
         name: undefined,
+        workspaceId: undefined,
         onOpen: (id) => reopened.push(id),
         onClose: () => undefined,
       },
@@ -158,6 +160,7 @@ test("a person's page opened again with a newer name keeps that name in its step
       personView: {
         userId,
         name,
+        workspaceId: undefined,
         onOpen: (_id, opened) => reopened.push(opened),
         onClose: () => undefined,
       },
