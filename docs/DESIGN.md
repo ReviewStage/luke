@@ -152,7 +152,9 @@ switch, option, and menu item, and anything else in the tab order, draws
 only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
 never rings a control. A control whose drawn shape is a part of it, a picture
 tile's picture over its caption, marks that part `data-focus-ring`, which
-rings in the control's place, so the ring takes the shape that is seen. A box that clips
+rings in the control's place, so the ring takes the shape that is seen. An
+unavailable button that keeps the keyboard (`aria-disabled`) fades its fill
+and words rather than itself, so its ring stays at full strength. A box that clips
 what it holds keeps the ring whole one of two ways: one that clips only to hold
 in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
 `overflow-clip-margin: var(--focus-ring-room)`, which names its box because
