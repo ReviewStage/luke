@@ -29,21 +29,34 @@ export const TEXT_FIELD_TYPE = {
 
 export type TextFieldType = (typeof TEXT_FIELD_TYPE)[keyof typeof TEXT_FIELD_TYPE];
 
+/**
+ * How a text entry is named: by its `FormField`'s label, through the field's
+ * control, or by a `label` of its own where it stands alone, so none is
+ * drawn without a name.
+ */
+type Named =
+  | {
+      /** The field's control, inside a `FormField`. */
+      field: FieldControl;
+      label?: undefined;
+    }
+  | {
+      field?: undefined;
+      /** The accessible name, where no `FormField` labels it. */
+      label: string;
+    };
+
 /** What both kinds of text entry take. */
-interface TextEntryProps {
+type TextEntryProps = Named & {
   value: string;
   onChange: (value: string) => void;
-  /** The field's control, inside a `FormField`. */
-  field?: FieldControl | undefined;
-  /** The accessible name, where no `FormField` labels it. */
-  label?: string | undefined;
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
   readOnly?: boolean | undefined;
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
-}
+};
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
 function entryAttributes(props: TextEntryProps) {
