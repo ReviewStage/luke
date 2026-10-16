@@ -902,7 +902,11 @@ function messageLine(
   if (line.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
   return {
     text: line,
-    sender: { kind: MESSAGE_SENDER.AGENT, name: agentName(caller.agent), agentId: caller.agent.id },
+    sender: {
+      kind: MESSAGE_SENDER.AGENT,
+      name: agentName(caller.agent),
+      model: caller.agent.model,
+    },
   };
 }
 

@@ -138,7 +138,7 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
   it.effect(
-    "each line names what sent it, a member by the name their account holds now and none once it is gone, an agent by the model it runs on where it stands, a line written with no sender names nothing, and another account reads none",
+    "each line names what sent it, a member by the name their account holds now and none once it is gone, an agent by the model it ran on, a line written with no sender names nothing, and another account reads none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -177,18 +177,10 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
-        // The sending agent is the teammate's, whose model the owner's line still names.
-        const sender = yield* tasklessAgent(teammate, yield* openWorkspace(teammate));
         const byAgent = yield* line("agent", {
           kind: MESSAGE_SENDER.AGENT,
           name: "Invite expiry",
-          agentId: sender.agentId,
-        });
-        // An agent's line from before its agent was kept, or whose agent is gone, names no model.
-        const byGoneAgent = yield* line("gone-agent", {
-          kind: MESSAGE_SENDER.AGENT,
-          name: "Old agent",
-          agentId: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
         });
         // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
@@ -204,15 +196,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
-        const ids = [
-          byTeammate,
-          byLuke,
-          byAutomation,
-          byGitHub,
-          byAgent,
-          byGoneAgent,
-          earlier?.id ?? "",
-        ];
+        const ids = [byTeammate, byLuke, byAutomation, byGitHub, byAgent, earlier?.id ?? ""];
 
         const senders = yield* lineSendersOf(target, ids);
         assert.deepEqual(
@@ -227,7 +211,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
               name: "Invite expiry",
               model: "anthropic/claude-opus-5.5",
             },
-            { kind: MESSAGE_SENDER.AGENT, name: "Old agent", model: undefined },
             undefined,
           ],
         );

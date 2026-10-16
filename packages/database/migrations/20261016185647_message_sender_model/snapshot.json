@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d1b9bc0f-210b-4e14-badf-68353302d2da",
+  "id": "8b2e1913-402f-4821-a255-1fd55262125b",
   "prevIds": ["24ea9378-2b2a-4351-b1ef-89b7c578da9c"],
   "ddl": [
     {
@@ -6082,14 +6082,14 @@
       "table": "messages"
     },
     {
-      "type": "uuid",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "sender_agent_id",
+      "name": "sender_model",
       "entityType": "columns",
       "schema": "public",
       "table": "messages"

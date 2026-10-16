@@ -306,7 +306,7 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its name as it stands at the send and its id.
+ * agent by its name and the model it runs on as they stand at the send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
@@ -316,7 +316,7 @@ export type LineSender =
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
       readonly name: string;
-      readonly agentId: string;
+      readonly model: string;
     };
 
 /** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
@@ -598,7 +598,7 @@ const MessageInsertSchema = Schema.Struct({
   sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
-  senderAgentId: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -746,7 +746,7 @@ const insertMessageRow = SqlSchema.findOneOption({
           sender: row.sender,
           senderUserId: row.senderUserId,
           senderName: row.senderName,
-          senderAgentId: row.senderAgentId,
+          senderModel: row.senderModel,
         })
         .returning({ id: messages.id }),
     ),
@@ -1213,7 +1213,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
-    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
+    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };

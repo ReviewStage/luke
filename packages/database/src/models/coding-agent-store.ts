@@ -1773,8 +1773,8 @@ export function delegationStartsOf(
  * a member by their account's id and the name it holds now, or nobody where
  * their account is gone; Luke; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
- * its send kept, and the model it runs on now, which its harness is read
- * off, where the line kept the agent and the agent stands.
+ * its send kept, and the model it ran on then, which its harness is read
+ * off, where the line kept one.
  */
 export type LineSent =
   | {
@@ -1790,14 +1790,14 @@ export type LineSent =
       readonly model: string | undefined;
     };
 
-/** A line's sender as its row keeps it, with the member's account and the sending agent's model where each still stands. */
+/** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
   id: Schema.String,
   sender: Schema.Literals(Object.values(MESSAGE_SENDER)),
   memberId: Schema.NullOr(Schema.String),
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
-  agentModel: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -1816,11 +1816,10 @@ const findLineSenders = SqlSchema.findAll({
           memberId: user.id,
           memberName: user.name,
           senderName: messages.senderName,
-          agentModel: codingAgent.model,
+          senderModel: messages.senderModel,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
-        .leftJoin(codingAgent, eq(codingAgent.id, messages.senderAgentId))
         .where(
           and(
             inArray(messages.id, [...messageIds]),
@@ -1859,7 +1858,7 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
         : {
             kind: MESSAGE_SENDER.AGENT,
             name: row.senderName,
-            model: row.agentModel ?? undefined,
+            model: row.senderModel ?? undefined,
           };
   }
 }

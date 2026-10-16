@@ -1680,7 +1680,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
           [
             "Take the split view.",
-            { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab", agentId: agent.id },
+            { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab", model: agent.model },
           ],
         ] as const) {
           yield* writer.writeAwaitingLine(
