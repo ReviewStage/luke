@@ -29,6 +29,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
@@ -1117,6 +1118,61 @@ test("a tool its server says nothing of has a page that says so", async () => {
   );
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
+});
+
+test("a connected row's line wraps between its state and its count of tools, never inside either", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  await searchFor(page, "deploy");
+  const line =
+    rowNamed(page, "Vercel").querySelector(".settings-state") ?? assert.fail("no state line");
+
+  const sheets = layContainersAt({});
+  try {
+    const drawn = getComputedStyle(line);
+    assert.deepEqual([drawn.flexWrap, drawn.whiteSpace], ["wrap", "nowrap"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a tool's page under a list too narrow to stand beside it gives its title a line of its own and its name the line under it, and beside the list keeps both on one line", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    {
+      name: "create_issue_with_template",
+      title: "Create issue with template and attachments",
+      description: "Creates an issue from a template.",
+    },
+  ]);
+  const page = await mount();
+  openRow(page, "Vercel");
+  const head =
+    page.querySelector(".integration-tools-panel .integration-tool-detail-head") ??
+    assert.fail("no tool page");
+  const parts = () => {
+    const title = head.querySelector(".integration-tool-detail-title") ?? assert.fail("no title");
+    const name = head.querySelector(".integration-tool-detail-name") ?? assert.fail("no name");
+    return {
+      wraps: getComputedStyle(head).flexWrap,
+      title: getComputedStyle(title).whiteSpace,
+      name: getComputedStyle(name).flexBasis,
+    };
+  };
+
+  // A Settings card in the smallest window beside the widest page list.
+  const narrow = layContainersAt({ "integration-tools": 268 });
+  try {
+    assert.deepEqual(parts(), { wraps: "wrap", title: "normal", name: "100%" });
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "integration-tools": 638 });
+  try {
+    assert.deepEqual(parts(), { wraps: "nowrap", title: "nowrap", name: "auto" });
+  } finally {
+    wide.remove();
+  }
 });
 
 test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {

@@ -270,7 +270,7 @@ function ToolsLine({
   tools: RowTools;
 }): React.JSX.Element {
   return (
-    <small className="settings-state" data-state={LINE_STATE.CONNECTED}>
+    <small className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
       <button
         type="button"

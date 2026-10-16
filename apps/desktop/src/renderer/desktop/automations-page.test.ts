@@ -34,8 +34,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -144,6 +146,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a Run now is held unanswered, as one still out on the wire. */
+let runHeld = false;
 /** What a Run now answers where it does not start a run. */
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
 /** Every agent whose page a run opened. */
@@ -184,6 +188,7 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
   factoryOpens = [];
@@ -280,6 +285,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
           runsAsked.push(request.payload.automationId);
+          if (runHeld) return new Promise<never>(() => undefined);
           if (runRefusal !== undefined) {
             return Promise.resolve({
               status: ACT_OUTCOME_STATUS.DONE,
@@ -1176,6 +1182,118 @@ test("the list and an automation's page each say they are an experiment, and eac
   act(() => button("Send feedback").click());
 
   assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
+});
+
+/** The pill the pointer resting on `element` raises, or nothing where it raises none. */
+function pillOver(element: Element): string | undefined {
+  act(() => element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
+  act(() => element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  return pill;
+}
+
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
+  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
+  const acts = () =>
+    ["Automations", "Send feedback", "Run now"].map((name) => {
+      const press =
+        [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
+        assert.fail(`no ${name}`);
+      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
+      return {
+        name,
+        drawn: shown(words),
+        labelled: press.getAttribute("aria-label"),
+        pill: pillOver(press),
+      };
+    });
+
+  // A 760 window's toolbar, past the traffic lights.
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
+      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+    ]);
+    assert.equal(shown(status), false);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "automation-toolbar": 1100 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: true, labelled: null, pill: undefined },
+      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
+      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+    ]);
+    assert.equal(shown(status), true);
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
+
+  assert.equal(pillOver(crumb), undefined);
+  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
+  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
+  act(() => relayout());
+  assert.equal(pillOver(crumb), SWEEP.name);
+});
+
+test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  const chip = picker(page, "Owner");
+  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
+  // The form beside the runs, 300px from its left edge to the chip's right one.
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
+  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
+
+  const sheets = layContainersAt({});
+  try {
+    act(() => chip.click());
+    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
+    assert.equal(getComputedStyle(menu).width, "max-content");
+    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  runHeld = true;
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    const run = button("Run now");
+    act(() => run.click());
+    await settle();
+
+    assert.deepEqual(
+      {
+        pressable: !run.disabled,
+        ring: run.querySelector('.spinner[role="status"]') !== null,
+        glyph: run.querySelector("svg.lucide-play") !== null,
+      },
+      { pressable: false, ring: true, glyph: false },
+    );
+  } finally {
+    narrow.remove();
+  }
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {

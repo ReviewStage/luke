@@ -45,14 +45,23 @@ const LEAST_LIST_HEIGHT = 160;
 /** What the menu's search field, padding, and any foot take out of the room the list may fill. */
 const MENU_CHROME_HEIGHT = 48;
 
-/** Where the menu fits: the side with room for its list, and the list height that side allows. */
+/**
+ * Where the menu fits: the side with room for its list, the list height
+ * that side allows, and the widest the menu may stand from the chip's edge
+ * it hangs from before what clips it cuts its far side off.
+ */
 function pickerPlacement(input: {
-  /** The chip's top and bottom, in window coordinates. */
+  /** The chip's edges, in window coordinates. */
   chipTop: number;
   chipBottom: number;
+  chipLeft: number;
+  chipRight: number;
   /** The edges of what clips the menu: the nearest scroller, or the window. */
   roomTop: number;
   roomBottom: number;
+  roomLeft: number;
+  roomRight: number;
+  align: PickerAlign;
   /** How many window pixels one of the chip's own pixels is, which a zoomed page sets above one. */
   scale: number;
 }) {
@@ -60,7 +69,15 @@ function pickerPlacement(input: {
     (input.roomBottom - input.chipBottom) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const above = (input.chipTop - input.roomTop) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const side = below >= LEAST_LIST_HEIGHT || below >= above ? PICKER_SIDE.BELOW : PICKER_SIDE.ABOVE;
-  return { side, listMax: Math.floor(Math.max(side === PICKER_SIDE.BELOW ? below : above, 0)) };
+  const across =
+    input.align === PICKER_ALIGN.END
+      ? input.chipRight - input.roomLeft
+      : input.roomRight - input.chipLeft;
+  return {
+    side,
+    listMax: Math.floor(Math.max(side === PICKER_SIDE.BELOW ? below : above, 0)),
+    widthMax: Math.floor(Math.max(across / input.scale - MENU_GAP, 0)),
+  };
 }
 
 /** The overflow values that make an element a scroller, which clips a menu running past its edge. */
@@ -71,9 +88,9 @@ function roomAround(chip: HTMLElement) {
   for (let each = chip.parentElement; each !== null; each = each.parentElement) {
     if (!SCROLLING_OVERFLOW.has(getComputedStyle(each).overflowY)) continue;
     const bounds = each.getBoundingClientRect();
-    return { top: bounds.top, bottom: bounds.bottom };
+    return { top: bounds.top, bottom: bounds.bottom, left: bounds.left, right: bounds.right };
   }
-  return { top: 0, bottom: window.innerHeight };
+  return { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
 }
 
 /** What a picker is handed: the value it names and the menu it drops. */
@@ -145,12 +162,17 @@ export function Picker({
       pickerPlacement({
         chipTop: bounds.top,
         chipBottom: bounds.bottom,
+        chipLeft: bounds.left,
+        chipRight: bounds.right,
         roomTop: room.top,
         roomBottom: room.bottom,
+        roomLeft: room.left,
+        roomRight: room.right,
+        align,
         scale,
       }),
     );
-  }, [open]);
+  }, [open, align]);
 
   // Note that we hand focus back to the chip, as a native menu returns it to
   // its button, because closing takes the focused menu away with it.
@@ -168,7 +190,10 @@ export function Picker({
       style={
         placement === undefined
           ? undefined
-          : cssCustomProperties({ "--settings-picker-list-max": `${placement.listMax}px` })
+          : cssCustomProperties({
+              "--settings-picker-list-max": `${placement.listMax}px`,
+              "--settings-picker-width-max": `${placement.widthMax}px`,
+            })
       }
     >
       <Chip

@@ -73,6 +73,7 @@ import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
 import { AgentModelChip } from "../planning/agent-model-chip";
@@ -89,6 +90,7 @@ import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
@@ -586,6 +588,18 @@ function AutomationActions({
   );
 }
 
+/** The crumb naming the automation, cut short with an ellipsis where the toolbar is narrow, the pointer reading it whole. */
+function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
+  const [words, clipped] = useClipped();
+  return (
+    <Tooltip label={clipped ? name : undefined}>
+      <span ref={words} className="automation-crumb">
+        {name}
+      </span>
+    </Tooltip>
+  );
+}
+
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
@@ -622,72 +636,71 @@ function EditorToolbar({
           : "Saved";
   return (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <nav className="automation-crumbs" aria-label="Path">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
-            Automations
-          </button>
-          <ChevronRightIcon aria-hidden="true" />
-          <span className="automation-crumb">
-            {automation === undefined ? "New automation" : automation.name}
+      {/* The toolbar's own width, which a container query reads, folds its acts' words before they crowd its crumbs. */}
+      <div className="automation-toolbar">
+        <div className="desktop-toolbar-heading">
+          <nav className="automation-crumbs" aria-label="Path">
+            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <ChevronRightIcon aria-hidden="true" />
+            <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
+          </nav>
+          <ExperimentTag />
+        </div>
+        <div className="desktop-toolbar-actions">
+          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
+          <span className="automation-editor-status" data-dirty={String(dirty)}>
+            {status}
           </span>
-        </nav>
-        <ExperimentTag />
-      </div>
-      <div className="desktop-toolbar-actions">
-        <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-        <span className="automation-editor-status" data-dirty={String(dirty)}>
-          {status}
-        </span>
-        {automation === undefined ? null : (
+          {automation === undefined ? null : (
+            <FoldingButton
+              label="Run now"
+              glyph={<PlayIcon />}
+              busy={running ? "Running" : undefined}
+              className="toolbar-button bordered-button"
+              disabled={running}
+              onClick={onRunNow}
+            >
+              <BusyLabel busy={running} label="Running">
+                Run now
+              </BusyLabel>
+            </FoldingButton>
+          )}
           <button
             type="button"
-            className="toolbar-button bordered-button"
-            disabled={running}
-            onClick={onRunNow}
+            className="primary-button"
+            disabled={saving || !(automation === undefined || dirty)}
+            onClick={onSave}
           >
-            <PlayIcon />
-            <BusyLabel busy={running} label="Running">
-              Run now
+            <BusyLabel busy={saving} label="Saving">
+              {automation === undefined ? "Create" : "Save"}
             </BusyLabel>
           </button>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={saving || !(automation === undefined || dirty)}
-          onClick={onSave}
-        >
-          <BusyLabel busy={saving} label="Saving">
-            {automation === undefined ? "Create" : "Save"}
-          </BusyLabel>
-        </button>
-        {automation === undefined ? null : (
-          <>
-            <Switch
-              checked={automation.enabled}
-              label={
-                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-              }
-              onChange={(enabled) => onToggle(enabled)}
-            />
-            <AutomationActions automation={automation} onDelete={onDelete} />
-          </>
-        )}
-        {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
-        <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-          <button
-            type="button"
-            className="icon-button side-panel-toggle"
-            aria-label={runsLabel}
-            aria-expanded={runsPanel.open}
-            data-open={String(runsPanel.open)}
-            onClick={runsPanel.onToggle}
-          >
-            <SidePanelIcon />
-          </button>
-        </Tooltip>
+          {automation === undefined ? null : (
+            <>
+              <Switch
+                checked={automation.enabled}
+                label={
+                  automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+                }
+                onChange={(enabled) => onToggle(enabled)}
+              />
+              <AutomationActions automation={automation} onDelete={onDelete} />
+            </>
+          )}
+          {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
+          <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+            <button
+              type="button"
+              className="icon-button side-panel-toggle"
+              aria-label={runsLabel}
+              aria-expanded={runsPanel.open}
+              data-open={String(runsPanel.open)}
+              onClick={runsPanel.onToggle}
+            >
+              <SidePanelIcon />
+            </button>
+          </Tooltip>
+        </div>
       </div>
     </header>
   );

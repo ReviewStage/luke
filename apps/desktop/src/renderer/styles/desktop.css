@@ -4852,12 +4852,16 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its
-   name, the line saying who sees it, and its form at a Settings measure. */
+   name, the line saying who sees it, and its form at a Settings measure.
+   The crumbs clip what runs past them, though not the keyboard's ring on a
+   crumb, so the way back never draws over the tag after them. */
 .automation-crumbs {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--space-4);
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-reach);
   color: var(--text-secondary);
 }
 
@@ -4883,6 +4887,34 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-editor-status[data-dirty="true"] {
   color: var(--text-secondary);
+}
+
+/* The editor's toolbar holds its crumbs and its acts in a box of their own,
+   whose width a container query reads: the toolbar's own padding leaves the
+   traffic lights their room or not as the sidebar folds, so the window's
+   width says nothing of the room the crumbs have. Too narrow for every
+   act's words beside a readable name, the acts fold to their glyphs, each
+   named by its pill (`folding-button.tsx`), and the draft's state goes,
+   since Save, pressable or not, says it already; the crumb back folds to
+   its glyph alike, so the name it leads to keeps the room. */
+.automation-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--control-gap);
+  container: automation-toolbar / inline-size;
+}
+
+@container automation-toolbar (max-width: 879px) {
+  .automation-toolbar :is(.toolbar-button-words, .automation-editor-status) {
+    display: none;
+  }
+
+  .automation-toolbar .toolbar-button:has(> .toolbar-button-words) {
+    width: var(--control-height);
+    padding: 0;
+  }
 }
 
 .automation-editor {
@@ -5352,7 +5384,11 @@ button.automation-run:hover {
   padding-top: var(--space-32);
 }
 
+/* A column too narrow for the name and the page's actions on one line
+   drops the actions under the name, as a Settings page's head drops its
+   Reset, rather than breaking the name inside a word. */
 .plan-page-head .plan-title-line {
+  flex-wrap: wrap;
   align-items: center;
 }
 
@@ -7522,6 +7558,18 @@ button.automation-run:hover {
   min-width: 0;
   align-items: center;
   gap: var(--space-6);
+}
+
+/* A picker's menu here is as wide as its widest value, within a bound,
+   since the chip it hangs from grew to name its whole value: an owner's
+   long workspace name reads whole in the menu, not faded at its check.
+   The bound is also the room the scroller leaves from the chip's edge the
+   menu hangs from (`picker-row.tsx`), so a menu beside the runs never runs
+   past the form's edge and loses the start of its rows. */
+.automation-form .settings-picker .settings-picker-menu {
+  width: max-content;
+  min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
+  max-width: min(400px, var(--settings-picker-width-max, 400px));
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing

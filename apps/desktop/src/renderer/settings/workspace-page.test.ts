@@ -33,7 +33,9 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenPersonProvider } from "../person-door";
 import { dayAndTimeText } from "../planning/plan-time";
@@ -687,6 +689,51 @@ test("the chosen team workspace's members are listed with their email and role, 
     null,
     "no row keeps a ⋯'s room where none has one",
   );
+});
+
+/** Lays `words` out narrower than they run, as a row too narrow for an address does, and tells the window. */
+function cutShort(words: Element): void {
+  Object.defineProperty(words, "scrollWidth", { configurable: true, value: 320 });
+  Object.defineProperty(words, "clientWidth", { configurable: true, value: 180 });
+  act(() => relayout());
+}
+
+/** The pill the pointer resting on `words` raises, or nothing where it raises none. */
+function pillOver(words: Element): string | undefined {
+  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
+  act(() => words.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  return pill;
+}
+
+test("a member's address and an invited one keep to one line, ending in an ellipsis where the row cuts them short, when the pointer resting on them reads them whole", async () => {
+  const LONG = "bartholomew.montgomery-fitzgerald@orbital-freight.example.com";
+  stored = [OWNER, { ...MEMBER, email: LONG }];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
+  const addresses = [
+    rowNamed(page, "Sam").querySelector(".settings-copy small"),
+    (invitationRows(page)[0] ?? assert.fail("no pending invitation")).querySelector("strong"),
+  ].map((words) => words ?? assert.fail("an address is not drawn"));
+
+  const sheets = layContainersAt({});
+  try {
+    assert.deepEqual(
+      addresses.map((words) => {
+        const drawn = getComputedStyle(words);
+        return [words.textContent, drawn.whiteSpace, drawn.textOverflow];
+      }),
+      [
+        [LONG, "nowrap", "ellipsis"],
+        [LONG, "nowrap", "ellipsis"],
+      ],
+    );
+  } finally {
+    sheets.remove();
+  }
+  assert.deepEqual(addresses.map(pillOver), [undefined, undefined], "drawn whole, no pill");
+  for (const words of addresses) cutShort(words);
+  assert.deepEqual(addresses.map(pillOver), [LONG, LONG]);
 });
 
 test("where some members' rows carry a ⋯, a row without one keeps its room, so every role ends in one column", async () => {
