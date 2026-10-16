@@ -11,8 +11,9 @@ import { Tooltip } from "../tooltip";
  * offers a press beside the words once they are selected, and the press
  * lays them over the composer as one quote of their own, apart from the
  * words being written, with a way off; the quote leads the message once it
- * is sent. So here: a selection inside an agent's own words, the part of
- * one of its messages that wears `REPLY_SCOPE`, stands Reply over it once
+ * is sent. So here: a selection inside an agent's own words, a text part
+ * of one of its messages, which wears `REPLY_SCOPE`, never a call's output
+ * or a thought beside it, stands Reply over it once
  * the pointer or the keys let it go, and a press hands the words to the
  * agent's box (`use-agent-composer.ts`'s `setReply`), which quotes them
  * (`ComposerReply`) and sends them as a Markdown quote leading the words

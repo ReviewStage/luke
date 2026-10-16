@@ -497,7 +497,12 @@ function AgentPartView({
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
-      return <TranscriptWords text={part.text} />;
+      // The agent's words alone may be replied to, never a call's output or a thought.
+      return (
+        <div {...{ [REPLY_SCOPE]: "" }}>
+          <TranscriptWords text={part.text} />
+        </div>
+      );
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL: {
@@ -857,7 +862,7 @@ export function AgentMessage({
   return (
     <Message from={message.role} data-message-id={message.id}>
       {named}
-      <MessageContent {...{ [REPLY_SCOPE]: "" }}>
+      <MessageContent>
         <TranscriptRows
           rows={agentRows(message, moving, {
             newestTodos: todos.kept,
@@ -1171,7 +1176,8 @@ function AgentTabView({
           />
         )}
       </footer>
-      {onUnarchive !== undefined || composer.closed !== undefined ? null : (
+      {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
+      {onUnarchive !== undefined || composer.closed !== undefined || composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={composer.setReply} />
       )}
     </section>
