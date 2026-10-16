@@ -31,10 +31,13 @@ marks a picture only with the change's red or green.
   (PR 5, `look_at_picture` and a correction that keeps its pictures),
   #2945 (PR 6, a coding agent adds a sandbox screenshot), and #2890 (PR 7,
   Mermaid).
-- **Left open:** `look_at_picture` allows four looks a turn, coding agents
-  included, whose one turn is their whole run. If an agent working from
-  several mockups runs out, raise `PICTURE_LOOK.MAX_PER_TURN` or give
-  coding agents a bound of their own.
+- **No bound on looks.** PR 5 shipped `look_at_picture` with four looks a
+  turn. Dean took it out (#2991): "Why would we have a limit? Do other
+  industry tools do this? We don't want any overengineering or special
+  logic/handling. The agent should be smart enough to figure it out." A
+  model looks as often as it asks. What bounds a look is what bounds the
+  picture, 1.5 MB, and a model provider's own limits answer as the tool
+  error they are.
 
 The show is `docs/proposals/plan-media/index.html`, one self-contained file
 that fetches nothing. Open it in a browser. Each frame uses main's compiled
@@ -474,8 +477,8 @@ parallel.
   privacy rule working, and the alt text still reads.
 - **Prompt cost.** `look_at_plan_file` puts a picture in a model's context
   each time it is called. The tool's description says to look only when the
-  alt text is not enough, and PR 5 bounds a turn's looks, which
-  `look_at_board` does not do today.
+  alt text is not enough, and the model decides when that is; as decided,
+  no count bounds a turn's looks.
 - **Mermaid's size and surface.** 228 KB on first diagram, and a large
   dependency to keep current. `securityLevel: "strict"` and drawing through
   an `<img>` keep its output from running anything. A failure shows the
