@@ -42,7 +42,6 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
-import { drawnDraftTabs } from "./main-tabs";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { TaskStatusMark, taskCardOf } from "./task-card";
 import { TaskNameField, useTaskRename } from "./task-name-field";
@@ -420,8 +419,8 @@ export function TaskActions({
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
- * waits in one of its boxes, past those its column's tabs mark themselves
- * while it is the plan open (`draft-mark.tsx`), and before that, on a task
+ * waits in one of its boxes and it is not the plan open, whose boxes show
+ * their own words (`draft-mark.tsx`), and before that, on a task
  * someone else created, its creator's face (`teammateCreator`), read against
  * the members of the directory around the list; the reader's own tasks wear
  * none. Its repository's name, muted, where the list hands one (in one run),
@@ -450,7 +449,7 @@ export function SidebarTask({
   task: TaskSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
-  /** Whether the plan is open in the window, its column's tabs marking their own drafts; a row the sidebar does not mark may be, as one opened from a pin, and is its own mark unless said. */
+  /** Whether the plan is open in the window, so its drafts are in reach and unmarked; a row the sidebar does not mark may be, as one opened from a pin, and is its own mark unless said. */
   open?: boolean;
   /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
@@ -472,10 +471,7 @@ export function SidebarTask({
   });
   const teammate = teammateCreator(task, useMemberDirectory());
   const creator = face ? teammate : undefined;
-  const drafted = usePlanDrafted(
-    task.id,
-    open ? drawnDraftTabs(tasks.mainTabs, tasks.agents) : undefined,
-  );
+  const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);

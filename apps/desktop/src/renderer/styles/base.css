@@ -886,7 +886,7 @@ body,
 }
 
 /* A draft waiting in a box (`draft-mark.tsx`): a pencil in the muted ink, at
-   the failed mark's size where it takes the same place at a tab's end. */
+   the failed mark's size. */
 .draft-mark {
   display: inline-flex;
   width: 14px;
