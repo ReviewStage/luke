@@ -7,6 +7,7 @@ import {
   type PlanSectionEdit,
 } from "@luke/features/plan-wire";
 import {
+  type FormerMember,
   WORKSPACE_ROLE,
   type WorkspaceMember,
   type WorkspaceRole,
@@ -96,6 +97,8 @@ export type Actor =
       readonly name?: string;
       /** A member who left's account id, which their page is opened by; none for the rest. */
       readonly userId?: string;
+      /** A member who left's sign-in picture, which the window draws grayed; none where the service names none. */
+      readonly pictureUrl?: string;
     }
   | GitHubActor;
 
@@ -208,23 +211,28 @@ export function actorName(
  * workspace's `members` for their picture, email, and role, and as the
  * reader where the id is the reader's own. While the members are unread
  * the wire's name stands alone; once read, a member they no longer list has
- * left the workspace. A ref the service named nobody for is someone unnamed.
+ * left the workspace, and keeps the picture `former` names them by. A ref the service named nobody for is someone unnamed.
  */
 export function personActor(
   ref: { readonly userId: string; readonly name: string } | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor {
   if (ref === undefined) return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
-    return {
+    // Note that the read of who left names them as their account does now, so a name changed since the work stood is the new one.
+    const named = former?.find((each) => each.userId === ref.userId);
+    const left = {
       kind: ACTOR_KIND.SOMEONE,
       reason: SOMEONE_REASON.FORMER,
-      name: ref.name,
+      name: named?.name ?? ref.name,
       userId: ref.userId,
-    };
+    } as const;
+    const pictureUrl = named?.pictureUrl;
+    return pictureUrl === undefined ? left : { ...left, pictureUrl };
   }
   const person: PersonActor = { kind: ACTOR_KIND.PERSON, userId: ref.userId, name: ref.name, you };
   return member === undefined ? person : memberActor(member, readerId);
@@ -280,7 +288,7 @@ export function creatorActor(
 ): Actor {
   const { createdBy, ownerId } = plan;
   if (createdBy !== undefined || ownerId === undefined) {
-    return personActor(createdBy, reader.members, reader.readerId);
+    return personActor(createdBy, reader.members, reader.readerId, reader.former);
   }
   const member = reader.members?.find((each) => each.userId === ownerId);
   if (member !== undefined) return memberActor(member, reader.readerId);
@@ -319,6 +327,8 @@ export function teammateCreator(
 export interface EditReader {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures they keep, grayed. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly owner?: PersonActor | undefined;
 }
 
@@ -330,7 +340,7 @@ export interface EditAgent {
 
 /** The member an edit names, for the reader: the owner where every edit is theirs, a member as the directory reads them otherwise. */
 function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
-  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId);
+  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
 /**
@@ -437,7 +447,7 @@ function sameAgent(
   return one.agentId === other.agentId;
 }
 
-/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by, someone on GitHub by their login in any case. */
+/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why, their account id, and the name they go by, someone on GitHub by their login in any case. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -449,8 +459,12 @@ function sameActor(one: Actor, other: Actor): boolean {
     case ACTOR_KIND.AUTOMATION:
       return other.kind === one.kind && other.name === one.name;
     case ACTOR_KIND.SOMEONE:
+      // Note that two who left may share a name, so their account ids tell them apart.
       return (
-        other.kind === ACTOR_KIND.SOMEONE && other.reason === one.reason && other.name === one.name
+        other.kind === ACTOR_KIND.SOMEONE &&
+        other.reason === one.reason &&
+        other.userId === one.userId &&
+        other.name === one.name
       );
     case ACTOR_KIND.GITHUB:
       // Note that GitHub reads a login whatever its case, and its answers do not always spell one alike.
@@ -473,6 +487,8 @@ export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
 export interface GitHubPlace {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures a linked login who left keeps. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly agent: Actor | undefined;
 }
 
@@ -490,7 +506,7 @@ export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
   if (person.userId !== undefined) {
     const member = place.members?.find((each) => each.userId === person.userId);
     const ref = { userId: person.userId, name: member?.name ?? person.login };
-    return personActor(ref, place.members, place.readerId);
+    return personActor(ref, place.members, place.readerId, place.former);
   }
   const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login: person.login, bot: person.bot };
   return person.avatarUrl === undefined ? actor : { ...actor, avatarUrl: person.avatarUrl };

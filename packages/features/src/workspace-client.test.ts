@@ -190,19 +190,38 @@ const GRACE = {
   role: "member",
 };
 
-it.effect("reads a workspace's members under the workspace's id, as the service ordered them", () =>
+it.effect(
+  "reads a workspace's members under the workspace's id, as the service ordered them, and nobody who left where the service names none",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
+      });
+
+      const people = yield* Effect.provide(client().people(ACME.id), api.layer);
+
+      assert.deepEqual(people, { ok: true, answer: { members: [ADA, GRACE], former: [] } });
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, search }) => `${method} ${pathname}${search}`),
+        [`GET /api/workspaces/members?workspaceId=${ACME.id}`],
+      );
+    }),
+);
+
+it.effect("reads who the workspace's work names but left beside its members", () =>
   Effect.gen(function* () {
+    const LEE = {
+      userId: "user-lee",
+      name: "Lee Park",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    };
     const api = fakeCloudApi({
-      "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
+      "GET /api/workspaces/members": { answer: () => ({ members: [ADA], former: [LEE] }) },
     });
 
-    const members = yield* Effect.provide(client().members(ACME.id), api.layer);
+    const people = yield* Effect.provide(client().people(ACME.id), api.layer);
 
-    assert.deepEqual(members, { ok: true, answer: [ADA, GRACE] });
-    assert.deepEqual(
-      api.requests().map(({ method, pathname, search }) => `${method} ${pathname}${search}`),
-      [`GET /api/workspaces/members?workspaceId=${ACME.id}`],
-    );
+    assert.deepEqual(people, { ok: true, answer: { members: [ADA], former: [LEE] } });
   }),
 );
 
@@ -211,11 +230,11 @@ it.effect("names a members read the service refused: not permitted, or not a mem
     const route = "GET /api/workspaces/members";
 
     const notPermitted = yield* Effect.provide(
-      client().members(PERSONAL.id),
+      client().people(PERSONAL.id),
       refusing(route, HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN).layer,
     );
     const outsider = yield* Effect.provide(
-      client().members(ACME.id),
+      client().people(ACME.id),
       refusing(route, HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND).layer,
     );
 

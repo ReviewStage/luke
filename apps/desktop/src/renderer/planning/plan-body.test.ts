@@ -41,6 +41,9 @@ const PLAN: Plan = {
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LEE = { userId: "user-lee", name: "Lee Park" };
+/** Who the workspace's work names but left, as the read of who left answers. */
+const LEE_PICTURE = "https://avatars.githubusercontent.com/u/7";
+const FORMER = [{ ...LEE, pictureUrl: LEE_PICTURE }];
 
 const ACME: Workspace = {
   id: "workspace-acme",
@@ -100,7 +103,9 @@ async function draw(plan: Plan, drawn: Drawn = {}): Promise<HTMLElement> {
         Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
             ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+            : request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: FORMER }
+              : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
         ),
     },
   });
@@ -192,7 +197,7 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
   assert.equal(charles.querySelectorAll(".plan-edit-note .actor-mark").length, 1);
 });
 
-test("an edit the service names no member for, or read without an account id, is never yours, and a member who left stands on an outline", async () => {
+test("an edit the service names no member for, or read without an account id, is never yours, and a member who left keeps their face, grayed, and is heard as having left", async () => {
   const unnamed = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false };
 
   assert.equal(
@@ -204,11 +209,10 @@ test("an edit the service names no member for, or read without an account id, is
     "Edited by Dean Stratakos · now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[0], "Edited by Lee Park · now");
-  assert.equal(
-    former.querySelector(".plan-edit-note .actor-mark")?.getAttribute("data-kind"),
-    "someone",
-  );
+  assert.equal(editedLines(former)[0], "Edited by Lee Park (former member) · now");
+  const mark = former.querySelector(".plan-edit-note .actor-mark");
+  assert.equal(mark?.getAttribute("data-left"), "true");
+  assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
 
 test("the time opens the version history, on the plan as it stands or on the section's last save, and the writer opens nothing", async () => {

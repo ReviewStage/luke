@@ -38,8 +38,10 @@ import { Tooltip } from "./tooltip";
  *
  * A person's circle holds their sign-in picture once it loads, and the first
  * letter of their name on the hue read off their id until then and where it
- * fails, as a workspace's tile does; a member who left, or someone the
- * service names nobody for, stands on a quiet outline. Someone GitHub names
+ * fails, as a workspace's tile does; a member who left keeps their own
+ * picture or letter, grayed and muted, their name saying they left, so
+ * colour is never the only sign; someone the service names nobody for
+ * stands on a quiet outline. Someone GitHub names
  * who is no member stands by their GitHub avatar, a person on a circle and
  * an App's bot on a square, its robot until the avatar loads. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
@@ -167,6 +169,16 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
     case ACTOR_KIND.GITHUB:
       return <GitHubFace actor={actor} />;
     case ACTOR_KIND.SOMEONE:
+      // A member who left keeps their own face, grayed by the mark, where the service still names them.
+      if (actor.reason === SOMEONE_REASON.FORMER && actor.name !== undefined) {
+        return (
+          <PictureFace
+            id={actor.userId ?? actor.name}
+            pictureUrl={actor.pictureUrl}
+            stand={{ letter: identityLetter(actor.name) }}
+          />
+        );
+      }
       return (
         <span className="actor-face">
           {actor.reason === SOMEONE_REASON.FORMER ? (
@@ -180,6 +192,18 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
       );
   }
 }
+
+/** Whether the actor is a member who left whom the service still names, drawn by their own face, grayed. */
+function leftWithFace(actor: Actor): boolean {
+  return (
+    actor.kind === ACTOR_KIND.SOMEONE &&
+    actor.reason === SOMEONE_REASON.FORMER &&
+    actor.name !== undefined
+  );
+}
+
+/** What a screen reader hears after a name that is a member who left, since their grayed face is hidden from it. */
+const LEFT_WORDS = " (former member)";
 
 /** An actor's circle or square alone, at a size. */
 export function ActorMark({
@@ -197,6 +221,7 @@ export function ActorMark({
       className="actor-mark"
       data-kind={actor.kind}
       data-bot={actor.kind === ACTOR_KIND.GITHUB && actor.bot ? "true" : undefined}
+      data-left={leftWithFace(actor) ? "true" : undefined}
       data-size={size}
       data-tiled={tiled ? "true" : undefined}
       aria-hidden="true"
@@ -213,7 +238,8 @@ export function ActorMark({
  * hovered or holds the keyboard.
  */
 export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
-  return <span className="visually-hidden">{`(created by ${actorName(actor)})`}</span>;
+  const left = leftWithFace(actor) ? ", who left" : "";
+  return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
 }
 
 /** The quiet badge the reader's own account wears beside its name. */
@@ -460,6 +486,7 @@ export function ActorRef({
     <>
       <ActorMark actor={actor} />
       <span className="actor-ref-name">{name}</span>
+      {leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null}
     </>
   );
   return (
@@ -496,9 +523,10 @@ export interface StackFace {
   readonly card?: ReactNode;
 }
 
-/** What the face says of an actor to a screen reader and in its pill: their name, and what the face says beside it. */
+/** What the face says of an actor to a screen reader and in its pill: their name, that they left where they did, and what the face says beside it. */
 function faceName(actor: Actor, face: StackFace): string {
-  return face.says === undefined ? actorName(actor) : `${actorName(actor)} · ${face.says}`;
+  const name = leftWithFace(actor) ? `${actorName(actor)}${LEFT_WORDS}` : actorName(actor);
+  return face.says === undefined ? name : `${name} · ${face.says}`;
 }
 
 /** One face of a facepile that hangs its card: the actor's mark, its badge, named to a screen reader by its name and what it says. */

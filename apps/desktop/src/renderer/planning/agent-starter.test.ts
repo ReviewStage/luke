@@ -5,6 +5,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
@@ -14,6 +15,7 @@ import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,6 +28,7 @@ import {
   agentActor,
   endLine,
   endLineReason,
+  lineSender,
   macOwnerOf,
   teammateStarter,
 } from "./coding-agent-model";
@@ -382,4 +385,28 @@ test("a command an agent ran on a Mac says whose, by their disc and name: a team
   const untold = await macPlace(CHARLES, undefined);
   assert.equal(untold.textContent?.trim(), "On your Mac");
   assert.equal(untold.querySelector(".actor-mark"), null);
+});
+
+test("a starter or sender who left keeps their picture and their account's name now, from the read of who left", () => {
+  const lee = { userId: "user-lee", name: "Lee Park" };
+  const former = [
+    {
+      userId: "user-lee",
+      name: "Lee Chen",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
+  ];
+  const left = {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Chen",
+    userId: "user-lee",
+    pictureUrl: "https://avatars.githubusercontent.com/u/7",
+  };
+
+  assert.deepEqual(macOwnerOf(lee, MEMBERS, "user-dean", former), left);
+  assert.deepEqual(
+    lineSender({ ...lee, kind: CODING_AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
+    left,
+  );
 });

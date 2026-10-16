@@ -226,6 +226,7 @@ type PlanningActKind =
   | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
@@ -245,6 +246,7 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
   | typeof ACT_KIND.WORKSPACE_TRANSFER
@@ -611,6 +613,15 @@ export function planningActRows(
         "members" in answer
           ? Effect.succeed(answer.members)
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
+      );
+    },
+    // Who left is read on the same read as the members, so a service that names nobody answers none.
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, sender);
+      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.former ?? [])
+          : refusedWorkspace(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, answer.failure),
       );
     },
     // Note that the photo's answer, a failure among them, is the panel's to

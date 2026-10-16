@@ -4,7 +4,7 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
@@ -42,7 +42,7 @@ import {
   type ViewedVersion,
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { useWorkspaceMembers } from "../planning/use-workspace-members";
+import { useFormerMembers, useWorkspaceMembers } from "../planning/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
@@ -357,12 +357,14 @@ function SectionRow({
 function readerOf(
   account: AccountSnapshot,
   members: readonly WorkspaceMember[] | undefined,
+  former: readonly FormerMember[] | undefined,
 ): HistoryReader {
   const reader =
     account.status === ACCOUNT_STATUS.SIGNED_IN
       ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
       : { id: undefined, name: undefined, pictureUrl: undefined };
-  return members === undefined ? reader : { ...reader, members };
+  const read = members === undefined ? reader : { ...reader, members };
+  return former === undefined ? read : { ...read, former };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -640,7 +642,8 @@ export function DesktopVersionHistory({
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
   const linked = subject.plan;
-  const reader = readerOf(account, members);
+  const former = useFormerMembers(subject.workspace);
+  const reader = readerOf(account, members, former);
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);

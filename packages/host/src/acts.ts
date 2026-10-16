@@ -175,6 +175,8 @@ import {
   workspaceInvitationSchema,
 } from "@luke/features/workspace-invitation-wire";
 import {
+  type FormerMember,
+  formerMemberSchema,
   type Workspace,
   type WorkspaceMember,
   workspaceMemberSchema,
@@ -355,6 +357,7 @@ export const ACT_KIND = {
   WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
   WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",
@@ -578,6 +581,7 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+const formerMembersSchema = EffectSchema.Array(formerMemberSchema);
 
 const linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
 
@@ -928,6 +932,11 @@ export const ACT = {
     payload: actSchema(planningWorkspaceMembersParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not read that workspace's members on this system.",
+  },
+  [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: {
+    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    result: wireResult<readonly FormerMember[]>(isReadable(formerMembersSchema)),
+    refusal: "Could not read who left that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
     payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),

@@ -38,6 +38,8 @@ const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, g
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const PRIYA = { userId: "user-priya", name: "Priya Raman" };
+const PRIYA_PICTURE = "https://avatars.githubusercontent.com/u/11";
+const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }];
 const MEMBERS: readonly WorkspaceMember[] = [
   { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
   { ...CHARLES, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
@@ -157,6 +159,9 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
           const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
           const value: CodingAgentInboxAnswerView = {
@@ -428,4 +433,13 @@ test("someone who left offers no More: no email to copy, and no row in Settings 
   await settle();
 
   assert.equal(page.querySelector('button[aria-label="More"]'), null);
+});
+
+test("someone who left heads their page with their own picture, grayed", async () => {
+  const { page } = mount(PRIYA.userId);
+  await settle();
+
+  const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
+  assert.equal(face?.dataset.left, "true");
+  assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });

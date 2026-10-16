@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   type MemberSeams,
   OrganizationRefused,
@@ -9,8 +10,10 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
+import { plan } from "@luke/database/schemas/plan";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
+import { INBOX_REPLY, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import {
   workspaceInvitationAnswerSchema,
   workspaceInvitationsAnswerSchema,
@@ -36,6 +39,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
 import {
   type FakeGitHub,
   GITHUB_FIXTURE_REFUSED_CODE,
@@ -1052,6 +1056,99 @@ it.effect(
           bearerRequest(photoAt(acme), mallory),
         );
         assert.deepEqual(refusal.body, { error: HOSTED_API_ERROR.NOT_FOUND });
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a members read names who the workspace's work credits but left, with their picture, and nobody who left without work there",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+        ]);
+        yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
+        yield* Database.use((db) =>
+          db
+            .insert(plan)
+            .values({ userId: grace, organizationId: acme, name: "Relay retries", document: "" }),
+        );
+        yield* leaving(plugin, grace, acme);
+        yield* removing(plugin, ada, acme, alan);
+
+        const answered = yield* readMembers(seams, ada, membersAt(acme));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            ],
+            former: [
+              {
+                userId: grace,
+                name: "Grace Hopper",
+                pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+              },
+            ],
+          },
+        });
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a members read names who left having only answered an Inbox item of an agent with no task",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const lin = yield* openGithubAccount("Lin Chen");
+        const acme = yield* openTeam(api, ada, [{ userId: lin, role: "member" }]);
+        const started = yield* createCodingAgent(ada, {
+          planId: null,
+          organizationId: acme,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: null,
+          prompt: "Sweep the flaky tests.",
+        });
+        const agent = { userId: ada, planId: null, agentId: Option.getOrThrow(started).agent.id };
+        const posted = yield* postInboxItem(agent, {
+          key: "branch-protection",
+          title: "Require a review on main",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(posted));
+        const done = { reply: INBOX_REPLY.DONE } as const;
+        assert.ok(
+          Option.isSome(yield* answerInboxItem(lin, posted.success.id, 1, done, randomUUID())),
+        );
+        yield* leaving(plugin, lin, acme);
+
+        const answered = yield* readMembers(seams, ada, membersAt(acme));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            ],
+            former: [{ userId: lin, name: "Lin Chen" }],
+          },
+        });
       }).pipe(Effect.provide(database));
     }),
 );

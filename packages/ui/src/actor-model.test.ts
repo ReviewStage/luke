@@ -198,6 +198,17 @@ test("a facepile of who did a thing draws each of them once, where they first st
   ]);
 });
 
+test("two who left under one name each keep a face, told apart by their account ids", () => {
+  const left = (userId: string) => ({
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Alex",
+    userId,
+  });
+
+  assert.equal(distinctActors([left("user-1"), left("user-2"), left("user-1")]).length, 2);
+});
+
 test("two agents of one name each keep a face, told apart by their ids, and agents an older service sent no id for are told apart by name", () => {
   const edit = (agentId?: string) => ({
     actor: PLAN_ACTOR.AGENT,
@@ -322,5 +333,46 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
     distinctActors([stranger, devin, { ...stranger, login: "OctoCat" }]).length,
     2,
     "one GitHub account is one face, whatever case its login is spelled in",
+  );
+});
+
+test("a member who left keeps the picture the read of who left names them by, and nobody else takes one from it", () => {
+  const lee = { userId: "user-lee", name: "Lee Park" };
+  const former = [{ ...lee, pictureUrl: "https://avatars.githubusercontent.com/u/7" }];
+
+  assert.deepEqual(personActor(lee, [DANA, SAM], SAM.userId, former), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Park",
+    userId: "user-lee",
+    pictureUrl: "https://avatars.githubusercontent.com/u/7",
+  });
+  assert.equal(
+    "pictureUrl" in
+      personActor({ userId: "user-kim", name: "Kim Ito" }, [DANA], SAM.userId, former),
+    false,
+  );
+});
+
+test("a linked GitHub login who left keeps their picture and their account's name now, from the read of who left", () => {
+  const former = [
+    {
+      userId: "user-lee",
+      name: "Lee Chen",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
+  ];
+  assert.deepEqual(
+    githubActor(
+      { login: "leepark", bot: false, userId: "user-lee" },
+      { members: [DANA, SAM], readerId: SAM.userId, agent: undefined, former },
+    ),
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "Lee Chen",
+      userId: "user-lee",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
   );
 });

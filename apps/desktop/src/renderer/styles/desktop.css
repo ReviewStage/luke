@@ -1014,7 +1014,11 @@ button.sidebar-section-head-name:hover {
 }
 
 /* A person's picture keeps its edge on a ground of its own colour, a GitHub user's too. */
-.actor-mark:is([data-kind="person"], [data-kind="github"]:not([data-bot="true"]))::after {
+.actor-mark:is(
+  [data-kind="person"],
+  [data-kind="github"]:not([data-bot="true"]),
+  [data-left="true"]
+)::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -1027,6 +1031,22 @@ button.sidebar-section-head-name:hover {
   background: none;
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
   color: var(--text-tertiary);
+}
+
+/* A member who left keeps their own face, their picture or their letter on
+   its hue, drawn in grayscale and muted, rather than the outline that
+   stands for someone the service names nobody for; their name says they
+   left, so the gray is never the only sign. Muted to 0.8, the letter holds
+   3.8:1 on its gray in light and 4.2:1 in dark, and the gray 3.2:1 on the
+   ground, past the 3:1 a graphic needs. */
+.actor-mark[data-left="true"] {
+  background: var(--actor-tile);
+  box-shadow: none;
+}
+
+.actor-mark[data-left="true"] .actor-face {
+  filter: grayscale(1);
+  opacity: 0.8;
 }
 
 .actor-face {

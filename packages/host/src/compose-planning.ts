@@ -312,7 +312,7 @@ export type PlanningClient = Pick<
     | "linearConnect"
     | "linearDisconnect"
     | "linearIssues"
-    | "members"
+    | "people"
     | "photo"
     | "removeMember"
     | "changeRole"
@@ -1711,7 +1711,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
       }),
-    // The members are answered to the window that asked and held nowhere:
+    // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:
     // it keeps what it read, and reads again as it opens. A read moves
     // nothing, so nothing else is read with it.
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
@@ -1719,12 +1719,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const read = readEither(planningWorkspaceMembersParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
         if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const members = yield* Effect.provide(
-          client.workspaces.members(read.success.workspaceId),
+        const people = yield* Effect.provide(
+          client.workspaces.people(read.success.workspaceId),
           FetchHttpClient.layer,
         );
         return carried<PlanningWorkspaceMembersAnswer>(
-          members.ok ? { members: members.answer } : { failure: members.failure },
+          !people.ok
+            ? { failure: people.failure }
+            : people.answer.former.length === 0
+              ? { members: people.answer.members }
+              : { members: people.answer.members, former: people.answer.former },
         );
       }),
     // A photo is answered to the window that asked and held nowhere, as

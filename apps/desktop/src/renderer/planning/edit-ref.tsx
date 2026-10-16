@@ -186,8 +186,8 @@ function CallOwner({ edit, place }: { edit: PlanLastEdit; place: EditPlace }): R
 
 /** The reader with the members of the directory standing around the caller. */
 export function useEditReader(reader: PlanReader): EditReader {
-  const { members } = useMemberDirectory();
-  return { ...reader, members };
+  const { members, former } = useMemberDirectory();
+  return { ...reader, members, former };
 }
 
 /** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */

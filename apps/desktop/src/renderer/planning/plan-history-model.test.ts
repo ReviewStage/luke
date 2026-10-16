@@ -422,6 +422,22 @@ test("a teammate's revision wears their face as the workspace's members list the
     name: "Charles Pan",
     userId: CHARLES.userId,
   });
+  // And keeps their picture, and the name their account holds now, from the read of who left.
+  const left = {
+    ...CHARLES,
+    name: "Charles Pan-Ito",
+    pictureUrl: "https://avatars.githubusercontent.com/u/9",
+  };
+  assert.deepEqual(
+    revisionAuthorOf(edit(CHARLES), { ...reader, members: [member(DEAN)], former: [left] }, []),
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "Charles Pan-Ito",
+      userId: CHARLES.userId,
+      pictureUrl: left.pictureUrl,
+    },
+  );
 });
 
 test("a person's revision the service names nobody for, or read with no account id, is never You", () => {

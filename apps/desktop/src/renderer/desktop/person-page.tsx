@@ -258,11 +258,11 @@ function PersonColumn({
   const now = useMinute();
   const listed = plans.listed.plans;
   // Named as the list names them, else as the members read does, else by the name the page was opened with; nobody's name where none does.
-  const { members, readerId } = useMemberDirectory();
+  const { members, readerId, former } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
   const known = opened === undefined ? undefined : { userId, name: opened };
   const ref = personRef(userId, listed) ?? member ?? known;
-  const person = personActor(ref, members, readerId);
+  const person = personActor(ref, members, readerId, former);
   // The sidebar's own view, so their tasks are listed there as its Created by lists them.
   const taskView = useTaskListView(plans.workspace?.id, staged);
   const archive = useArchivedView(plans.workspace?.id, staged);

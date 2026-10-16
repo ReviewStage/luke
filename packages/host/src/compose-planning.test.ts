@@ -50,6 +50,7 @@ import {
 import type { PlanTranscript } from "@luke/features/transcript-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
+  type FormerMember,
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
@@ -176,6 +177,8 @@ interface FakeService extends PlanningClient {
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
+  /** Who each workspace's work names but left, as the service answers beside its members. */
+  former: Record<string, FormerMember[]>;
   /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
   linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
@@ -319,6 +322,7 @@ function fakeService(plans: Plan[]): FakeService {
     renamedAgain: undefined,
     workspacesGate: Effect.void,
     members: {},
+    former: {},
     linearIssues: {},
     invitations: {},
     photos: {},
@@ -444,13 +448,16 @@ function fakeService(plans: Plan[]): FakeService {
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
             : ({ ok: true, answer: issues } as const);
         }),
-      members: (workspaceId) =>
+      people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);
           const members = service.members[workspaceId];
           return members === undefined
             ? UNANSWERED_WORKSPACE
-            : ({ ok: true, answer: members } as const);
+            : ({
+                ok: true,
+                answer: { members, former: service.former[workspaceId] ?? [] },
+              } as const);
         }),
       photo: (workspaceId) =>
         Effect.sync(() => {
@@ -1593,6 +1600,23 @@ it.effect(
         yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
         refused,
       );
+    }),
+);
+
+it.effect(
+  "a members read carries who the workspace's work names but left, where the service names anyone",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [ADA];
+      const lee = { userId: "user-lee", name: "Lee Park" };
+      service.former[ACME.id] = [lee];
+      const { call } = yield* subject(service);
+
+      const people = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id });
+
+      assert.deepEqual(people, { members: [ADA], former: [lee] });
     }),
 );
 
