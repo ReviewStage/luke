@@ -9,6 +9,7 @@ import {
 import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
+import { writePage } from "@luke/database/models/plan-pages";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -68,6 +69,7 @@ import {
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
+  READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
@@ -721,4 +723,31 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: ARCHIVE_AGENT_REFUSAL.WORKING,
   });
+});
+
+test("Luke reads a page of the call's task by its id, as the member on the call, and nothing of another workspace's", async () => {
+  const opener = await database.createUser();
+  const plan = await taskConversation(opener, RELAY_FULL_NAME);
+  const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
+  const shown = Option.getOrThrow(
+    await database.run(
+      writePage(opener, plan.taskId, { title: "Funnel", html: "<h1>Funnel</h1>" }),
+    ),
+  );
+  const theirs = Option.getOrThrow(
+    await database.run(
+      writePage(stranger.userId, stranger.taskId, { title: "Theirs", html: "<p/>" }),
+    ),
+  );
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const call = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+
+  const read = await call(READ_PAGE_TOOL.name, { pageId: shown.id });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
+  assert.ok(isRecord(read.page));
+  assert.deepEqual([read.page.html, read.page.isYourTask], ["<h1>Funnel</h1>", true]);
+  assert.equal(
+    (await call(READ_PAGE_TOOL.name, { pageId: theirs.id })).status,
+    ACTION_RESULT_STATUS.REJECTED,
+  );
 });

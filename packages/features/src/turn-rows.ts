@@ -64,6 +64,7 @@ export const CALL_KIND = {
   UNARCHIVE_AGENT: "unarchive-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
+  READ_PAGE: "read-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
   SHOW_IMAGE: "show-image",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
@@ -106,6 +107,7 @@ export const CALL_WORDS = {
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
+  [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },

@@ -12,6 +12,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
+import { writePage } from "@luke/database/models/plan-pages";
 import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -59,6 +60,7 @@ import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
   ARCHIVE_AGENT_REFUSAL,
   CODING_AGENT_TOOL_REFUSAL,
+  READ_PAGE_REFUSAL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
@@ -829,4 +831,48 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   });
   const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
   assert.equal(Option.getOrThrow(read).archivedAt, null);
+});
+
+test("read_page reads a page a teammate showed on another task of the caller's workspace, its newest version or one named, its HTML cut on a line to the bound, and nothing of another workspace's or a version never written", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const bob = agents.teammates.userId;
+  const rows = Array.from({ length: 3_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
+  const shown = Option.getOrThrow(
+    await database.run(writePage(bob, plans.billing, { title: "Seats", html: "<h1>One</h1>" })),
+  );
+  await database.run(
+    writePage(bob, plans.billing, { pageId: shown.id, title: "Seats by month", html: rows }),
+  );
+  const elsewhere = Option.getOrThrow(
+    await database.run(
+      writePage(agents.otherWorkspaces.userId, plans.elsewhere, { title: "Theirs", html: "<p/>" }),
+    ),
+  );
+  const page = (answer: WireRecord) => (isRecord(answer.page) ? answer.page : {});
+
+  const newest = await call(CODER_TOOL.READ_PAGE, { pageId: shown.id });
+  assert.equal(newest.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(newest));
+  const read = page(newest);
+  assert.deepEqual(
+    [read.title, read.version, read.newestVersion, read.task, read.isYourTask],
+    ["Seats by month", 2, 2, { id: plans.billing, name: "Billing" }, false],
+  );
+  assert.ok(isWireString(read.html) && read.html.length <= 40_000 && read.html.endsWith("</p>"));
+  assert.equal(
+    (isWireString(read.html) ? read.html.length : 0) + Number(read.leftOutChars),
+    rows.length,
+  );
+  const first = page(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 1 }));
+  assert.deepEqual([first.version, first.html, first.leftOutChars], [1, "<h1>One</h1>", 0]);
+
+  const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: READ_PAGE_REFUSAL.NO_PAGE };
+  assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 3 }), refused);
+  // The caller's starter is a member of the other workspace too, but the caller is not of it.
+  assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: elsewhere.id }), refused);
+  assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 0 }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: READ_PAGE_REFUSAL.UNREADABLE,
+  });
 });
