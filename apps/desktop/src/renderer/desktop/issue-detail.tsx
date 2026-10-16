@@ -1,15 +1,17 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ArchiveIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { ExperimentTag } from "../experiment-marks";
+import { FoldingButton } from "../folding-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
-import { TaskNameField, useTaskRename } from "./task-name-field";
 import type { IssueChange } from "./use-issues";
 
 /**
@@ -25,7 +27,31 @@ import type { IssueChange } from "./use-issues";
 /** What the ⋯ menu is called. */
 const ACTIONS_LABEL = "Issue actions";
 
-/** The toolbar: the way back to the list, the issue's identifier, and its ⋯ menu. */
+/**
+ * The toolbar's path, as the automation editor's: the Issues list a press
+ * away, and the issue's identifier where one stands.
+ */
+export function IssueCrumbs({
+  identifier,
+  onBack,
+}: {
+  identifier?: string | undefined;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <nav className="automation-crumbs" aria-label="Path">
+      <FoldingButton label="Issues" glyph={<ListTodoIcon />} onClick={onBack} />
+      {identifier === undefined ? null : (
+        <>
+          <ChevronRightIcon aria-hidden="true" />
+          <span className="automation-crumb">{identifier}</span>
+        </>
+      )}
+    </nav>
+  );
+}
+
+/** The toolbar: the path back to the list, and the issue's ⋯ menu. */
 function DetailToolbar({
   identifier,
   onBack,
@@ -45,11 +71,8 @@ function DetailToolbar({
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
-        <button type="button" className="toolbar-button" onClick={onBack}>
-          <ListTodoIcon />
-          Issues
-        </button>
-        <span className="issue-crumb">{identifier}</span>
+        <IssueCrumbs identifier={identifier} onBack={onBack} />
+        <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
         <Tooltip label={ACTIONS_LABEL}>
@@ -59,7 +82,7 @@ function DetailToolbar({
             aria-label={ACTIONS_LABEL}
             {...menu.trigger()}
           >
-            <EllipsisIcon />
+            <EllipsisIcon className="icon-button-glyph" />
           </button>
         </Tooltip>
         {menu.drawn === undefined ? null : (
@@ -75,7 +98,12 @@ function DetailToolbar({
   );
 }
 
-/** The title, a press away from its field. */
+/**
+ * The title, drawn and edited where it stands in the task page's own
+ * heading (`plan-document-editor.tsx`): Return or a press elsewhere keeps
+ * what was typed, Escape the title it opened on, and a title left empty or
+ * unchanged renames nothing.
+ */
 function IssueTitle({
   issue,
   onChange,
@@ -83,21 +111,51 @@ function IssueTitle({
   issue: Issue;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
-  const rename = useTaskRename(issue.id, (_, title) => onChange({ title }));
-  return rename.editing ? (
-    <TaskNameField
-      name={issue.title}
-      className="issue-title-field"
-      label="Issue title"
-      maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
-      onEnd={rename.end}
-    />
-  ) : (
-    <h1 className="issue-title">
-      <button type="button" className="issue-title-button" onClick={rename.begin}>
+  const text = useRef<HTMLDivElement>(null);
+  const putBack = () => {
+    if (text.current !== null) text.current.textContent = issue.title;
+  };
+  const keep = () => {
+    const typed = (text.current?.textContent ?? "").trim().slice(0, ISSUE_BOUNDS.MAX_TITLE_CHARS);
+    if (typed === "" || typed === issue.title) {
+      putBack();
+      return;
+    }
+    onChange({ title: typed }).then((kept) => {
+      if (!kept) putBack();
+    });
+  };
+  return (
+    <div className="markdown task-title ph-no-capture">
+      {/* biome-ignore lint/a11y/useSemanticElements: the title is edited in the heading's own look, which wraps as a heading does; an input cannot. */}
+      <div
+        ref={text}
+        className="markdown-heading task-title-text"
+        data-level="1"
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+        role="textbox"
+        aria-label="Issue title"
+        tabIndex={0}
+        spellCheck
+        onBlur={keep}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            text.current?.blur();
+          }
+          // Note that Escape goes no further than the title, because the window's own Escape would leave the issue as well.
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            putBack();
+            text.current?.blur();
+          }
+        }}
+      >
         {issue.title}
-      </button>
-    </h1>
+      </div>
+    </div>
   );
 }
 
@@ -126,23 +184,26 @@ export function IssueDetail({
   );
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
-    <section className="issues-view" aria-label={identifier}>
+    <section className="automations-view" aria-label={identifier}>
       <DetailToolbar identifier={identifier} onBack={onBack} onArchive={archiving.ask} />
-      <div className="issues-scroll scroll-fade-top">
-        <article className="issue-detail">
-          <IssueTitle issue={issue} onChange={onChange} />
-          <div className="issue-properties">
-            <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
-            <PriorityMenu
-              priority={issue.priority}
-              onPick={(priority) => void onChange({ priority })}
+      {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
+      <div className="desktop-document">
+        <div className="plan-document-scroll scroll-fade">
+          <article className="plan-body">
+            <IssueTitle issue={issue} onChange={onChange} />
+            <div className="issue-properties">
+              <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
+              <PriorityMenu
+                priority={issue.priority}
+                onPick={(priority) => void onChange({ priority })}
+              />
+            </div>
+            <IssueDescription
+              description={issue.description}
+              onSave={(description) => onChange({ description })}
             />
-          </div>
-          <IssueDescription
-            description={issue.description}
-            onSave={(description) => onChange({ description })}
-          />
-        </article>
+          </article>
+        </div>
       </div>
       <ConfirmDialog
         confirm={archiving}

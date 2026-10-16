@@ -1,77 +1,14 @@
-/* The Issues page (`issues-page.tsx`): the listed workspace's issues under a
-   heading for each status, in the plan's place beside the sidebar. Its rows
-   are the sidebar's own, as Home's and Factory's are; only what an issue's
-   row adds is drawn here. Tokens only. */
-
-.issues-view {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.issues-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-8) var(--content-inset) var(--space-32);
-}
-
-.issues-scroll:has(.empty-state) {
-  display: flex;
-  flex-direction: column;
-}
-
-.issues-scroll > .read-failure-centred {
-  flex: 1;
-}
+/* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
+   title are the window's own: the Automations page's view and scroll, Home's
+   sections and rows, a person's page's column, and a task's heading. Only
+   what an issue adds is drawn here: its identifier, its status and priority
+   marks, its properties' row, and its description's editor. Tokens only. */
 
 /* The toolbar's field files an issue on Return; it stands at a control's height. */
 .issues-new-title {
   width: min(320px, 40vw);
   height: var(--control-height);
   padding-block: 0;
-}
-
-.issues-skeleton-row {
-  padding: var(--space-8) var(--row-inset);
-}
-
-.issue-group + .issue-group {
-  margin-top: var(--space-12);
-}
-
-/* A status's heading: its glyph, its name, and how many issues stand in it. */
-.issue-group-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin: 0;
-  padding: var(--space-8) var(--row-inset);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.issue-group-count {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.issue-rows {
-  margin: var(--space-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A row offers no Pin or Archive to give way to, so its time stays put.
-   Note that it outranks the sidebar's own row, which hides its time to
-   make that room. */
-.issue-rows .issue-row:hover .sidebar-task:not(.sidebar-agent) .sidebar-task-time,
-.issue-rows .issue-row:has(:focus-visible) .sidebar-task:not(.sidebar-agent) .sidebar-task-time {
-  visibility: visible;
 }
 
 .issue-row-identifier {
@@ -118,49 +55,6 @@
 
 .issue-priority-mark[data-priority="urgent"] {
   color: var(--state-attention);
-}
-
-/* One issue's page: its title, its two chips, and its description, at the
-   window's reading width. */
-.issue-crumb {
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.issue-detail {
-  display: flex;
-  max-width: var(--reading-width);
-  flex-direction: column;
-  gap: var(--space-12);
-  padding-top: var(--space-8);
-}
-
-.issue-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-/* The title is a press away from its field, drawn as the words themselves. */
-.issue-title-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-primary);
-  cursor: text;
-  font: inherit;
-  text-align: left;
-}
-
-.issue-title-field {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 600;
 }
 
 .issue-properties {

@@ -78,7 +78,7 @@ const IssuesPage = lazy(() =>
  */
 function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
-  return <section className="issues-view" aria-label="Issues" />;
+  return <section className="automations-view" aria-label="Issues" />;
 }
 
 /**
