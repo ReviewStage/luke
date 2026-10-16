@@ -421,10 +421,10 @@ export function PlanActions({
  * the first named in the row's card, before that a pencil while a draft
  * waits in one of its boxes (`draft-mark.tsx`), and before that, on a task someone else
  * created, its creator's face (`teammateCreator`), read against the members
- * of the directory around the list; the reader's own tasks wear none. A row
- * says what its group does not: its repository's name, muted, where its
- * group is not its repository's, and no face where its group is its
- * creator's. Its time is the one the list's order chooses. Pin
+ * of the directory around the list; the reader's own tasks wear none. Its
+ * repository's name, muted, where the list hands one (in one run), and no
+ * face where its group is its creator's. Its time is the one the list's
+ * order chooses. Pin
  * and Archive stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
@@ -453,7 +453,7 @@ export function SidebarPlan({
   now: number;
   /** The time the row shows, which the list's order chooses: its last update unless said. */
   at?: number;
-  /** The repository's name the row says, muted before its time, where its group does not say it. */
+  /** The repository's name the row says, muted before its time, where the list hands one. */
   repository?: string | undefined;
   /** Whether a teammate's task wears its creator's face, which a group by creator says instead. */
   face?: boolean;

@@ -190,7 +190,7 @@ function taskRows(
   }));
 }
 
-test("a shared workspace's tasks group by repository until View options groups them by creator, yours first, each row naming its repository instead of a face", () => {
+test("a shared workspace's tasks group by repository until View options groups them by creator, yours first, each row wearing no face and naming no repository, which its card names", () => {
   const sidebar = mountSidebar(ACME);
   assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
   assert.deepEqual(
@@ -205,10 +205,18 @@ test("a shared workspace's tasks group by repository until View options groups t
   choose(sidebar, "Group by", "Creator");
   assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
   assert.deepEqual(taskRows(sidebar), [
-    { name: "Retry webhooks", repository: "relay", face: false },
-    { name: "Billing empty states", repository: "console", face: false },
-    { name: "Fix flaky deploy", repository: "relay", face: false },
+    { name: "Retry webhooks", repository: undefined, face: false },
+    { name: "Billing empty states", repository: undefined, face: false },
+    { name: "Fix flaky deploy", repository: undefined, face: false },
   ]);
+  const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-plan`)].find(
+    (each) => each.querySelector(".sidebar-plan-name")?.textContent === "Billing empty states",
+  );
+  assert.ok(row, "the task has a row");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.match(document.querySelector(".tooltip-card")?.textContent ?? "", /acme\/console/);
 });
 
 test("grouped by none, the tasks run in one list, each row naming its repository and a teammate's wearing their face", () => {
