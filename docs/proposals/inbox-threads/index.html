@@ -475,6 +475,8 @@ function flipRowNow(sw){ // flip the dot in place so the change shows while the 
   setTimeout(renderRows, 360);
 }
 function settle(sw){
+  // A row the list redrew under a pending swipe is gone; its swipe does nothing.
+  if(!sw.isConnected) return;
   const x = sw._x || 0;
   if(x >= fullAt(sw)){ // long swipe: do it
     sw.classList.remove('dragging');
@@ -514,7 +516,12 @@ function endDrag(){
   drag = null;
 }
 document.addEventListener('pointerup', endDrag);
-document.addEventListener('pointercancel', endDrag);
+// A cancelled pointer is not a release: the row closes and nothing flips.
+document.addEventListener('pointercancel', ()=>{
+  if(!drag) return;
+  if(drag.live) closeSw(drag.sw);
+  drag = null;
+});
 // Two-finger swipe on a trackpad: horizontal wheel deltas move the row; it settles once they stop.
 document.addEventListener('wheel', e=>{
   const sw = e.target.closest('.sw[data-key]');
