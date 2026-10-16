@@ -8,6 +8,7 @@ import {
   CHECK_STATE,
   CODING_AGENT_AUTHOR,
   CONVERSATION_ENTRY,
+  DIFF_SIDE,
   MERGE_STATE,
   OVERVIEW_BOUNDS,
   PULL_REQUEST_STATE,
@@ -110,9 +111,16 @@ function repository(answers: {
   readonly statuses?: readonly object[];
   readonly comments?: readonly object[];
   readonly reviews?: readonly object[];
+  readonly graphql?: object | Response;
 }): RepositoryScript {
   return (sent) => {
     const { pathname } = new URL(sent.url);
+    if (pathname === "/graphql" && sent.method === "POST" && answers.graphql !== undefined) {
+      const asked: { variables?: object } = JSON.parse(sent.body);
+      // Note that the threads are asked of this one pull request by name and number.
+      assert.deepEqual(asked.variables, { owner: "acme", name: "relay", number: NUMBER });
+      return answers.graphql instanceof Response ? answers.graphql : Response.json(answers.graphql);
+    }
     // Note that the bodies are GitHub's to render, so a read of one that does not ask for its rendering is refused.
     const rendered = sent.headers.get("accept") === "application/vnd.github.full+json";
     if ([PULL, COMMENTS, `${PULL}/reviews`].includes(pathname) && !rendered) {
@@ -156,7 +164,6 @@ const overviewOf = (organizationId: string, script: RepositoryScript) =>
     const read = yield* pullRequestOverview(TOKEN, REPOSITORY, NUMBER);
     if (Option.isNone(read)) return undefined;
     return yield* namedOverview(
-      TOKEN,
       { organizationId, author: CODING_AGENT_AUTHOR.DEVELOPER },
       read.value,
     );
@@ -249,7 +256,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           login: LUKE.login,
           bot: true,
           avatarUrl: LUKE.avatar_url,
-          luke: true,
         });
         assert.equal(overview.writtenAs, CODING_AGENT_AUTHOR.DEVELOPER);
         assert.deepEqual(
@@ -401,6 +407,280 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           ["vercel"],
         );
       }),
+  );
+
+  it.effect(
+    "a review that only left line comments stands with its threads, each with its file, lines, hunk, standing, and comments; a draft's comment is left out, replies past the bound and threads left on GitHub are counted, and a thread whose review is unlisted stands at its own time",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const hunk =
+          "@@ -10,3 +10,4 @@ export function send()\n   const a = 1;\n-  twice();\n+  once();\n+  done();";
+        /** A comment as GitHub's GraphQL answers one. */
+        /** An author as GitHub's GraphQL names one. */
+        interface Author {
+          readonly __typename: string;
+          readonly login: string;
+          readonly avatarUrl: string;
+          readonly databaseId: number;
+        }
+        const comment = (
+          author: Author | null,
+          at: string,
+          id: number,
+          review: { databaseId: number | null; state: string } | null,
+        ) => ({
+          author,
+          body: `comment ${id}`,
+          bodyHTML: `<p dir="auto">comment ${id}</p>`,
+          createdAt: at,
+          url: `${PAGE}#discussion_r${id}`,
+          diffHunk: hunk,
+          pullRequestReview: review,
+        });
+        const asPriyaNode = {
+          __typename: "User",
+          login: PRIYA.login,
+          avatarUrl: PRIYA.avatar_url,
+          databaseId: PRIYA.id,
+        };
+        const asCharlesNode = {
+          __typename: "User",
+          login: CHARLES.login,
+          avatarUrl: CHARLES.avatar_url,
+          databaseId: CHARLES.id,
+        };
+        const reviewer = {
+          __typename: "Bot",
+          login: "reviewer",
+          avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+          databaseId: 4242,
+        };
+        const overview = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            reviews: [
+              {
+                id: 5,
+                user: PRIYA,
+                state: "COMMENTED",
+                body: "",
+                submitted_at: "2026-10-15T09:30:00Z",
+                html_url: `${PAGE}#pullrequestreview-5`,
+              },
+            ],
+            graphql: {
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      totalCount: 4,
+                      nodes: [
+                        {
+                          path: "src/invite.ts",
+                          line: 12,
+                          startLine: 11,
+                          originalLine: 12,
+                          originalStartLine: 11,
+                          diffSide: "RIGHT",
+                          startDiffSide: "RIGHT",
+                          isResolved: false,
+                          isOutdated: false,
+                          comments: {
+                            totalCount: 4,
+                            nodes: [
+                              comment(asPriyaNode, "2026-10-15T09:29:00Z", 1, {
+                                databaseId: 5,
+                                state: "COMMENTED",
+                              }),
+                              comment(asCharlesNode, "2026-10-15T10:30:00Z", 2, {
+                                databaseId: 6,
+                                state: "COMMENTED",
+                              }),
+                              comment(asCharlesNode, "2026-10-15T10:40:00Z", 3, {
+                                databaseId: 7,
+                                state: "PENDING",
+                              }),
+                            ],
+                          },
+                        },
+                        {
+                          path: "src/old.ts",
+                          line: null,
+                          startLine: null,
+                          originalLine: 3,
+                          originalStartLine: null,
+                          diffSide: "LEFT",
+                          startDiffSide: null,
+                          isResolved: true,
+                          isOutdated: true,
+                          comments: {
+                            totalCount: 1,
+                            nodes: [
+                              comment(reviewer, "2026-10-15T12:00:00Z", 4, {
+                                databaseId: 99,
+                                state: "COMMENTED",
+                              }),
+                            ],
+                          },
+                        },
+                        {
+                          path: "src/draft.ts",
+                          line: 1,
+                          startLine: null,
+                          originalLine: 1,
+                          originalStartLine: null,
+                          diffSide: "RIGHT",
+                          startDiffSide: null,
+                          isResolved: false,
+                          isOutdated: false,
+                          comments: {
+                            totalCount: 1,
+                            nodes: [
+                              comment(asCharlesNode, "2026-10-15T13:00:00Z", 5, {
+                                databaseId: 8,
+                                state: "PENDING",
+                              }),
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        );
+
+        assert.ok(overview !== undefined);
+        const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
+        const asCharles = {
+          login: CHARLES.login,
+          bot: false,
+          avatarUrl: CHARLES.avatar_url,
+          userId: charles,
+        };
+        assert.deepEqual(overview.conversation, [
+          {
+            kind: CONVERSATION_ENTRY.REVIEW,
+            by: asPriya,
+            state: REVIEW_STATE.COMMENTED,
+            html: null,
+            body: "",
+            at: Date.parse("2026-10-15T09:30:00Z"),
+            url: `${PAGE}#pullrequestreview-5`,
+            threads: [
+              {
+                path: "src/invite.ts",
+                line: 12,
+                startLine: 11,
+                originalLine: 12,
+                originalStartLine: 11,
+                side: DIFF_SIDE.RIGHT,
+                startSide: DIFF_SIDE.RIGHT,
+                diffHunk: hunk,
+                resolved: false,
+                outdated: false,
+                comments: [
+                  {
+                    by: asPriya,
+                    html: '<p dir="auto">comment 1</p>',
+                    body: "",
+                    at: Date.parse("2026-10-15T09:29:00Z"),
+                    url: `${PAGE}#discussion_r1`,
+                  },
+                  {
+                    by: asCharles,
+                    html: '<p dir="auto">comment 2</p>',
+                    body: "",
+                    at: Date.parse("2026-10-15T10:30:00Z"),
+                    url: `${PAGE}#discussion_r2`,
+                  },
+                ],
+                more: 1,
+              },
+            ],
+          },
+          {
+            kind: CONVERSATION_ENTRY.REVIEW,
+            by: {
+              login: "reviewer[bot]",
+              bot: true,
+              avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+            },
+            state: REVIEW_STATE.COMMENTED,
+            html: null,
+            body: "",
+            at: Date.parse("2026-10-15T12:00:00Z"),
+            url: `${PAGE}#discussion_r4`,
+            threads: [
+              {
+                path: "src/old.ts",
+                line: null,
+                startLine: null,
+                originalLine: 3,
+                originalStartLine: null,
+                side: DIFF_SIDE.LEFT,
+                startSide: null,
+                diffHunk: hunk,
+                resolved: true,
+                outdated: true,
+                comments: [
+                  {
+                    by: {
+                      login: "reviewer[bot]",
+                      bot: true,
+                      avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+                    },
+                    html: '<p dir="auto">comment 4</p>',
+                    body: "",
+                    at: Date.parse("2026-10-15T12:00:00Z"),
+                    url: `${PAGE}#discussion_r4`,
+                  },
+                ],
+                more: 0,
+              },
+            ],
+          },
+        ]);
+        assert.equal(overview.earlier, 1, "the thread GitHub holds past the bound is counted");
+      }),
+  );
+
+  it.effect("review threads GitHub will not answer leave the rest of the overview standing", () =>
+    Effect.gen(function* () {
+      const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+      for (const graphql of [
+        Response.json({ message: "Resource not accessible" }, { status: 403 }),
+        { data: null, errors: [{ message: "Something went wrong" }] },
+      ]) {
+        const overview = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            reviews: [
+              {
+                id: 5,
+                user: PRIYA,
+                state: "APPROVED",
+                body: "",
+                submitted_at: "2026-10-15T09:30:00Z",
+                html_url: `${PAGE}#pullrequestreview-5`,
+              },
+            ],
+            graphql,
+          }),
+        );
+        assert.ok(overview !== undefined);
+        assert.deepEqual(
+          overview.conversation.map((entry) => [entry.state, entry.threads]),
+          [[REVIEW_STATE.APPROVED, undefined]],
+        );
+      }
+    }),
   );
 
   it.effect("none where the repository no longer holds the pull request", () =>

@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CHANNEL_KIND, CHAT_BLOCK, CHAT_BOUNDS, MEMBER_KIND } from "@luke/features/chat-wire";
+import {
+  ASK_STATUS,
+  CHANNEL_KIND,
+  CHAT_ASK,
+  CHAT_BLOCK,
+  CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
+  CHAT_REPLY,
+  MEMBER_KIND,
+} from "@luke/features/chat-wire";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
@@ -10,7 +19,10 @@ import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  answerAsk,
+  attachMessageImages,
   CHAT_REFUSAL,
+  type ChatImageWrite,
   type ChatMemberRow,
   type ChatPost,
   channelNamed,
@@ -24,10 +36,17 @@ import {
   leave,
   markNoticed,
   memberNamed,
+  openAsksOf,
   openTopicChannel,
+  postAsk,
   postMessage,
+  readAttachment,
+  resolveAsk,
   roster,
   unreadFor,
+  waitingOn,
+  waitingStamps,
+  withdrawAnswer,
 } from "../chat-store.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
@@ -813,5 +832,587 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           [reply.id],
         );
       }),
+  );
+});
+
+/** A choice between two expiries, as an agent asks it. */
+const EXPIRY = {
+  title: "Invite expiry",
+  response: {
+    type: CHAT_ASK.CHOICE,
+    options: [{ label: "Seven days" }, { label: "Five days" }],
+  },
+} as const;
+
+/** The room `openRoom` opens. */
+type Room = Effect.Success<typeof openRoom>;
+
+it.layer(getTestDB())("the chat store's asks", (it) => {
+  /** An ask posted by the member given under the key given, in the plan's channel or where named. */
+  const ask = (
+    room: Room,
+    author: ChatMemberRow,
+    key: string,
+    text: string,
+    channelId = room.channel.id,
+  ) =>
+    Effect.map(
+      postAsk(room.owner, room.workspace, {
+        authorMemberId: author.id,
+        to: { channelId },
+        blocks: words(text),
+        mentions: [],
+        clientKey: randomUUID(),
+        key,
+        ask: EXPIRY,
+      }),
+      Result.getOrThrow,
+    );
+
+  /** An answer by the member given at the revision given, under the key given. */
+  const answer = (
+    room: Room,
+    answerer: ChatMemberRow,
+    seq: number,
+    revision: number,
+    clientKey: string = randomUUID(),
+    as = room.owner,
+  ) =>
+    answerAsk(as, room.workspace, {
+      answererMemberId: answerer.id,
+      seq,
+      revision,
+      reply: { reply: CHAT_REPLY.CHOSE, choices: ["Seven days"], note: "Match the plan." },
+      clientKey,
+    });
+
+  it.effect(
+    "an ask posted twice under its key is one message, written again in place at the next revision and place, and opened again",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const first = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        assert.deepEqual(
+          [first.created, first.message.askRevision, first.message.askStatus],
+          [true, 1, ASK_STATUS.OPEN],
+        );
+        Result.getOrThrow(yield* answer(room, room.ada, first.message.seq, 1));
+        yield* room.posted(room.second, "Meanwhile.");
+        const again = yield* ask(
+          room,
+          room.first,
+          "invite-expiry",
+          "Which expiry, given the audit?",
+        );
+        assert.equal(again.message.id, first.message.id);
+        assert.deepEqual(
+          [again.created, again.message.askRevision, again.message.askStatus, again.message.answer],
+          [false, 2, ASK_STATUS.OPEN, null],
+        );
+        assert.ok(again.message.touchedSeq > first.message.touchedSeq);
+        assert.equal(again.message.seq, first.message.seq);
+        assert.deepEqual(
+          textsOf([again.message]),
+          textsOf([{ blocks: words("Which expiry, given the audit?") }]),
+        );
+        // Another author's ask under the same key is its own.
+        const other = yield* ask(room, room.second, "invite-expiry", "Mine too.");
+        assert.notEqual(other.message.id, first.message.id);
+      }),
+  );
+
+  it.effect(
+    "an answer is taken at the revision it names, as a reply in the ask's thread, once under its key, and refused at a revision the author moved past",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        yield* ask(room, room.first, "invite-expiry", "Which expiry, now?");
+        const stale = Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 1));
+        assert.deepEqual(
+          [stale.taken, stale.ask.askStatus, stale.reply],
+          [false, ASK_STATUS.OPEN, Option.none()],
+        );
+
+        const key = randomUUID();
+        const taken = Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 2, key));
+        const reply = Option.getOrThrow(taken.reply);
+        assert.deepEqual(
+          [taken.taken, taken.ask.askStatus, taken.ask.answeredByMemberId, taken.ask.touchedSeq],
+          [true, ASK_STATUS.ANSWERED, room.ada.id, reply.seq],
+        );
+        assert.deepEqual([reply.parentId, reply.authorMemberId], [posted.message.id, room.ada.id]);
+        assert.deepEqual(
+          textsOf([reply]),
+          textsOf([{ blocks: words('Chose "Seven days".\n\nMatch the plan.') }]),
+        );
+        const repeated = Result.getOrThrow(
+          yield* answer(room, room.ada, posted.message.seq, 2, key),
+        );
+        assert.deepEqual([repeated.taken, Option.getOrThrow(repeated.reply).id], [true, reply.id]);
+        const late = Result.getOrThrow(
+          yield* answer(room, room.grace, posted.message.seq, 2, undefined, room.teammate),
+        );
+        assert.equal(late.taken, false);
+        assert.deepEqual(
+          yield* answer(room, room.ada, 999, 1),
+          Result.fail(CHAT_REFUSAL.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "an answer withdrawn under its key opens the ask again, once, and an ask resolved is closed with why at the next revision",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        const key = randomUUID();
+        yield* answer(room, room.ada, posted.message.seq, 1, key);
+        assert.deepEqual(
+          yield* withdrawAnswer(
+            room.teammate,
+            room.workspace,
+            room.grace.id,
+            posted.message.seq,
+            key,
+          ),
+          Option.none(),
+        );
+        const reopened = Option.getOrThrow(
+          yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key),
+        );
+        assert.deepEqual(
+          [reopened.askStatus, reopened.answer, reopened.answerKey, reopened.askRevision],
+          [ASK_STATUS.OPEN, null, null, 1],
+        );
+        assert.deepEqual(
+          yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key),
+          Option.none(),
+        );
+
+        const closed = Option.getOrThrow(
+          yield* resolveAsk(
+            room.owner,
+            room.workspace,
+            room.first.id,
+            "invite-expiry",
+            "Settled in the plan.",
+          ),
+        );
+        assert.deepEqual(
+          [closed.askStatus, closed.closedReason, closed.askRevision],
+          [ASK_STATUS.CLOSED, "Settled in the plan.", 2],
+        );
+        assert.deepEqual(
+          yield* resolveAsk(room.owner, room.workspace, room.first.id, "no-such-key", "Gone."),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* resolveAsk(
+            room.teammate,
+            room.workspace,
+            room.ada.id,
+            "invite-expiry",
+            "Not mine.",
+          ),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect(
+    "an author's or a channel's asks read every open one, then the latest settled up to the limit, each run the latest changed first",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const older = yield* ask(room, room.first, "older", "Older?");
+        const newer = yield* ask(room, room.first, "newer", "Newer?");
+        const settledFirst = yield* ask(room, room.first, "settled-first", "Done?");
+        const settledLast = yield* ask(room, room.first, "settled-last", "Done too?");
+        yield* resolveAsk(room.owner, room.workspace, room.first.id, "settled-first", "Done.");
+        yield* resolveAsk(room.owner, room.workspace, room.first.id, "settled-last", "Done.");
+        yield* ask(room, room.second, "someone-else", "Not agent-1's.");
+        const ids = (rows: readonly { readonly id: string }[]) => rows.map((row) => row.id);
+
+        assert.deepEqual(
+          ids(yield* openAsksOf(room.owner, room.workspace, { authorMemberId: room.first.id }, 1)),
+          [newer.message.id, older.message.id, settledLast.message.id],
+        );
+        assert.deepEqual(
+          ids(yield* openAsksOf(room.owner, room.workspace, { authorMemberId: room.first.id })),
+          [newer.message.id, older.message.id],
+        );
+        assert.equal(
+          (yield* openAsksOf(room.owner, room.workspace, { channelId: room.channel.id }, 10))
+            .length,
+          5,
+        );
+        assert.deepEqual(
+          ids(yield* openAsksOf(room.owner, room.workspace, { authorMemberId: room.first.id }, 10)),
+          [newer.message.id, older.message.id, settledLast.message.id, settledFirst.message.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "what waits on a person is the open asks of others they may answer: not their own, not an agents' DM, not on an archived plan, and a DM to them included",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const inChannel = yield* ask(room, room.first, "in-channel", "Which expiry?");
+        yield* ask(room, room.ada, "adas-own", "My own question.");
+        const toAda = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.second.id, room.ada.id),
+        );
+        const dmAsk = yield* ask(room, room.second, "to-ada", "Ada, which?", toAda.id);
+        const between = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.second.id),
+        );
+        yield* ask(room, room.first, "between-agents", "agent-2, which?", between.id);
+        const answered = yield* ask(room, room.second, "answered", "Answered?");
+        yield* answer(room, room.grace, answered.message.seq, 1, undefined, room.teammate);
+
+        // Every change in a test lands at one instant, so the sequence orders them, the latest first.
+        const waiting = yield* waitingOn(room.owner);
+        assert.deepEqual(
+          waiting.map((each) => [each.message.id, each.planId]),
+          [
+            [dmAsk.message.id, null],
+            [inChannel.message.id, room.plan],
+          ],
+        );
+        assert.deepEqual(
+          (yield* waitingStamps(room.owner)).map((stamp) => stamp.id),
+          waiting.map((each) => each.message.id),
+        );
+
+        yield* updateTask(room.owner, room.plan, { archived: true });
+        assert.deepEqual(
+          (yield* waitingOn(room.owner)).map((each) => each.message.id),
+          [dmAsk.message.id],
+        );
+        const stranger = yield* openAccount();
+        assert.deepEqual(yield* waitingOn(stranger), []);
+        assert.deepEqual(
+          yield* openAsksOf(stranger, room.workspace, { channelId: room.channel.id }),
+          [],
+        );
+      }),
+  );
+  it.effect(
+    "two posts of one new ask racing land as one ask at the second revision, an ask stays where it was first posted, and a key a plain message holds is no ask's",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const [a, b] = yield* Effect.all(
+          [
+            ask(room, room.first, "invite-expiry", "Which?"),
+            ask(room, room.first, "invite-expiry", "Which, really?"),
+          ],
+          { concurrency: "unbounded" },
+        );
+        assert.equal(a.message.id, b.message.id);
+        assert.deepEqual([a.created, b.created].toSorted(), [false, true]);
+        assert.deepEqual([a.message.askRevision, b.message.askRevision].toSorted(), [1, 2]);
+
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        assert.deepEqual(
+          yield* postAsk(room.owner, room.workspace, {
+            authorMemberId: room.first.id,
+            to: { channelId: general.id },
+            blocks: words("Moved?"),
+            mentions: [],
+            clientKey: randomUUID(),
+            key: "invite-expiry",
+            ask: EXPIRY,
+          }),
+          Result.fail(CHAT_REFUSAL.ASK_ELSEWHERE),
+        );
+
+        yield* postMessage(room.owner, room.workspace, {
+          authorMemberId: room.first.id,
+          to: { channelId: room.channel.id },
+          blocks: words("Plain."),
+          mentions: [],
+          clientKey: "request-1",
+        });
+        assert.deepEqual(
+          yield* postAsk(room.owner, room.workspace, {
+            authorMemberId: room.first.id,
+            to: { channelId: room.channel.id },
+            blocks: words("Asked under a plain message's key."),
+            mentions: [],
+            clientKey: "request-1",
+            key: "another",
+            ask: EXPIRY,
+          }),
+          Result.fail(CHAT_REFUSAL.KEY_TAKEN),
+        );
+      }),
+  );
+
+  it.effect("a form filled to its bounds is answered in as many blocks as its words take", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const fields = Array.from({ length: CHAT_BOUNDS.MAX_FIELDS }, (_, at) => ({
+        type: "text" as const,
+        label: `Field ${at}`,
+      }));
+      const posted = Result.getOrThrow(
+        yield* postAsk(room.owner, room.workspace, {
+          authorMemberId: room.first.id,
+          to: { channelId: room.channel.id },
+          blocks: words("Fill these in."),
+          mentions: [],
+          clientKey: randomUUID(),
+          key: "the-form",
+          ask: { response: { type: CHAT_ASK.FORM, fields } },
+        }),
+      );
+      const answered = Result.getOrThrow(
+        yield* answerAsk(room.owner, room.workspace, {
+          answererMemberId: room.ada.id,
+          seq: posted.message.seq,
+          revision: 1,
+          reply: {
+            reply: CHAT_REPLY.SUBMITTED,
+            values: fields.map((field) => ({
+              label: field.label,
+              value: "v".repeat(CHAT_BOUNDS.MAX_FIELD_VALUE_CHARS),
+            })),
+            note: "n".repeat(CHAT_BOUNDS.MAX_NOTE_CHARS),
+          },
+          clientKey: randomUUID(),
+        }),
+      );
+      assert.equal(answered.taken, true);
+      assert.equal(Option.getOrThrow(answered.reply).blocks.length, 2);
+    }),
+  );
+  it.effect(
+    "an answer cut across blocks never splits a character, and one withdrawn and sent again under its key takes its reply again",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const fields = Array.from({ length: CHAT_BOUNDS.MAX_FIELDS }, (_, at) => ({
+          type: "text" as const,
+          label: `Field ${at}`,
+        }));
+        const posted = Result.getOrThrow(
+          yield* postAsk(room.owner, room.workspace, {
+            authorMemberId: room.first.id,
+            to: { channelId: room.channel.id },
+            blocks: words("Fill these in."),
+            mentions: [],
+            clientKey: randomUUID(),
+            key: "long-form",
+            ask: { response: { type: CHAT_ASK.FORM, fields } },
+          }),
+        );
+        // Every field but the last full, and the last's words run so a smile straddles the first block's bound.
+        const full = "v".repeat(CHAT_BOUNDS.MAX_FIELD_VALUE_CHARS);
+        const before = [
+          "Filled in the form.",
+          "",
+          ...fields.slice(0, -1).map((field) => `- ${field.label}: ${full}`),
+          `- Field ${CHAT_BOUNDS.MAX_FIELDS - 1}: `,
+        ].join("\n").length;
+        const last = `${"v".repeat(CHAT_BOUNDS.MAX_MARKDOWN_CHARS - 1 - before)}😀 and more`;
+        const reply = {
+          reply: CHAT_REPLY.SUBMITTED,
+          values: fields.map((field, at) => ({
+            label: field.label,
+            value: at === fields.length - 1 ? last : full,
+          })),
+        } as const;
+        const key = randomUUID();
+        const answer = () =>
+          answerAsk(room.owner, room.workspace, {
+            answererMemberId: room.ada.id,
+            seq: posted.message.seq,
+            revision: 1,
+            reply,
+            clientKey: key,
+          });
+        const answered = Result.getOrThrow(yield* answer());
+        const blocks = Option.getOrThrow(answered.reply).blocks;
+        assert.equal(blocks.length, 2);
+        assert.ok(JSON.stringify(blocks[1]).startsWith('{"type":"markdown","text":"😀'));
+
+        yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key);
+        const again = Result.getOrThrow(yield* answer());
+        assert.deepEqual(
+          [again.taken, again.ask.askStatus, Option.getOrThrow(again.reply).id],
+          [true, ASK_STATUS.ANSWERED, Option.getOrThrow(answered.reply).id],
+        );
+      }),
+  );
+
+  it.effect(
+    "an answer under a key a message outside the ask's thread holds is refused, and an answer whose answerer is gone is withdrawn by no one else",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* ask(room, room.first, "expiry", "Which expiry?");
+        yield* postMessage(room.owner, room.workspace, {
+          authorMemberId: room.ada.id,
+          to: { channelId: room.channel.id },
+          blocks: words("Unrelated."),
+          mentions: [],
+          clientKey: "shared-key",
+        });
+        assert.deepEqual(
+          yield* answer(room, room.ada, posted.message.seq, 1, "shared-key"),
+          Result.fail(CHAT_REFUSAL.KEY_TAKEN),
+        );
+
+        const key = randomUUID();
+        yield* answer(room, room.grace, posted.message.seq, 1, key, room.teammate);
+        // The answerer's account goes, and its member with it.
+        const db = yield* Database;
+        yield* db.delete(user).where(eq(user.id, room.teammate));
+        assert.deepEqual(
+          yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect(
+    "a key says one answer by one member: another member's retry under it, or a different answer sent again under it after a withdrawal, is refused; and an author that left resolves nothing",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        const key = randomUUID();
+        Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 1, key));
+        assert.deepEqual(
+          yield* answer(room, room.grace, posted.message.seq, 1, key, room.teammate),
+          Result.fail(CHAT_REFUSAL.KEY_TAKEN),
+        );
+
+        yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key);
+        assert.deepEqual(
+          yield* answerAsk(room.owner, room.workspace, {
+            answererMemberId: room.ada.id,
+            seq: posted.message.seq,
+            revision: 1,
+            reply: { reply: CHAT_REPLY.CHOSE, choices: ["Five days"] },
+            clientKey: key,
+          }),
+          Result.fail(CHAT_REFUSAL.KEY_TAKEN),
+        );
+        const again = Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 1, key));
+        assert.equal(again.taken, true);
+
+        yield* ask(room, room.second, "branch-rules", "Require a review?");
+        yield* leave(room.owner, room.workspace, room.second.id);
+        assert.deepEqual(
+          yield* resolveAsk(room.owner, room.workspace, room.second.id, "branch-rules", "Done."),
+          Option.none(),
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's pictures", (it) => {
+  /** A message carrying an image block for each id given, as a post that read its pictures lands. */
+  const pictured = (room: Room, ids: readonly string[]) =>
+    Effect.map(
+      postMessage(room.owner, room.workspace, {
+        authorMemberId: room.first.id,
+        to: { channelId: room.channel.id },
+        blocks: ids.map((attachmentId) => ({
+          type: CHAT_BLOCK.IMAGE,
+          attachmentId,
+          alt: "The rendered invite.",
+        })),
+        mentions: [],
+        clientKey: randomUUID(),
+      }),
+      (posted) => Result.getOrThrow(posted).message,
+    );
+
+  it.effect(
+    "a message's pictures read back byte for byte, one it no longer keeps is dropped, one it never named is refused, and only its author keeps them",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const png = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array([137, 80, 78, 71, 0, 255]),
+        };
+        const webp = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.WEBP,
+          bytes: new Uint8Array([82, 73, 70, 70]),
+        };
+        const message = yield* pictured(room, [png.id, webp.id]);
+        const keep = (images: readonly ChatImageWrite[], author = room.first.id, as = room.owner) =>
+          attachMessageImages(as, room.workspace, author, message.id, images);
+        const read = (attachmentId: string, as = room.owner) =>
+          readAttachment(as, room.workspace, message.id, attachmentId);
+
+        assert.equal(yield* keep([png, webp]), true);
+        const stored = Option.getOrThrow(yield* read(png.id));
+        assert.deepEqual(
+          [stored.contentType, [...stored.bytes]],
+          [png.contentType, [...png.bytes]],
+        );
+
+        yield* keep([webp]);
+        assert.deepEqual(yield* read(png.id), Option.none());
+        assert.equal(Option.getOrThrow(yield* read(webp.id)).contentType, CHAT_IMAGE_TYPE.WEBP);
+
+        const stray = { ...png, id: randomUUID() };
+        assert.equal(yield* keep([webp, stray]), false);
+        assert.deepEqual(yield* read(stray.id), Option.none());
+        assert.equal(yield* keep([png], room.second.id), false);
+        assert.equal(yield* keep([png], room.ada.id, room.teammate), false);
+      }),
+  );
+
+  it.effect("two writes of one message's pictures take turns, and the last one's stand alone", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const a = { id: randomUUID(), contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([1]) };
+      const b = { id: randomUUID(), contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([2]) };
+      const message = yield* pictured(room, [a.id, b.id]);
+      yield* Effect.all(
+        [
+          attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [a]),
+          attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [b]),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const kept = yield* Effect.forEach([a, b], (image) =>
+        Effect.map(readAttachment(room.owner, room.workspace, message.id, image.id), Option.isSome),
+      );
+      assert.equal(kept.filter(Boolean).length, 1);
+    }),
+  );
+
+  it.effect("an account not in the workspace reads none of its pictures", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const stranger = yield* openAccount();
+      const png = {
+        id: randomUUID(),
+        contentType: CHAT_IMAGE_TYPE.PNG,
+        bytes: new Uint8Array([1, 2, 3]),
+      };
+      const message = yield* pictured(room, [png.id]);
+      yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [png]);
+      assert.deepEqual(
+        yield* readAttachment(stranger, room.workspace, message.id, png.id),
+        Option.none(),
+      );
+      assert.equal(
+        Option.isSome(yield* readAttachment(room.teammate, room.workspace, message.id, png.id)),
+        true,
+      );
+    }),
   );
 });

@@ -15,6 +15,7 @@ import {
   type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback } from "react";
 import { useAct } from "../act";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { EmptyState } from "../empty-state";
@@ -40,16 +42,12 @@ import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "./agent-ref";
+import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import { DiffRowLine } from "./diff-rows";
+import { useLinesLook } from "./file-tab";
 import { PullRequestMark } from "./pull-request-mark";
-import {
-  OpenedBy,
-  PersonRef,
-  type PullRequestAgent,
-  ReviewersLine,
-  ReviewStanding,
-} from "./pull-request-people";
+import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
 import {
@@ -88,7 +86,11 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * (`body_html`), drawn through the transcript's own markdown drawing
  * (`GitHubWords`), with an image GitHub serves read through the service on
  * the App's token (`GitHubPicture`) and any other drawn as its link, as
- * ReviewStage/stage draws them. Every name and word here is the
+ * ReviewStage/stage draws them. A review carries the threads on lines it
+ * started, each headed by its file and lines over the end of the hunk it was
+ * made on, drawn in Files changed's own diff rows, then its comments; one
+ * resolved or outdated by a later push is folded closed under its head,
+ * which says which, until opened. Every name and word here is the
  * repository's, so the tab is left out of the screen recording
  * (`ph-no-capture`).
  */
@@ -103,7 +105,19 @@ const PULL_REQUEST_WORDS = {
   NO_CONVERSATION: "Nobody has commented yet.",
   /** What the conversation says of the earlier entries a read left on GitHub, by how many. */
   earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
+  /** What a review thread says of the replies a read left on GitHub, by how many. */
+  moreReplies: (count: number) => `${count} more ${count === 1 ? "reply" : "replies"} on GitHub`,
+  RESOLVED: "Resolved",
+  OUTDATED: "Outdated",
 } as const;
+
+/** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
+function threadLines(thread: ReviewThread): string | undefined {
+  const line = thread.line ?? thread.originalLine;
+  const start = thread.line === null ? thread.originalStartLine : thread.startLine;
+  if (line === null) return undefined;
+  return start === null || start === line ? `line ${line}` : `lines ${start}–${line}`;
+}
 
 /** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: CodingAgentOverviewAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
@@ -448,7 +462,7 @@ function EntryWords({
   entry,
   picture,
 }: {
-  entry: ConversationEntry;
+  entry: Pick<ConversationEntry, "html" | "body">;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element | null {
   if (entry.html !== null) {
@@ -465,26 +479,115 @@ function EntryWords({
   );
 }
 
-/** One comment or review: who, where a review left them, and when; then their words. */
+/**
+ * One review thread: its file and lines at its head, with whether it was
+ * resolved or a later push outdated it, which folds it closed until opened;
+ * then the lines it is on, as Files changed draws a diff's rows
+ * (`threadPreview`), and its comments, oldest first, as the conversation
+ * draws an entry, with the replies a read left on GitHub counted after them.
+ */
+function ThreadCard({
+  thread,
+  now,
+  picture,
+}: {
+  thread: ReviewThread;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const look = useLinesLook();
+  const openLink = useOpenLink();
+  const preview = threadPreview(thread);
+  const lines = threadLines(thread);
+  const labels = [
+    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
+    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
+  ];
+  const last = thread.comments.at(-1);
+  return (
+    <li className="pull-request-thread">
+      <Fold defaultOpen={labels.length === 0}>
+        <FoldSummary className="pull-request-thread-head">
+          <Tooltip label={thread.path}>
+            <span className="pull-request-thread-path">
+              <bdi>{thread.path}</bdi>
+            </span>
+          </Tooltip>
+          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
+          {labels.map((label) => (
+            <span key={label} className="pull-request-thread-label">
+              {label}
+            </span>
+          ))}
+          <FoldChevron />
+        </FoldSummary>
+        <FoldBody>
+          {preview === undefined ? null : (
+            <div className="code-lines file-tab-lines pull-request-thread-lines" {...look}>
+              {preview.map((row, at) => (
+                // oxlint-disable-next-line react/no-array-index-key -- a preview's rows never move within it.
+                <DiffRowLine key={at} row={row} />
+              ))}
+            </div>
+          )}
+          <ol className="pull-request-thread-comments">
+            {thread.comments.map((comment) => (
+              <li key={comment.url} className="pull-request-thread-comment">
+                <span className="changes-comment-head">
+                  <PersonRef person={comment.by} />
+                  <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
+                </span>
+                <EntryWords entry={comment} picture={picture} />
+              </li>
+            ))}
+          </ol>
+          {thread.more === 0 || last === undefined ? null : (
+            <button
+              type="button"
+              className="pull-request-more pull-request-thread-more"
+              onClick={() => openLink(last.url)}
+            >
+              {PULL_REQUEST_WORDS.moreReplies(thread.more)}
+            </button>
+          )}
+        </FoldBody>
+      </Fold>
+    </li>
+  );
+}
+
+/** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
 function EntryCard({
   entry,
-  agent,
   now,
   picture,
 }: {
   entry: ConversationEntry;
-  agent: PullRequestAgent;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
+  const threads = entry.threads ?? [];
   return (
     <li className="pull-request-entry">
       <span className="changes-comment-head">
-        <PersonRef person={entry.by} agent={agent} />
+        <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
+      {threads.length === 0 ? null : (
+        <ol className="pull-request-threads">
+          {threads.map((thread, at) => (
+            // Note that a thread is keyed by its first comment's page, which no other thread shares, or its place.
+            <ThreadCard
+              key={thread.comments[0]?.url ?? `${at}`}
+              thread={thread}
+              now={now}
+              picture={picture}
+            />
+          ))}
+        </ol>
+      )}
     </li>
   );
 }
@@ -493,11 +596,9 @@ function EntryCard({
 function PullRequestPage({
   agentId,
   pullRequest,
-  agent,
 }: {
   agentId: string;
   pullRequest: CodingAgentOverview;
-  agent: PullRequestAgent;
 }): React.JSX.Element {
   const now = useMinute();
   const openLink = useOpenLink();
@@ -519,15 +620,13 @@ function PullRequestPage({
         </p>
       </Tooltip>
       <div className="changes-people pull-request-people">
-        {author === undefined ? null : (
-          <OpenedBy person={author} writtenAs={pullRequest.writtenAs} agent={agent} />
-        )}
+        {author === undefined ? null : <OpenedBy person={author} />}
         {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
         <span className="pull-request-quiet">
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} agent={agent} />}
+        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
       <Checks checks={pullRequest.checks} />
@@ -565,7 +664,7 @@ function PullRequestPage({
         ) : (
           <ol className="pull-request-conversation">
             {conversation.map((entry) => (
-              <EntryCard key={entry.url} entry={entry} agent={agent} now={now} picture={picture} />
+              <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
             ))}
           </ol>
         )}
@@ -578,7 +677,6 @@ function PullRequestPage({
 function OverviewView({
   agentId,
   read,
-  agent,
 }: {
   agentId: string;
   read: {
@@ -586,7 +684,6 @@ function OverviewView({
     readonly out: boolean;
     readonly ask: () => void;
   };
-  agent: PullRequestAgent;
 }): React.JSX.Element {
   const { answer, out, ask } = read;
   // A failure gives way to the wait as soon as it is asked again; a page drawn stands until the answer lands.
@@ -609,7 +706,7 @@ function OverviewView({
       <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
     );
   }
-  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} agent={agent} />;
+  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} />;
 }
 
 /**
@@ -642,11 +739,6 @@ export function AgentPullRequestTab({
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const onOverview = view === PULL_REQUEST_VIEW.OVERVIEW;
   const read = useAgentRead(agentId, shown && onOverview, ended, control.readOverview, UNANSWERED);
-  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
-  const agent = {
-    subject: agentSubject(control, agentId, NOTHING_HELD, false),
-    models: control.models,
-  };
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
@@ -656,7 +748,7 @@ export function AgentPullRequestTab({
         overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}
       />
       <div className="pull-request-view" hidden={!onOverview}>
-        <OverviewView agentId={agentId} read={read} agent={agent} />
+        <OverviewView agentId={agentId} read={read} />
       </div>
       <div className="pull-request-view" hidden={onOverview}>
         <AgentChangesTab

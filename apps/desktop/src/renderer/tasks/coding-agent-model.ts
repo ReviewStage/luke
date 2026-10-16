@@ -61,12 +61,17 @@ import {
 } from "@luke/ui/actor-model";
 import {
   ACTION_RESULT_STATUS,
+  type ChatNoticeMetadata,
   isRecord,
   isWireString,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type UnparsedWireValue,
+  USER_MESSAGE_METADATA,
   type WireValue,
 } from "@luke/wire";
+import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
@@ -1033,6 +1038,23 @@ function agentPart(part: WireValue): AgentPart {
   return { kind: AGENT_PART.OTHER };
 }
 
+/** A user row's metadata as the service stored it, or nothing where it holds none this build reads. */
+const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
+
+/**
+ * What a chat notice says of the message it tells, where a chat notice
+ * wrote the line rather than the developer: which kind of member posted
+ * it, its place in the workspace's chat, and the poster's handle. Nothing
+ * for the developer's own words, typed or spoken, or a row this build
+ * cannot read.
+ */
+export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | undefined {
+  if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
+  const read = Option.getOrUndefined(readUserMetadata(message.metadata));
+  if (read === undefined || !("channel" in read)) return undefined;
+  return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
+}
+
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   return message.parts.map(agentPart);
@@ -1512,9 +1534,23 @@ export interface SentLine {
   readonly steers: boolean;
 }
 
-/** The developer's own rows of a transcript, which a sent line is read back as one of. */
+/**
+ * Whether a user row is the developer's own words, typed or spoken by
+ * them: never a chat notice, nor a line the voice model or the brain
+ * wrote. A row whose metadata this build cannot read, or one written
+ * before metadata was kept, is taken as the developer's, as it always was.
+ */
+function developersOwn(message: CodingAgentMessage): boolean {
+  if (message.role !== MESSAGE_ROLE.USER) return false;
+  if (message.metadata === undefined) return true;
+  const read = Option.getOrUndefined(readUserMetadata(message.metadata));
+  if (read === undefined) return true;
+  return read.author === MESSAGE_AUTHOR.DEVELOPER && chatNoticeOf(message) === undefined;
+}
+
+/** The developer's own rows of a transcript, which a sent line is read back as one of; a chat notice of the same words never answers it. */
 function developerRows(messages: readonly CodingAgentMessage[]): readonly CodingAgentMessage[] {
-  return messages.filter((message) => message.role === MESSAGE_ROLE.USER);
+  return messages.filter(developersOwn);
 }
 
 /** The ids of the developer's rows a transcript holds now, for a line about to go. */

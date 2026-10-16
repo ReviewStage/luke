@@ -752,15 +752,14 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * whether that bot is Luke's own App, whose commits and pull requests, or
- * co-authorship beside a developer, are its agents'; and the Luke account whose linked GitHub account it is,
- * where that account is a member of the agent's workspace.
+ * the Luke account whose linked GitHub account it is, where that account is
+ * a member of the agent's workspace. Luke's own App's bot is an App's bot
+ * like any other.
  */
 const githubPersonSchema = EffectSchema.Struct({
   login: EffectSchema.String,
   avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
   bot: EffectSchema.Boolean,
-  luke: EffectSchema.optionalKey(EffectSchema.Boolean),
   userId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
@@ -876,7 +875,19 @@ export const OVERVIEW_BOUNDS = {
   MAX_ENTRIES: 100,
   /** The most characters of a check's or a branch's name a read carries. */
   MAX_NAME_CHARS: 255,
+  /** The most review threads one read carries, the newest kept, the rest counted with the earlier entries. */
+  MAX_THREADS: 100,
+  /** The most comments of one review thread a read carries, its first kept, the rest counted. */
+  MAX_THREAD_COMMENTS: 50,
 } as const;
+
+/** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
+export const DIFF_SIDE = {
+  LEFT: "left",
+  RIGHT: "right",
+} as const;
+
+export type DiffSide = (typeof DIFF_SIDE)[keyof typeof DIFF_SIDE];
 
 /** A name GitHub gives a check or a branch, as a read carries it. */
 const overviewName = EffectSchema.String.check(
@@ -901,11 +912,56 @@ const pullRequestCheckSchema = EffectSchema.Struct({
 export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
 
 /**
+ * One comment of a review thread: who; their words whole, as GitHub renders
+ * them (`bodyHTML`), or, where GitHub sent no rendering, null with their
+ * words as markdown in `body`; when, in epoch milliseconds; and its page.
+ */
+const reviewThreadCommentSchema = EffectSchema.Struct({
+  by: githubPersonSchema,
+  html: EffectSchema.NullOr(EffectSchema.String),
+  body: EffectSchema.String,
+  at: countedNumber,
+  url: EffectSchema.String,
+});
+
+const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
+
+/**
+ * One review thread: the file it is on; the line it stands on now and the
+ * first of its range, each null where a later push outdated it or it is on
+ * the whole file; the line and the first of its range where it was made,
+ * which its `diffHunk` is counted against, and the side each counts on;
+ * the hunk GitHub froze when it was made, ending at its line, empty where
+ * GitHub kept none; whether it was resolved, and whether a later push
+ * outdated it; its comments, oldest first, up to the bound; and how many
+ * more GitHub holds (`more`).
+ */
+const reviewThreadSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  line: EffectSchema.NullOr(countedNumber),
+  startLine: EffectSchema.NullOr(countedNumber),
+  originalLine: EffectSchema.NullOr(countedNumber),
+  originalStartLine: EffectSchema.NullOr(countedNumber),
+  side: diffSideSchema,
+  startSide: EffectSchema.NullOr(diffSideSchema),
+  diffHunk: EffectSchema.String,
+  resolved: EffectSchema.Boolean,
+  outdated: EffectSchema.Boolean,
+  comments: EffectSchema.Array(reviewThreadCommentSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREAD_COMMENTS),
+  ),
+  more: countedNumber,
+});
+
+export type ReviewThread = typeof reviewThreadSchema.Type;
+
+/**
  * One entry of a pull request's conversation: a comment on it, or a review
  * and where it left its reviewer; who; their words whole, as GitHub renders
  * them (`body_html`), or, where GitHub sent no rendering, null with their
  * words as markdown in `body`, empty otherwise; when, in epoch
- * milliseconds; and its page.
+ * milliseconds; its page; and, on a review, the threads on lines it
+ * started, absent where it started none or from a service before them.
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
@@ -915,6 +971,11 @@ const conversationEntrySchema = EffectSchema.Struct({
   body: EffectSchema.String,
   at: countedNumber,
   url: EffectSchema.String,
+  threads: EffectSchema.optionalKey(
+    EffectSchema.Array(reviewThreadSchema).check(
+      EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREADS),
+    ),
+  ),
 });
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
@@ -928,8 +989,8 @@ export type ConversationEntry = typeof conversationEntrySchema.Type;
  * its head; who opened it, who the agent writes as on GitHub, and its
  * reviewers and where each stands; and its conversation, oldest first, its
  * newest entries kept up to the bound, with how many earlier ones were left
- * on GitHub (`earlier`). Null where the agent
- * has opened none yet.
+ * on GitHub (`earlier`), review threads past their bound among them. Null
+ * where the agent has opened none yet.
  */
 export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
