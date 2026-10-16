@@ -313,3 +313,17 @@ body {
   height: 480px;
   padding: 140px var(--luke-space-12) 0;
 }
+
+/* The row the menu example right-clicks, marked out so a reader sees where to press. */
+.catalog-menu-row {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: var(--luke-space-24) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}

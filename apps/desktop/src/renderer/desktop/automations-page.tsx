@@ -17,6 +17,7 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { useMenu } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -31,7 +32,7 @@ import { Switch } from "../switch";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -119,7 +120,7 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>

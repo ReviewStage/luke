@@ -16,7 +16,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ProviderMark, TrashIcon } from "@luke/ui";
+import { ProviderMark, TrashIcon, useMenu } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -35,7 +35,7 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu } from "../desktop/action-menu";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
@@ -565,7 +565,7 @@ function HeirChip({
   chosen: WorkspaceMember;
   onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
@@ -771,7 +771,7 @@ function RoleChip({
   onChange: (role: WorkspaceInvitation["role"]) => void;
 }): React.JSX.Element {
   // The page is drawn whenever the chip is, so the menu closes with the chip unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>

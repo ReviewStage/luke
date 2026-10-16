@@ -1,5 +1,7 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { useMenu } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -18,8 +20,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
@@ -555,7 +556,7 @@ function AgentSummaryRow({
   onPick: () => void;
 }) {
   const archive = useAgentArchive(agent, agents, shown);
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>

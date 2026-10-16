@@ -281,7 +281,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
 
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
-  const notes = document.querySelectorAll('[role="menu"] .task-menu-footer p');
+  const notes = document.querySelectorAll('[role="menu"] .luke-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
@@ -289,7 +289,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   openMenu(mountToolbar(sharedTab(DEAN.userId)));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
-  const faces = document.querySelectorAll('[role="menu"] .task-menu-footer .actor-mark');
+  const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
     [
@@ -297,7 +297,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
       ["person", "D"],
     ],
   );
-  const times = document.querySelectorAll('[role="menu"] .task-menu-footer time');
+  const times = document.querySelectorAll('[role="menu"] .luke-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),
     [new Date(60_000).toISOString(), new Date(120_000).toISOString()],

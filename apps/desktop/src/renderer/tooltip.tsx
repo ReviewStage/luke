@@ -43,6 +43,7 @@
 
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -64,7 +65,6 @@ import { createPortal } from "react-dom";
 import { APP_SHORTCUTS, type KeyedCommand, shortcutAria } from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
 import { Shortcut } from "./shortcut";
-import { useDisclosure } from "./use-disclosure";
 
 /** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
 const TOOLTIP_GAP = 6;

@@ -7,7 +7,9 @@ import {
   PinIcon,
   PlusIcon,
   UnpinIcon,
+  useMenu,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,8 +25,7 @@ import {
 } from "../tasks/transcript-copy";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { MenuTab } from "./tab-strip";
 
 /**
@@ -220,7 +221,7 @@ function ToolbarTabActions({
   groups: MenuAction[][];
   slot: HTMLElement;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const named = `${label} actions`;
   return createPortal(
     <>

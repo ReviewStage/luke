@@ -1,11 +1,11 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
 import { agentUsageLine, choiceLabel, providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";

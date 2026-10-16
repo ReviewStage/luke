@@ -2437,10 +2437,10 @@ ul.actor-stack {
 
 /* Menus ----------------------------------------------------------------- */
 
-/* Every menu stands on one surface: the window's own drop-down and its
-   submenus (`action-menu.tsx`), the searchable picker and its submenus
-   (`searchable-menu.tsx`), the composer's `/` list, the MCP popover, and a
-   crumb's tree. Where it hangs and how wide it stands are each menu's own;
+/* Every menu the window draws itself stands on one surface, the one
+   `@luke/ui`'s `Menu` draws for the window's own drop-down: the searchable
+   picker and its submenus (`searchable-menu.tsx`), the composer's `/` list,
+   the MCP popover, and a crumb's tree. Where it hangs and how wide it stands are each menu's own;
    the ground, edge, corner, shadow, inset, and entrance are this, and so is
    staying hidden for the one layout pass that measures where it fits.
    Note that the entrance animates a transform, which makes a surface the
@@ -2605,88 +2605,38 @@ ul.actor-stack {
 
 /* Plan actions ---------------------------------------------------------- */
 
-/* The window's own menu, dropped from a ⋯ or opened at the pointer, and drawn
-   the same from both, over the window wherever it hangs. It sits over the
-   toolbar's drag strip, so it claims its own presses back from the window
-   frame. A long menu, as a folder's entries may be, scrolls down within the
-   window and never sideways: words wider than the menu, a long email or
-   name, end in an ellipsis inside their row instead. */
-.task-menu {
-  position: fixed;
+/* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
+   looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
+   the layer it stands on over everything, or over a modal it was opened
+   from; its presses claimed back from the toolbar's drag strip it sits
+   over; and the marks it holds, restated at a menu's size, because their
+   own rules here would otherwise win over the shared layer: a check the
+   text's colour rather than the state palette's, a chevron, and a
+   repository's picture in the glyph slot. */
+.luke-menu {
   z-index: var(--z-menu);
-  min-width: 196px;
-  max-width: 280px;
-  max-height: calc(100vh - 16px);
-  overflow-x: hidden;
-  overflow-y: auto;
   -webkit-app-region: no-drag;
 }
 
-/* A menu opened from a modal's card stands over the window the modal dims. */
-.task-menu[data-layer="dialog"] {
+.luke-menu[data-layer="dialog"] {
   z-index: calc(var(--z-dialog) + 1);
 }
 
-.task-menu-label {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.luke-menu-item-glyph :is(svg, .repository-picture),
+.luke-menu-item-end > svg {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+  flex: 0 0 auto;
 }
 
-/* An item with a second line under its label grows to hold both, as the
-   sidebar's workspace head does. */
-.menu-item[data-detail="true"] {
-  height: auto;
-  min-height: var(--menu-row-height);
-  padding-block: var(--space-4);
+.luke-menu-item-end .credential-check {
+  color: var(--text-primary);
 }
 
-.menu-item-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.menu-item-copy > .task-menu-label {
-  flex: none;
-}
-
-.menu-item-detail {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-}
-
-.task-menu-rule {
-  height: 1px;
-  margin: var(--menu-inset) var(--row-inset);
-  border: 0;
-  background: var(--hairline);
-}
-
-/* Whose menu it is, over its items and pressed by nothing: the account's
-   name, and its email muted under it. */
-.task-menu-heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--row-inset);
-  font-size: 12px;
-}
-
-/* Who made the plan a menu is about, under its items and pressed by nothing:
-   who created it and who last edited it, each on a muted line of its own. */
-.task-menu-footer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--row-inset);
+.luke-menu-item-end .settings-chevron {
+  width: 14px;
+  height: 14px;
   color: var(--text-tertiary);
-  font-size: 12px;
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps; a
@@ -3757,7 +3707,7 @@ ul.actor-stack {
    palette drawn at the body's end does not stand under, so they are held
    still here too. */
 body:has(.app-stage[data-capture="true"])
-:is(.menu-surface, .command-palette, .command-palette-backdrop) {
+:is(.luke-menu, .menu-surface, .command-palette, .command-palette-backdrop) {
   --duration-quick: 0s;
   --duration-fast: 0s;
   --duration-exit: 0s;

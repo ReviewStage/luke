@@ -11,7 +11,7 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { BackIcon } from "@luke/ui";
+import { BackIcon, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
@@ -43,7 +43,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 import { WorkspaceTile } from "./workspace-tile";
@@ -64,7 +64,7 @@ function SettingsPageRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const page = settingsPageOf(view);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
   return (
     <li>

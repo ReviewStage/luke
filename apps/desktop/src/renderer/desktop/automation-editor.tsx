@@ -68,7 +68,9 @@ import {
   POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
+  useMenu,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -96,8 +98,7 @@ import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -562,7 +563,7 @@ function AutomationActions({
   automation: AutomationSummary;
   onDelete: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",

@@ -35,6 +35,7 @@
     "./confirm-state": "./src/confirm-state.js",
     "./use-setting-write": "./src/use-setting-write.js",
     "./use-state-with-ref": "./src/use-state-with-ref.js",
+    "./use-disclosure": "./src/use-disclosure.js",
     "./tasks-model": "./src/tasks-model.js",
     "./call-card-model": "./src/call-card-model.js",
     "./avatar-session-contract": "./src/avatar-session-contract.js",

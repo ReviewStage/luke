@@ -5,6 +5,7 @@ import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { MENU_EXAMPLE } from "./examples/menu";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
@@ -41,4 +42,5 @@ export const EXAMPLES: readonly Example[] = [
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   ANCHORED_POPOVER_EXAMPLE,
+  MENU_EXAMPLE,
 ];

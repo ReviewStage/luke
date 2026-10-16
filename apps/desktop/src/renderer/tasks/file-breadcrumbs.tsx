@@ -1,9 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
+import { MENU_DROP } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MENU_DROP } from "../desktop/action-menu";
 import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";

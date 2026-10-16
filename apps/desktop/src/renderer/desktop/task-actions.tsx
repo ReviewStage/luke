@@ -11,6 +11,7 @@ import {
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
+  useMenu,
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
@@ -41,7 +42,7 @@ import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { TaskStatusMark, taskCardOf } from "./task-card";
 import { TaskNameField, useTaskRename } from "./task-name-field";
@@ -324,7 +325,7 @@ function useTaskMenu(
   );
   const moving = useMoveTaskDialog(tasks, plan);
   const copy = useCopyToast();
-  const { open, drawn, close, trigger, contextMenu } = useActionMenu(tasks.shown && doors.drawn);
+  const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
       <ActionMenu

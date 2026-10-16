@@ -7,13 +7,13 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
@@ -531,7 +531,7 @@ function UnitMenu({
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const trigger = menu.trigger();
   return (
     <>

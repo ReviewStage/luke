@@ -2,21 +2,19 @@
 
 import assert from "node:assert/strict";
 import { CopyIcon } from "lucide-react";
-import { act, createElement, Fragment } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { SearchableMenu } from "../searchable-menu";
 import { MenuRow } from "../settings/menu-row";
 import { LinesMenu } from "../tasks/file-menu";
-import { ActionMenu, useActionMenu } from "./action-menu";
 
 /**
  * The window's menus as the developer opens them: a ⋯ that drops its menu
  * and closes it again, a right-click that hangs the same menu at the
  * pointer, or under the row where the menu key asked with no point of its
- * own, a row's acts in groups ruled apart, and every menu, the window's own and the searchable picker alike,
- * drawn on one surface with one row.
+ * own, and a row's acts in groups ruled apart. How the menu itself behaves
+ * is `@luke/ui`'s `Menu`'s, tested beside it.
  */
 
 const roots: Root[] = [];
@@ -124,41 +122,6 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
   assert.equal(openMenu()?.style.top, "104px", "and hangs under the row");
 });
 
-test("the window's menu and the searchable picker stand on one surface and draw one row", () => {
-  const container = mount(
-    createElement(
-      "div",
-      null,
-      createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
-      createElement(SearchableMenu, {
-        id: "repository",
-        label: "Repository",
-        placeholder: "Search repositories",
-        rows: [{ id: "acme/relay", label: "acme/relay", icon: createElement(CopyIcon) }],
-        value: undefined,
-        noMatch: "No match",
-        onPick: ignore,
-        onClose: ignore,
-        onLeave: ignore,
-      }),
-    ),
-  );
-  const ellipsis = container.querySelector<HTMLElement>('button[aria-label="Linear actions"]');
-  assert.ok(ellipsis, "the ⋯ is drawn");
-  press(ellipsis);
-
-  const menus = [openMenu(), document.querySelector<HTMLElement>('[role="dialog"]')];
-  for (const menu of menus) {
-    assert.ok(menu, "the menu is drawn");
-    const name = menu.getAttribute("aria-label");
-    assert.ok(menu.classList.contains("menu-surface"), `${name} stands on the menu surface`);
-    const row = menu.querySelector('[role="menuitem"], [role="option"]');
-    assert.ok(row, `${name} draws a row`);
-    assert.ok(row.classList.contains("menu-item"), `${name}'s rows are the one menu row`);
-    assert.ok(row.querySelector(".menu-item-glyph > svg"), "with the mark in the glyph slot");
-  }
-});
-
 test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {
   const container = mount(
     createElement(MenuRow, {
@@ -220,67 +183,4 @@ test("a Settings row keeps its muted ⋯, named for its menu, and More on the po
   assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
   assert.equal(ellipsis.textContent, "", "with no words of its own");
   assert.equal(document.querySelector(".tooltip")?.textContent, "More");
-});
-
-/** A menu of two submenus, as the sidebar's View options is: Group by over Order by. */
-function TwoSubmenus(): React.JSX.Element {
-  const menu = useActionMenu(true);
-  const choice = (label: string) => ({ label, checked: false, onSelect: ignore });
-  return createElement(
-    Fragment,
-    null,
-    createElement("button", { type: "button", ...menu.trigger() }, "View options"),
-    menu.drawn === undefined
-      ? null
-      : createElement(ActionMenu, {
-          label: "View options",
-          menu: menu.drawn,
-          groups: [
-            [
-              { label: "Group by", items: [choice("Repository"), choice("None")] },
-              { label: "Order by", items: [choice("Last updated"), choice("Name")] },
-            ],
-          ],
-          onClose: menu.close,
-        }),
-  );
-}
-
-/** The menu item that opens the submenu named `label`. */
-function submenuItem(label: string): HTMLElement {
-  const item = [...document.querySelectorAll<HTMLElement>('[aria-haspopup="menu"]')].find(
-    (each) => each.textContent === label,
-  );
-  assert.ok(item, `${label} is drawn`);
-  return item;
-}
-
-/** The pointer moving onto `to`, from `from` or from outside the window, as a browser reports it. */
-function pointerMove(from: HTMLElement | null, to: HTMLElement): void {
-  act(() => {
-    from?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
-    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
-  });
-}
-
-test("resting on one submenu's item after another's opens the second's submenu, with no press", () => {
-  const container = mount(createElement(TwoSubmenus));
-  const button = container.querySelector("button");
-  assert.ok(button, "the menu's button is drawn");
-  press(button);
-
-  pointerMove(null, submenuItem("Group by"));
-  assert.ok(document.querySelector('[role="menu"][aria-label="Group by"]'), "Group by opens");
-
-  pointerMove(submenuItem("Group by"), submenuItem("Order by"));
-  assert.ok(document.querySelector('[role="menu"][aria-label="Order by"]'), "Order by opens");
-  assert.equal(document.querySelector('[role="menu"][aria-label="Group by"]'), null);
-
-  pointerMove(submenuItem("Order by"), submenuItem("Group by"));
-  act(() => {
-    submenuItem("Order by").dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
-    );
-  });
-  assert.ok(document.querySelector('[role="menu"][aria-label="Order by"]'), "→ opens Order by");
 });

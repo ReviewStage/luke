@@ -334,7 +334,7 @@ function menuOf(row: Element): MenuRead {
   if (ellipsis === null) return { items: [], heading: undefined } satisfies MenuRead;
   act(() => ellipsis.click());
   const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
-  const heading = document.querySelector(".task-menu-heading")?.textContent ?? undefined;
+  const heading = document.querySelector(".luke-menu-heading")?.textContent ?? undefined;
   act(() => ellipsis.click());
   return { items, heading } satisfies MenuRead;
 }

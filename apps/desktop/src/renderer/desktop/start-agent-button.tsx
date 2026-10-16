@@ -1,6 +1,7 @@
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
 import { BusyLabel } from "../spinner";
@@ -9,7 +10,6 @@ import { ModelMenu, settledChoice } from "../tasks/model-menu";
 import { useRepositoryRemedy } from "../tasks/repository-remedy";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
 
 /**
  * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
