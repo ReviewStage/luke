@@ -308,6 +308,18 @@ async function narrowPlanInbox(
       ),
     rows: () =>
       [...tab.querySelectorAll(".inbox-plans .sidebar-plan-name")].map((row) => row.textContent),
+    /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+    filteredOut: () => {
+      const empty = tab.querySelector(".inbox-plans:not([hidden]) .empty-state");
+      if (empty === null) return null;
+      return [
+        empty.querySelector("h3")?.textContent,
+        empty.querySelector("p")?.textContent,
+        empty.querySelector("button")?.textContent,
+      ];
+    },
+    showAll: () =>
+      act(() => tab.querySelector<HTMLButtonElement>(".inbox-plans .empty-state button")?.click()),
     pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
     /** What the list says of a read that did not land, and whether it offers Retry. */
     failure: () => {
@@ -426,7 +438,7 @@ function heldAnswer(): HeldAnswer {
   };
 }
 
-test("with Needs you on, the item a task's Inbox chose for itself stays listed and shown once it is answered", async () => {
+test("with Needs you on, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says nothing needs you", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
@@ -434,10 +446,45 @@ test("with Needs you on, the item a task's Inbox chose for itself stays listed a
   inbox.pressNeedsYou();
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  assert.deepEqual(inbox.rows(), []);
+  assert.equal(inbox.filteredOut()?.[0], "Nothing needs you");
   assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
   window.localStorage.clear();
   inbox.unmount();
+});
+
+test("a task's Inbox holding only settled items, Needs you pressed on, lists no row and says nothing needs you with Show all, wide or one column wide, and Show all turns the filter off", async () => {
+  window.localStorage.clear();
+  const items = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const wide = await narrowPlanInbox(items, false, 1_200);
+  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  wide.pressNeedsYou();
+  assert.deepEqual(wide.head(), ["Inbox", "true"]);
+  assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
+  assert.deepEqual(wide.filteredOut(), [
+    "Nothing needs you",
+    "You've answered everything",
+    "Show all",
+  ]);
+  assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
+  wide.showAll();
+  assert.deepEqual(wide.head(), ["Inbox", "false"]);
+  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  wide.pressNeedsYou();
+  wide.unmount();
+
+  // Opened again one column wide, Needs you kept, nothing stands chosen, so the list stands alone and says so.
+  const narrow = await narrowPlanInbox(items);
+  assert.deepEqual(narrow.standing(), ["list", ""]);
+  assert.equal(narrow.filteredOut()?.[2], "Show all");
+  narrow.showAll();
+  assert.deepEqual(narrow.head(), ["Inbox", "false"]);
+  assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  window.localStorage.clear();
+  narrow.unmount();
 });
 
 test("a task's Inbox whose read failed offers Retry though Needs you lists nothing it still holds", async () => {

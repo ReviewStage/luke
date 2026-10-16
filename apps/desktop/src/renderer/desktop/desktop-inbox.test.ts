@@ -1047,6 +1047,63 @@ function readTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
 }
 
+/** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
+  const empty = page.querySelector(".inbox-plans:not([hidden]) .empty-state");
+  if (empty === null) return null;
+  return [
+    empty.querySelector("h3")?.textContent,
+    empty.querySelector("p")?.textContent,
+    empty.querySelector("button")?.textContent,
+  ];
+}
+
+test("with only settled items, Needs you pressed on lists no row, the item read still shown beside the list, which says nothing needs you and offers Show all; Show all turns the filter off", async () => {
+  const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered }]);
+  inboxes.set(BILLING.id, [RETRY]);
+  const { page } = mount();
+  await settle();
+  const button = () => {
+    const found = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+    assert.ok(found, "the head offers Needs you");
+    return found;
+  };
+  const everything = [
+    "# Billing usage alerts",
+    "▸ How is a failed email retried?",
+    "# Invites",
+    "Expire after 7 days?",
+  ];
+  assert.deepEqual(listed(page), everything);
+
+  act(() => button().click());
+  assert.equal(button().getAttribute("aria-pressed"), "true");
+  assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
+  assert.deepEqual(needsYouEmpty(page), [
+    "Nothing needs you",
+    "You've answered everything",
+    "Show all",
+  ]);
+  assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+
+  // One column wide, the item read stands alone with nothing to page to, and its way back reaches the empty list.
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(pagerOf(page), null);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
+
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-plans .empty-state button");
+  assert.ok(showAll, "the empty state offers Show all");
+  act(() => showAll.click());
+  assert.equal(button().getAttribute("aria-pressed"), "false");
+  assert.deepEqual(listed(page), everything);
+  assert.equal(needsYouEmpty(page), null);
+});
+
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
   const { page } = mount();
   await settle();

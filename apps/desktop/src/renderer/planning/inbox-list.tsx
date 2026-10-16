@@ -18,6 +18,7 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
+import { EmptyState } from "../empty-state";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, planlessSubject } from "./agent-ref";
 import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
@@ -64,7 +65,10 @@ import { cardTitle } from "./tool-call-model";
  * developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
- * checked; both are kept across launches. A task's own Inbox lists one
+ * checked; both are kept across launches. Where Needs you leaves out every
+ * item listed, the list says so in the Inbox's empty state, with Show all to
+ * turn the filter off, as a mail app's empty unread view does; the item the
+ * pane shows keeps its place there, though no row. A task's own Inbox lists one
  * task's items in one run, so its head offers Needs you alone, kept apart
  * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
@@ -360,6 +364,27 @@ function NeedsYouOnly({
         </InboxIcon>
       </button>
     </Tooltip>
+  );
+}
+
+/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off. */
+export function NeedsYouEmpty({ needsYou }: { needsYou: InboxWaitingOnly }): React.JSX.Element {
+  return (
+    <EmptyState
+      icon={<InboxIcon />}
+      title={NEEDS_YOU.NONE}
+      action={
+        <button
+          type="button"
+          className="toolbar-button"
+          onClick={() => needsYou.onWaitingOnly(false)}
+        >
+          {NEEDS_YOU_PRESS.ALL}
+        </button>
+      }
+    >
+      {NEEDS_YOU.ANSWERED}
+    </EmptyState>
   );
 }
 

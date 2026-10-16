@@ -20,7 +20,7 @@ import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList, ItemMark } from "../planning/inbox-list";
+import { InboxList, ItemMark, NeedsYouEmpty } from "../planning/inbox-list";
 import {
   firstChoice,
   INBOX_GROUPING,
@@ -165,9 +165,10 @@ const NO_FOLDS = () => false;
  * choice of its own (`folded-groups.ts`), and no groups since they are one
  * plan's, and the chosen item read beside them in the same pane, on the
  * plan's own held read. With nothing chosen, the first item listed that
- * waits stands chosen, else the newest; a plan listing nothing, its read
- * holding nothing or Needs you leaving nothing, says so under the Inbox's
- * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
+ * waits stands chosen, else the newest; a plan whose read holds nothing
+ * says so under the Inbox's glyph, and one whose items Needs you leaves out
+ * says so in its list and offers Show all, the item chosen still shown
+ * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
@@ -195,15 +196,16 @@ function PlanInboxTab({
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const needsYou = useTaskInboxWaitingOnly();
   const items = [...inbox.board.open, ...inbox.board.settled];
-  const list = inboxList([{ holder: planHolder(plan), items }], {
-    grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: needsYou.waitingOnly,
-    chosen: asked,
-  });
+  const groups = [{ holder: planHolder(plan), items }];
+  const filter = { grouping: INBOX_GROUPING.NEWEST, waitingOnly: needsYou.waitingOnly };
+  // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
+  const list = inboxList(groups, { ...filter, chosen: undefined });
+  const steps = inboxList(groups, { ...filter, chosen: asked });
   const listed = listedItems(list);
-  const chosen = listed.find(({ item }) => item.id === asked) ?? firstChoice(list);
-  // Note that the item standing chosen is kept as asked, so Needs you keeps it listed once it is answered, as the window's Inbox keeps its stand-in.
+  const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
+  // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
+  const filteredOut = needsYou.waitingOnly && listed.length === 0 && items.length > 0;
   // Note that the way back counts every item, filtered out or not, since the list holds Needs you.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
   const shown = plans.shown && !plans.sidePanel.fullScreen;
@@ -214,9 +216,9 @@ function PlanInboxTab({
     columns.onOpen(listed.item.id);
   };
   // Note that the column is hidden, though drawn, while the side panel fills the window.
-  const pager = useInboxPager(list, chosen?.item.id, choose, { shown, folded: NO_FOLDS });
+  const pager = useInboxPager(steps, chosen?.item.id, choose, { shown, folded: NO_FOLDS });
   const next = inboxNext(
-    list,
+    steps,
     chosen,
     ({ holder, item }) => (
       <ItemMark
@@ -256,6 +258,8 @@ function PlanInboxTab({
             <div className="sidebar-note">
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
+          ) : inbox.read && filteredOut ? (
+            <NeedsYouEmpty needsYou={needsYou} />
           ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -271,7 +275,8 @@ function PlanInboxTab({
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <header className="desktop-toolbar" />
-          {inbox.read && listed.length === 0 ? (
+          {/* Note that the list says what Needs you left out, so the pane beside it stands bare. */}
+          {inbox.read && listed.length === 0 && !filteredOut ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
         </section>
