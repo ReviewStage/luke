@@ -70,7 +70,7 @@ import {
 } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
-import type { CopyLink, LinkAtHand } from "../links-at-hand";
+import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
@@ -776,6 +776,8 @@ export function CommandPalette({
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
   const invoker = useRef<HTMLElement | null>(null);
+  // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
+  const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
   const field = useRef<HTMLInputElement>(null);
@@ -786,6 +788,7 @@ export function CommandPalette({
       ? () => {
           invoker.current =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setFromPanel(inSidePanel(document.activeElement));
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
           // The files are read afresh by the first search of each opening,
@@ -934,7 +937,7 @@ export function CommandPalette({
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
-        ...copyLinkRows(links.links, (held) => choose(() => links.copy(held))),
+        ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
         ...readMarkRows(plans, reads, choose),

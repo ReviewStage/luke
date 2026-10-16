@@ -3,6 +3,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
+import { createContext, useContext, useEffect, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { LINK_COPY, useCopyToast } from "./copy-feedback";
@@ -22,7 +23,9 @@ import { SIDE_PANEL_TAB, type SidePanelTab } from "./planning/use-side-panel";
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, or a terminal, is passed over for the task.
  * Each link is written under its workspace's slug, or its id until the
- * workspaces are read, as a task's own is.
+ * workspaces are read, as a task's own is; an agent's page under the
+ * workspace the page read its agent into, which only the page knows, so the
+ * page tells the window (`usePageWorkspace`).
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -54,13 +57,27 @@ export interface LinkAtHand {
   readonly name?: string | undefined;
 }
 
-/** Where the window stands beyond the Plans tab: Settings on a page, and whether the keyboard is in the side panel. */
+/** The workspace an agent's page read its agent into, by the agent's id. */
+interface PageWorkspace {
+  readonly agentId: string;
+  readonly workspaceId: string;
+}
+
+/** Where the window stands beyond the Plans tab: Settings on a page, whether the keyboard is in the side panel, and an agent's page's workspace. */
 export interface WindowAt {
   readonly settings:
     | { readonly view: SettingsView; readonly workspace: Workspace | undefined }
     | undefined;
   readonly sidePanelFocused: boolean;
+  readonly pageWorkspace?: PageWorkspace | undefined;
 }
+
+const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
+  () => undefined,
+);
+
+/** Hands an agent's page the window's ear for the workspace it read its agent into (`CopyLink`'s `onPageWorkspace`). */
+export const PageWorkspaceProvider = PageWorkspaceContext.Provider;
 
 /** A workspace as a link names it: its slug, or its id before its slug is read. */
 function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefined): string {
@@ -157,7 +174,11 @@ function linksAtHand(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
     return [at_({ kind: LINK_PLACE.SETTINGS, page: view }, LINK_THING.SETTINGS, slug)];
   }
   const { agentId } = plans.agentView;
-  if (agentId !== undefined) return [at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT)];
+  if (agentId !== undefined) {
+    const page = at.pageWorkspace;
+    const home = page?.agentId === agentId ? slugOf(plans.workspaces, page.workspaceId) : listed;
+    return [at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home)];
+  }
   if (plans.inboxView.open) {
     const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
     const { chosen } = plans.inboxView;
@@ -185,15 +206,30 @@ function linksAtHand(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
   return taskLinks(plans, at);
 }
 
-/** The links at hand, the most specific first, and the copy of one, as the command palette offers them. */
+/**
+ * The links at hand, the most specific first, as the keyboard stood in or
+ * out of the side panel, and the copy of one, as the command palette offers
+ * them; and the ear an agent's page tells its workspace to.
+ */
 export interface CopyLink {
-  readonly links: readonly LinkAtHand[];
+  readonly linksAt: (sidePanelFocused: boolean) => readonly LinkAtHand[];
   readonly copy: (held: LinkAtHand) => void;
+  readonly onPageWorkspace: (held: PageWorkspace | undefined) => void;
 }
 
-/** Whether the keyboard is in the side panel now, which makes its tab the thing at hand. */
-function sidePanelFocused(): boolean {
-  return document.activeElement?.closest(SIDE_PANEL_SELECTOR) != null;
+/** Whether `element` is in the side panel, which makes its tab the thing at hand while the keyboard is there. */
+export function inSidePanel(element: Element | null): boolean {
+  return element?.closest(SIDE_PANEL_SELECTOR) != null;
+}
+
+/** Tells the window the workspace `agentId`'s page read its agent into, so its links name that one rather than the one listed. */
+export function usePageWorkspace(agentId: string, workspaceId: string | undefined): void {
+  const tell = useContext(PageWorkspaceContext);
+  useEffect(() => {
+    if (workspaceId === undefined) return undefined;
+    tell({ agentId, workspaceId });
+    return () => tell(undefined);
+  }, [tell, agentId, workspaceId]);
 }
 
 /**
@@ -210,15 +246,17 @@ export function useCopyLink(
   const copyWords = useCopyToast();
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
-  const links = linksAtHand(plans, { settings, sidePanelFocused: false });
+  const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
+  const linksAt = (sidePanelFocused: boolean) =>
+    linksAtHand(plans, { settings, sidePanelFocused, pageWorkspace });
   useAppCommand(
     APP_COMMAND.COPY_LINK,
-    enabled && links.length > 0
+    enabled && linksAt(false).length > 0
       ? () => {
-          const first = linksAtHand(plans, { settings, sidePanelFocused: sidePanelFocused() })[0];
+          const first = linksAt(inSidePanel(document.activeElement))[0];
           if (first !== undefined) copy(first);
         }
       : undefined,
   );
-  return { links, copy };
+  return { linksAt, copy, onPageWorkspace };
 }

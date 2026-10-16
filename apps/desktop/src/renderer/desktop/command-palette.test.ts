@@ -31,7 +31,7 @@ import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
-import { useCopyLink } from "../links-at-hand";
+import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { usePlanLooks } from "../planning/use-plan-looks";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
@@ -58,12 +58,26 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The palette as the window draws it, offering the links at hand through the window's own Copy link. */
-function WindowPalette(
-  props: Omit<Parameters<typeof CommandPalette>[0], "links">,
-): React.JSX.Element {
+/** An agent's page, as far as it tells the window the workspace it read its agent into. */
+function AgentPageTelling(props: { agentId: string; workspaceId: string }): null {
+  usePageWorkspace(props.agentId, props.workspaceId);
+  return null;
+}
+
+/** The palette as the window draws it, offering the links at hand through the window's own Copy link, beside an agent's page where one tells its workspace. */
+function WindowPalette({
+  page,
+  ...props
+}: Omit<Parameters<typeof CommandPalette>[0], "links"> & {
+  page?: { agentId: string; workspaceId: string } | undefined;
+}): React.JSX.Element {
   const links = useCopyLink(props.plans, undefined, true);
-  return createElement(CommandPalette, { ...props, links });
+  return createElement(
+    PageWorkspaceProvider,
+    { value: links.onPageWorkspace },
+    createElement(CommandPalette, { ...props, links }),
+    page === undefined ? null : createElement(AgentPageTelling, page),
+  );
 }
 
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
@@ -71,6 +85,7 @@ function openPalette(
   plans: PlansControl = plansControl(),
   readFiles: (planId: string) => Promise<PlanningTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
+  page?: { agentId: string; workspaceId: string },
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -89,6 +104,7 @@ function openPalette(
           onViewChange: (view) => sent.views.push(view),
         },
         readFiles,
+        page,
       }),
     ),
   );
@@ -972,4 +988,57 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
   await act(async () => undefined);
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/call`]);
+});
+
+test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⌥⌘C, as ⌥⌘C there copies", () => {
+  const panel = document.body.appendChild(document.createElement("div"));
+  panel.className = "side-panel";
+  const field = panel.appendChild(document.createElement("button"));
+  field.focus();
+  openPalette(
+    plansControl({
+      ...ON_AGENT_TAB,
+      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
+    }),
+  );
+  type("copy link");
+  const chord = document.querySelector(".menu-item .menu-item-hint")?.textContent;
+
+  assert.deepEqual(
+    rows().filter((row) => row.startsWith("Copy link to ")),
+    [
+      "Copy link to call",
+      "Copy link to agent · Expire old invites",
+      `Copy link to task · ${DOCUMENT_PLAN.name}`,
+    ],
+  );
+  assert.equal(chord, "⌥⌘C");
+});
+
+test("on an agent's page in another workspace than the one listed, ⌥⌘C names the agent's workspace, which the page read", async () => {
+  const copied = installClipboard();
+  openPalette(
+    plansControl({
+      workspaces: [
+        ...ON_AGENT_TAB.workspaces,
+        {
+          id: "workspace-beta",
+          name: "Beta",
+          slug: "beta",
+          role: WORKSPACE_ROLE.MEMBER,
+          github: null,
+        },
+      ],
+      workspace: ON_AGENT_TAB.workspaces[0],
+      agentView: { ...plansControl().agentView, agentId: LINKED_AGENT },
+    }),
+    undefined,
+    { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
+  );
+  act(() => {
+    runAppCommand(APP_COMMAND.COPY_LINK);
+  });
+  await act(async () => undefined);
+
+  assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
 });
