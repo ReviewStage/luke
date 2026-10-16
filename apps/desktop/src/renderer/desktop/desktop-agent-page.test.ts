@@ -378,6 +378,88 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
+test("with its last tab closed, the panel offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { task: "Find the flakiest test." },
+            output: "Started task delegate-7k2m9q.",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = await mountPanelPage();
+  const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
+  assert.ok(row, "the delegation's row opens its worker");
+  act(() => row.click());
+  await settle();
+  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the panel opens");
+  const add = panel.querySelector<HTMLButtonElement>("button[aria-label='Open a tab']");
+  assert.ok(add, "the panel offers its +");
+  act(() => add.click());
+  await settle();
+  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+    (each) => each.textContent,
+  );
+  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
+    each.getAttribute("aria-label"),
+  );
+  act(() => add.click());
+  await settle();
+  const close = panel.querySelector<HTMLButtonElement>(".tab-close");
+  assert.ok(close, "the worker's tab closes");
+  act(() => close.click());
+  await settle();
+
+  const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
+  assert.deepEqual(
+    rows.map((each) => each.textContent),
+    offered,
+  );
+  assert.deepEqual(
+    [...well.querySelectorAll("section")].map((each) => each.getAttribute("aria-label")),
+    headings,
+  );
+  assert.deepEqual(headings, ["Changes", "Terminal"]);
+  const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
+  assert.ok(changes, "the empty panel offers the agent's pull request");
+  act(() => changes.click());
+  await settle();
+  assert.ok(
+    [...panel.querySelectorAll("[role='tab']")].some((tab) =>
+      (tab.textContent ?? "").includes("Changes"),
+    ),
+    "the Changes tab stands in the panel",
+  );
+});
+
 test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   published = {
