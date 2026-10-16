@@ -512,7 +512,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // failed beside the plans it already drew rather than emptying them.
     write(
       listed.ok
-        ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
+        ? {
+            plans: listed.answer.plans,
+            planlessAgents: listed.answer.planlessAgents ?? [],
+            listStatus: PLANNING_READ.READY,
+          }
         : { listStatus: PLANNING_READ.FAILED },
     );
   });

@@ -42,11 +42,11 @@ import {
   type PlanCreateRequest,
   type PlanFileAnswer,
   type PlanFileRequest,
+  type PlanListAnswer,
   type PlanRenameRequest,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSkillsAnswer,
-  type PlanSummary,
   type PlanTreeAnswer,
   type PlanTreeRequest,
   type PlanUpdateRequest,
@@ -197,9 +197,9 @@ export class HostedPlanClient {
     });
   }
 
-  /** Every plan the account owns, newest started first, the archived ones among them. */
+  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived ones of each among them. */
   list(): Effect.Effect<
-    PlanCallResult<readonly PlanSummary[], typeof PLAN_CALL_FAILURE.UNANSWERED>,
+    PlanCallResult<PlanListAnswer, typeof PLAN_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
@@ -208,7 +208,7 @@ export class HostedPlanClient {
         { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
         planListAnswerSchema,
       ),
-      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer.plans)),
+      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
     );
   }
 

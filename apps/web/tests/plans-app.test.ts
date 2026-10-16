@@ -552,7 +552,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       );
       assert.deepEqual(yield* ask(request(PLANS, other)), {
         status: HOSTED_HTTP_STATUS.OK,
-        body: { plans: [] },
+        body: { plans: [], planlessAgents: [] },
       });
       assert.equal(
         (yield* ask(request(ONE_PLAN, owner, { id: planId }))).status,
@@ -645,7 +645,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         assert.deepEqual(yield* ask(request(PLANS, owner)), {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { plans: [] },
+          body: { plans: [], planlessAgents: [] },
         });
       }),
   );
@@ -670,7 +670,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual([naming, shaped, pathed, bare], [invalid, invalid, invalid, invalid]);
         assert.deepEqual(yield* ask(request(PLANS, owner)), {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { plans: [] },
+          body: { plans: [], planlessAgents: [] },
         });
       }),
   );

@@ -3,6 +3,7 @@ import {
   type CodingAgentLatestTurn,
   type CodingAgentStoreEffect,
   latestTurnsOfReached,
+  listPlanlessCodingAgents,
   listPublishedCodingAgents,
   type PublishedCodingAgent,
 } from "@luke/database/models/coding-agent-store";
@@ -10,6 +11,7 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
+  type PlanlessAgent,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -22,12 +24,13 @@ import {
 import { Clock, Effect } from "effect";
 import {
   codingAgentActivityAt,
+  codingAgentPage,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
 } from "./coder-host/status.js";
 
 /**
- * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
+ * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
  * Four statements answer the whole list however many plans it holds: the
  * agents of every plan named with the pull request each last published,
@@ -171,6 +174,33 @@ export function withPlanAgents(
     return plans.map((plan) => {
       const agents = byPlan.get(plan.id);
       return agents === undefined ? plan : { ...plan, agents: summaryOf(agents) };
+    });
+  });
+}
+
+/**
+ * The agents with no plan in the account's workspaces, whichever member
+ * started each, newest started first, each read as its own page reads it,
+ * with its automation's name and when it last moved, the archived ones only
+ * where `includeArchived` asks: the sidebar's rows beside the plans.
+ */
+export function listPlanlessAgents(
+  userId: string,
+  options: { readonly includeArchived: boolean },
+): CodingAgentStoreEffect<readonly PlanlessAgent[]> {
+  return Effect.gen(function* () {
+    const agents = yield* listPlanlessCodingAgents(userId, options);
+    const conversationIds = agents.map((agent) => agent.conversationId);
+    // The agents were read through their workspaces' gate, and each conversation is its starter's.
+    const turns = yield* latestTurnsOfReached(conversationIds);
+    const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const names = yield* readAccountNames(agents.map((agent) => agent.userId));
+    const now = yield* Clock.currentTimeMillis;
+    return agents.map((agent) => {
+      const turn = turns.get(agent.conversationId);
+      const lineAwaits = awaiting.has(agent.conversationId);
+      const { origin: _origin, ...page } = codingAgentPage(agent, { turn, lineAwaits }, now, names);
+      return { ...page, activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }) };
     });
   });
 }
