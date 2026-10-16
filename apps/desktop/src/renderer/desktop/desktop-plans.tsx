@@ -62,7 +62,13 @@ import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
-import { SummaryButton, type SummaryPin, TaskSummary, useSummaryLayout } from "./plan-summary";
+import {
+  SummaryButton,
+  type SummaryPin,
+  summaryHolds,
+  TaskSummary,
+  useSummaryLayout,
+} from "./plan-summary";
 import {
   COLUMN,
   changesTabOf,
@@ -341,7 +347,12 @@ function PlanDocument({
   });
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
+  const summaryLayout = useSummaryLayout(
+    summary,
+    column,
+    plans.sidePanel.fullScreen,
+    summaryHolds(plans, inbox.board),
+  );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();

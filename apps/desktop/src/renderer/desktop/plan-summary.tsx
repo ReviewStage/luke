@@ -49,6 +49,10 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
  * agents archived are folded under Archived at the foot of Coding agents
  * (`agent-archive.tsx`).
  *
+ * A plan with nothing yet to list draws no summary at all, rail, card, or
+ * toolbar button, rather than one saying so; it stands once the plan holds
+ * its first row.
+ *
  * It is drawn expanded or collapsed wherever the column has room for its
  * rail. Expanded and
  * where the column has room to keep the document at its measure beside it,
@@ -130,9 +134,6 @@ const SECTION_ORDER = [
   ADD_SECTION.PAGES,
 ] as const;
 
-/** What the summary says on a plan that holds nothing yet to list. */
-const NOTHING_YET_LINE = "Nothing yet.";
-
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
 
@@ -188,6 +189,8 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
 /** How the summary stands now, whether its card hangs, and the presses that change either. */
 export interface SummaryLayout {
   mode: SummaryMode;
+  /** Whether the summary lists anything, without which neither it nor the toolbar's button is drawn. */
+  holds: boolean;
   /** Whether the column has room for the summary pinned, which is what the toolbar's button turns. */
   wide: boolean;
   /** What hung the card, while it hangs. */
@@ -202,16 +205,18 @@ export interface SummaryLayout {
 /**
  * How the summary stands in the plan's `column`, measured whole: pinned
  * while it is pinned and the column holds it beside the document's measure,
- * a rail where the column spares the rail's room, and not drawn otherwise. A
- * card hangs only where the summary is not pinned, and only while the
- * column is drawn, so the summary pinned, or a side panel `covering` the
- * column, takes it down. A column not laid out, hidden or not yet drawn,
- * measures nothing and changes nothing.
+ * a rail where the column spares the rail's room, and not drawn otherwise,
+ * nor while it `holds` nothing to list. A card hangs only where the summary
+ * is not pinned, and only while the column is drawn and the summary holds
+ * something, so the summary pinned, a side panel `covering` the column, or
+ * its last row gone takes it down. A column not laid out, hidden or not yet
+ * drawn, measures nothing and changes nothing.
  */
 export function useSummaryLayout(
   pin: SummaryPin,
   column: HTMLElement | null,
   covering: boolean,
+  holds: boolean,
 ): SummaryLayout {
   const { wide, onMeasured } = pin;
   const [hung, setHung] = useState<CardFrom | undefined>(undefined);
@@ -229,11 +234,16 @@ export function useSummaryLayout(
     observer.observe(column);
     return () => observer.disconnect();
   }, [column, onMeasured]);
-  const mode =
-    wide && pin.pinned ? SUMMARY_MODE.COLUMN : railed ? SUMMARY_MODE.RAIL : SUMMARY_MODE.NONE;
+  const mode = !holds
+    ? SUMMARY_MODE.NONE
+    : wide && pin.pinned
+      ? SUMMARY_MODE.COLUMN
+      : railed
+        ? SUMMARY_MODE.RAIL
+        : SUMMARY_MODE.NONE;
   // Note that the card's keys are heard on the window, so a card the
   // column no longer shows is let go rather than left taking Escape.
-  const gone = mode === SUMMARY_MODE.COLUMN || covering;
+  const gone = mode === SUMMARY_MODE.COLUMN || covering || !holds;
   if (gone && hung !== undefined) setHung(undefined);
   const card = gone ? undefined : hung;
   const expand = (from: CardFrom) => {
@@ -244,6 +254,7 @@ export function useSummaryLayout(
   const onDismiss = useCallback(() => setHung(undefined), []);
   return {
     mode,
+    holds,
     wide,
     card,
     onToggle: () => expand(CARD_FROM.TOOLBAR),
@@ -263,9 +274,10 @@ function cardControl(layout: SummaryLayout, cardId: string) {
 
 /**
  * The toolbar's button, after the ⋯ menu, drawn on while the summary is
- * expanded, pinned or hung. While the card hangs, or where the summary
- * does not fit, it hangs the card over the rail or takes it down; otherwise
- * it pins the summary or collapses it to its rail, and says which it is.
+ * expanded, pinned or hung, and not drawn while the summary holds nothing.
+ * While the card hangs, or where the summary does not fit, it hangs the
+ * card over the rail or takes it down; otherwise it pins the summary or
+ * collapses it to its rail, and says which it is.
  */
 export function SummaryButton({
   layout,
@@ -273,7 +285,8 @@ export function SummaryButton({
 }: {
   layout: SummaryLayout;
   cardId: string;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (!layout.holds) return null;
   const pins = layout.wide && layout.card === undefined;
   const label = pins ? "Toggle pinned summary" : "Toggle summary";
   const state = pins
@@ -301,9 +314,9 @@ interface SummaryEntry extends AddEntry {
 }
 
 /** A heading and the rows under it. */
-interface SummarySection {
+interface SummarySection<Entry extends AddEntry = SummaryEntry> {
   heading: string;
-  entries: readonly SummaryEntry[];
+  entries: readonly Entry[];
 }
 
 /**
@@ -399,18 +412,12 @@ function withCards(
 }
 
 /**
- * What the summary lists, under its headings in their order, each heading
- * only where it has a row. The plan's Inbox leads Tabs, counting what waits
- * on the developer, while it holds an item, waiting or settled, or its tab
- * is open, as a panel's kind stands once the plan has used it.
+ * The rows the summary lists, before their cards: the plan's Inbox leads,
+ * counting what waits on the developer, while it holds an item, waiting or
+ * settled, or its tab is open, as a panel's kind stands once the plan has
+ * used it; then the panel's kinds and what they hold, then the agents.
  */
-function summarySections(
-  plans: PlansControl,
-  inbox: InboxBoardView,
-  held: HeldTranscripts,
-  repository: string | null,
-  onOpenAgent: (agentId: string) => void,
-): SummarySection[] {
+function summaryRows(plans: PlansControl, inbox: InboxBoardView) {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(workRowsOf(work.conversation, work.callLive));
   const files = shownFiles(plans.shownCode ?? []);
@@ -432,6 +439,32 @@ function summarySections(
     }),
     ...agentEntries(mainTabs, agents),
   ];
+  return { rows, workers, files, changes };
+}
+
+/** `entries` under their headings in their order, each heading only where it has a row. */
+function sectionsOf<Entry extends AddEntry>(
+  entries: readonly Entry[],
+  agents: CodingAgentsControl,
+): SummarySection<Entry>[] {
+  // Coding agents stands while only archived agents are left, so their fold has a heading.
+  const archived = (agents.archived?.length ?? 0) > 0;
+  return SECTION_ORDER.flatMap((heading) => {
+    const own = entries.filter((entry) => (entry.row.section ?? TABS_SECTION) === heading);
+    const kept = own.length > 0 || (heading === AGENTS_SECTION && archived);
+    return kept ? [{ heading, entries: own }] : [];
+  });
+}
+
+/** What the summary lists, under its headings in their order, each row with the card it hangs. */
+function summarySections(
+  plans: PlansControl,
+  inbox: InboxBoardView,
+  held: HeldTranscripts,
+  repository: string | null,
+  onOpenAgent: (agentId: string) => void,
+): SummarySection[] {
+  const { rows, workers, files, changes } = summaryRows(plans, inbox);
   const paths = files.map((ref) => ref.path);
   const entries = withCards(rows, {
     plans,
@@ -443,13 +476,12 @@ function summarySections(
     repository,
     onOpenAgent,
   });
-  // Coding agents stands while only archived agents are left, so their fold has a heading.
-  const archived = (agents.archived?.length ?? 0) > 0;
-  return SECTION_ORDER.flatMap((heading) => {
-    const own = entries.filter((entry) => (entry.row.section ?? TABS_SECTION) === heading);
-    const kept = own.length > 0 || (heading === AGENTS_SECTION && archived);
-    return kept ? [{ heading, entries: own }] : [];
-  });
+  return sectionsOf(entries, plans.agents);
+}
+
+/** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
+export function summaryHolds(plans: PlansControl, inbox: InboxBoardView): boolean {
+  return sectionsOf(summaryRows(plans, inbox).rows, plans.agents).length > 0;
 }
 
 /**
@@ -559,7 +591,6 @@ function SummaryList({
   shown: boolean;
   onPicked?: () => void;
 }): React.JSX.Element {
-  if (sections.length === 0) return <p className="plan-summary-empty">{NOTHING_YET_LINE}</p>;
   return (
     <>
       {sections.map(({ heading, entries }) => (

@@ -6066,25 +6066,12 @@ button.automation-run:hover {
   margin-bottom: 0;
 }
 
-.plan-summary[data-mode="column"] > .plan-summary-empty,
-.plan-summary-card > .plan-summary-empty {
-  padding-top: var(--space-8);
-  padding-right: var(--control-height);
-}
-
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
 @keyframes summary-card-grow {
   from {
     transform: scale(0.97);
   }
-}
-
-.plan-summary-empty {
-  margin: 0;
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 12.5px;
 }
 
 .plan-summary-rows {
