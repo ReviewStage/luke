@@ -223,7 +223,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an answer names the member who gave it, to every member, and an answer withdrawn or an item asked again names nobody",
+    "an item names the member whose agent asks it and an answer the member who gave it, to every member, and an answer withdrawn or an item asked again names nobody",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openTasklessAgent;
@@ -236,11 +236,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         const answered = Option.getOrThrow(yield* answerInboxItem(teammate, id, 1, DONE, key));
         assert.deepEqual(answered.answeredBy, { userId: teammate, name: "Test User" });
+        assert.equal(answered.startedBy?.userId, agent.userId, "the item names whose agent asks");
         for (const reader of [agent.userId, teammate]) {
-          assert.equal(
-            Option.getOrThrow(yield* readInboxItem(reader, id)).item.answeredBy?.userId,
-            teammate,
-          );
+          const read = Option.getOrThrow(yield* readInboxItem(reader, id)).item;
+          assert.equal(read.answeredBy?.userId, teammate);
+          assert.equal(read.startedBy?.userId, agent.userId);
         }
 
         const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(teammate, id, key));

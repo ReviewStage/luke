@@ -78,7 +78,8 @@ export function agentCardReading(
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
-  agents: Pick<CodingAgentsControl, "me" | "pullRequests">,
+  agents: Pick<CodingAgentsControl, "me" | "pullRequests"> &
+    Partial<Pick<CodingAgentsControl, "chatOn">>,
 ): () => CardReading {
   return () => {
     const { archivedAt } = agent;
@@ -94,7 +95,14 @@ export function agentCardReading(
         state: archivedAt === undefined ? agentStateWords(agent.status) : ARCHIVED_WORDS,
       }),
       choice: { model: agent.model, effort: agent.effort },
-      transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
+      transcript:
+        messages &&
+        agentTranscript({
+          title: label,
+          messages,
+          brief: agent.brief,
+          chatOn: agents.chatOn === true,
+        }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
       tile: agentActor(agent, label),
@@ -179,7 +187,8 @@ export function tasklessSubject(
  * once the list has been read, and nothing more before.
  */
 export function agentSubject(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
+  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests"> &
+    Partial<Pick<CodingAgentsControl, "chatOn">>,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,

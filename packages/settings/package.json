@@ -1,5 +1,6 @@
 {
   "name": "@luke/settings",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The app settings schema: every setting's id, section, side effect, and how a change is counted",

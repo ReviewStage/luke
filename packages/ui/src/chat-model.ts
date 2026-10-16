@@ -10,7 +10,7 @@ import {
   MEMBER_KIND,
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
-import type { TaskAgentLine } from "@luke/features/task-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
 /**
@@ -86,6 +86,20 @@ export interface ChatNames {
   readonly agents: ReadonlyMap<string, TaskAgentLine>;
   readonly plans: ReadonlyMap<string, string>;
   readonly selfName: string | undefined;
+}
+
+/** The names a window knows: each agent's line from the plans' summaries and the lines a chat read carries, each plan's name, and the reader's own. */
+export function chatNames(
+  plans: readonly TaskSummary[],
+  agents: readonly TaskAgentLine[],
+  selfName: string | undefined,
+): ChatNames {
+  const lines = [...plans.flatMap((plan) => plan.agents?.agents ?? []), ...agents];
+  return {
+    agents: new Map(lines.map((line) => [line.id, line])),
+    plans: new Map(plans.map((plan) => [plan.id, plan.name])),
+    selfName,
+  };
 }
 
 /** A member as a line names it: what it is called, its handle, the agent's line where it is one, and the plan it stands for. */
