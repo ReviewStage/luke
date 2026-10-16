@@ -1,7 +1,7 @@
 import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
-  type AutomationAction,
+  type AutomationActionJson,
   type AutomationFiring,
   type AutomationGuards,
   type AutomationPause,
@@ -63,7 +63,8 @@ export const automation = pgTable(
     pausedReason: text("paused_reason").$type<AutomationPause>(),
     triggerKind: text("trigger_kind").$type<AutomationTriggerKind>().notNull(),
     trigger: jsonb("trigger").$type<AutomationTrigger>().notNull(),
-    action: jsonb("action").$type<AutomationAction>().notNull(),
+    // Note that the column holds the action as JSON writes it, its servers not yet read against the providers known.
+    action: jsonb("action").$type<AutomationActionJson>().notNull(),
     guards: jsonb("guards").$type<AutomationGuards>().notNull(),
     /** When a schedule is next due; null for any other trigger and while paused. */
     nextRunAt: timestamptz("next_run_at"),

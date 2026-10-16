@@ -42,10 +42,17 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "@luke/features/automation-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+} from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { SidePanelIcon } from "@luke/ui";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -55,7 +62,10 @@ import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { useIntegrationStatuses } from "../integration-statuses";
+import { useOpenSettings } from "../open-settings";
 import { AgentModelChip } from "../planning/agent-model-chip";
+import { AgentServersButton } from "../planning/agent-servers";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
@@ -283,6 +293,82 @@ function OwnerRow({
         if (picked !== undefined) onOwner(picked);
       }}
     />
+  );
+}
+
+/**
+ * Which of the owner's connected MCP servers a run's new agent is handed:
+ * the marks of those left on, beside the agent box's own servers button,
+ * whose switches, search, and way to Settings › Integrations are the ones a
+ * task's Start offers. Every server is on until switched off. Note that a
+ * run starts on its creator's connections, so only its creator is shown
+ * them to switch; anyone else reads which the creator switched off.
+ */
+function ServersRow({
+  mine,
+  disabled,
+  onSwitch,
+}: {
+  /** Whether the reading account made it, so its connections are the ones a run is handed. */
+  mine: boolean;
+  disabled: readonly IntegrationProvider[];
+  onSwitch: (disabled: readonly IntegrationProvider[]) => void;
+}): React.JSX.Element {
+  if (!mine) {
+    return (
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>MCP servers</strong>
+          <small>
+            {disabled.length === 0
+              ? "Its creator's connected servers, every one."
+              : `Its creator's connected servers, but ${disabled.map((provider) => INTEGRATION_NAME[provider]).join(", ")} switched off.`}
+          </small>
+        </span>
+      </div>
+    );
+  }
+  return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
+}
+
+/** The servers row as the automation's creator sees it: their connections, switched by the agent box's own button. */
+function OwnServersRow({
+  disabled,
+  onSwitch,
+}: {
+  disabled: readonly IntegrationProvider[];
+  onSwitch: (disabled: readonly IntegrationProvider[]) => void;
+}): React.JSX.Element {
+  const statuses = useIntegrationStatuses();
+  const openSettings = useOpenSettings();
+  const connected = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
+  );
+  const on = connected.filter((provider) => !disabled.includes(provider));
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>MCP servers</strong>
+        <small>
+          {connected.length === 0
+            ? "None connected. A run's agent is handed the servers you connect."
+            : `${on.length} of ${connected.length} on. A run's agent is handed the servers left on.`}
+        </small>
+      </span>
+      <span className="automation-row-controls automation-servers">
+        {on.map((provider) => (
+          <ProviderMark key={provider} provider={provider} />
+        ))}
+        <AgentServersButton
+          servers={{
+            disabled,
+            onSwitch,
+            onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+          }}
+          statuses={statuses}
+        />
+      </span>
+    </div>
   );
 }
 
@@ -994,6 +1080,7 @@ const targetOf = optionValue(TARGETS);
 /** Where a run lands, under the repository it works in: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
 function RunsGroup({
   draft,
+  mine,
   savedAgentId,
   workspace,
   problems,
@@ -1002,6 +1089,8 @@ function RunsGroup({
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** Whether the reading account made it, whose connections its runs are handed. */
+  mine: boolean;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   workspace: Workspace | undefined;
@@ -1057,6 +1146,11 @@ function RunsGroup({
       ) : (
         <>
           <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+          <ServersRow
+            mine={mine}
+            disabled={draft.disabledServers}
+            onSwitch={(disabledServers) => onDraft({ disabledServers })}
+          />
           <SwitchRow
             label="Archive successful runs"
             detail="A run's agent is archived once it finishes without failing. Its transcript and pull request stay reachable."
@@ -1180,6 +1274,7 @@ function EditorForm({
       </SettingsGroup>
       <RunsGroup
         draft={draft}
+        mine={automation === undefined || automation.mine === true}
         savedAgentId={savedAgentId}
         workspace={workspace}
         problems={problems}

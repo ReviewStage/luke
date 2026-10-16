@@ -26,6 +26,7 @@ import {
   PULL_REQUEST_DEFAULT_MOMENTS,
   type PullRequestMoment,
 } from "./automation-wire.js";
+import type { IntegrationProvider } from "./integration-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 
 /**
@@ -105,6 +106,8 @@ export interface AutomationDraft {
   readonly choice: ModelChoice | null;
   /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
+  /** The owner's MCP servers a run's new agent is not handed, as the agent box's servers button switches them. */
+  readonly disabledServers: readonly IntegrationProvider[];
 }
 
 /** A GitHub trigger's settings as its editor holds them, each stated where the trigger leaves it to a default. */
@@ -182,10 +185,16 @@ function landingAgent(draft: AutomationDraft): string | null {
   return draft.target === AUTOMATION_TARGET.SAME_AGENT ? draft.agentId : null;
 }
 
-/** The action a draft's runs take: its task, on its model where it names one. */
+/** The action a draft's runs take: its task, on its model where it names one, with the servers it switched off. */
 function actionOf(draft: AutomationDraft): AutomationAction {
-  const action = { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: draft.prompt.trim() } as const;
-  return draft.choice === null ? action : { ...action, choice: draft.choice };
+  return {
+    kind: AUTOMATION_ACTION.CODING_AGENT,
+    prompt: draft.prompt.trim(),
+    ...(draft.choice === null ? undefined : { choice: draft.choice }),
+    ...(draft.disabledServers.length === 0
+      ? undefined
+      : { disabledServers: draft.disabledServers }),
+  };
 }
 
 /** Where a draft's runs land, as the service takes it: a new agent, or the one chosen; a same agent with none chosen lands nowhere and is a problem before it is a write. */
@@ -317,6 +326,7 @@ export function automationDraft(
       agentId: null,
       choice: null,
       archiveSuccessful: false,
+      disabledServers: [],
     };
   }
   const { trigger } = automation;
@@ -351,6 +361,7 @@ export function automationDraft(
       automation.target?.kind === AUTOMATION_TARGET.SAME_AGENT ? automation.target.agentId : null,
     choice: automation.action.choice ?? null,
     archiveSuccessful: automation.archiveSuccessful ?? false,
+    disabledServers: automation.action.disabledServers ?? [],
   };
 }
 
@@ -461,6 +472,7 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     one.target === other.target &&
     landingAgent(one) === landingAgent(other) &&
     sameChoice(one.choice, other.choice) &&
+    sameSet(one.disabledServers, other.disabledServers) &&
     one.archiveSuccessful === other.archiveSuccessful
   );
 }
@@ -487,7 +499,10 @@ export function changeOf(
       !sameFilters(draft.githubFilters, was.githubFilters) ||
       !sameSettings(draft.githubSettings, was.githubSettings));
   const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
-  const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
+  const actionMoved =
+    draft.prompt.trim() !== was.prompt ||
+    !sameChoice(draft.choice, was.choice) ||
+    !sameSet(draft.disabledServers, was.disabledServers);
   const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};

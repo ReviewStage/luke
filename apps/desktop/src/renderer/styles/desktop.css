@@ -4575,7 +4575,18 @@ body:has(.app-stage[data-capture="true"])
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
 .automation-row-controls > .settings-input,
-.settings-row > .automation-cron {
+.settings-row > /* The servers left on, by their marks, beside the servers button. */
+.automation-servers {
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.automation-servers > .provider-mark {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+}
+
+.automation-cron {
   height: var(--control-height);
   padding-block: 0;
   border-radius: var(--control-radius);
