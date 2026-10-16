@@ -13,7 +13,7 @@ const ACTIONS = 15368;
 const OTHER_APP = 1;
 
 const RULES_PATH = `repos/${REPOSITORY}/rules/branches/main`;
-const COMPARE_PATH = `repos/${REPOSITORY}/compare/${COMMIT}...main`;
+const COMPARE_PATH = `repos/${REPOSITORY}/compare/${COMMIT}...main?per_page=1`;
 
 /** GitHub's answer to the check-runs question for one check name. */
 function checkRunsPath(name: string): string {
@@ -28,7 +28,7 @@ type Answer =
       type: string;
       parameters?: { required_status_checks: { context: string; integration_id: number }[] };
     }[]
-  | { status: string }
+  | { status: string; files?: { filename: string; patch: string }[] }
   | { check_runs: CheckRun[] };
 
 type Answers = Map<string, Answer>;
@@ -106,6 +106,15 @@ test("a commit on main whose every required check succeeded passes", async (t) =
   const atHead = await verify(t, mergedBut([COMPARE_PATH, { status: "identical" }]));
   assert.equal(atHead.status, 0);
   assert.match(atHead.stdout, /TypeScript checks, Tests \(1\/4\)/u);
+});
+
+test("a commit main has moved far past passes, however large the comparison", async (t) => {
+  const patch = "+".repeat(4 * 1024 * 1024);
+  const ran = await verify(
+    t,
+    mergedBut([COMPARE_PATH, { status: "ahead", files: [{ filename: "CHANGELOG.md", patch }] }]),
+  );
+  assert.equal(ran.status, 0, ran.stderr);
 });
 
 test("a commit beside main fails, however green its checks", async (t) => {

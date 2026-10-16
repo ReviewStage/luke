@@ -19,9 +19,12 @@ const BRANCH = "main";
 const RULE_TYPE = { REQUIRED_STATUS_CHECKS: "required_status_checks" };
 const CONCLUSION = { SUCCESS: "success" };
 const COMPARE_STATUS = { IDENTICAL: "identical", AHEAD: "ahead" };
+// A comparison carries every file patch between the commit and the branch's
+// head, megabytes once main has moved on, far past spawnSync's 1 MiB default.
+const ANSWER_LIMIT_BYTES = 256 * 1024 * 1024;
 
 function api(path) {
-  const ran = spawnSync("gh", ["api", path], { encoding: "utf8" });
+  const ran = spawnSync("gh", ["api", path], { encoding: "utf8", maxBuffer: ANSWER_LIMIT_BYTES });
   if (ran.status !== 0) {
     throw new Error(`gh api ${path} failed: ${(ran.stderr ?? "").trim() || `exit ${ran.status}`}`);
   }
@@ -38,7 +41,7 @@ function requiredChecks(repository) {
 // Note that the comparison runs from the commit to the branch, so "ahead"
 // means the branch has moved on past the commit, which is still on it.
 function onBranch(repository, commit) {
-  const { status } = api(`repos/${repository}/compare/${commit}...${BRANCH}`);
+  const { status } = api(`repos/${repository}/compare/${commit}...${BRANCH}?per_page=1`);
   return status === COMPARE_STATUS.IDENTICAL || status === COMPARE_STATUS.AHEAD;
 }
 
