@@ -718,3 +718,13 @@ test("the agent whose page stands is the row the sidebar marks", () => {
   );
   assert.deepEqual(marked, ["Triage overnight issues"]);
 });
+
+test("with every task archived but a one-off agent standing, the list holds the agent and says nothing of every task being archived", async () => {
+  const sidebar = await mountRead(ACME, [], ARCHIVED, [TRIAGE]);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Triage overnight issues"],
+  );
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(!notes.some((note) => note?.startsWith("Every task is archived")), notes.join(" | "));
+});

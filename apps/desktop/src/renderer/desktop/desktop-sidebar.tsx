@@ -1367,13 +1367,14 @@ function SidebarColumn({
           {plans.signedIn && unlisted && plans.listRead && !plans.listFailed && !archive.shown ? (
             <p className="sidebar-note">No tasks yet.</p>
           ) : null}
-          {/* Every task archived, the list would stand empty with no word of where they went. */}
+          {/* Every task and agent archived, the list would stand empty with no word of where they went. */}
           {plans.signedIn &&
           !archive.shown &&
           plans.listRead &&
           !plans.listFailed &&
           plans.listed.plans.length === 0 &&
-          plans.listed.archived.length > 0 ? (
+          listedAgents.standing.length === 0 &&
+          (plans.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
             <p className="sidebar-note">
               Every task is archived.{" "}
               <button

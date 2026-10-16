@@ -1559,8 +1559,9 @@ ul.actor-stack {
   z-index: 1;
 }
 
-.sidebar-plan-item:hover .sidebar-plan-time,
-.sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+/* Note that a one-off agent's row keeps its time, because it has no marks to make room for. */
+.sidebar-plan-item:hover .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time,
+.sidebar-plan-item:has(:focus-visible) .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time {
   visibility: hidden;
 }
 
