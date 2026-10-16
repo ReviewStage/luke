@@ -135,12 +135,17 @@ export const GitHubOpenerSchema = Schema.Struct({
   avatar_url: Schema.optional(Schema.String),
 });
 
-/** Who opened a pull request or an issue, as its link's card names them: their login, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; nothing where GitHub named no one. */
-export function openerFieldsOf(user: typeof GitHubOpenerSchema.Type | null | undefined): {
+/** Who opened a pull request or an issue, as its read names them: their login, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; none of them where GitHub named no one. */
+interface OpenerFields {
   readonly author?: string;
   readonly authorAvatarUrl?: string;
   readonly authorBot?: boolean;
-} {
+}
+
+/** Who opened a pull request or an issue, as its link's card names them; nothing where GitHub named no one. */
+export function openerFieldsOf(
+  user: typeof GitHubOpenerSchema.Type | null | undefined,
+): OpenerFields {
   if (user == null) return {};
   const avatarUrl = githubAvatarUrl(user.avatar_url);
   return {
