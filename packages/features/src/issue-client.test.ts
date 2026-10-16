@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { fakeCloudApi, HTTP_STATUS, recordingHttpClient } from "@luke/wire/testing";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostedIssueClient } from "./issue-client.js";
 import { ISSUE_CALL_FAILURE } from "./issue-view.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "./issue-wire.js";
@@ -34,6 +35,7 @@ const ISSUE = {
 function client(): HostedIssueClient {
   return new HostedIssueClient({
     serviceBaseUrl: "https://tryluke.dev",
+    requestTimeoutMs: 10_000,
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     readAccountKey: () => Effect.succeed("ada@example.com"),
@@ -122,5 +124,29 @@ it.effect(
       assert.deepEqual(untitled, { failure: ISSUE_CALL_FAILURE.INVALID });
       assert.deepEqual(empty, { failure: ISSUE_CALL_FAILURE.INVALID });
       assert.equal(api.requests().length, 3, "no unsendable write traveled");
+    }),
+);
+
+it.effect(
+  "a body that stalls after its headers answers unanswered once the deadline passes, rather than never",
+  () =>
+    Effect.gen(function* () {
+      const stalled = recordingHttpClient(
+        () =>
+          new Response(
+            new ReadableStream({
+              start: (controller) => controller.enqueue(new TextEncoder().encode('{"issues":')),
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      );
+
+      const asked = yield* Effect.forkChild(
+        Effect.provide(client().list({ workspaceId: WORKSPACE_ID }), stalled.layer),
+      );
+      yield* TestClock.adjust("10 seconds");
+      const listed = yield* Fiber.join(asked);
+
+      assert.deepEqual(listed, { failure: ISSUE_CALL_FAILURE.UNANSWERED });
     }),
 );

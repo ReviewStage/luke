@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Duration, Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -72,6 +72,24 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
+/**
+ * A response's body as JSON within the deadline, or nothing where it has
+ * not arrived by then. Note that the account call's
+ * own deadline ends with the headers, so a body that stalls after them is
+ * bounded here, or the call would never answer.
+ */
+function jsonWithin(
+  response: Response,
+  deadline: Duration.Duration,
+): Effect.Effect<WireBoundaryInput> {
+  return jsonOf(response).pipe(
+    Effect.timeoutOrElse({
+      duration: deadline,
+      orElse: () => Effect.succeed(undefined),
+    }),
+  );
+}
+
 /** The refusal a refused answer carries, where it is one this client names; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
@@ -79,13 +97,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   return failure === undefined ? UNANSWERED : { failure };
 }
 
-/** An answer read whole: the body the schema admits, a key a newer service added dropped, or why there is none. */
+/** An answer read whole within the deadline: the body the schema admits, a key a newer service added dropped, or why there is none. */
 function readAnswer<Answer, Encoded>(
   answer: CallAnswer,
   schema: Schema.Codec<Answer, Encoded>,
+  deadline: Duration.Duration,
 ): Effect.Effect<Answer | Failed> {
   if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonOf(answer.response), (body): Answer | Failed => {
+  return Effect.map(jsonWithin(answer.response, deadline), (body): Answer | Failed => {
     const payload = unparsedWire(body);
     if (!answer.response.ok) return refusedAs(payload, REFUSALS);
     return Result.getOrUndefined(readServiceAnswer(schema)(payload)) ?? UNANSWERED;
@@ -102,6 +121,7 @@ function listQuery(params: IssueListParams): string {
 /** The window's reads and writes of a workspace's issues. */
 export class HostedIssueClient {
   readonly #call: AccountCallEffects;
+  readonly #deadline: Duration.Duration;
 
   constructor(options: HostedIssueClientOptions) {
     this.#call = accountCall({
@@ -109,6 +129,7 @@ export class HostedIssueClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#deadline = Duration.millis(this.#call.requestTimeoutMs);
   }
 
   /** The workspace's issues, standing or archived, the most recently changed first. */
@@ -118,7 +139,7 @@ export class HostedIssueClient {
         method: HTTP_METHOD.GET,
         path: `${HOSTED_SERVICE_PATH.ISSUES}${listQuery(params)}`,
       }),
-      (answer) => readAnswer(answer, issueListAnswerSchema),
+      (answer) => readAnswer(answer, issueListAnswerSchema, this.#deadline),
     );
   }
 
@@ -126,7 +147,7 @@ export class HostedIssueClient {
   read(params: IssueIdParams): Effect.Effect<IssueView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: issuePath(params.issueId) }),
-      (answer) => readAnswer(answer, issueAnswerSchema),
+      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
     );
   }
 
@@ -140,7 +161,7 @@ export class HostedIssueClient {
         path: HOSTED_SERVICE_PATH.ISSUES,
         body: JSON.stringify(admitted),
       }),
-      (answer) => readAnswer(answer, issueAnswerSchema),
+      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
     );
   }
 
@@ -154,7 +175,7 @@ export class HostedIssueClient {
         path: issuePath(admitted.issueId),
         body: JSON.stringify(admitted.change),
       }),
-      (answer) => readAnswer(answer, issueAnswerSchema),
+      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
     );
   }
 }
