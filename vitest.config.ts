@@ -25,6 +25,7 @@ export default defineConfig({
       "packages/host",
       "packages/ui",
       "packages/ui/vitest.browser.config.ts",
+      "apps/catalog",
     ],
   },
 });
