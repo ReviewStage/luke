@@ -2498,6 +2498,75 @@ button.skill-chip:hover,
   border-color: var(--selected-edge);
 }
 
+/* A quote block in the message box (`reply-to-selection.tsx`): the agent's
+   words on a raised card rounded on every corner, an inset bar at its
+   leading edge, three lines at most, with the press that takes it out at
+   its end. It stands in the editor's flow as a line of its own does. */
+.composer-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: var(--raised-strong);
+  box-shadow: inset 3px 0 0 var(--hairline-strong);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 20px;
+  user-select: none;
+}
+
+.composer-quote .composer-quote-words {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.composer-quote .composer-quote-remove {
+  width: 20px;
+  height: 20px;
+}
+
+.composer-quote .composer-quote-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Reply over words selected in an agent's message: one press on the menus'
+   surface, centred over the selection, or under it where the window's top
+   leaves no room. It moves with `translate`, since the surface's own
+   entrance animates its `transform`. */
+.reply-to-selection {
+  position: fixed;
+  z-index: var(--z-menu);
+  padding: 2px;
+  translate: -50% -100%;
+  -webkit-app-region: no-drag;
+}
+
+.reply-to-selection[data-below] {
+  translate: -50% 0;
+}
+
+.reply-to-selection .toolbar-button {
+  height: 26px;
+  padding: 0 var(--space-8);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.reply-to-selection .toolbar-button svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* The files on a message: a row of chips over the box's words, and over
    the developer's bubble in the transcript, at its right as the bubble is. */
 .attached-files {

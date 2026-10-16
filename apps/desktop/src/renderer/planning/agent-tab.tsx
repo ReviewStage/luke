@@ -87,6 +87,7 @@ import {
   useMessageReveal,
 } from "./message-links";
 import { callHeading, useMinute } from "./plan-time";
+import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
@@ -502,7 +503,12 @@ function AgentPartView({
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
-      return <TranscriptWords text={part.text} />;
+      // The agent's words alone may be replied to, never a call's output or a thought.
+      return (
+        <div {...{ [REPLY_SCOPE]: "" }}>
+          <TranscriptWords text={part.text} />
+        </div>
+      );
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL: {
@@ -1182,6 +1188,9 @@ function AgentTabView({
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
+  const tab = useRef<HTMLElement>(null);
+  // The door the box hands Reply, which lays a quote in at its caret.
+  const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const origin = agentOrigin({
     agent,
     run,
@@ -1191,7 +1200,11 @@ function AgentTabView({
     openGitHub,
   });
   return (
-    <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
+    <section
+      ref={tab}
+      className="agent-tab ph-no-capture"
+      aria-label={agentTabLabel(agent, models)}
+    >
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <MentionedServers value={{ disabled: servers.disabled, steering }}>
@@ -1261,9 +1274,14 @@ function AgentTabView({
             followsUp
             keywords={keywords}
             skills={skills}
+            replyDoor={replyDoor}
           />
         )}
       </footer>
+      {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
+      {onUnarchive !== undefined || composer.closed !== undefined || composer.sending ? null : (
+        <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
+      )}
     </section>
   );
 }

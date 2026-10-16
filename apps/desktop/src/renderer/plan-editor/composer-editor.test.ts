@@ -429,3 +429,59 @@ test("a mention laid in from elsewhere stands where the caret is, a space after 
   assert.equal(box.drafts.at(-1), `Fix [@invite.ts:2–3](${lines.target}) first`);
   assert.deepEqual(full.drafts, []);
 });
+
+/** The quote blocks the box holds, by their words. */
+function quotesIn(host: HTMLElement): (string | null)[] {
+  return [...host.querySelectorAll("[data-quote]")].map((element) => element.textContent);
+}
+
+test("a quote laid in stands as a block under the caret's line, the caret on a line under it, and reads out as a blockquote set apart", () => {
+  const box = mounted("Two things:");
+  assert.equal(box.handle.insertQuote("A or B?"), true);
+  assert.deepEqual(quotesIn(box.host), ["A or B?"]);
+  assert.equal(box.drafts.at(-1), "Two things:\n\n> A or B?\n\n");
+
+  typeInComposer(box.host, "B.");
+  box.handle.insertQuote("Ship today?");
+  box.handle.insertQuote("Or wait?");
+  typeInComposer(box.host, "Wait.");
+  assert.equal(
+    box.drafts.at(-1),
+    "Two things:\n\n> A or B?\n\nB.\n\n> Ship today?\n\n> Or wait?\n\nWait.",
+    "a quote laid in on an empty line takes its place, so quotes laid in one after another stack",
+  );
+});
+
+test("words laid in with quotes set apart hold them as blocks, and hand the same words back", () => {
+  const box = mounted("> A or B?\n>\n> Pick one.\n\nB.\n\n> Ship today?\n\nYes");
+  assert.deepEqual(quotesIn(box.host), ["A or B?\n\nPick one.", "Ship today?"]);
+  typeInComposer(box.host, "!");
+  assert.equal(box.drafts.at(-1), "> A or B?\n>\n> Pick one.\n\nB.\n\n> Ship today?\n\nYes!");
+
+  box.handle.replace("Above\n> runs into the line\nBelow");
+  assert.deepEqual(quotesIn(box.host), [], "a > line run into its neighbours stays words");
+});
+
+test("one Backspace at the start of the line under a quote takes the quote out whole, and Delete at the end of the line above it too", () => {
+  const box = mounted("");
+  box.handle.insertQuote("A or B?");
+  pressInComposer(box.host, "Backspace");
+  assert.deepEqual(quotesIn(box.host), []);
+  assert.equal(box.drafts.at(-1), "");
+
+  typeInComposer(box.host, "Above");
+  box.handle.insertQuote("A or B?");
+  typeInComposer(box.host, "Below");
+  box.caretAt(1 + "Above".length);
+  pressInComposer(box.host, "Delete");
+  assert.equal(box.drafts.at(-1), "Above\nBelow");
+});
+
+test("a quote is cut from its end to the room the bound leaves, and none is laid in where there is none", () => {
+  const box = mounted("Hi", { maxLength: 30 });
+  assert.equal(box.handle.insertQuote("Option A or option B or option C"), true);
+  const written = box.drafts.at(-1) ?? "";
+  assert.ok(written.length <= 30, written);
+  assert.match(written, /^Hi\n\n> Option A.*…\n\n$/u);
+  assert.equal(box.handle.insertQuote("More"), false);
+});

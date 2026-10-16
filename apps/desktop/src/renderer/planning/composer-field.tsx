@@ -6,6 +6,7 @@ import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerInput,
+  ComposerQuote,
   ComposerTrigger,
   MentionNode,
   PlanEditorModule,
@@ -29,7 +30,7 @@ import type {
  * words the field draws while the draft is empty, rather than an attribute
  * of the editor's, so the recording masks it as it masks the words. A chip
  * the editor holds is drawn by the box, into the node's own element, as the
- * owner draws it (`chip`).
+ * owner draws it (`chip`), and so is a quote block (`quote`).
  */
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
@@ -43,10 +44,13 @@ function typingElsewhere(): boolean {
   );
 }
 
-/** A chip the editor asked to be drawn: the element its node stands as, what it is, a skill or a mention, and the key its drawing goes under. */
+/** A chip the editor asked to be drawn: the element its node stands as, what it is, a skill, a mention, or a quote, and the key its drawing goes under. */
 interface DrawnChip {
   readonly element: HTMLElement;
-  readonly chip: ComposerChip | { readonly mention: MentionNode };
+  readonly chip:
+    | ComposerChip
+    | { readonly mention: MentionNode }
+    | { readonly quote: ComposerQuote };
   readonly key: number;
 }
 
@@ -76,6 +80,7 @@ export function ComposerField({
   onPasteFiles,
   onTrigger,
   chip,
+  quote,
   mentions,
   children,
 }: {
@@ -99,6 +104,8 @@ export function ComposerField({
   onPasteFiles: (files: readonly File[]) => boolean;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
+  /** How a quote block the editor holds is drawn; its words alone where none is given. */
+  quote?: ((quote: ComposerQuote) => ReactNode) | undefined;
   /** What the box's mentions are picked and drawn with; none where the box takes no mentions, read as it mounts. */
   mentions?: ComposerFieldMentions | undefined;
   /** What stands over the field, a list it opened. */
@@ -149,6 +156,7 @@ export function ComposerField({
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
       drawChip: (element, drawnChip) => draw(element, drawnChip),
+      drawQuote: (element, drawnQuote) => draw(element, { quote: drawnQuote }),
       mentions:
         now.mentions === undefined
           ? undefined
@@ -189,7 +197,9 @@ export function ComposerField({
         createPortal(
           "mention" in each.chip
             ? (mentions?.chip(each.chip.mention) ?? `@${each.chip.mention.name}`)
-            : chip(each.chip),
+            : "quote" in each.chip
+              ? (quote?.(each.chip.quote) ?? each.chip.quote.words)
+              : chip(each.chip),
           each.element,
           each.key,
         ),

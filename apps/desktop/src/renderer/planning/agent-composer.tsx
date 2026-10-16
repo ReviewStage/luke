@@ -45,6 +45,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useMentionBox, usePlanMentions } from "./plan-mentions";
+import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
 import { MentionedServers } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
@@ -103,6 +104,16 @@ import { useKnownNames } from "./use-known-names";
  * cannot come says why under the card while the rest still come
  * (`attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
+ *
+ * Words selected in one of the agent's messages and answered with Reply
+ * are laid into the words as a quote block under the line the caret stands
+ * on, and the caret goes to a fresh line under it, so the developer answers
+ * there; Reply again without a word between stacks the quotes, and words
+ * between them answer point by point (`reply-to-selection.tsx`). A quote
+ * goes out as a Markdown blockquote set apart by a blank line. Note that
+ * a quote is part of the words like any other, and sends as they do,
+ * because the words cannot tell a Reply's quote from a `>` line the
+ * developer typed or pasted, and one of those alone is a message.
  *
  * Words can be spoken into the box as well: the microphone left of the
  * round button records in place of the foot's controls until ✓ or Enter sends the clip
@@ -257,6 +268,7 @@ export function AgentComposer({
   followsUp,
   keywords = [],
   skills,
+  replyDoor,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -286,6 +298,8 @@ export function AgentComposer({
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;
+  /** Where the box hands the transcript's Reply the door that lays a quote in at its caret; none where nothing replies. */
+  replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
@@ -367,6 +381,17 @@ export function AgentComposer({
             if (latest.current.note === note) latest.current.retry();
           });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
+
+  // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
+  useEffect(() => {
+    if (replyDoor === undefined) return undefined;
+    replyDoor.current = (words) => {
+      editor.current?.insertQuote(words);
+    };
+    return () => {
+      replyDoor.current = undefined;
+    };
+  }, [replyDoor]);
 
   const dictation = useDictation({ editor, keywords, onNote: setRefusal });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
@@ -566,6 +591,7 @@ export function AgentComposer({
           }}
           onTrigger={skillPicker.onTrigger}
           chip={skillPicker.chip}
+          quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
           mentions={
             planMentions === undefined
               ? undefined
