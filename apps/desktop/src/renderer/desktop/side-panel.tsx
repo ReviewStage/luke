@@ -1795,7 +1795,7 @@ export function SidePanel({
   const terminals = panel.terminals.filter((each) =>
     drawsTerminal(each, { taskAgents: agents.agentIds }),
   );
-  // A Browser tab stands while the experiment is on; turned off, it closes (below).
+  // A Browser tab stands while the experiment is on; turned off, it closes (`app.tsx`).
   const browsing = useExperiment(EXPERIMENT.BROWSER);
   const browsers = browsing ? panel.browsers : NO_BROWSERS;
   const browserPages = useBrowserPages(browsing);
@@ -1853,13 +1853,6 @@ export function SidePanel({
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
-
-  // A Browser tab left open as its experiment went off closes, its page with it.
-  const { onClose } = panel;
-  const strayBrowsers = browsing ? NO_BROWSERS : panel.browsers;
-  useEffect(() => {
-    for (const each of strayBrowsers) onClose(each.tab);
-  }, [strayBrowsers, onClose]);
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;

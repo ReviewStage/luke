@@ -51,8 +51,9 @@ const pageAt = (
   ...standing,
 });
 
-/** Main as the window's doors reach it: every act it was sent, what it answers, and its two events. */
-function main() {
+/** Main as the window's doors reach it: every act it was sent, what it answers, and its two events; a capture held until `release` while `holdCapture`. */
+function main(options: { holdCapture?: boolean } = {}) {
+  const held: (() => void)[] = [];
   const sent: Act[] = [];
   let tellPage: ((page: BrowserPage) => void) | undefined;
   let tellKey: ((key: BrowserKey) => void) | undefined;
@@ -70,7 +71,10 @@ function main() {
     luke: {
       act: (request: Act) => {
         sent.push(request);
-        return Promise.resolve(answer(request));
+        if (options.holdCapture !== true || request.kind !== ACT_KIND.BROWSER_CAPTURE) {
+          return Promise.resolve(answer(request));
+        }
+        return new Promise<ActOutcome>((resolve) => held.push(() => resolve(answer(request))));
       },
       onBrowserState: (listener: (page: BrowserPage) => void) => {
         tellPage = listener;
@@ -87,6 +91,10 @@ function main() {
     kinds: () => sent.map((request) => request.kind),
     says: (page: BrowserPage) => act(() => tellPage?.(page)),
     hands: (key: BrowserKey) => act(() => tellKey?.(key)),
+    release: () =>
+      act(async () => {
+        for (const resolve of held.splice(0)) resolve();
+      }),
   };
 }
 
@@ -137,9 +145,8 @@ function laidOut(element: Element, box: typeof BODY): void {
 }
 
 /** Mounts the tab as it stands open, answering what it draws and what it said of its page. */
-function mount(address: string | undefined) {
+function mount(address: string | undefined, browserId: string = crypto.randomUUID()) {
   const opened: string[] = [];
-  const browserId = crypto.randomUUID();
   const open: OpenBrowser = { tab: { browser: browserId }, task: "task", address };
   const container = document.createElement("div");
   document.body.append(container);
@@ -178,7 +185,11 @@ function mount(address: string | undefined) {
     assert.ok(found);
     return found;
   };
-  return { browserId, container, opened, field, go, press, body };
+  const unmount = () => {
+    act(() => root.unmount());
+    roots.splice(roots.indexOf(root), 1);
+  };
+  return { browserId, container, opened, field, go, press, body, unmount };
 }
 
 test("a blank tab asks for an address, and opens a dev server on the Mac over plain http", async () => {
@@ -334,5 +345,58 @@ test("a menu drawn from inside the window's root over the body gives way to a st
   assert.deepEqual(doors.sent.at(-1), {
     kind: ACT_KIND.BROWSER_PLACE,
     payload: { browserId: tab.browserId, bounds: BODY },
+  });
+});
+
+test("a thin menu crossing the body's edge between the hit test's points gives way to a still too", async () => {
+  const doors = main();
+  const clock = frames();
+  const tab = mount("https://example.com/");
+  await act(async () => undefined);
+  laidOut(tab.body(), BODY);
+  hitTest(tab.body);
+  await clock.run(3);
+
+  // A menu 25 pixels tall, standing over the body's top 20 pixels, where no point is tested.
+  const menu = document.createElement("div");
+  menu.setAttribute("role", "menu");
+  tab.container.append(menu);
+  laidOut(menu, { x: 700, y: 60, width: 200, height: 25 });
+  await clock.run(3);
+
+  assert.deepEqual(doors.sent.at(-1), {
+    kind: ACT_KIND.BROWSER_PLACE,
+    payload: { browserId: tab.browserId, bounds: null },
+  });
+});
+
+test("a still caught as the tab was left never hides the page once the tab is drawn again", async () => {
+  const doors = main({ holdCapture: true });
+  const clock = frames();
+  const first = mount("https://example.com/");
+  await act(async () => undefined);
+  laidOut(first.body(), BODY);
+  hitTest(first.body);
+  await clock.run(3);
+  const menu = document.createElement("div");
+  document.body.append(menu);
+  laidOut(menu, { x: 900, y: 100, width: 200, height: 160 });
+  await clock.run(1);
+  assert.equal(doors.kinds().at(-1), ACT_KIND.BROWSER_CAPTURE, "a still is being caught");
+
+  // The tab left while its still is caught, and drawn again, the menu gone.
+  first.unmount();
+  menu.remove();
+  const again = mount("https://example.com/", first.browserId);
+  await act(async () => undefined);
+  laidOut(again.body(), BODY);
+  hitTest(again.body);
+  await clock.run(3);
+  await doors.release();
+  await clock.run(3);
+
+  assert.deepEqual(doors.sent.at(-1), {
+    kind: ACT_KIND.BROWSER_PLACE,
+    payload: { browserId: first.browserId, bounds: BODY },
   });
 });

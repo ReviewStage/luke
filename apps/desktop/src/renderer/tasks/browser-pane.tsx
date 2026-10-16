@@ -54,7 +54,24 @@ import type { OpenBrowser } from "./use-side-panel";
  * pane's: the address, and a reload.
  */
 
-/** How many points a side the body is hit-tested at each frame, for a layer drawn over it from inside the window's root. */
+/**
+ * The layers drawn from inside the window's root that may stand over the
+ * body, by their role or their kind: a menu, a list it offers, a dialog, a
+ * tooltip, a popover, and the floating call card. Their boxes are read
+ * whole, so a thin one crossing the body's edge is found as surely as a
+ * large one.
+ */
+const IN_ROOT_LAYERS = [
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[role="tooltip"]',
+  ".anchored-popover",
+  '.call-card[data-surface="floating"]',
+].join(", ");
+
+/** How many points a side the body is hit-tested at each frame, for any other layer drawn over it from inside the window's root. */
 const PROBES = 8;
 
 /** Less than this, in square CSS pixels, covers nothing: a visually hidden region's one pixel. */
@@ -122,17 +139,22 @@ function overlaps(layer: DOMRect, body: DOMRect): boolean {
 
 /**
  * Whether any layer stands over the body: a portal drawn over
- * `document.body`, a tooltip or a dialog, wherever its box meets the body's,
- * since some take no pointer; or, at any of a grid of points over the body,
- * anything drawn above it from inside the window's root, a menu or a
- * floating card, which the hit test finds topmost there.
+ * `document.body`, or a menu, dialog, tooltip, popover, or floating card
+ * drawn from inside the window's root (`IN_ROOT_LAYERS`), wherever its box
+ * meets the body's, since some take no pointer; or, at any of a grid of
+ * points over the body, anything else drawn above it, which the hit test
+ * finds topmost there.
  */
 function coveredAt(element: Element, body: DOMRect): boolean {
   const root = document.getElementById("root");
   const portals = [...document.body.children].filter(
     (each) => each !== root && each.tagName !== "SCRIPT",
   );
-  if (portals.some((each) => overlaps(each.getBoundingClientRect(), body))) return true;
+  const layers = [...document.querySelectorAll(IN_ROOT_LAYERS)].filter(
+    (each) => !element.contains(each),
+  );
+  const boxes = [...portals, ...layers].map((each) => each.getBoundingClientRect());
+  if (boxes.some((box) => overlaps(box, body))) return true;
   for (let row = 0; row < PROBES; row += 1) {
     for (let column = 0; column < PROBES; column += 1) {
       const x = body.left + ((column + 0.5) * body.width) / PROBES;
@@ -181,6 +203,11 @@ function useViewPlacing(
   useEffect(() => {
     if (!wanted) return;
     let frame = 0;
+    // The frame the view goes out of sight on, once its still is painted.
+    let hiding = 0;
+    // Note that a capture answering after the effect ended changes nothing,
+    // because a newer effect may have laid the same view over its body since.
+    let ended = false;
     let last: DOMRect | undefined;
     let settled = 0;
     let live = false;
@@ -207,19 +234,22 @@ function useViewPlacing(
       void act(ACT_KIND.BROWSER_CAPTURE, { browserId })
         .catch(() => null)
         .then((caught) => {
+          if (ended) return;
           if (caught !== null) setStill(caught);
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
+          hiding = requestAnimationFrame(() => {
+            hiding = requestAnimationFrame(() => {
               tell(ACT_KIND.BROWSER_PLACE, { browserId, bounds: null });
               leaving = false;
               settled = 0;
-            }),
-          );
+            });
+          });
         });
     };
     frame = requestAnimationFrame(step);
     return () => {
+      ended = true;
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(hiding);
       tell(ACT_KIND.BROWSER_PLACE, { browserId, bounds: null });
     };
   }, [browserId, body, wanted, act, tell]);

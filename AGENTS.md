@@ -67,7 +67,8 @@ the check names. A component is placed by review under the same rule.
   title, and a still of it go only to the panel that opened the tab, from its
   view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
   trace, a counted event, a fixture, app state, the service, or the voice
-  window, and the still is left out of the screen recording.
+  window; the still is left out of the screen recording, and the title and
+  address the tab draws are masked there as every word is.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

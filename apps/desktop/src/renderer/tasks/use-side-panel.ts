@@ -573,6 +573,8 @@ export interface SidePanelControl {
   onResize: (width: number) => void;
   /** Opens a Browser tab on the open plan, chosen at the strip's end, on the address given or on none, which its bar asks for. */
   onOpenBrowser: (address?: string) => void;
+  /** Closes every Browser tab on every plan, their pages with them, as the Browser tab experiment going off does. */
+  onCloseBrowsers: () => void;
   /** Says the Browser tab's page was opened at the address, which the tab opens its view on when it is drawn again; one opened already keeps its first. */
   onBrowserOpened: (browserId: string, address: string) => void;
 }
@@ -1718,6 +1720,20 @@ export function useSidePanel(
     },
     [update, drawn, taskId],
   );
+  // Note that a Browser tab chosen goes too, and the plan shows its first tab in its place.
+  const onCloseBrowsers = useCallback(
+    () =>
+      update((held) =>
+        held.browsers.length === 0
+          ? held
+          : {
+              ...held,
+              browsers: [],
+              tab: held.tab !== undefined && isBrowserTab(held.tab) ? undefined : held.tab,
+            },
+      ),
+    [update],
+  );
   const onBrowserOpened = useCallback(
     (browserId: string, address: string) =>
       update((held) => {
@@ -1772,6 +1788,7 @@ export function useSidePanel(
     onFoldNote,
     onResize,
     onOpenBrowser,
+    onCloseBrowsers,
     onBrowserOpened,
   };
 }

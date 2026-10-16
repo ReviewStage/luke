@@ -305,3 +305,30 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
   assert.deepEqual(second.control().browsers, []);
   Reflect.deleteProperty(window, "luke");
 });
+
+test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
+  const sent: Act[] = [];
+  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
+  Object.assign(window, {
+    luke: { act: (request: Act) => Promise.resolve(void sent.push(request)) },
+  });
+  const panel = launch({ task: TASK, taskAgents: [] });
+  act(() => panel.control().onOpenBrowser("http://localhost:3000/"));
+  const here = panel.control().browsers[0];
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  act(() => panel.control().onOpenBrowser("https://example.com/"));
+  const there = panel.control().browsers[0];
+  assert.ok(here !== undefined && there !== undefined);
+
+  act(() => panel.control().onCloseBrowsers());
+
+  assert.deepEqual(panel.control().browsers, []);
+  assert.ok(panel.control().tab === undefined || !("browser" in Object(panel.control().tab)));
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().browsers, []);
+  assert.deepEqual(
+    sent.map((request) => ("payload" in request ? request.payload : undefined)),
+    [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
+  );
+  Reflect.deleteProperty(window, "luke");
+});

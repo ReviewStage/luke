@@ -221,6 +221,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onFoldNote: ignore,
       onResize: ignore,
       onOpenBrowser: ignore,
+      onCloseBrowsers: ignore,
       onBrowserOpened: ignore,
     },
     unreadTabs: [],

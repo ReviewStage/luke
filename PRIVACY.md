@@ -776,8 +776,10 @@ clicked.
 web page you choose, your own `localhost` included, in a view of its own on
 your Mac. Luke does not see, store, log, or count the page, its address, or
 its title; they reach only the panel that opened the tab, and none of it
-reaches a trace, a counted event, our service, or the screen recording, which
-cannot see into the view. The pages keep their own cookies and storage on your
+reaches a trace, a counted event, or our service. The screen recording cannot
+see into the page's view, and leaves out the still of the page Luke draws while
+a menu covers it; the tab's title and address appear there as blocks, as every
+word does. The pages keep their own cookies and storage on your
 Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
 launches. Every permission a page asks for, such as the camera, microphone, or
 location, is refused, and downloads are cancelled.

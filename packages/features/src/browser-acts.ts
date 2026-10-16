@@ -24,9 +24,14 @@ const BROWSER_SCHEMES: ReadonlySet<string> = new Set(["http:", "https:"]);
 /** An address that names its own scheme, `name://`, which a typed line is taken at its word on. */
 const NAMED_SCHEME = /^[a-z][a-z\d+.-]*:\/\//iu;
 
-/** A typed line that is a host, with a port or a path or neither: no space, and a dot, `localhost`, or a bracketed IPv6. */
+/**
+ * A typed line that is a host, with a port or a path or neither: dotted
+ * labels, `localhost`, or a bracketed IPv6, and no space. Note that a label
+ * holds no dot, so the pattern reads a line one way only and never backtracks
+ * over it.
+ */
 const HOST_LIKE =
-  /^(?:localhost|\[[\da-f:]+\]|[^\s/:?#]+\.[^\s/:?#]+)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
+  /^(?:localhost|\[[\da-f:]+\]|[^\s/:?#.]+(?:\.[^\s/:?#.]+)+)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
 
 /** Hosts served on the Mac or its own network, which are opened over plain http, as a dev server serves them. */
 const LOCAL_HOST =
@@ -68,7 +73,8 @@ function hostAddress(line: string): string | undefined {
  */
 export function browserAddressOf(typed: string): string | undefined {
   const line = typed.trim();
-  if (line.length === 0) return undefined;
+  // Note that a line too long to open is refused before any pattern reads it.
+  if (line.length === 0 || line.length > BROWSER_ADDRESS_MAX_CHARS) return undefined;
   if (NAMED_SCHEME.test(line)) return isBrowserAddress(line) ? new URL(line).href : undefined;
   if (HOST_LIKE.test(line)) return hostAddress(line);
   const search = `${SEARCH}${encodeURIComponent(line)}`;
