@@ -3,6 +3,7 @@ import {
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
+  HostedIssueClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
@@ -29,6 +30,7 @@ import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
+import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeSettings } from "./compose-settings.js";
@@ -58,6 +60,7 @@ const HOST_CONCERN = {
   TASKS: "planning",
   CODING_AGENTS: "codingAgents",
   AUTOMATIONS: "automations",
+  ISSUES: "issues",
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
   TERMINALS: "terminals",
@@ -76,6 +79,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
+  HOST_CONCERN.ISSUES,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
@@ -169,6 +173,14 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
+    const issues = yield* composeIssues({
+      kernel,
+      account,
+      client: new HostedIssueClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     const integrations = yield* composeIntegrations({
       kernel,
       account,
@@ -253,6 +265,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
+      [HOST_CONCERN.ISSUES]: issues,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.TERMINALS]: terminals,
