@@ -48,11 +48,14 @@ function heldWords(message: ChatAnswer["messages"][number]): string {
 
 /** A chat notice's card: the sender, the channel, the place, and when, then the message; Open in Chat where the window holds the chat. */
 export function ChatNoticeCard({
+  messageId,
   notice,
   words,
   doors,
   now,
 }: {
+  /** The transcript line the notice wrote, which a link to it finds the card by. */
+  messageId: string;
   notice: ChatNoticeMetadata;
   /** The notice's own words, drawn where the chat the window holds does not carry the message. */
   words: string;
@@ -78,7 +81,12 @@ export function ChatNoticeCard({
   const fromChat = held === undefined ? "" : heldWords(held);
   const shownWords = fromChat === "" ? words : fromChat;
   return (
-    <section className="chat-notice" data-chat-notice="" data-author={notice.author}>
+    <section
+      className="chat-notice"
+      data-chat-notice=""
+      data-author={notice.author}
+      data-message-id={messageId}
+    >
       <header className="chat-notice-head">
         {who === undefined ? null : <MemberMark who={who} small />}
         <span className="chat-notice-from">@{notice.from}</span>

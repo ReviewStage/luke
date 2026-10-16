@@ -674,6 +674,7 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   const { container, opened } = noticeDrawn(true);
   const card = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(card, "the notice draws as a card");
+  assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
   assert.equal(container.querySelector(".is-user"), null);
   assert.equal(card.querySelector(".chat-notice-from")?.textContent, "@agent-2");
   assert.match(

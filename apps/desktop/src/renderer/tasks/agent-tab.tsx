@@ -317,7 +317,15 @@ function NoticeRow({
   const now = useMinute();
   const notice = chatNoticeOf(message);
   if (notice === undefined) return null;
-  return <ChatNoticeCard notice={notice} words={messageWords(message)} doors={doors} now={now} />;
+  return (
+    <ChatNoticeCard
+      messageId={message.id}
+      notice={notice}
+      words={messageWords(message)}
+      doors={doors}
+      now={now}
+    />
+  );
 }
 
 /**

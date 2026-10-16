@@ -23,6 +23,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
@@ -2204,4 +2205,17 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
   await settle();
   assert.equal(live.control().chatView.open, false);
   assert.equal(live.control().chatView.chat, undefined);
+});
+
+test("opening Chat on a place, as a chat notice's Open in Chat does, asks first while a page stands its ask, as every other way out does", () => {
+  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+  act(() => tab.control().chatView.onShow(FOR_YOU));
+  assert.equal(tab.control().chatView.open, false, "nothing is left before Leave");
+  assert.equal(asked.length, 1);
+  act(() => asked[0]?.());
+  assert.equal(tab.control().chatView.open, true);
 });

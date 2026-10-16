@@ -2578,10 +2578,10 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
         ),
-      onShow: (place) => {
+      onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.CHAT, place });
-      },
+      }),
       onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
       onAnswer: (answer) =>
         stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
