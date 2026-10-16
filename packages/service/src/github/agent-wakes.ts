@@ -70,8 +70,8 @@ type AgentWakeKind = (typeof AGENT_WAKE)[keyof typeof AGENT_WAKE];
 export interface AgentWake {
   readonly kind: AgentWakeKind;
   readonly repository: string;
-  /** The branch the agents stand on, where the delivery names it; a comment's names only its pull request. */
-  readonly branch: string | undefined;
+  /** The branches the agents stand on, where the delivery names them; a comment's names only its pull request. */
+  readonly branches: readonly string[];
   readonly pullRequest: number | undefined;
   /** The page of the review, the comment, or the failed commit's checks. */
   readonly url: string;
@@ -196,7 +196,7 @@ function reviewWake(payload: UnparsedWireValue, now: number): AgentWake | undefi
   return {
     kind: AGENT_WAKE.REVIEW,
     repository: repository.full_name,
-    branch: pullRequest.head.ref,
+    branches: [pullRequest.head.ref],
     pullRequest: pullRequest.number,
     url: review.html_url,
     by: sender.login,
@@ -219,7 +219,7 @@ function commentWake(payload: UnparsedWireValue, now: number): AgentWake | undef
   return {
     kind: AGENT_WAKE.COMMENT,
     repository: repository.full_name,
-    branch: undefined,
+    branches: [],
     pullRequest: issue.number,
     url: comment.html_url,
     by: sender.login,
@@ -244,7 +244,7 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
   return {
     kind: AGENT_WAKE.CHECK_FAILED,
     repository: repository.full_name,
-    branch,
+    branches: [branch],
     pullRequest: suite.pull_requests[0]?.number,
     // The failed commit's checks by its address, so the agent reads the revision that failed even after the branch moves on.
     url: `${repository.html_url}/commit/${suite.head_sha}/checks`,
@@ -253,17 +253,19 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
   };
 }
 
-/** A commit status that failed on an agent's branch, told as a failed check is: by who set it, on the failed commit's checks. */
+/** A commit status that failed on agents' branches, every `luke/` branch at the commit, told as a failed check is: by who set it, on the failed commit's checks. */
 function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
   const read = readDelivery(StatusDeliverySchema, payload);
   if (Result.isFailure(read) || !FAILED_STATES.has(read.success.state)) return undefined;
   const { repository, sender, sha, branches } = read.success;
-  const branch = branches.find((each) => each.name.startsWith(AGENT_BRANCH_PREFIX))?.name;
-  if (branch === undefined) return undefined;
+  const agentBranches = branches
+    .map((each) => each.name)
+    .filter((name) => name.startsWith(AGENT_BRANCH_PREFIX));
+  if (agentBranches.length === 0) return undefined;
   return {
     kind: AGENT_WAKE.CHECK_FAILED,
     repository: repository.full_name,
-    branch,
+    branches: agentBranches,
     pullRequest: undefined,
     url: `${repository.html_url}/commit/${sha}/checks`,
     by: sender.login,
@@ -298,8 +300,8 @@ function pullRequestWords(wake: AgentWake): string {
     : `your pull request #${wake.pullRequest}`;
 }
 
-/** The message the agent is told, which is also the line its transcript draws as GitHub's. */
-function agentWakeText(wake: AgentWake): string {
+/** The message the agent on `branch` is told, which is also the line its transcript draws as GitHub's. */
+function agentWakeText(wake: AgentWake, branch: string | null): string {
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
       const verdict = VERDICT_WORDS.get(wake.verdict ?? "") ?? REVIEWED;
@@ -308,7 +310,7 @@ function agentWakeText(wake: AgentWake): string {
     case AGENT_WAKE.COMMENT:
       return `@${wake.by} commented on ${pullRequestWords(wake)}: ${wake.url}\n\nRead the comment with \`gh\`, and act on it as you judge best.`;
     case AGENT_WAKE.CHECK_FAILED:
-      return `A check failed on your branch \`${wake.branch ?? ""}\`: ${wake.url}\n\nRead why with \`gh\`, fix the cause, and push, as you watch your own checks.`;
+      return `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}\n\nRead why with \`gh\`, fix the cause, and push, as you watch your own checks.`;
   }
 }
 
@@ -336,10 +338,10 @@ export function agentIsWoken(
   return !atWork && (settledAt === undefined || settledAt < wake.at);
 }
 
-/** The agents a delivery is about: those on its branch, or, for a comment, those whose pull request it is. */
+/** The agents a delivery is about: those on its branches, or, for a comment, those whose pull request it is. */
 function agentsOf(wake: AgentWake) {
-  if (wake.branch !== undefined) {
-    return listCodingAgentsOnBranches(wake.repository, [wake.branch], MAXIMUM_AGENTS_PER_WAKE);
+  if (wake.branches.length > 0) {
+    return listCodingAgentsOnBranches(wake.repository, wake.branches, MAXIMUM_AGENTS_PER_WAKE);
   }
   if (wake.pullRequest === undefined) return Effect.succeed<readonly OwnedCodingAgent[]>([]);
   return listCodingAgentsOnPullRequest(wake.repository, wake.pullRequest, MAXIMUM_AGENTS_PER_WAKE);
@@ -370,7 +372,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
         yield* steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
-          text: agentWakeText(wake),
+          text: agentWakeText(wake, agent.branch),
           clientKey: deliveryId,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
         });

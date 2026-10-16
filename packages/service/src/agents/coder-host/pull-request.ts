@@ -20,6 +20,7 @@ import {
 } from "../../github/github-app.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { agentRepositoryToken, type CheckoutServices } from "./checkout.js";
+import { agentPublished } from "./published.js";
 
 /**
  * pull-request.ts -- the coding agent's `open_pull_request` tool: its pull request opened by the service, as the developer it writes as, or as the App.
@@ -43,11 +44,10 @@ import { agentRepositoryToken, type CheckoutServices } from "./checkout.js";
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
  * to read and opens nothing. Every description ends on the line saying Luke
- * made it, since its author may be a person. The branch the pull request is
- * opened from is written on the agent's row before GitHub is asked, rather
- * than only as the turn ends, so GitHub's delivery about the opening finds
- * the agent and reads its pull request onto the row, where a comment on it
- * is looked up by (`github/agent-wakes.ts`).
+ * made it, since its author may be a person. Once GitHub opens it, its
+ * branch and the pull request are written on the agent's row at once rather
+ * than only as the turn ends, so a comment on it finds the agent
+ * (`github/agent-wakes.ts`); a refused call moves nothing.
  */
 
 /** GitHub's own bounds on what a pull request carries. */
@@ -308,12 +308,12 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
 }
 
 /**
- * Runs one call: the pull request opened as the developer where the agent
- * writes as them and GitHub takes their token, and as the App otherwise,
- * the App's opening in the developer's place recorded on the agent's row
- * with why; or GitHub's reason it opened none.
+ * One call's opening: the pull request opened as the developer where the
+ * agent writes as them and GitHub takes their token, and as the App
+ * otherwise, the App's opening in the developer's place recorded on the
+ * agent's row with why; or GitHub's reason it opened none.
  */
-export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
+const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
   agent: CodingAgent,
   input: UnparsedWireValue,
@@ -324,14 +324,6 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
   if (Result.isFailure(minted)) return pullRequestRejected(`Not opened: ${minted.failure.reason}`);
   const { token: appToken, fullName, defaultBranch } = minted.success;
   const pullRequest = pullRequestOf(read.success, defaultBranch);
-  // The branch stands on the row before GitHub is asked, so its delivery about the opening finds the agent mid-turn.
-  yield* updateCodingAgentBranch(target.userId, agent.id, pullRequest.head).pipe(
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `The branch of conversation ${target.conversationId}'s pull request was not recorded: ${failure._tag}`,
-      ),
-    ),
-  );
   const asDeveloper = yield* attemptAsDeveloper(target, agent, fullName, pullRequest);
   if (asDeveloper !== undefined && asDeveloper.kind !== ATTEMPT.TOKEN_REFUSED) {
     return answerOf(asDeveloper, OPENED_AS.DEVELOPER);
@@ -351,4 +343,41 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
     ),
   );
   return answerOf(asApp, OPENED_AS.APP, FALLBACK_NOTE[asDeveloper.reason]);
+});
+
+/**
+ * What an opening GitHub took leaves on the agent's row: the branch it was
+ * opened from, and the pull request read back from GitHub onto the row, as
+ * a turn's end and a delivery about the branch would, so a comment on it
+ * finds the agent at once. Either failing is logged by its kind and the
+ * call still answers as opened.
+ */
+const recordOpened = (target: ConversationTarget, agent: CodingAgent, head: string) =>
+  Effect.gen(function* () {
+    yield* updateCodingAgentBranch(target.userId, agent.id, head);
+    yield* agentPublished(target.userId, { ...agent, branch: head });
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `Conversation ${target.conversationId}'s opened pull request was not recorded on its agent: ${failure._tag}`,
+      ),
+    ),
+  );
+
+/**
+ * Runs one call: the opening above, and where GitHub opened it, its branch
+ * and pull request recorded on the agent. A refused call leaves the row as
+ * it stood, the branch and pull request the agent already had among it.
+ */
+export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
+  target: ConversationTarget,
+  agent: CodingAgent,
+  input: UnparsedWireValue,
+): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
+  const result = yield* attemptOpening(target, agent, input);
+  const read = readInput(input);
+  if (result.status === ACTION_RESULT_STATUS.ACCEPTED && Result.isSuccess(read)) {
+    yield* recordOpened(target, agent, read.success.head);
+  }
+  return result;
 });

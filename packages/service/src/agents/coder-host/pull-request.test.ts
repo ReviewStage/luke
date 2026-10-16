@@ -5,6 +5,7 @@ import {
   createCodingAgent,
   readCodingAgent,
   settleCodingAgentAuthor,
+  updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -200,10 +201,12 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
   );
 
   it.effect(
-    "GitHub refusing the pull request itself opens nothing and moves nothing, and a call without a title is refused before GitHub hears of it",
+    "GitHub refusing the pull request itself opens nothing and moves nothing, the agent's branch among it, and a call without a title is refused before GitHub hears of it",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent(26, CODING_AGENT_AUTHOR.DEVELOPER);
+        // The agent already stands on a branch of its own, with its pull request from it.
+        yield* updateCodingAgentBranch(agent.target.userId, agent.agent.id, "luke/ready");
         const exists = () =>
           Response.json(
             {
@@ -225,6 +228,11 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
         });
         assert.equal(refused.openings.length, 1, "the App does not try in the developer's place");
         assert.equal(refused.author, CODING_AGENT_AUTHOR.DEVELOPER);
+        assert.equal(
+          refused.branch,
+          "luke/ready",
+          "a refused call leaves the agent's branch as it stood",
+        );
         assert.equal(untitled.result.status, ACTION_RESULT_STATUS.REJECTED);
         assert.deepEqual(untitled.openings, []);
       }),

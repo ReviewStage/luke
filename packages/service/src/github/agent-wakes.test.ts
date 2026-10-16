@@ -173,7 +173,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     {
       kind: AGENT_WAKE.REVIEW,
       repository: RELAY_FULL_NAME,
-      branch: ref,
+      branches: [ref],
       pullRequest: 41,
       url: `https://github.com/${RELAY_FULL_NAME}/pull/41#pullrequestreview-9`,
       by: "octocat",
@@ -195,7 +195,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
   assert.deepEqual(agentWakeOf("issue_comment", unparsedWire(comment(true)), 0), {
     kind: AGENT_WAKE.COMMENT,
     repository: RELAY_FULL_NAME,
-    branch: undefined,
+    branches: [],
     pullRequest: 41,
     url: `https://github.com/${RELAY_FULL_NAME}/pull/41#issuecomment-7`,
     by: "octocat",
@@ -216,7 +216,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
   assert.deepEqual(agentWakeOf("check_suite", unparsedWire(suite(ref, "failure")), 0), {
     kind: AGENT_WAKE.CHECK_FAILED,
     repository: RELAY_FULL_NAME,
-    branch: ref,
+    branches: [ref],
     pullRequest: 41,
     url: `https://github.com/${RELAY_FULL_NAME}/commit/0123abcd/checks`,
     by: "github-actions[bot]",
@@ -229,13 +229,13 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     updated_at: new Date(MADE_AT).toISOString(),
     repository,
     sender: { login: "buildkite[bot]", type: "Bot" },
-    branches: [{ name: "main" }, { name: branch }],
+    branches: [{ name: "main" }, { name: branch }, { name: "luke/another-agent" }],
     description: "Never read.",
   });
   assert.deepEqual(agentWakeOf("status", unparsedWire(status(ref, "failure")), 0), {
     kind: AGENT_WAKE.CHECK_FAILED,
     repository: RELAY_FULL_NAME,
-    branch: ref,
+    branches: [ref, "luke/another-agent"],
     pullRequest: undefined,
     url: `https://github.com/${RELAY_FULL_NAME}/commit/4567cdef/checks`,
     by: "buildkite[bot]",
@@ -250,7 +250,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     ["check_suite", suite(ref, "success")],
     ["check_suite", suite("main", "failure")],
     ["status", status(ref, "pending")],
-    ["status", status("release", "error")],
+    ["status", { ...status("release", "error"), branches: [{ name: "release" }] }],
   ] as const) {
     assert.equal(agentWakeOf(event, unparsedWire(payload), 0), undefined, event);
   }
@@ -260,7 +260,7 @@ test("a person's review reaches an agent at work or not, Luke's App's only an ag
   const review = (by: string): AgentWake => ({
     kind: AGENT_WAKE.REVIEW,
     repository: RELAY_FULL_NAME,
-    branch: "luke/invites",
+    branches: ["luke/invites"],
     pullRequest: 41,
     url: "https://github.com/Acme/Relay/pull/41#pullrequestreview-9",
     by,
