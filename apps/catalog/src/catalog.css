@@ -207,3 +207,28 @@ body {
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
 }
+
+/* A sample block standing for an item an arrangement holds; a long one
+   gives way rather than overflowing, as a real label does. */
+.catalog-swatch {
+  overflow: hidden;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A dashed outline that shows the room an arrangement is given. */
+.catalog-frame {
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-frame-wide {
+  width: 160px;
+}

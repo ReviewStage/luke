@@ -17,8 +17,8 @@ import { changesPeople } from "./github-people.js";
 /**
  * Who an agent's pull request names, as its changes carry them, read off a
  * scripted GitHub over a real dialect: GitHub's accounts by login and
- * avatar, a reviewer by where they stand, Luke's own bot and another App's
- * told apart, and a teammate named by their Luke account only while they
+ * avatar, a reviewer by where they stand, Luke's own App's bot an App's bot
+ * like any other, and a teammate named by their Luke account only while they
  * are a member of the agent's workspace. Synthetic accounts throughout.
  */
 
@@ -128,7 +128,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           login: LUKE.login,
           bot: true,
           avatarUrl: LUKE.avatar_url,
-          luke: true,
         };
         const asCharles = {
           login: CHARLES.login,
@@ -297,7 +296,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         assert.deepEqual(people.author, asCharles);
         assert.deepEqual(people.commitAuthors, [
           asCharles,
-          { login: LUKE.login, bot: true, luke: true },
+          { login: LUKE.login, bot: true },
           {
             login: PAIR.login,
             bot: false,

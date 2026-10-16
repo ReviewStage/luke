@@ -1,5 +1,6 @@
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
+import { emulateReducedMotion } from "./src/testing/browser-commands.js";
 
 /**
  * vitest.browser.config.ts -- the package's second project: a shared
@@ -22,6 +23,7 @@ export default defineConfig({
       provider: playwright(),
       instances: [{ browser: "chromium" }],
       viewport: { width: 1280, height: 840 },
+      commands: { emulateReducedMotion },
     },
   },
 });

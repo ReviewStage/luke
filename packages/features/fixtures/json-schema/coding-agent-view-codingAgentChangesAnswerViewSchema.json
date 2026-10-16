@@ -99,9 +99,6 @@
                     "bot": {
                       "type": "boolean"
                     },
-                    "luke": {
-                      "type": "boolean"
-                    },
                     "userId": {
                       "type": "string"
                     }
@@ -137,9 +134,6 @@
                             "type": "string"
                           },
                           "bot": {
-                            "type": "boolean"
-                          },
-                          "luke": {
                             "type": "boolean"
                           },
                           "userId": {
@@ -185,9 +179,6 @@
                       "bot": {
                         "type": "boolean"
                       },
-                      "luke": {
-                        "type": "boolean"
-                      },
                       "userId": {
                         "type": "string"
                       }
@@ -215,9 +206,6 @@
                             "type": "string"
                           },
                           "bot": {
-                            "type": "boolean"
-                          },
-                          "luke": {
                             "type": "boolean"
                           },
                           "userId": {

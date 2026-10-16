@@ -501,28 +501,23 @@ export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
 
 /**
  * Where someone a pull request names on GitHub is drawn: the workspace's
- * members as read and the reader's id, which name a teammate, and the agent
- * whose pull request it is, where the window knows it.
+ * members as read and the reader's id, which name a teammate.
  */
 export interface GitHubPlace {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
   /** Who the workspace's work names but left, whose pictures a linked login who left keeps. */
   readonly former?: readonly FormerMember[] | undefined;
-  readonly agent: Actor | undefined;
 }
 
 /**
- * Someone a pull request names on GitHub, as the window draws them. Luke's
- * own App's bot is the agent whose pull request it is, where the window
- * knows it, since that agent's commits and pull request are the bot's,
- * else Luke. A GitHub account linked to a member is that member, by the
- * name the members read gives them, or the login while it is unread.
- * Anyone else is themself on GitHub: a person's circle, or an App's
- * bot's square.
+ * Someone a pull request names on GitHub, as the window draws them. A
+ * GitHub account linked to a member is that member, by the name the
+ * members read gives them, or the login while it is unread. Anyone else is
+ * themself on GitHub: a person's circle, or an App's bot's square, Luke's
+ * own App's bot among them.
  */
 export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
-  if (person.luke === true) return place.agent ?? LUKE_ACTOR;
   if (person.userId !== undefined) {
     const member = place.members?.find((each) => each.userId === person.userId);
     const ref = { userId: person.userId, name: member?.name ?? person.login };

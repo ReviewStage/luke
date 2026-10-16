@@ -52,5 +52,6 @@ test("a page is drawn at the profile and theme it is mounted at, in the shared t
 
 test("the accessibility check names a field nothing labels", async () => {
   const { container } = await mount(createElement("input", { type: "text" }));
-  expect(await accessibilityViolations(container)).toContain("label");
+  const violations = await accessibilityViolations(container);
+  expect(violations.some((violation) => violation.startsWith("label "))).toBe(true);
 });

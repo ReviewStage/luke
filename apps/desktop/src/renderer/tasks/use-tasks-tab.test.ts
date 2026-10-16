@@ -23,6 +23,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
@@ -681,6 +682,64 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.deepEqual(panel().strip, strip);
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
   assert.equal(tab.control().onReopenClosedTab, undefined);
+});
+
+test("the plan's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+  const listed = {
+    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+  };
+  const tab = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const column = () => tab.control().mainTabs;
+  const agent = { agent: AGENT_ID };
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent]);
+
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [agent]);
+  assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
+  act(() => tab.control().onReopenClosedTab?.());
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent], "⇧⌘T opens it first again");
+  assert.equal(column().tab, MAIN_TAB.PLAN);
+  act(() => column().onClose(MAIN_TAB.PLAN));
+
+  const launched = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const again = () => launched.control().mainTabs;
+  assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
+
+  act(() => again().onClose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN]);
+  assert.equal(again().tab, MAIN_TAB.PLAN, "a column with no other tab is back on the plan");
+  act(() => again().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN], "alone, it does not close");
+  act(() => again().onChoose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN, agent], "it stays open beside a tab opened since");
+});
+
+test("a closed plan's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  const archived = { ...RUNNING_AGENT, archivedAt: 5 };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        listed = [archived];
+        return Promise.resolve({ agent: archived });
+      },
+    },
+  );
+  await settle();
+  const column = () => tab.control().mainTabs;
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+
+  await act(() => tab.control().agents.onArchive(AGENT_ID, true));
+  await settle();
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
+  act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
+  assert.equal(column().tabs[0], MAIN_TAB.PLAN, "the plan's tab stands beside the draft's");
+  assert.equal(column().tabs.length, 2);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -1711,7 +1770,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
@@ -2190,4 +2249,31 @@ test("a pin's place the service took follows the next list, even one a drag on a
   tab.stand({ tasks: listRead([{ ...pinned, pinPosition: "a2" }]) });
 
   assert.equal(position(), "a2");
+});
+
+test("a fixture run on the chat profile opens Chat at once and its staged chat lands there; a live run stages none", async () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.CHAT });
+  assert.equal(fixture.control().chatView.open, true);
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(fixture.control().chatView.chat, "the staged chat landed");
+  });
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  const live = mount({ shown: true });
+  await settle();
+  assert.equal(live.control().chatView.open, false);
+  assert.equal(live.control().chatView.chat, undefined);
+});
+
+test("opening Chat on a place, as a chat notice's Open in Chat does, asks first while a page stands its ask, as every other way out does", () => {
+  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+  act(() => tab.control().chatView.onShow(FOR_YOU));
+  assert.equal(tab.control().chatView.open, false, "nothing is left before Leave");
+  assert.equal(asked.length, 1);
+  act(() => asked[0]?.());
+  assert.equal(tab.control().chatView.open, true);
 });
