@@ -65,6 +65,8 @@ let sent: Act[] = [];
 let refuseRead = false;
 /** Whether a forget is answered with a failure rather than the memories. */
 let refuseForget = false;
+/** Where a forget is held unanswered until the test lets it go, rather than answered at once. */
+let holdForgets: ((answer: ActOutcome) => void)[] | undefined;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -81,6 +83,10 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(refuseRead ? unanswered : { memories: stored }));
     case ACT_KIND.MEMORIES_FORGET:
       if (refuseForget) return Promise.resolve(done(unanswered));
+      if (holdForgets !== undefined) {
+        const held = holdForgets;
+        return new Promise((resolve) => held.push(resolve));
+      }
       stored = stored.filter((memory) => memory.id !== request.payload.id);
       return Promise.resolve(done({ memories: stored }));
     default:
@@ -95,6 +101,7 @@ beforeEach(() => {
   sent = [];
   refuseRead = false;
   refuseForget = false;
+  holdForgets = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -117,28 +124,20 @@ async function mount(
   workspace: Workspace | undefined = ACME,
 ): Promise<{
   readonly page: HTMLElement;
-  readonly show: (next: Workspace) => Promise<void>;
+  readonly show: (next: Workspace, readerId?: string) => Promise<void>;
 }> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (shown: Workspace | undefined) =>
-    act(() =>
-      root.render(
-        createElement(MemorySection, {
-          signedIn,
-          workspace: shown,
-          readerId: signedIn ? READER : undefined,
-        }),
-      ),
-    );
-  draw(workspace);
+  const draw = (shown: Workspace | undefined, readerId: string | undefined) =>
+    act(() => root.render(createElement(MemorySection, { signedIn, workspace: shown, readerId })));
+  draw(workspace, signedIn ? READER : undefined);
   await settle();
   return {
     page: container,
-    show: async (next) => {
-      draw(next);
+    show: async (next, readerId = READER) => {
+      draw(next, readerId);
       await settle();
     },
   };
@@ -257,6 +256,34 @@ test("showing another workspace reads that workspace's memories in place of the 
   );
   assert.deepEqual(words(page), []);
   assert.match(page.textContent ?? "", /planning calls in Globex/u);
+});
+
+test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
+  holdForgets = [];
+  const { page, show } = await mount();
+  await forget(page, DEPLOYS);
+  stored = [];
+
+  await show(GLOBEX);
+  const release = holdForgets[0] ?? assert.fail("the forget was not sent");
+  release(done({ memories: [TESTS] }));
+  await settle();
+
+  assert.deepEqual(words(page), []);
+  assert.match(page.textContent ?? "", /planning calls in Globex/u);
+});
+
+test("another account signing in on the same workspace reads its memories again, as that reader may forget them", async () => {
+  const { show } = await mount();
+
+  await show(ACME, "user-dean");
+
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.MEMORIES_READ)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
+  );
 });
 
 test("a workspace Luke has remembered nothing in says so", async () => {

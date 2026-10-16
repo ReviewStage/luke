@@ -4,7 +4,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { TrashIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { dayText } from "../planning/plan-time";
 import { SpinnerRegion } from "../spinner";
@@ -127,9 +127,17 @@ export function MemorySection({
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [forgetting, setForgetting] = useState<string | undefined>(undefined);
+  // Note that every change of workspace or reader starts a new scope, because a forget still out
+  // from the one before answers that scope's list, which must never be drawn under this one.
+  const scope = useRef(0);
+
+  const workspaceId = workspace?.id;
+  useEffect(() => {
+    scope.current += 1;
+    setForgetting(undefined);
+  }, [signedIn, workspaceId, readerId]);
 
   // The page opening reads the memories as the service holds them now, which a call may just have added to.
-  const workspaceId = workspace?.id;
   useEffect(() => {
     if (!signedIn || workspaceId === undefined) return;
     let live = true;
@@ -149,7 +157,7 @@ export function MemorySection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, workspaceId, attempt]);
+  }, [act, signedIn, workspaceId, readerId, attempt]);
 
   const forget = useCallback(
     (id: string): Promise<ActionResult> => {
@@ -159,15 +167,20 @@ export function MemorySection({
           reason: PAGE_LINE.FORGET_FAILED,
         });
       }
+      const asked = scope.current;
       setForgetting(id);
       return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
-          setForgetting(undefined);
           if (answer === undefined || "failure" in answer) {
+            if (asked === scope.current) setForgetting(undefined);
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED };
           }
-          setMemories(answer.memories);
+          // A forget answered after the page moved on to another workspace or reader draws nothing.
+          if (asked === scope.current) {
+            setForgetting(undefined);
+            setMemories(answer.memories);
+          }
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
