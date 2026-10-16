@@ -4421,11 +4421,12 @@ body:has(.app-stage[data-capture="true"])
    over what fires it, its owner, when it runs next in the tertiary ink, a
    failure's mark, and its switch, divided by the card's hairlines. */
 .automation-row {
+  position: relative;
   display: flex;
   min-height: 52px; /* off-scale */
   align-items: center;
   gap: var(--space-12);
-  padding: var(--space-8) var(--space-16);
+  padding-right: var(--space-16);
 }
 
 .automation-row-copy {
@@ -4490,28 +4491,59 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
-/* A row's name and schedule are its press, which opens its page; the owner,
-   the next run, and the switch beside them are not, so the switch stays a
+/* A row is its press, which opens its page, from its edge to its switch, as
+   a sidebar task's row is: the owner, the next run, and the failure's mark
+   stand in it, and the switch stands beside it, so the switch stays a
    switch. */
 .automation-row-open {
   display: flex;
   min-width: 0;
   flex: 1;
+  align-self: stretch;
   align-items: center;
   gap: var(--space-12);
-  margin: calc(-1 * var(--space-8)) 0;
-  padding: var(--space-8) 0;
+  padding: var(--space-8) 0 var(--space-8) var(--space-16);
+  border-radius: inherit;
   background: none;
   color: inherit;
   text-align: left;
+}
+
+/* Note that the press reaches past its own box to the row's, because the
+   gap before the switch and the inset after it would otherwise be filled
+   by the hover yet answer no press. */
+.automation-row-open::after {
+  position: absolute;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+}
+
+/* The row's cells and its switch stand above that reach, so the owner's and
+   the next run's titles still answer the pointer; a press on a cell still
+   reaches the button it stands in. */
+.automation-row-open > *,
+.automation-row > .switch {
+  position: relative;
+  z-index: 1;
 }
 
 .automation-row-open > .state-glyph {
   color: var(--text-secondary);
 }
 
-.automation-row:has(.automation-row-open:hover) {
+/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
+.automation-row:hover {
   background: var(--raised);
+}
+
+.automation-row-open:focus-visible {
+  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
+}
+
+:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its
