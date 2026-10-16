@@ -1,8 +1,9 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { accessibilityViolations, mount } from "../../testing/browser.js";
 import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
+import { Button } from "../button/button.js";
 import { Inline } from "../layout/layout.js";
 import { AVATAR_SIZE, Avatar } from "./avatar.js";
 
@@ -88,6 +89,36 @@ test("the letter stands until the picture loads, and stands again where the pict
   expect(failed?.textContent).toBe("A");
   expect(failed?.querySelector("img")).toBeNull();
   expect(lettered?.textContent).toBe("A");
+});
+
+/** A disc whose picture a button takes away and gives back. */
+function Toggled({ src }: { src: string }): React.JSX.Element {
+  const [given, setGiven] = useState(true);
+  return createElement(
+    "div",
+    null,
+    createElement(Avatar, given ? { name: "ada", src } : { name: "ada" }),
+    createElement(Button, { onClick: () => setGiven(!given), children: "Toggle picture" }),
+  );
+}
+
+test("a picture that failed is asked for again once its address is taken away and given back", async () => {
+  let failures = 0;
+  const counted = (event: Event): void => {
+    if (event.target instanceof HTMLImageElement) failures += 1;
+  };
+  // An image's error does not bubble, so it is counted on its way down.
+  document.addEventListener("error", counted, true);
+  try {
+    await mount(createElement(Toggled, { src: BROKEN }));
+    await expect.poll(() => failures).toBe(1);
+    const toggle = page.getByRole("button", { name: "Toggle picture" });
+    await toggle.click();
+    await toggle.click();
+    await expect.poll(() => failures).toBe(2);
+  } finally {
+    document.removeEventListener("error", counted, true);
+  }
 });
 
 test("a name with no character to draw stands as the figure, said to nobody", async () => {

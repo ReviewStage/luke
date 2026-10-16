@@ -26,14 +26,16 @@ export const AVATAR_SIZE = {
 
 export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 
-/** The person `name`, by the picture at `src` once it loads, and by their letter on the hue of `id` until then. */
-export function Avatar({
-  name,
-  id = name,
-  src,
-  size = AVATAR_SIZE.ROW,
-  decorative = false,
-}: {
+/** How far a picture has got: still on its way, drawn, or given up. */
+const PICTURE = {
+  LOADING: "loading",
+  LOADED: "loaded",
+  FAILED: "failed",
+} as const;
+
+type Picture = (typeof PICTURE)[keyof typeof PICTURE];
+
+interface AvatarProps {
   name: string;
   /** What the hue is read off, so a rename keeps the colour a person is known by. */
   id?: string;
@@ -42,11 +44,19 @@ export function Avatar({
   size?: AvatarSize;
   /** Whether the name already stands beside the disc, so a reader hears it once. */
   decorative?: boolean;
-}): React.JSX.Element {
-  const [failedSrc, setFailedSrc] = useState<string | undefined>(undefined);
-  const [loadedSrc, setLoadedSrc] = useState<string | undefined>(undefined);
-  const url = src !== failedSrc ? src : undefined;
-  const shown = url !== undefined && url === loadedSrc;
+}
+
+/** The disc for one picture address, which forgets how its picture fared when the address changes. */
+function AvatarDisc({
+  name,
+  id = name,
+  src,
+  size = AVATAR_SIZE.ROW,
+  decorative = false,
+}: AvatarProps): React.JSX.Element {
+  const [picture, setPicture] = useState<Picture>(PICTURE.LOADING);
+  const url = picture === PICTURE.FAILED ? undefined : src;
+  const shown = url !== undefined && picture === PICTURE.LOADED;
   const letter = identityLetter(name);
   // A blank name has nothing to say to a reader, so its figure is hidden as a decorative disc is.
   const named =
@@ -67,10 +77,16 @@ export function Avatar({
           referrerPolicy="no-referrer"
           draggable={false}
           data-loaded={String(shown)}
-          onLoad={() => setLoadedSrc(url)}
-          onError={() => setFailedSrc(url)}
+          onLoad={() => setPicture(PICTURE.LOADED)}
+          onError={() => setPicture(PICTURE.FAILED)}
         />
       )}
     </span>
   );
+}
+
+/** The person `name`, by the picture at `src` once it loads, and by their letter on the hue of `id` until then. */
+export function Avatar(props: AvatarProps): React.JSX.Element {
+  // Note that the disc is keyed by its address, because a picture that failed must be asked for again once a caller gives its address back, and only a fresh disc forgets the failure.
+  return <AvatarDisc key={props.src ?? ""} {...props} />;
 }
