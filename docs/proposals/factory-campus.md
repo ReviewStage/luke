@@ -1,6 +1,6 @@
 # Proposal: Factory as a campus of buildings
 
-Status: **Exploration, undecided.** This is one of four mockups for another
+Status: **Exploration; Windows and Containers chosen.** This is one of four mockups for another
 Factory view, made to be compared. It is a mockup, not a feature: nothing in
 the app changes. There is no schema, database, backend or stored layout, and
 the old Factory's Talk → Build → Ship stations are not used.
@@ -54,17 +54,17 @@ illustrative details the gate needs are:
 | --- | --- | --- |
 | A building | one listed task | data |
 | Which plot, and so which silhouette | the task's place in `createdAt` order on a fixed master plan | derived each draw, never stored. The silhouette is art direction and means nothing. |
-| Agents (crew, stacks, drones, or windows) | one mark per agent in `agents.total`, in its status's colour, dashed when not named | data |
+| Lit windows and smoke | blue: an agent running; orange: an open Inbox item; red: a failed agent; green: this Mac's call; a few soft lights: nothing happening; smoke: an agent running | data |
 | A beacon | an open Inbox item | data |
 | Rings | `callTaskId` | data |
 | A crane and scaffolding | an agent running and `pullRequestTotal` = 0 | derived |
 | A purple flag on a roof | every named pull request merged | derived |
-| A pull request's cargo (ship, containers, parcels, or crates) | one named pull request, sized on the style's one shared scale from additions + deletions, with its additions' and deletions' shares | data |
-| A dashed "?" piece of cargo at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
+| A container | one named pull request; length is additions + deletions (linear, one tile per 150), the band its additions' and deletions' shares | data |
+| A dashed container at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
 | The merge gate's yard | open pull requests in three lanes by `checks` (failing, running, ready nearest the gate), each lane lit at its head, placed by PR number | data. It is not GitHub's merge queue and implies no order. |
 | The gatehouse and its lowered barrier | merging happens on GitHub; there is no merge action | relationship |
 | The shipped lot past the gate | merged pull requests the summaries name | data, labelled as a sample, not all-time |
-| A dashed route from a task to its crates, while either is pointed at or open | which task the pull request belongs to | relationship |
+| A dashed route from a task to its containers, while either is pointed at or open | which task the pull request belongs to | relationship |
 | Inside a building, with the roof off | a desk per agent in `agents.total`, with no cap; dashed figures for agents not named | data |
 | Trees, lamps, roads, plaza | nothing | scenery |
 
@@ -77,43 +77,77 @@ Exact numbers appear only on hover or selection:
 The toolbar names its two kinds of waiting separately ("1 question · 1 ready
 to merge"), and the Inbox badge counts Inbox items only.
 
-## Agents and pull requests, several ways each
+## The chosen styles
 
-The page's header switches how agents and pull requests are drawn. The rest of
-the campus stays the same. Nothing is stored; a link can name a pair with
-`?agents=` and `?cargo=`.
+Agents are drawn as **Windows**: lit by what the task's agents are doing, with
+smoke while one runs. Opening a building shows a desk per agent. Pull requests
+are drawn as **Containers**: a steel container per pull request whose length
+is lines changed (linear, one tile per 150). The diff is a painted band along
+its side. The other styles from the comparison round are gone.
 
-**Agents.** Each style draws one mark per agent in `agents.total`, with no
-cap. All of them use the same colours: blue running, orange asked a question,
-red failed, quiet when the turn ended, and dashed when the summary doesn't
-name the agent.
+## Simulated events
 
-- **Crew** (default): a worker per agent at the building's door, in a hard hat
-  of the agent's state. Running workers bob with a tool in hand, and the one
-  that asked holds up a "?".
-- **Stacks:** a chimney per agent on the roof. It smokes while the agent runs,
-  shows a lamp when the agent asks or fails, and is cold when its turn ended.
-- **Drones:** a drone per agent. Running drones circle the roof, the one that
-  asked hovers with its light on, and idle ones are parked on the roof.
-- **Windows** (V3): lit windows and the building's own smoke.
+The page plays a fixed script of events over the sample work, then replays it.
+The header has Pause, Play and Restart, and `?events=off` starts it paused.
+Nothing in it is real. Each event changes the illustrative data as the window
+would hear it, and the campus, the sidebar, the pane and a passing notice all
+follow:
 
-In every style except Windows, the windows only glow, so the agents carry the
-state. Opening a building shows each agent at its own desk inside, as before.
+- **Agents:** Sonnet starts on Keyboard shortcuts. Sonnet's turn ends on
+  Improve search ranking. Opus is archived on Fix reconnect handling, which
+  leaves the task's count. Opus starts on a new task.
+- **Checks:** checks run again on #3088, then pass. A forklift moves its
+  container between lanes.
+- **Merges:** #3081 and then #3088 merge. A truck carries each container out of
+  its lane, the barrier lifts, and sparks go up as it reaches the shipped lot.
+- **A new task**, Dark mode toggle, rises on the last plot. It goes up under a
+  crane until its first pull request opens.
+- **A question:** Opus asks about Keyboard shortcuts, and the beacon comes on.
 
-**Pull requests.** Every style uses one shared scale for every PR, open or
-merged. Exact numbers stay in the card and the inspector.
+Reduced motion still applies the events; the forklift and truck jump straight
+to their places.
 
-- **Ship** (default): merged PRs are containers loaded onto a ship in a
-  harbour past the gate. Open ones wait as containers on the quay, in the gate's
-  lanes.
-- **Containers:** steel containers whose **length is lines changed, linear**
-  (one tile per 150 lines). The diff is a painted band along the side, in
-  additions' and deletions' shares, rather than a coloured box.
-- **Parcels:** a pallet of small boxes, **one per 25 lines** of additions and
-  one per 25 of deletions, rounded up, so the count is the measure. The colour
-  is only the tape: green for additions, red for deletions.
-- **Crates** (V3): cubes whose volume is lines changed (edge ∝ ∛lines, not
-  linear), split green and red across their width.
+## Fun, without overdoing it
+
+Added this round, each tied to an event:
+
+- the truck through the gate on a merge;
+- the forklift on a checks change;
+- sparks at the shipped lot;
+- a building rising for a new task;
+- a ring spreading from a plot when something happens there.
+
+Further ideas, not built:
+
+- **Time of day:** follow the Mac's clock, so it's night after sunset.
+- **Failing checks:** a short red flicker in the lane's lamp.
+- **A quiet campus:** when nothing is running, the lamps dim one by one.
+
+## Built from the app's own components
+
+- **The pane** is the side panel: its bar, a tab named for what's open with a
+  close button, `section-heading` titles ("Coding agents", "Pull requests"),
+  and 30px rows.
+- **Agents** are drawn with:
+  - the Claude Code harness mark, or the working mark while the agent runs;
+  - a model label ("Opus" with a "High" detail);
+  - a red failed mark or an attention mark;
+  - the short time ("4m").
+- **Pull requests** use the published-row: the state's pull-request mark (red
+  when checks fail), "#3081 · title", the Factory's words ("checks running",
+  "ready to merge", "merged"), and `+84 −31`.
+- **Questions** use the Inbox's byline, with an agent chip and "asked 4m", the
+  question, and the option buttons.
+- **Hover cards** follow `tooltip.tsx`. A card shows after a 500ms rest, at once
+  for 500ms after the last one, and lingers 180ms after the pointer leaves.
+  Every card has a head (glyph, name, sub-line, corner), a note, and a rule
+  above its rows. The cards hang from buildings, containers, the yards,
+  sidebar rows, pane rows, agent chips, and "2 need you".
+- **Notices** are the window's passing notices: a stack of up to three in the
+  corner, each with words and where.
+- **Sidebar task rows** are the sidebar's plan rows: the name, the working
+  mark or attention mark, and the time.
+- **Scene labels** take a mention chip's corner and weight.
 
 ## Limitations
 
@@ -125,5 +159,3 @@ merged. Exact numbers stay in the card and the inspector.
 - **The master plan has eight plots.** More tasks need a rule for growing it.
 - **Labels can crowd in turned views.** They're placed for the default view.
 - **Shared space.** The studio and the block's crane stand close to the gate.
-- **The ship holds a sample's worth.** More merged pull requests would need a
-  second ship, or a longer one.
