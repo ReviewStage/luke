@@ -15,7 +15,7 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
-import { ChipCards, type TaskFocus } from "../tasks/chip-cards";
+import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
@@ -377,7 +377,15 @@ export function DesktopShell({
   const chipCards = {
     taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
       const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
-      return task === undefined ? undefined : taskCardOf(tasks, task, now, focus);
+      if (task === undefined) return undefined;
+      // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
+      const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+      const card = taskCardOf(tasks, task, now, focus);
+      return home === undefined ? (
+        card
+      ) : (
+        <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
+      );
     },
   };
   if (gated) {

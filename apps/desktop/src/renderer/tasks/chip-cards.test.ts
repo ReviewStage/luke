@@ -75,6 +75,13 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.OWNER },
 ];
 
+/** Another workspace of the account's, where Sam is a member rather than the owner, and which runs an automation of its own. */
+const BETA: Workspace = { ...ACME, id: "workspace-beta", name: "Beta", slug: "beta" };
+
+const BETA_MEMBERS: readonly WorkspaceMember[] = [
+  { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
+];
+
 const PLAN: TaskSummary = {
   id: PLAN_ID,
   workspaceId: ACME.id,
@@ -103,6 +110,13 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
+const AUDIT: AutomationSummary = {
+  ...SWEEP,
+  id: "3f0e6f5c-7d1a-4f6e-9a55-000000000002",
+  workspaceId: BETA.id,
+  name: "Weekly audit",
+};
+
 /** Main's document holding the plan, its page, and an Inbox item waiting on it, the Automations experiment on. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = stateWith({ [EXPERIMENT.AUTOMATIONS]: true }, {});
@@ -111,7 +125,7 @@ const STATE: AppStateSnapshot = (() => {
     tasks: {
       ...IDLE_TASKS_VIEW,
       tasks: [PLAN],
-      workspaces: [ACME],
+      workspaces: [ACME, BETA],
       pages: [{ id: PAGE_ID, title: "Unfurl matrix", version: 3, at: AT }],
     },
     inbox: {
@@ -142,10 +156,12 @@ afterEach(() => {
 
 function answer(request: Act): ActOutcome {
   if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS };
+    const beta = request.payload.workspaceId === BETA.id;
+    return { status: ACT_OUTCOME_STATUS.DONE, value: beta ? BETA_MEMBERS : MEMBERS };
   }
   if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { automations: [SWEEP] } };
+    const beta = request.payload.workspaceId === BETA.id;
+    return { status: ACT_OUTCOME_STATUS.DONE, value: { automations: beta ? [AUDIT] : [SWEEP] } };
   }
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." };
 }
@@ -387,4 +403,17 @@ test("an automation's chip hangs its card, the workspace's automations read only
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
   assert.equal(reads(), 1);
+});
+
+test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {
+  const container = await drawn(
+    `Ask [Sam](https://tryluke.dev/beta/person/${SAM}) about [the audit](https://tryluke.dev/beta/automation/${AUDIT.id}).`,
+  );
+  const [person, automation] = chipsOf(container);
+
+  const member = await cardOf(person);
+  const audit = await cardOf(automation);
+
+  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.equal(audit.name, "Weekly audit");
 });

@@ -47,6 +47,11 @@ const MentionedAgentsContext = createContext<MentionedAgentsPlace>(NO_PLACE);
 /** Hands every agent's chip under it what its card is named by. */
 export const MentionedAgents = MentionedAgentsContext.Provider;
 
+/** The reader, as the window around the chips names them, whose own work a card names no one over. */
+export function useMentionedReader(): string | undefined {
+  return useContext(MentionedAgentsContext).me;
+}
+
 /** What a card's foot says of the task an agent works on. */
 const TASK_WORDS = {
   NONE: "On no task",

@@ -1,5 +1,6 @@
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { DocumentIcon } from "@luke/ui";
 import { AppWindowIcon, HashIcon, InboxIcon } from "lucide-react";
@@ -7,12 +8,12 @@ import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref";
 import { AutomationDirectory, useAutomation } from "../automation-directory";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { usePerson } from "../member-directory";
+import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory";
 import { useAppState, useExperiment } from "../use-app-state";
+import { useMentionedReader } from "./mentioned-agent-card";
 import { usePlanMentions } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * chip-cards.tsx -- the cards the chips of places in Luke hang, each the card the window already hangs for what the chip names, read from what the window holds.
@@ -167,17 +168,65 @@ export function PageChipCard({
   );
 }
 
-/** A member's card, as every place naming them hangs it, read from the directory around the chip; `fallback` where the directory lists no one of the id. */
+/** The workspace a link was written under, by its slug, as the account holds it; none where it holds no such workspace. */
+function useLinkWorkspace(slug: string): Workspace | undefined {
+  return useAppState()?.tasks?.workspaces.find((each) => each.slug === slug);
+}
+
+/**
+ * The members of the workspace given around a card, so a person it names
+ * is read as that workspace holds them: the directory standing around the
+ * chip where it is that workspace's, else the workspace's own, read as the
+ * card is hung.
+ */
+export function WorkspaceDirectory({
+  workspace,
+  children,
+}: {
+  workspace: Pick<Workspace, "id" | "memberCount">;
+  children: ReactNode;
+}): ReactNode {
+  const around = useMemberDirectory();
+  const reader = useMentionedReader();
+  if (around.workspaceId === workspace.id) return children;
+  return (
+    <MemberDirectory workspace={workspace} readerId={around.readerId ?? reader}>
+      {children}
+    </MemberDirectory>
+  );
+}
+
+/** A member's card, as the directory around it holds them; `fallback` where it holds no one of the id, or while it is read. */
+function MemberCard({ userId, fallback }: { userId: string; fallback: ReactNode }): ReactNode {
+  const { members, former } = useMemberDirectory();
+  const name = [...(members ?? []), ...(former ?? [])].find((each) => each.userId === userId)?.name;
+  const actor = usePerson({ userId, name: name ?? "" });
+  return name === undefined ? fallback : (actorCard(actor) ?? fallback);
+}
+
+/**
+ * A member's card, as every place naming them hangs it, read against the
+ * members of the workspace the link names, since their role and whether
+ * they left are that workspace's; `fallback` where the account holds no
+ * such workspace, or it lists no one of the id.
+ */
 export function PersonChipCard({
   userId,
+  workspace,
   fallback,
 }: {
   userId: string;
+  /** The slug of the workspace the link was written under. */
+  workspace: string;
   fallback: ReactNode;
 }): ReactNode {
-  const name = useKnownNames().people.get(userId);
-  const actor = usePerson({ userId, name: name ?? "" });
-  return name === undefined ? fallback : (actorCard(actor) ?? fallback);
+  const named = useLinkWorkspace(workspace);
+  if (named === undefined) return fallback;
+  return (
+    <WorkspaceDirectory workspace={named}>
+      <MemberCard userId={userId} fallback={fallback} />
+    </WorkspaceDirectory>
+  );
 }
 
 /** An Inbox item's card: its question, that it waits for an answer, and when it was asked, where the window holds it waiting; else `fallback`. */
@@ -223,21 +272,27 @@ function KnownAutomationCard({
 /**
  * An automation's card, the workspace's automations read as it is first
  * hung where no directory around the chip reads them yet, and shared with
- * one that does (`AutomationDirectory`); `fallback` while the read is out,
+ * one that does (`AutomationDirectory`), of the workspace the link names,
+ * else the one the words are of; `fallback` while the read is out,
  * with the experiment off, or where the workspace lists no such automation.
  */
 export function AutomationChipCard({
   automationId,
-  workspaceId,
+  workspace: slug,
+  wordsWorkspaceId,
   fallback,
 }: {
   automationId: string;
-  /** The workspace the words are of, whose automations are read. */
-  workspaceId: string | undefined;
+  /** The slug of the workspace the link was written under, whose automations are read. */
+  workspace: string;
+  /** The workspace the words are of, read where the account holds none of the link's slug. */
+  wordsWorkspaceId: string | undefined;
   fallback: ReactNode;
 }): ReactNode {
   const on = useExperiment(EXPERIMENT.AUTOMATIONS);
-  const workspace = useAppState()?.tasks?.workspaces.find((each) => each.id === workspaceId);
+  const named = useLinkWorkspace(slug);
+  const words = useAppState()?.tasks?.workspaces.find((each) => each.id === wordsWorkspaceId);
+  const workspace = named ?? words;
   return (
     <AutomationDirectory workspace={workspace} on={on} wanted onOpen={OPEN_NOTHING}>
       <KnownAutomationCard automationId={automationId} fallback={fallback} />

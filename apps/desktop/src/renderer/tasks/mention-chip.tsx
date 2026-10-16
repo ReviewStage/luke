@@ -619,7 +619,7 @@ function PlaceCard({
         />
       );
     case LINK_PLACE.PERSON:
-      return <PersonChipCard userId={place.userId} fallback={fallback} />;
+      return <PersonChipCard userId={place.userId} workspace={workspace} fallback={fallback} />;
     case LINK_PLACE.INBOX_ITEM:
       return <InboxItemChipCard itemId={place.itemId} fallback={fallback} />;
     case LINK_PLACE.AUTOMATION:
@@ -627,7 +627,8 @@ function PlaceCard({
       return (
         <AutomationChipCard
           automationId={place.automationId}
-          workspaceId={workspaceId}
+          workspace={workspace}
+          wordsWorkspaceId={workspaceId}
           fallback={fallback}
         />
       );
