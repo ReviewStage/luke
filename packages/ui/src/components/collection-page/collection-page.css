@@ -1,0 +1,183 @@
+/* collection-page.css -- a collection's page: a still header and filters
+   over one scrolling content column, all three at one measure centred in
+   the room. The measure is the page's, a plan's reading width in the window
+   and the admin's wider column on the web. The page queries its own width
+   rather than the viewport's, so a page in a narrow pane narrows its inset
+   as it would in a narrow window; a container query cannot read a custom
+   property, so the width it narrows under is a literal here. */
+
+@layer components {
+  .luke-collection-page {
+    --luke-collection-page-width: 720px;
+    --luke-collection-page-inset: var(--luke-page-inset);
+    container-type: inline-size;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+  }
+
+  [data-luke-profile="web"] .luke-collection-page {
+    --luke-collection-page-width: 1040px;
+  }
+
+  /* Under 480px of room a desktop page gives back half its inset. */
+  @container (max-width: 479px) {
+    .luke-collection-page > * {
+      --luke-collection-page-inset: var(--luke-page-inset-narrow);
+    }
+  }
+
+  /* The header, the filters, and the content each take the page's inset
+     and stand their measure in the middle of what is left, so all three
+     open on one edge. */
+  .luke-collection-page-header,
+  .luke-collection-page-filters,
+  .luke-collection-page-content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: calc(var(--luke-collection-page-width) + 2 * var(--luke-collection-page-inset));
+    margin-inline: auto;
+    padding-inline: var(--luke-collection-page-inset);
+  }
+
+  /* The title's acts are centred on its first line, whatever a control's
+     height is beside the title's leading. */
+  .luke-collection-page-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--luke-control-gap);
+    padding-top: var(--luke-collection-page-inset);
+  }
+
+  .luke-collection-page-heading {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .luke-collection-page-title {
+    margin: 0;
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+  }
+
+  .luke-collection-page-description {
+    margin: var(--luke-space-4) 0 0;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-collection-page-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
+  }
+
+  .luke-collection-page-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* The header and filters stand still above the scroll, and reserve a
+     scrollbar's gutter as the scroll does, so a scrollbar that takes room
+     narrows the column under them no more than them. Their
+     end gap is the content's room under the filters, which keeps a focus
+     ring on a filter inside what they clip. */
+  .luke-collection-page-top {
+    flex: none;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+    padding-bottom: var(--luke-section-gap);
+  }
+
+  /* The one scroll, the width of the page so the wheel works anywhere on
+     it. */
+  .luke-collection-page-scroll {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .luke-collection-page-content {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    padding-bottom: var(--luke-collection-page-inset);
+  }
+
+  /* A filter's search field stands at a search's width, not the line's. */
+  .luke-collection-page-filters > .luke-text-field {
+    flex: 0 1 240px;
+    min-width: 0;
+  }
+
+  /* A list reaches past the column by its rows' inset, so a row's words
+     open on the title's edge and its fill runs out either side. */
+  .luke-collection-page-content > .luke-list,
+  .luke-collection-page-loading {
+    margin-inline: calc(-1 * var(--luke-space-12));
+  }
+
+  .luke-collection-page-loading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+  }
+
+  /* A loading row stands as tall as a ListRow with a line under its title. */
+  .luke-collection-page-loading-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+    padding: var(--luke-space-8) var(--luke-space-12);
+  }
+
+  .luke-collection-page-loading-title {
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+  }
+
+  .luke-collection-page-loading-description {
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* An empty or failed collection stands its notice a little above the
+     room's middle, shared two to three as an empty state stands alone. */
+  .luke-collection-page-notice {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .luke-collection-page-notice::before,
+  .luke-collection-page-notice::after {
+    content: "";
+  }
+
+  .luke-collection-page-notice::before {
+    flex: 2 1 0;
+  }
+
+  .luke-collection-page-notice::after {
+    flex: 3 1 0;
+  }
+}
