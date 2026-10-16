@@ -1,6 +1,7 @@
 import {
   CHANNEL_KIND,
   type ChannelKind,
+  type ChatBlock,
   MEMBER_KIND,
   type MemberKind,
 } from "@luke/features/chat-wire";
@@ -10,6 +11,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   uniqueIndex,
@@ -43,7 +45,20 @@ const literal = (value: string) => sql.raw(`'${value}'`);
  * A channel is the workspace's general one, a plan's own, a topic one a
  * member opened, or a DM, which names its two members in uuid order so one
  * pair is one channel. A channel's name is unique in its workspace, and a
- * DM has none. Every row goes with its workspace.
+ * DM has none.
+ *
+ * A message is a record of its own in a channel, addressed by its place in
+ * the workspace's one chat sequence, which `workspace_chat` mints under its
+ * row's lock as a conversation mints its rows' places, so a reader's one
+ * cursor reads every channel. `touched_seq` is the place the message last
+ * changed at, its own place until a change moves it on, so a reader past
+ * the message reads it again where it changed. A reply names its thread's
+ * root as its parent, never another reply, and stands as a message of its
+ * own where its root goes with its author's account. Its body is the wire's blocks
+ * (`@luke/features/chat-wire`), its mentions the members its words named,
+ * resolved as it was posted, and its client key the poster's for the post,
+ * unique in its channel, so a post repeated after a lost answer lands once.
+ * Every row goes with its workspace.
  */
 export const chatMember = pgTable(
   "chat_member",
@@ -142,5 +157,56 @@ export const chatChannel = pgTable(
         and (${table.kind} = ${literal(CHANNEL_KIND.DM)}) = (${table.dmAMemberId} is not null and ${table.dmBMemberId} is not null)
         and (${table.dmAMemberId} is null or ${table.dmAMemberId} < ${table.dmBMemberId})`,
     ),
+  ],
+);
+
+/** The next place a workspace's chat sequence hands out, from one; the row is made with the workspace's first post. */
+export const workspaceChat = pgTable("workspace_chat", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  nextSeq: integer("next_seq").notNull().default(1),
+});
+
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => chatChannel.id, { onDelete: "cascade" }),
+    /** The message's place in the workspace's chat sequence. */
+    seq: integer("seq").notNull(),
+    /** The place the message last changed at: its own until a change moves it on. */
+    touchedSeq: integer("touched_seq").notNull(),
+    /** The thread's root, on a reply; null on a root. */
+    parentId: uuid("parent_id").references((): AnyPgColumn => chatMessage.id, {
+      onDelete: "set null",
+    }),
+    authorMemberId: uuid("author_member_id")
+      .notNull()
+      .references(() => chatMember.id, { onDelete: "cascade" }),
+    /** The body, as the wire's blocks. */
+    blocks: jsonb("blocks").$type<readonly ChatBlock[]>().notNull(),
+    /** The members the words named, as they were resolved when it was posted. */
+    mentions: uuid("mentions").array().notNull().default(sql`'{}'::uuid[]`),
+    /** The poster's key for the post, unique in its channel. */
+    clientKey: text("client_key").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("chat_message_organization_seq").on(table.organizationId, table.seq),
+    uniqueIndex("chat_message_channel_client_key").on(table.channelId, table.clientKey),
+    // A channel's history, read back from a place.
+    index("chat_message_channel_seq").on(table.channelId, table.seq),
+    // A thread's replies, in order.
+    index("chat_message_parent_seq")
+      .on(table.parentId, table.seq)
+      .where(sql`${table.parentId} is not null`),
+    // What changed past a reader's cursor.
+    index("chat_message_organization_touched").on(table.organizationId, table.touchedSeq),
   ],
 );
