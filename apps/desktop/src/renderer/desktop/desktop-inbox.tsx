@@ -237,7 +237,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   // Note that a chosen item whose plan or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
   // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
-  // one whose agents are not read yet may still hold the item.
+  // one whose agents are not read yet may still hold the item, until its Inbox's own read answers.
   const holderEmpty = agents.listMissing || agents.heldIds?.length === 0;
   const agentsUnread = agents.heldIds === undefined && !agents.listFailed && !agents.listMissing;
   const chosenWaits =
@@ -245,7 +245,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
       ((holdings.some((holding) => holding.planId === planId) &&
         !read.items.has(planId) &&
         !live.read) ||
-        agentsUnread)) ||
+        (agentsUnread && !read.items.has(planId) && !live.read))) ||
     (chosenAgentId !== undefined &&
       !planless.items.has(chosenAgentId) &&
       !live.read &&

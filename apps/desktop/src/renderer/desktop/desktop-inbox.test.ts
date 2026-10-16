@@ -152,6 +152,8 @@ let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
+/** Whether a read of a plan's agents is held open, never answering. */
+let agentListHeld = false;
 /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
 let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
@@ -188,6 +190,7 @@ beforeEach(() => {
   agentInboxes = new Map();
   agentReads = [];
   agentReadFails = false;
+  agentListHeld = false;
   holdAgentRead = undefined;
   listedWorkspace = undefined;
   automations = [];
@@ -201,7 +204,9 @@ beforeEach(() => {
       act: (request: Act) => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           const agent = pageAgents.get(request.payload.agentId);
           return Promise.resolve({
@@ -1747,6 +1752,23 @@ test("an item a link names under a task with no agent and nothing in its Inbox i
   act(() =>
     chooseFromOutside({
       planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names that its task's Inbox read does not hold is not found, though the task's agents are still being read", async () => {
+  agentListHeld = true;
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      planId: BILLING.id,
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
