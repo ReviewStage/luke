@@ -7,10 +7,12 @@
   // print one into a cached log nor bake one into a cached hash. The desktop
   // build's Sentry token and DSN stay with `pnpm package`, which turbo never runs.
   "envMode": "strict",
-  // Files outside every workspace that a workspace reads: the web app imports
-  // the changelog and the privacy notice. The brand artwork the web app and
-  // the desktop build read is @luke/brand's, which `transit` tracks.
-  "globalDependencies": [".nvmrc", "tsconfig.base.json", "CHANGELOG.md", "PRIVACY.md"],
+  // Files outside every workspace that every workspace reads. The changelog
+  // and the privacy notice, which only the web app imports, are inputs of its
+  // tasks alone (apps/web/turbo.json), so a release's changelog misses no
+  // other workspace's cache. The brand artwork the web app and the desktop
+  // build read is @luke/brand's, which `transit` tracks.
+  "globalDependencies": [".nvmrc", "tsconfig.base.json"],
   "tasks": {
     // A task with no script anywhere, whose hash is its workspace's files and
     // the transit hashes of the workspaces it depends on. A task that depends

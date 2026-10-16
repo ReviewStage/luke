@@ -2,12 +2,26 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
-    // Some of web's tests run a script from the repository's own scripts/
-    // (the Vercel ignore step, the release's CI check) rather than one of
-    // its workspace, so that directory is an input of the task as well, or a
+    // The web app imports the changelog and the privacy notice from the
+    // repository's root, so each of its tasks reads them as inputs; no other
+    // workspace does, which is why they are not global dependencies.
+    "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/CHANGELOG.md", "$TURBO_ROOT$/PRIVACY.md"]
+    },
+    "build": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/CHANGELOG.md", "$TURBO_ROOT$/PRIVACY.md"]
+    },
+    // Some of web's tests also run a script from the repository's own
+    // scripts/ (the Vercel ignore step, the release's CI check, the
+    // release-only classifier), so that directory is an input as well, or a
     // change to a script alone would replay the old pass.
     "test:vitest": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/CHANGELOG.md",
+        "$TURBO_ROOT$/PRIVACY.md",
+        "$TURBO_ROOT$/scripts/**"
+      ]
     }
   }
 }

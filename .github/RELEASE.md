@@ -42,7 +42,10 @@ nothing.
 ## Cut a release
 
 1. **Prepare and merge the version PR.** Bump `apps/desktop/package.json` and add the
-   release's entry to `CHANGELOG.md` at the repository root in the same change. The
+   release's entry to `CHANGELOG.md` at the repository root in the same change. That
+   manifest is the only one carrying a version, since the tag, the build, the updater, and
+   Sentry's release all read it and nothing reads another; `scripts/repository-checks.sh`
+   refuses a `"version"` in any other workspace's `package.json`. The
    landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
    refuses a desktop version the changelog does not name, so a bump cannot land without
    its notes. Every bullet and feature section links the pull request or
