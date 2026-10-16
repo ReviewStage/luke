@@ -83,3 +83,22 @@ test("the card a transcript opens on stands in a sent message's measure and span
   // And the card is as wide as that measure, never a narrower width of its own.
   assert.equal(getComputedStyle(card).width, "100%");
 });
+
+test("a card nobody is named as sending still says under it when it was sent, on a line that breaks before the time rather than squeeze a sender", () => {
+  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  const sentAt = Date.UTC(2026, 9, 14, 16, 5);
+  const view = draw(message({ message: { ...PLAN, sentAt }, plan: true }));
+  const card =
+    view.querySelector<HTMLElement>("[data-task-card]") ?? assert.fail("the card stands");
+  const meta =
+    view.querySelector<HTMLElement>(".agent-origin > .message-meta") ??
+    assert.fail("the card has a meta line");
+
+  assert.ok(card.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(meta.querySelector(".message-sender"), null);
+  assert.equal(
+    meta.querySelector("time")?.getAttribute("datetime"),
+    new Date(sentAt).toISOString(),
+  );
+  assert.equal(getComputedStyle(meta).flexWrap, "wrap");
+});

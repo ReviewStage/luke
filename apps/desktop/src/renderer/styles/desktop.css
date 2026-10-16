@@ -3116,6 +3116,13 @@ ul.actor-stack {
   width: 100%;
 }
 
+/* Its meta line breaks before the time rather than squeeze who sent it: a
+   long sender keeps the card's whole measure, the time on a line under it. */
+.agent-origin > .message-meta {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
 .agent-origin > .message-meta > .message-sender {
   min-width: 0;
 }
