@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { act, createElement, useState } from "react";
+import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hover-pane";
@@ -9,8 +10,8 @@ import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hov
 /**
  * A pane that floats as the sidebar does, drawn through the module's two
  * hooks alone: its toggle opens it, its edge peeks it, and its one row is
- * a choice. A menu it raised stands beside it, and the work beside it
- * holds a button of its own.
+ * a choice. A menu it raised stands outside it, through a portal, and the
+ * work beside it holds a button of its own.
  */
 function Floating(): React.JSX.Element {
   const [state, onState] = useState<PaneFloat>(PANE_FLOAT.CLOSED);
@@ -44,9 +45,9 @@ function Floating(): React.JSX.Element {
         onKeyDown: pane.onKeyDown,
       },
       createElement("button", { type: "button", className: "row", onClick: choose }, "Row"),
+      // A menu the pane raised, drawn outside it through a portal, as the sidebar's are.
+      createPortal(createElement("div", { role: "menu", className: "menu" }), document.body),
     ),
-    // A menu the pane raised, which stands outside it, as a portal's does.
-    createElement("div", { role: "menu", className: "menu" }),
     createElement(
       "main",
       null,
@@ -155,17 +156,18 @@ test("the press on the toggle that opens the pane is no press inside it when the
   assert.equal(standing(page), PANE_FLOAT.CLOSED);
 });
 
-test("a press in a peek leaves it a peek, gone once the pointer leaves, though not for a menu it raised", () => {
+test("a press in a peek leaves it a peek, gone once the pointer leaves, though not for a menu it raised, until the pointer leaves that menu for the work", () => {
   const page = mount();
   const aside = part(page, "aside");
   const work = part(page, ".work");
   pointerCross(work, part(page, ".edge"));
   pressDown(aside);
   assert.equal(standing(page), PANE_FLOAT.PEEK, "the press opens nothing past the peek");
-  pointerCross(aside, part(page, ".menu"));
+  const menu = document.querySelector(".menu") ?? assert.fail("the menu is drawn");
+  pointerCross(aside, menu);
   assert.equal(standing(page), PANE_FLOAT.PEEK, "a menu it raised is no way out");
-  pointerCross(aside, work);
-  assert.equal(standing(page), PANE_FLOAT.CLOSED);
+  pointerCross(menu, work);
+  assert.equal(standing(page), PANE_FLOAT.CLOSED, "the menu left for the work leaves the peek");
 });
 
 test("a pane opened from away holds the keyboard against Tab until Escape hands it back", () => {
