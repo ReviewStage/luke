@@ -1,20 +1,25 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
+import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
   type InboxPlanFolds,
   type InboxViewChoices,
+  type InboxWaitingOnly,
   useInboxListWidth,
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
+import { EmptyState } from "../empty-state";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, planlessSubject } from "./agent-ref";
 import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
@@ -35,7 +40,7 @@ import { cardTitle } from "./tool-call-model";
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its plan's group header or in one run, with what the list shows and how at its head.
  *
- * The list is drawn from the sidebar's own pieces, so it reads as the
+ * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
  * sidebar does. A plan's items stand under the sidebar's own group header
  * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
@@ -61,13 +66,20 @@ import { cardTitle } from "./tool-call-model";
  * developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
- * checked; both are kept across launches. The plan page's own Inbox lists
- * one plan's items, so its list has neither head nor groups. Either list
+ * checked; both are kept across launches. Where Needs you leaves out every
+ * item listed, the list says so in the Inbox's empty state, with Show all to
+ * turn the filter off, as a mail app's empty unread view does; the item the
+ * pane shows keeps its place there, though no row. A task's own Inbox lists one
+ * task's items in one run, so its head offers Needs you alone, kept apart
+ * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
  * item stands in its place (`inbox-columns.ts`).
  */
+
+/** What an item's row's right-click menu is called. */
+const ITEM_ACTIONS = "Inbox item actions";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -119,7 +131,12 @@ function itemSubject(
     return line === undefined
       ? undefined
       : planlessSubject(
-          { title: line.agentTitle, model: line.agentModel, automationId: line.automationId },
+          {
+            title: line.agentTitle,
+            model: line.agentModel,
+            automationId: line.automationId,
+            automationName: holder.automationId === null ? undefined : holder.name,
+          },
           models,
         );
   }
@@ -132,7 +149,7 @@ function itemSubject(
  * leaving the press to its row; a bare tile of no known harness where the
  * holder names no such agent.
  */
-function ItemMark({
+export function ItemMark({
   holder,
   agentId,
   models,
@@ -156,7 +173,9 @@ function ItemMark({
  * One item as a sidebar row: the agent's mark, the title, and how long ago it
  * changed; one that needs the developer in the unread weight with a dot past
  * its time. The home page's Needs you names the item's plan after its title,
- * in `context`, since its rows stand under no plan's header.
+ * in `context`, since its rows stand under no plan's header. Its right-click offers
+ * Copy link, the item's link under the task or the agent that holds it, where
+ * the list hands down a workspace to write it under.
  */
 export function InboxItemRow({
   listed,
@@ -179,6 +198,12 @@ export function InboxItemRow({
   const { holder, item } = listed;
   const title = cardTitle(item.title);
   const needsYou = item.status === INBOX_STATUS.OPEN;
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()(
+    holder.kind === INBOX_HOLDER.PLAN
+      ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.plan.id, itemId: item.id }
+      : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
+  );
   return (
     <li className="sidebar-plan-item inbox-row">
       <Tooltip label={title}>
@@ -189,6 +214,7 @@ export function InboxItemRow({
           data-unread={String(needsYou)}
           data-item-id={item.id}
           onClick={() => onChoose(listed)}
+          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
         >
           <span className="sidebar-plan-line">
             <span className="inbox-row-mark">
@@ -215,6 +241,14 @@ export function InboxItemRow({
           </span>
         </button>
       </Tooltip>
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={ITEM_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
     </li>
   );
 }
@@ -334,21 +368,47 @@ function NeedsYouOnly({
   );
 }
 
-/**
- * The window's head: the Inbox's name, and Needs you and the view's menu
- * at the list's top right. Its heading and its buttons glide as the
- * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the buttons keeping to the list's edge.
- */
-function ListHead({
-  shown,
-  choices,
-  waiting,
+/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off and keeps the list standing where the Inbox shows one column. */
+export function NeedsYouEmpty({
+  needsYou,
+  onList,
 }: {
-  shown: boolean;
-  choices: InboxViewChoices;
-  waiting: boolean;
+  needsYou: InboxWaitingOnly;
+  /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
+  onList: () => void;
 }): React.JSX.Element {
+  return (
+    <EmptyState
+      icon={<InboxIcon />}
+      title={NEEDS_YOU.NONE}
+      action={
+        <button
+          type="button"
+          className="toolbar-button"
+          onClick={() => {
+            onList();
+            needsYou.onWaitingOnly(false);
+          }}
+        >
+          {NEEDS_YOU_PRESS.ALL}
+        </button>
+      }
+    >
+      {NEEDS_YOU.ANSWERED}
+    </EmptyState>
+  );
+}
+
+/**
+ * The list's head: the Inbox's name, and Needs you and, on the window's
+ * Inbox, the view's menu at the list's top right; a task's own Inbox lists
+ * one task's items in one run, so it has no menu. On the window's Inbox its
+ * heading and its buttons glide as the sidebar folds, the name moving to the
+ * list's middle, clear of the sidebar's toggle, and the buttons keeping to
+ * the list's edge.
+ */
+function ListHead({ head }: { head: InboxListHead }): React.JSX.Element {
+  const { shown, needsYou, view, waiting } = head;
   return (
     <header className="desktop-toolbar inbox-plans-bar">
       <div className="desktop-toolbar-heading">
@@ -357,23 +417,69 @@ function ListHead({
       <div className="desktop-toolbar-actions">
         <NeedsYouOnly
           waiting={waiting}
-          waitingOnly={choices.waitingOnly}
-          onWaitingOnly={choices.onWaitingOnly}
+          waitingOnly={needsYou.waitingOnly}
+          onWaitingOnly={needsYou.onWaitingOnly}
         />
-        <ViewOptions shown={shown} grouping={choices.grouping} onGrouping={choices.onGrouping} />
+        {view === undefined ? null : (
+          <ViewOptions
+            shown={shown}
+            grouping={view.choices.grouping}
+            onGrouping={view.choices.onGrouping}
+          />
+        )}
       </div>
     </header>
   );
 }
 
-/** What the list's head offers, on the window's Inbox: absent on a plan's own, which lists one plan's items alone. */
+/** What the list's head offers: Needs you on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  readonly choices: InboxViewChoices;
-  readonly folds: InboxPlanFolds;
+  readonly needsYou: InboxWaitingOnly;
+  /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
+  readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxPlanFolds } | undefined;
   /** Whether any item needs the developer, filtered out or not, for Needs you's dot. */
   readonly waiting: boolean;
+}
+
+/** What the list wears to keep the keyboard: its element, and its handlers for focus arriving and leaving. */
+interface RowFocus {
+  readonly ref: React.RefObject<HTMLElement | null>;
+  readonly onFocus: (event: React.FocusEvent) => void;
+  readonly onBlur: () => void;
+}
+
+/**
+ * Keeps the keyboard in the list when the row holding it is no longer
+ * drawn, as Needs you leaves out an item answered on another Mac while its
+ * row is focused: the keyboard goes to Needs you, the control that left it
+ * out. Note that a removed row fires no blur, so the row last focused is
+ * remembered and looked for after every render.
+ */
+function useRowFocusKept(): RowFocus {
+  const ref = useRef<HTMLElement | null>(null);
+  const focusedRow = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const row = focusedRow.current;
+    if (list === null || row === undefined || list.hidden) return;
+    const rows = list.querySelectorAll<HTMLElement>("[data-item-id]");
+    if ([...rows].some((each) => each.dataset.itemId === row)) return;
+    focusedRow.current = undefined;
+    if (document.activeElement !== null && document.activeElement !== document.body) return;
+    list.querySelector<HTMLElement>(".inbox-needs-you-only")?.focus();
+  });
+  return {
+    ref,
+    onFocus: (event) => {
+      focusedRow.current =
+        event.target instanceof HTMLElement ? event.target.dataset.itemId : undefined;
+    },
+    onBlur: () => {
+      focusedRow.current = undefined;
+    },
+  };
 }
 
 /** The list: its head where it has one, then each plan's group of rows, or every row in one run, or a line where nothing is listed. */
@@ -394,7 +500,7 @@ export function InboxList({
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
-  head: InboxListHead | undefined;
+  head: InboxListHead;
   /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
@@ -403,6 +509,7 @@ export function InboxList({
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
+  const rowFocus = useRowFocusKept();
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -424,28 +531,29 @@ export function InboxList({
   );
   return (
     <nav
+      ref={rowFocus.ref}
       className="inbox-plans"
       aria-label="Inbox items"
       hidden={columns === INBOX_COLUMNS.ITEM}
+      onFocus={rowFocus.onFocus}
+      onBlur={rowFocus.onBlur}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      {head === undefined ? null : (
-        <ListHead shown={head.shown} choices={head.choices} waiting={head.waiting} />
-      )}
-      <div className="inbox-plans-scroll">
+      <ListHead head={head} />
+      <div className="inbox-plans-scroll scroll-fade-top">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
           <ul className="sidebar-plans">{view.items.map(row)}</ul>
         ) : (
           view.groups.map(({ holder, items }) => {
             const key = holderKey(holder);
-            const folded = head?.folds.folded(key) ?? false;
+            const folded = head.view?.folds.folded(key) ?? false;
             return (
               <div key={key} className="sidebar-repository">
                 <HolderHeader
                   holder={holder}
                   folded={folded}
                   count={items.filter(({ status }) => status === INBOX_STATUS.OPEN).length}
-                  onToggle={() => head?.folds.toggle(key)}
+                  onToggle={() => head.view?.folds.toggle(key)}
                 />
                 {folded ? null : (
                   <ul className="sidebar-plans">{items.map((item) => row({ holder, item }))}</ul>

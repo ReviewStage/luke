@@ -1,8 +1,9 @@
 import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
-import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
+import Paragraph from "@tiptap/extension-paragraph";
 import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
@@ -12,9 +13,11 @@ import StarterKit from "@tiptap/starter-kit";
 import type {
   MentionNode,
   PlanEditorHandle,
+  PlanEditorPictures,
   PlanEditorPlacement,
   PlanEditorProps,
 } from "./contract";
+import { diagramPreview } from "./diagram-preview";
 import {
   documentManager,
   documentMarkdown,
@@ -25,18 +28,31 @@ import {
   sourcesOf,
 } from "./document-source";
 import { mentionNode, pastedMention } from "./mention-node";
+import {
+  copiedPictures,
+  droppedPictures,
+  laidInPictures,
+  pastedPictures,
+  pictureNode,
+  removedPicture,
+  settledPicture,
+} from "./picture-node";
 import { planMentions } from "./plan-mentions";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every shortcut for writing it, is TipTap's
- * own: StarterKit, `@tiptap/markdown`, task lists, tables, and images;
+ * own: StarterKit, `@tiptap/markdown`, task lists, tables, and pictures
+ * (`./picture-node.ts`), each inline in a paragraph even where it stands
+ * alone on its line;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
  * the text moves nothing. Each untouched block keeps its exact source
- * (`./document-source.ts`). Esc and ⌘↩ finish, naming the section the caret
+ * (`./document-source.ts`). A Mermaid code block stays code, its diagram
+ * previewed under it where the panel draws one (`./diagram-preview.ts`).
+ * Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
  */
 
@@ -54,6 +70,23 @@ const DocumentHeading = Heading.extend({
   renderHTML({ node }) {
     const level = Number(node.attrs.level);
     return [`h${level}`, { class: "markdown-heading", "data-level": String(level) }, 0];
+  },
+});
+
+/**
+ * A paragraph that keeps a picture standing alone on its line as its one
+ * inline child. Note that TipTap's own unwraps such a picture into a block,
+ * which a plan's inline image cannot be, so the document opened invalid and
+ * the first edit beside the picture threw; every other paragraph reads as
+ * TipTap's does.
+ */
+const DocumentParagraph = Paragraph.extend({
+  parseMarkdown(token, helpers) {
+    const tokens = token.tokens ?? [];
+    if (tokens.length === 1 && tokens[0]?.type === "image") {
+      return helpers.createNode("paragraph", undefined, helpers.parseInline(tokens));
+    }
+    return this.parent?.(token, helpers) ?? [];
   },
 });
 
@@ -104,21 +137,25 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
 export function markdownExtensions(
   drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
   namesMention?: ((target: string) => boolean) | undefined,
+  pictures?: PlanEditorPictures | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
+    blockquote: { HTMLAttributes: { class: QUOTE_CLASS } },
     heading: false,
+    paragraph: false,
     underline: false,
     trailingNode: false,
     link: { openOnClick: false },
   });
   return [
     kit,
+    DocumentParagraph,
     DocumentHeading,
     Markdown,
     TaskList,
     TaskItem,
     TableKit,
-    Image.configure({ inline: true }),
+    pictureNode(pictures),
     RawBlock,
     mentionNode(drawMention),
     linkLook(namesMention),
@@ -170,9 +207,20 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
  * caret where the placement says, and focused if it is asked to be.
  */
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
-  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
-    props;
-  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
+  const {
+    markdown,
+    placement,
+    focus,
+    label,
+    className,
+    onDraft,
+    onFinish,
+    onLeaveUp,
+    mentions,
+    drawDiagram,
+    pictures,
+  } = props;
+  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention, pictures);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
@@ -184,7 +232,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
-    extensions: [...extensions, Placeholder.configure({ placeholder: "Write the plan" })],
+    extensions: [
+      ...extensions,
+      Placeholder.configure({ placeholder: "Write the plan" }),
+      ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
+    ],
     content: opened.content,
     contentType: "json",
     editorProps: {
@@ -194,9 +246,15 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
-      // Note that a page of an integration's pasted whole is laid in as its mention, as the box lays it in.
-      handlePaste: (view, event) =>
-        mentions === undefined ? false : pastedMention(view, event, mentions.pasted),
+      // Note that image files pasted are laid in as pictures, and a page of an integration's pasted whole as its mention, as the box lays it in.
+      handlePaste: (view, event) => {
+        if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
+        return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);
+      },
+      handleDrop: (view, event, _slice, moved) =>
+        pictures === undefined ? false : droppedPictures(view, event, moved, pictures),
+      transformPasted: (slice) =>
+        pictures === undefined ? slice : copiedPictures(slice, pictures),
       handleKeyDown: (view, event) => {
         // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
         if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
@@ -229,6 +287,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    insertPictures: (files) => {
+      if (pictures !== undefined) laidInPictures(editor.view, files, pictures);
+    },
+    settlePicture: (upload, src) => settledPicture(editor.view, upload, src),
+    removePicture: (upload) => removedPicture(editor.view, upload),
     destroy: () => editor.destroy(),
   };
 }

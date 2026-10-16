@@ -71,6 +71,18 @@
               "additionalProperties": false
             }
           },
+          "linear": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "active"
+            ],
+            "additionalProperties": false
+          },
           "memberCount": {
             "type": "number",
             "minimum": 0

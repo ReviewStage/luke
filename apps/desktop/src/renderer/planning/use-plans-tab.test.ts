@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
@@ -21,7 +23,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxPlan, type AppInboxPlanHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   messageText,
@@ -41,10 +43,18 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
+import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import { MAIN_TAB } from "./use-main-tabs";
-import { type PlansControl, usePlansTab } from "./use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type LeaveAsk,
+  type PlansControl,
+  useLeaveGuard,
+  usePlansTab,
+} from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 const PLAN: Plan = {
@@ -170,10 +180,12 @@ function mount(
       inboxWaiting: held.inboxWaiting,
       inboxPlans: held.inboxPlans,
       inboxPlanless: [],
+      failedRuns: [],
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
+      leaveGuard: useLeaveGuard(),
     });
     return null;
   }
@@ -322,6 +334,9 @@ const TWO_WORKSPACES: PlanningView = {
 const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
+
+/** A pin's payload, read back as the act's own schema admits it. */
+const readPin = Schema.decodeUnknownOption(Schema.Struct({ pinned: Schema.Boolean }));
 
 /** A create's payload, read back as the act's own schema admits it. */
 const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
@@ -656,6 +671,216 @@ test("a Luke link to another plan's section opens that plan and asks its page to
   });
 });
 
+test("a Luke link to an agent with no task opens its page, and one under a task opens its tab on that task", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
+    }),
+  );
+  const page = tab.control().agentView.agentId;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, planId: PLAN.id, agentId: AGENT_ID },
+    }),
+  );
+
+  assert.equal(page, AGENT_ID);
+  assert.equal(tab.control().agentView.agentId, undefined);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+});
+
+test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.WORKER, planId: PLAN.id, agentId: AGENT_ID, callId: "toolu_1" },
+    }),
+  );
+  const worker = panelOf(tab);
+  const column = tab.control().mainTabs.tab;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CHANGES, planId: PLAN.id, agentId: AGENT_ID },
+    }),
+  );
+
+  assert.deepEqual(worker, {
+    open: true,
+    tab: { subagent: "toolu_1", delegation: { agent: AGENT_ID, task: "" } },
+  });
+  assert.deepEqual(
+    column,
+    { agent: AGENT_ID },
+    "the worker's agent's tab opens with it, which draws the worker",
+  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
+test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const link = {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.MESSAGE, planId: PLAN.id, agentId: AGENT_ID, messageId: "msg-7" },
+  } as const;
+
+  act(() => tab.control().onOpenLink(link));
+  const first = tab.control().messageReveal;
+  act(() => tab.control().onOpenLink(link));
+  act(() => tab.control().onMessageRevealed(2));
+
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.deepEqual(first, { agentId: AGENT_ID, messageId: "msg-7", ask: 1 });
+  assert.equal(tab.control().messageReveal, undefined);
+});
+
+test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const alerts = "alerts";
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "renamed-since",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: alerts, itemId },
+    }),
+  );
+  const inbox = { open: tab.control().inboxView.open, chosen: tab.control().inboxView.chosen };
+  const listed = tab.control().workspace?.id;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.AUTOMATION, automationId },
+    }),
+  );
+
+  assert.deepEqual(inbox, { open: true, chosen: { planId: alerts, itemId, opened: true } });
+  assert.equal(listed, ACME.id);
+  assert.equal(tab.control().inboxView.open, false);
+  assert.deepEqual(tab.control().automationsView.place, {
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId,
+  });
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a Luke link to an automation's run opens its editor naming the run, which its runs mark", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId: "a1", runId: "r1" },
+    }),
+  );
+
+  assert.deepEqual(tab.control().automationsView.place, {
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "a1",
+    runId: "r1",
+  });
+});
+
+test("a Luke link to a person opens their page in the workspace its slug names, in the place of the Inbox", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => tab.control().inboxView.onOpen());
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.PERSON, userId: "user-charles" },
+    }),
+  );
+
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().personView.userId, "user-charles");
+  assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
+});
+
+test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const listed = tab.control().workspace?.id;
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "someone-elses",
+      place: { kind: LINK_PLACE.AUTOMATION, automationId: OTHER_PLAN_ID },
+    }),
+  );
+
+  assert.equal(tab.control().workspace?.id, listed);
+  assert.equal(tab.control().automationsView.open, true);
+});
+
+test("a Luke link to a task's version opens its version history on that version, and one to its call opens its Call tab", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.VERSION, planId: PLAN.id, revision: 3 },
+    }),
+  );
+  const history = { open: tab.control().history.open, spot: tab.control().history.spot };
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CALL, planId: PLAN.id },
+    }),
+  );
+
+  assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
+  assert.equal(tab.control().history.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
+test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "someone-elses",
+      place: { kind: LINK_PLACE.VERSION, planId: OTHER_PLAN_ID, revision: 3 },
+    }),
+  );
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: OTHER_PLAN_ID,
+      document: { status: PLANNING_READ.MISSING },
+    },
+  });
+
+  assert.equal(tab.control().history.open, false);
+  assert.equal(tab.control().region.kind, DOCUMENT_REGION.MISSING);
+});
+
 test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
@@ -883,6 +1108,46 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(tab.shownInboxes.at(-1), null);
 });
 
+test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().personView.onOpen("user-charles", "Charles Pan"));
+  const opened = tab.control().personView.userId;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const afterSwitch = tab.control().personView.userId;
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
+
+  assert.equal(opened, "user-charles");
+  assert.equal(afterSwitch, undefined);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
+test("a person's page opened in another workspace lists it without reopening its last plan, so no refused reopen takes the page with it", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, ACME, PLATFORM],
+        activePlanId: "alerts",
+      },
+    },
+    OPENS,
+  );
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+  });
+  const opensBefore = opensAsked(tab.payloads).length;
+
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", ACME.id));
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(opensAsked(tab.payloads).length, opensBefore);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads
@@ -897,6 +1162,28 @@ const OPENS = {
   [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
   [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
 };
+
+test("a person's page opened while a plan's open is still out stands when the open answers late, listing nothing over it", async () => {
+  let answer: (opened: boolean) => void = () => undefined;
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } },
+    {
+      [ACT_KIND.PLANNING_SELECT]: () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+      [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+    },
+  );
+
+  act(() => tab.control().onSelect("alerts"));
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
+  await act(async () => answer(true));
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
 
 test("a plan opened from another workspace says the window switched, and Back lists the workspace left with the plan that stood open there", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
@@ -1242,6 +1529,64 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   ]);
 });
 
+test("the repository chip's list for a workspace with GitHub connected is its repositories alone, under no heading", async () => {
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [
+        {
+          owner: "acme",
+          name: "relay",
+          fullName: "acme/relay",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+        },
+      ],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
+  installScrollIntoView();
+  const chip = document.body.appendChild(document.createElement("div"));
+  act(() =>
+    createRoot(chip).render(
+      createElement(RepositoryChip, {
+        value: null,
+        chooser: tab.control().newPlan.repositoriesIn(ACME.id),
+        onChoose: () => undefined,
+        place: CHIP_PLACE.FIELD,
+      }),
+    ),
+  );
+  await settle();
+  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  await settle();
+
+  const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
+  assert.deepEqual(
+    [
+      // A row names the repository, then its owner after it.
+      [...menu.querySelectorAll('[role="option"]')].map((row) =>
+        [".plan-compose-menu-detail", ".plan-compose-menu-name"]
+          .map((part) => row.querySelector(part)?.textContent)
+          .join("/"),
+      ),
+      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
+    ],
+    [["acme/relay"], []],
+  );
+});
+
 test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
   let refuse = false;
   const tab = mount(
@@ -1545,6 +1890,31 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   assert.deepEqual(selected(tab), [PLAN.id]);
 });
 
+test("while a page stands its ask, a way out asks instead of going, Leave goes where was asked, and once the ask is down the doors go at once", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().inboxView.onOpen());
+  const asked: (() => void)[] = [];
+  const ask: LeaveAsk = (leave) => asked.push(leave);
+  let down: () => void = () => undefined;
+  act(() => {
+    down = tab.control().leaveGuard.stand(ask);
+  });
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().onChooseWorkspace("workspace-other"));
+  assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
+  assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
+
+  act(() => asked[0]?.());
+  assert.equal(tab.control().factoryView.open, true, "Leave goes where the first way out went");
+
+  act(() => down());
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(asked.length, 3, "nothing is asked once the ask is down");
+});
+
 test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
   const tab = mount({ shown: true, planning: listRead([listed()]) });
   act(() => tab.control().inboxView.onOpen());
@@ -1581,4 +1951,56 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
   act(() => home.control().onGoHome());
   assert.equal(home.control().inboxView.open, false);
   assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+});
+
+test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
+  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  /** Each pin the tab asked of main, in order, as `pinned`. */
+  const asked = () =>
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN)
+      .map((each) => Option.getOrUndefined(readPin(each.payload))?.pinned);
+
+  await act(async () => {
+    tab.control().onPinAgent("agent-1", true);
+    tab.control().onPinAgent("agent-1", false);
+  });
+  const first = asked();
+  // The first is answered as refused, which is no matter to the order the second is asked in.
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+
+  assert.deepEqual(first, [true]);
+  assert.deepEqual(asked(), [true, false]);
+});
+
+test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
+  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  await act(async () => {
+    tab.control().onPinAgent("agent-1", true);
+    tab.control().onPinAgent("agent-1", false);
+  });
+
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true, account: "teammate@example.com" });
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+
+  assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
 });

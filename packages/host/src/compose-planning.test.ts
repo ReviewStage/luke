@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryPullRequestAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
@@ -17,9 +18,13 @@ import {
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
+  type PlanlessAgent,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   PLAN_ACTOR,
@@ -35,6 +40,7 @@ import {
 } from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
+  PICTURE_KEEP_FAILURE,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCallFailure,
@@ -46,6 +52,7 @@ import {
 import type { PlanTranscript } from "@luke/features/transcript-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
+  type FormerMember,
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
@@ -105,6 +112,8 @@ interface FakeService extends PlanningClient {
   plans: Plan[];
   /** What the list says of each plan's coding agents, by plan id; a plan with none says nothing. */
   agents: Record<string, PlanAgentsSummary>;
+  /** The agents with no plan the list carries beside the plans. */
+  planlessAgents: PlanlessAgent[];
   listFails: boolean;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
@@ -135,6 +144,13 @@ interface FakeService extends PlanningClient {
   folders: Record<string, PlanTreeAnswer>;
   /** What the service answers for each plan's skills, by plan id; a plan with none answers nothing, as a service that did not answer. */
   skills: Record<string, PlanSkillsAnswer>;
+  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
+  places: Record<
+    string,
+    Record<string, { folders: Record<string, PlanTreeAnswer>; skills: PlanSkillsAnswer }>
+  >;
+  /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
+  pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -145,6 +161,8 @@ interface FakeService extends PlanningClient {
   pages: PageVersion[];
   /** Each plan's pages as the service lists them, by plan id; a plan with none answers nothing, as a service that did not answer. */
   pageLines: Record<string, readonly PageLine[]>;
+  /** The plans' pictures the service holds, by plan and then by picture. */
+  pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: PlanEditAnswer | undefined;
   /** The account's pinned repositories, newest pinned first, as the service keeps them. */
@@ -163,6 +181,10 @@ interface FakeService extends PlanningClient {
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
+  /** Who each workspace's work names but left, as the service answers beside its members. */
+  former: Record<string, FormerMember[]>;
+  /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
+  linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -201,6 +223,7 @@ const RELAY: Workspace = {
   github: null,
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -227,6 +250,7 @@ function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
     plans,
     agents: {},
+    planlessAgents: [],
     listFails: false,
     deleteFails: false,
     listGate: Effect.void,
@@ -243,6 +267,8 @@ function fakeService(plans: Plan[]): FakeService {
     files: {},
     folders: {},
     skills: {},
+    places: {},
+    pullRequests: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -252,6 +278,25 @@ function fakeService(plans: Plan[]): FakeService {
     pages: [],
     pageLines: {},
     readPages: (planId) => Effect.sync(() => service.pageLines[planId]),
+    pictures: new Map(),
+    // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
+    keepPicture: (planId, picture) =>
+      Effect.sync(() => {
+        const held = service.pictures.get(planId) ?? new Map();
+        service.pictures.set(planId, held);
+        if (held.size >= 2) return { failure: PICTURE_KEEP_FAILURE.TOO_MANY };
+        const id = `kept-${held.size + 1}`;
+        const [, base64 = ""] = picture.split(",");
+        held.set(id, { contentType: PICTURE_TYPE.PNG, base64 });
+        return { id };
+      }),
+    readPicture: (planId, attachmentId) =>
+      Effect.sync(
+        () =>
+          service.pictures.get(planId)?.get(attachmentId) ?? {
+            failure: PLAN_CALL_FAILURE.NOT_FOUND,
+          },
+      ),
     readPageVersion: (_planId, pageId, version) =>
       Effect.sync(() =>
         service.pages.find((page) => page.id === pageId && page.version === version),
@@ -282,6 +327,8 @@ function fakeService(plans: Plan[]): FakeService {
     renamedAgain: undefined,
     workspacesGate: Effect.void,
     members: {},
+    former: {},
+    linearIssues: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -379,13 +426,43 @@ function fakeService(plans: Plan[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }),
-      members: (workspaceId) =>
+      linearConnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-connect:${workspaceId}`);
+          return service.notPermitted
+            ? NOT_PERMITTED_WORKSPACE
+            : ({ ok: true, answer: LINEAR_SIGN_IN_URL } as const);
+        }),
+      linearDisconnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-disconnect:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const { linear: _gone, ...now } = found;
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }),
+      linearIssues: ({ workspaceId, query }) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-issues:${workspaceId}:${query ?? ""}`);
+          const issues = service.linearIssues[workspaceId];
+          return issues === undefined
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
+            : ({ ok: true, answer: issues } as const);
+        }),
+      people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);
           const members = service.members[workspaceId];
           return members === undefined
             ? UNANSWERED_WORKSPACE
-            : ({ ok: true, answer: members } as const);
+            : ({
+                ok: true,
+                answer: { members, former: service.former[workspaceId] ?? [] },
+              } as const);
         }),
       photo: (workspaceId) =>
         Effect.sync(() => {
@@ -504,6 +581,14 @@ function fakeService(plans: Plan[]): FakeService {
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_planId, folder) => Effect.sync(() => service.folders[folder.path]),
     readSkills: (planId) => Effect.sync(() => service.skills[planId]),
+    readRepositoryTree: (place, folder) =>
+      Effect.sync(
+        () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
+      ),
+    readRepositorySkills: (place) =>
+      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
+    readRepositoryPullRequest: (place, number) =>
+      Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -526,10 +611,13 @@ function fakeService(plans: Plan[]): FakeService {
           ? { ok: false as const, failure: PLAN_CALL_FAILURE.UNANSWERED }
           : {
               ok: true as const,
-              answer: service.plans.map((each) => {
-                const agents = service.agents[each.id];
-                return agents === undefined ? summary(each) : { ...summary(each), agents };
-              }),
+              answer: {
+                plans: service.plans.map((each) => {
+                  const agents = service.agents[each.id];
+                  return agents === undefined ? summary(each) : { ...summary(each), agents };
+                }),
+                planlessAgents: service.planlessAgents,
+              },
             };
         yield* service.listGate;
         return answer;
@@ -769,6 +857,51 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
   });
 }
 
+it.effect(
+  "a plan's picture is answered to the window that asked as its bytes, and as not found where the service holds none for it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const picture = { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      service.pictures.set(INVITES, new Map([["picture-1", picture]]));
+      const { call, told } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.PLANNING_PICTURE, {
+        planId: INVITES,
+        attachmentId: "picture-1",
+      });
+      const gone = yield* call(GATEWAY_METHOD.PLANNING_PICTURE, {
+        planId: INVITES,
+        attachmentId: "picture-2",
+      });
+
+      assert.deepEqual(read, picture);
+      assert.deepEqual(gone, { failure: PLAN_CALL_FAILURE.NOT_FOUND });
+      assert.equal(told.length, 0, "a picture's bytes are never told in the view");
+    }),
+);
+
+it.effect(
+  "a picture the editor took is kept on the service and read back by the id it answered, and one past the plan's bound is refused in so many words",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service);
+      const picture = "data:image/png;base64,iVBORw0KGgo=";
+
+      const kept = yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+      yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+      const third = yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+
+      assert.deepEqual(kept, { id: "kept-1" });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_PICTURE, { planId: INVITES, attachmentId: "kept-1" }),
+        { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      );
+      assert.deepEqual(third, { failure: PICTURE_KEEP_FAILURE.TOO_MANY });
+    }),
+);
+
 it.effect("the window's refresh lists the plans and opening one draws its saved document", () =>
   Effect.gen(function* () {
     const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
@@ -791,6 +924,41 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.activePlanId, BILLING);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
   }),
+);
+
+it.effect(
+  "the window's refresh lists the agents with no plan beside the plans, and a list read that fails keeps them",
+  () =>
+    Effect.gen(function* () {
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing]);
+      const triage: PlanlessAgent = {
+        id: "6f1c1f9e-5a8e-4f52-9d6c-2b7a0d1e3c41",
+        planId: null,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: "Triage overnight Sentry issues",
+        createdAt: 30,
+        status: CODING_AGENT_STATUS.COMPLETED,
+        turnId: null,
+        automationId: "0b9d6c7e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        automationName: "Morning Sentry triage",
+        workspaceId: ACME.id,
+        repository: "acme/api",
+        activityAt: 45,
+      };
+      service.planlessAgents = [triage];
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const read = [last()?.plans, last()?.planlessAgents];
+      service.listFails = true;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(read, [[summary(billing)], [triage]]);
+      assert.equal(last()?.listStatus, PLANNING_READ.FAILED);
+      assert.deepEqual(last()?.planlessAgents, [triage]);
+    }),
 );
 
 it.effect(
@@ -1443,6 +1611,23 @@ it.effect(
 );
 
 it.effect(
+  "a members read carries who the workspace's work names but left, where the service names anyone",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.members[ACME.id] = [ADA];
+      const lee = { userId: "user-lee", name: "Lee Park" };
+      service.former[ACME.id] = [lee];
+      const { call } = yield* subject(service);
+
+      const people = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: ACME.id });
+
+      assert.deepEqual(people, { members: [ADA], former: [lee] });
+    }),
+);
+
+it.effect(
   "a workspace's members are read on the service with nothing else, and a removal reads the workspaces again and not the plans",
   () =>
     Effect.gen(function* () {
@@ -1942,6 +2127,104 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
       unanswered,
     );
     assert.deepEqual(service.reads, []);
+  }),
+);
+
+it.effect(
+  "a folder and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const folder = (path: string): PlanTreeAnswer => ({
+        folder: { path, repository: "acme/relay", branch: "main", entries: [], truncated: false },
+      });
+      const skills = (name: string): PlanSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name, description: "", path: `.agents/skills/${name}/SKILL.md` }],
+        },
+      });
+      service.places[ACME.id] = {
+        "acme/relay": { folders: { src: folder("src") }, skills: skills("release") },
+      };
+      service.folders.docs = folder("docs");
+      service.skills[INVITES] = skills("review");
+      const { call } = yield* subject(service);
+      const place = { workspaceId: ACME.id, repository: "acme/relay" };
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_TREE, { ...place, path: "src" }),
+        folder("src"),
+      );
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_SKILLS, place), skills("release"));
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_TREE, { planId: INVITES, path: "docs" }),
+        folder("docs"),
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: INVITES }),
+        skills("review"),
+      );
+    }),
+);
+
+it.effect(
+  "a pull request is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, and a number off the wire is refused before the service",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const merged: GitHubRepositoryPullRequestAnswer = {
+        pullRequest: {
+          number: 42,
+          title: "Send invitations in batches",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.MERGED,
+        },
+      };
+      service.pullRequests[ACME.id] = {
+        "acme/relay": new Map([
+          [42, merged],
+          [43, { pullRequest: null }],
+        ]),
+      };
+      const { call, told } = yield* subject(service);
+      const asked = (number: number) =>
+        call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          number,
+        });
+
+      const read = yield* asked(42);
+      const none = yield* asked(43);
+      const unanswered = yield* asked(44);
+      const offTheWire = yield* Effect.exit(asked(0));
+
+      assert.deepEqual(read, merged);
+      assert.deepEqual(none, { pullRequest: null });
+      assert.deepEqual(unanswered, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      assert.ok(Exit.isFailure(offTheWire), "a pull request is numbered from one");
+      assert.equal(told.length, 0, "a pull request is never told in the view");
+    }),
+);
+
+it.effect("behind a closed account gate a pull request's read does not reach the service", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.pullRequests[ACME.id] = {
+      "acme/relay": new Map([[42, { pullRequest: null }]]),
+    };
+    const { call } = yield* subject(service, { signedIn: false });
+
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+        workspaceId: ACME.id,
+        repository: "acme/relay",
+        number: 42,
+      }),
+      { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    );
   }),
 );
 

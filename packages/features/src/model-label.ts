@@ -1,7 +1,7 @@
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
- * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out.
+ * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; and an agent by its title, its automation, or its model.
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
@@ -66,4 +66,21 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
       )
       .join(" "),
   );
+}
+
+/** What names an agent: its title, the automation whose run started it, and the model it runs on. */
+interface NamedAgent {
+  readonly title: string | null;
+  readonly model: string;
+  /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
+  readonly automationName?: string | undefined;
+}
+
+/**
+ * An agent as every place names it, its tab, a sidebar row, a card, a
+ * notification: its title, or until it has one the name of the automation
+ * whose run started it, or else its model's name (`modelLabel`).
+ */
+export function agentTabLabel(agent: NamedAgent, models?: readonly CatalogModel[]): string {
+  return agent.title ?? agent.automationName ?? modelLabel(agent.model, models);
 }

@@ -24,7 +24,8 @@
         "plan-archived",
         "not-permitted",
         "already-invited",
-        "sandbox-stopped"
+        "sandbox-stopped",
+        "linear-unavailable"
       ]
     }
   },

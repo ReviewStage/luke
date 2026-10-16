@@ -37,6 +37,7 @@ interface Recorded {
   sandboxed: number[];
   terminals: number[];
   automated: number[];
+  pictures: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -48,6 +49,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     terminals: [],
     automated: [],
+    pictures: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -87,6 +89,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.automated.push(now);
         return { fired: 1, started: 1, skipped: 0, failed: 0, archived: 0 };
       }),
+    purgeUnsavedPictures: (now) =>
+      Effect.sync(() => {
+        recorded.pictures.push(now);
+        return 4;
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -114,6 +121,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       terminals: [],
       automated: [],
+      pictures: [],
     });
   }),
 );
@@ -136,6 +144,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       terminals: [],
       automated: [],
+      pictures: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -145,12 +154,13 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       terminals: [],
       automated: [],
+      pictures: [],
     });
   }),
 );
 
 it.effect(
-  "an authorized sweep runs every sweep at one instant, the lapsed terminal leases among them, and answers what each did",
+  "an authorized sweep runs every sweep at one instant, the lapsed terminal leases and the unsaved pictures among them, and answers what each did",
   () =>
     Effect.gen(function* () {
       const { options, recorded } = sweepOptions();
@@ -159,6 +169,7 @@ it.effect(
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
+      assert.equal(answer.body.purgedPictures, 4);
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -169,6 +180,7 @@ it.effect(
         sandboxed: [instant],
         terminals: [instant],
         automated: [instant],
+        pictures: [instant],
       });
     }),
 );

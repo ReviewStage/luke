@@ -129,16 +129,24 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 
 - Every named task the account owns, newest started first. Opening a task
   moves no row, so a new task stands at the head and nothing else moves.
-  The tasks are grouped under their repositories' headers, the repository's
-  name with its owner on hover (or `owner/name` where two share a name), the
-  group whose task was updated most recently first and "No repository" last;
-  within a group the order stays newest started first, so no row moves while
-  Luke writes. A header's chevron folds the group, remembered on this Mac,
-  and its + (shown on hover or focus) opens the new-task page with that
+  The tasks stand in the **Tasks** section, whose head's **View options**
+  (the Inbox's sliders) chooses how they are drawn, remembered for each
+  workspace on this Mac: Group by Repository (the default), Creator (in a
+  shared workspace: You first, then each teammate), or None; Order by Last
+  updated (the default), Created, or Name, which orders the groups too; and,
+  in a shared workspace, Created by Anyone (the default), Me, or a teammate,
+  which while it names someone stands as a chip under the head whose ×
+  lifts it, the button wearing a dot. Under Repository, the groups stand
+  under their repositories' headers, the repository's name with its owner on
+  hover (or `owner/name` where two share a name), "No repository" last. A
+  header's chevron folds the group, remembered on this Mac, and a
+  repository's + (shown on hover or focus) opens the new-task page with that
   repository already chosen. Each row shows the task's name and, muted at its
-  end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
-  the date), moved on each minute, the full moment on hover. Pinned and
-  archived rows stay flat and name their `owner/repository` beneath.
+  end, the time the order chooses (its last activity, the later of its plan's
+  last save and its agents' last turn, or under Created when it was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
+  minute, the full moment on hover. A row says what its group does not: a
+  teammate's face under a repository's header, its repository's name under a
+  creator's, and both in one run.
 - A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
@@ -166,20 +174,42 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   repository belongs to <workspace> · Move to <workspace>", whose press opens
   Move to workspace on that workspace; nothing moves it without that press,
   since a move shares the task with the other workspace's members.
+- An agent an automation started with no task stands among the tasks, not
+  in a group of its own: under its repository, under whoever started it, or
+  in the one run, ordered with the tasks by its last activity, filtered by
+  Created by, and, archived, under Archived tasks. Its row leads with the
+  agent's harness mark, as its tab does, giving way to the working mark while
+  it works, ends with its automation's clock and its time, and reads in
+  semibold while its end is unseen; a press opens the agent's own page, and a
+  right-click offers its Copy link, the agent's own link under the listed
+  workspace, saying Link copied, then Pin or Unpin, as a task's row offers
+  them; ⌘K offers Pin agent or Unpin agent on the agent's own page. An
+  archived agent offers no pin.
 - Clicking a row opens that task on the document page (see "Leaving and
   resuming").
 - `New task` at the head of the list leaves any open task for the new-task
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-task page shows.
-- A pinned task stands under **Pinned**, a section above the rest drawn only
-  while any task is pinned, newest pinned first.
-- An archived task leaves the list for **Archived (n)**, a quiet row at the
-  list's foot that unfolds the archived tasks, newest archived first.
+- A pinned task stands under **Pinned**, a section above Tasks drawn only
+  while any task is pinned, newest pinned first, which no view filters. A
+  pinned agent with no task stands there among the pinned tasks, ordered the
+  same way, and leaves its place among the tasks. ⌘K offers Pin task or
+  Unpin task for the task on screen, through its row menu's own Pin, and
+  none for an archived task.
+- An archived task leaves the list. View options' **Archived tasks** turns
+  the Tasks section to the archived tasks, grouped and ordered as the view
+  says, the pins standing aside, with an Archived chip whose × goes back; it
+  is not remembered, so another workspace or the next launch opens on the
+  tasks.
   Archiving the open task leaves it for the new-task page, as deleting it
-  does, and back and forward pass archived tasks over. Pins and archives are
-  the account's (`PATCH /api/plans/{id}`), so they follow it to every Mac,
-  and a Pin, an Archive, or the way back from either is drawn at once and
+  does, and back and forward pass archived tasks over. A pin is the account's
+  own and an archive the workspace's (`PATCH /api/plans/{id}`), so a task of
+  a shared workspace one member pinned stands under Pinned for them alone,
+  both follow the account to every Mac, and a Pin, an Archive, or the way back from either is drawn at once and
   put back, with a quiet note under the task's row, when the service refuses.
+  An agent's pin is the account's own too (`agent_pin`, through
+  `PATCH /api/agents/{id}`), drawn at once and put back with a toast when the
+  service refuses.
 - There is no search in this journey.
 
 ### New task
@@ -211,9 +241,10 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
    meanwhile; nothing polls. The arrows move the highlight while the search
    field keeps focus, Enter picks, Escape closes the menu and hands focus
    back to the chip, and so does focus leaving it.
-3. **Start**, the round arrow at the card's other end, enabled once the name
-   is set; Enter presses it. Pressing it saves the task with its name, its
-   repository, and the untouched template as its plan, and opens it. If
+3. **Start**, the round arrow at the card's other end; Enter presses it.
+   The name is optional. Pressing it saves the task with its name, its
+   repository, and the untouched template as its plan, and opens it. A task
+   started with no name stands as "Untitled" until the developer renames it. If
    the service cannot be reached, or it refuses the repository (the App does
    not reach it, or the account must sign in with GitHub again), the reason
    shows under the card and the button can be pressed again.
@@ -224,7 +255,8 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
 - The task's name. The toolbar is one row, the side panel's bar's height
   exactly (`--desktop-bar-height`, the one token both take), so their bottom
   borders are one line across the window.
-- The task's repository is the sidebar's to name, by the group it stands in.
+- The task's repository is the sidebar's to name: by the group it stands in,
+  or on its row where the list's view groups by creator or not at all.
   A task with none yet, the 13 tasks from before repositories among them,
   shows a compact `Choose repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through
@@ -240,7 +272,7 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   Permanently delete, last and red, which asks first in a dialog that points
   a task not yet archived at Archive instead. ⇧⌘A archives the open task and
   ⌘⌫ asks to delete it, from any of its tabs.
-- An archived task opened from under Archived reads and works as any other,
+- An archived task opened from Archived tasks reads and works as any other,
   under a quiet line, "This task is archived", with Unarchive beside it.
 - **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
   while the task's own tab is chosen, as the ⋯ is. Its main
@@ -503,7 +535,12 @@ panel.
   forward on it. A Stop is the developer's own and is not announced, and an
   agent first seen already ended, as after a relaunch, is not either. The
   "opened #N" wording waits on a read of the agent's pull request, and a
-  Settings toggle for the notifications is a follow-up.
+  Settings toggle for the notifications is a follow-up. An agent an
+  automation started with no task is held from the task list, which carries
+  the account's own beside the tasks, and while it works it is read again by
+  itself on the same clock; its end is told the same way, titled with the
+  automation's name, and its click or its toast's View opens the agent's
+  own page.
 - **Privacy.** Every word is the agent's or the plan's, so the tab carries
   `ph-no-capture`, as the Transcript tab does.
 
@@ -590,17 +627,25 @@ written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
-- `replace` corrects a phrase copied exactly from the text, standing once in
-  it and touching no heading, and `remove` strikes the line holding one.
+- `replace` is the one generic edit: it replaces text copied exactly from
+  the plan, standing once in it, from a phrase to whole sections, headings
+  included, with what it becomes; an empty replacement deletes, and a line
+  it leaves empty is taken out.
 
-A note naming a phrase the plan does not hold is passed over, reported, and
-never guessed into another; a note that does not read under the schema is
-passed over alone. The rest save.
+A note's words may open headings of their own, so the notes can rename,
+split, merge, move, and drop sections, a move being a deletion and a
+replacement or an addition. The notes of one answer save together or not
+at all: one naming text or a heading the plan does not hold exactly
+once, or one that does not read under the schema, is reported, never guessed
+into another, and saves nothing of the answer, whose lines the next run is
+handed again over the plan as it then stands.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into
 the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
-the instant, and the notes as taken; the agent is named at read time from its
+the instant, and the notes as taken, a deletion kept as a `remove` and a
+replaced text cut to 500 characters so the deployment before reads it; a call whose notes do not all land saves
+nothing and answers the plan as it stands, to retry from. The agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" Luke is handed both say what the row
 says now.
@@ -818,12 +863,19 @@ known by its heading's words (`planSections`). Who last changed each section
 is read off the plan's revisions by heading (`sectionWritersOf`,
 `sectionEdits` on the wire), each against the one before it, so a heading
 renamed with nothing beneath it changed is the same section under its new
-words. Luke's notes land under the
-developer's headings (`applyNotesToText` in `plan-template.ts`): an addition
-at the end of its section, or as a new section at the end of the text where
-the text has none; a correction or a strike names a phrase standing once in
-the whole text and touching no heading, since the headings are the
-developer's. Every plan the fixed template once kept as fields was carried
+words. Luke's notes, the notetaker's and a coding agent's alike, may land
+anywhere in the text (`applyNotesToText` in `plan-template.ts`): an addition
+at the end of the one section under its heading, or as a new section at the
+end of the text where the text has none; a replacement names text standing
+once in the whole text, headings and whole sections among it, so a heading
+is renamed, and a section moved or struck, by replacing it, an empty
+replacement deleting; and a note's words may open headings of their own. One answer's notes are taken together or not at all,
+under the plan's lock: where one names a phrase or a heading the text does
+not hold exactly once, the developer having rewritten it meanwhile among the
+reasons, nothing is saved, so a move never strikes without placing. The
+notetaker's next run is handed the same lines over the text as it then
+stands; a coding agent's `edit_plan` answers the text as it stands, to retry
+from. Every plan the fixed template once kept as fields was carried
 over to its text by a one-time backfill (34 plans and 32 revisions in
 production), each field's words under its heading.
 
@@ -935,7 +987,7 @@ Luke reads the task's repository, not a folder on the Mac,
 and so does the code he puts on the developer's screen. What only the Mac
 has, he reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the task
-conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
+conversation's eve session owns (`apps/luke/sandbox.ts`), on a checkout of
 the task's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
 The first call that finds no checkout of the task's repository makes one, at
 the repository's current default branch and one commit deep, and later calls
@@ -1336,9 +1388,9 @@ changes when a check is run, not when one is planned.
   prewarm has not been run on Vercel.
 - **A coding agent.** No coding agent has run against a real provider, a
   real checkout, a push, or a pull request. The coder eval
-  (`apps/web/coder/evals/coder.eval.ts`) runs one turn under a scripted model
+  (`apps/dev/evals/coder.eval.ts`) runs one turn under a scripted model
   that calls no tool, so no sandbox opens and no repository is checked out,
-  and the `coder` service's sandbox `prepare` has not been run on Vercel.
+  and the `dev` service's sandbox `prepare` has not been run on Vercel.
 
 ### Known limitations
 

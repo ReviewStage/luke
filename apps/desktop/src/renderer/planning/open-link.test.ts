@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -9,21 +9,26 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./transcript-blocks";
-import { OpenPlanProvider } from "./use-open-link";
+import { OpenLinkProvider } from "./use-open-link";
 
 /**
- * A link pressed in written words: a Luke link, drawn as its chip, opens
- * its plan in the window, at its section, and never the browser, while a
- * GitHub page, drawn as GitHub's chip, and any other web page open in the
- * browser over their acts; off the window, where no opener for a plan is
- * handed down, a Luke link's chip opens nothing. Synthetic plan.
+ * A link pressed in written words: a Luke link, a task's drawn as its chip,
+ * opens its place in the window, a task at its section, an agent, an Inbox
+ * item, and never the browser, while a GitHub page, drawn as GitHub's chip,
+ * and any other web page open in the browser over their acts; off the
+ * window, where no opener for a place is handed down, a Luke link opens
+ * nothing in it. Synthetic ids.
  */
 
 const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const ITEM_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
 const WORDS = [
   `See [the rollout](https://tryluke.dev/acme/plan/${PLAN_ID}#rollout),`,
   `[the plan](https://tryluke.dev/personal-u_1/plan/${PLAN_ID}),`,
+  `[the agent](https://tryluke.dev/acme/plan/${PLAN_ID}/agent/${AGENT_ID}),`,
+  `[its question](https://tryluke.dev/acme/agent/${AGENT_ID}/inbox/${ITEM_ID}),`,
   "[the pull request](https://github.com/acme/relay/pull/12),",
   "and [the docs](https://example.com/docs).",
 ].join(" ");
@@ -54,7 +59,7 @@ afterEach(() => {
 });
 
 /** The words drawn under the opener given, each link pressed in order. */
-function pressedEach(openPlan: ((mention: PlanMention) => void) | undefined): void {
+function pressedEach(openPlace: ((link: ReadLink) => void) | undefined): void {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -62,7 +67,9 @@ function pressedEach(openPlan: ((mention: PlanMention) => void) | undefined): vo
   const words: ReactNode = createElement(TranscriptWords, { text: WORDS });
   act(() =>
     root.render(
-      openPlan === undefined ? words : createElement(OpenPlanProvider, { value: openPlan }, words),
+      openPlace === undefined
+        ? words
+        : createElement(OpenLinkProvider, { value: openPlace }, words),
     ),
   );
   for (const link of container.querySelectorAll<HTMLElement>(
@@ -72,14 +79,22 @@ function pressedEach(openPlan: ((mention: PlanMention) => void) | undefined): vo
   }
 }
 
-test("a Luke link opens its plan in the window, at its section, and other pages open in the browser", () => {
-  const opened: PlanMention[] = [];
+test("a Luke link opens its place in the window, a task at its section, an agent, an Inbox item, and other pages open in the browser", () => {
+  const opened: ReadLink[] = [];
 
-  pressedEach((mention) => opened.push(mention));
+  pressedEach((link) => opened.push(link));
 
   assert.deepEqual(opened, [
-    { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" },
-    { kind: MENTION_KIND.PLAN, planId: PLAN_ID },
+    { workspace: "", place: { kind: LINK_PLACE.SECTION, planId: PLAN_ID, anchor: "rollout" } },
+    { workspace: "", place: { kind: LINK_PLACE.TASK, planId: PLAN_ID } },
+    {
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: AGENT_ID },
+    },
+    {
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: ITEM_ID },
+    },
   ]);
   assert.deepEqual(
     sent.map((request) => request.kind),
@@ -87,11 +102,11 @@ test("a Luke link opens its plan in the window, at its section, and other pages 
   );
 });
 
-test("off the window, where no opener for a plan is handed down, a Luke link opens nothing, and other pages still open in the browser", () => {
+test("off the window, where no opener for a place is handed down, a Luke link opens in the browser as any page does", () => {
   pressedEach(undefined);
 
   assert.deepEqual(
     sent.map((request) => request.kind),
-    [ACT_KIND.GITHUB_OPEN, ACT_KIND.WEB_OPEN],
+    [ACT_KIND.WEB_OPEN, ACT_KIND.WEB_OPEN, ACT_KIND.GITHUB_OPEN, ACT_KIND.WEB_OPEN],
   );
 });

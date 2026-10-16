@@ -8,14 +8,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { CHIP_LOOK } from "../chip";
+import { PICKER_ALIGN } from "../settings/picker-row";
 import { NewPlanDialog } from "./new-plan-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
 /**
  * new-plan-workspace.test.ts -- New plan says where the plan will start,
  * "New task in Acme", and the workspace chip there chooses another: the
- * repository chip then lists that workspace's repositories under where they
- * come from, and the plan starts there. Synthetic throughout.
+ * repository chip then lists that workspace's repositories, and the plan
+ * starts there. Both chips are the app's one picker, Settings' bordered chip
+ * and its menu. Synthetic throughout.
  */
 
 const PERSONAL: Workspace = {
@@ -78,7 +81,6 @@ function chooserFor(workspaceId: string | undefined): RepositoryChooser {
     recent: ["acme-corp/relay"],
     scope: ACME.id,
     workspaceName: ACME.name,
-    source: "acme-corp on GitHub · Acme",
     read: () =>
       Promise.resolve({
         repositories: {
@@ -99,7 +101,7 @@ function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   };
 }
 
-test("New plan says the workspace it starts in, and the workspace chosen there lists its own repositories under their source and starts the plan", async () => {
+test("New plan says the workspace it starts in, and the workspace chosen there lists its own repositories and starts the plan", async () => {
   const starts: (string | undefined)[] = [];
   const control = plansControl();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -130,15 +132,14 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     assert.fail("the title's workspace is a chip");
   act(() => workspaceChip.click());
   await settle();
-  assert.equal(
-    document.querySelector<HTMLElement>('[role="menu"][aria-label="Workspace"]')?.dataset.layer,
-    "dialog",
-    "the chip's menu stands over the window the dialog dims, not under it",
+  const menu =
+    document.querySelector('[role="dialog"][aria-label="Workspace"]') ??
+    assert.fail("the chip opens its menu");
+  assert.ok(
+    document.querySelector(".new-plan-dialog")?.contains(menu),
+    "the chip's menu stands inside the dialog, over the window it dims",
   );
-  const acme = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-    (item) => item.textContent?.endsWith("Acme"),
-  );
-  act(() => acme?.click());
+  act(() => optionNamed(menu, "Acme").click());
   await settle();
   assert.match(title() ?? "", /Acme$/u, "the title says the workspace chosen");
 
@@ -147,10 +148,15 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     assert.fail("the repository chip stands");
   act(() => repositoryChip.click());
   await settle();
-  assert.match(
-    document.body.textContent ?? "",
-    /acme-corp on GitHub · Acme/u,
-    "the list says where its repositories come from",
+  assert.deepEqual(
+    // A row names the repository, then its owner after it.
+    [...document.querySelectorAll('[role="option"]')].map((row) =>
+      [".plan-compose-menu-detail", ".plan-compose-menu-name"]
+        .map((part) => row.querySelector(part)?.textContent)
+        .join("/"),
+    ),
+    ["acme-corp/relay"],
+    "the list is the chosen workspace's repositories",
   );
 
   const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
@@ -165,6 +171,15 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   await settle();
   assert.deepEqual(starts, [ACME.id], "the plan starts in the workspace chosen");
 });
+
+/** The menu's option that names `name`. */
+function optionNamed(menu: ParentNode, name: string): HTMLElement {
+  return (
+    [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+      option.textContent?.endsWith(name),
+    ) ?? assert.fail(`the menu offers ${name}`)
+  );
+}
 
 /** New plan open over the two workspaces, starting in `workspaceId`, each start's repository and workspace written down. */
 async function openNewPlan(workspaceId: string, preset?: string) {
@@ -227,10 +242,7 @@ test("switching New plan to a workspace with no GitHub connected lets the other 
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
     assert.fail("the title's workspace is a chip");
   act(() => workspaceChip.click());
-  const personal = [
-    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
-  ].find((item) => item.textContent?.endsWith("Personal"));
-  act(() => personal?.click());
+  act(() => optionNamed(document.body, "Personal").click());
   await settle();
   act(() => dialog.repositoryChip().click());
   await settle();
@@ -243,4 +255,55 @@ test("switching New plan to a workspace with no GitHub connected lets the other 
   assert.equal(offered.includes("acme-corp/relay"), false);
   assert.equal(note, "Personal has no GitHub connected yet.");
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
+});
+
+test("New task's workspace and repository chips are the app's bordered picker, each dropping its menu from its leading edge", async () => {
+  await openNewPlan(ACME.id);
+  const chips = [
+    document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
+      assert.fail("the title's workspace is a chip"),
+    document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
+      assert.fail("the repository chip stands"),
+  ];
+
+  const drawn = [];
+  for (const chip of chips) {
+    act(() => chip.click());
+    await settle();
+    const menu = document.querySelector('[role="dialog"][aria-label]');
+    drawn.push({
+      menu: menu?.getAttribute("aria-label"),
+      look: chip.dataset.look,
+      hangsFrom: menu?.parentElement?.closest("[data-align]")?.getAttribute("data-align"),
+    });
+    act(() => chip.click());
+    await settle();
+  }
+
+  assert.deepEqual(drawn, [
+    { menu: "Workspace", look: CHIP_LOOK.FIELD, hangsFrom: PICKER_ALIGN.START },
+    { menu: "Repository", look: CHIP_LOOK.FIELD, hangsFrom: PICKER_ALIGN.START },
+  ]);
+});
+
+test("Tab from the workspace picker's open list moves on to the task's name, and Shift-Tab back to the chip", async () => {
+  await openNewPlan(ACME.id);
+  const chip =
+    document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
+    assert.fail("the title's workspace is a chip");
+  const tabFromList = async (shiftKey: boolean) => {
+    act(() => chip.click());
+    await settle();
+    const list = document.activeElement ?? assert.fail("the open menu holds the keyboard");
+    act(() => {
+      list.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true }));
+    });
+    await settle();
+    return document.activeElement?.getAttribute("aria-label");
+  };
+
+  const forward = await tabFromList(false);
+  const backward = await tabFromList(true);
+
+  assert.deepEqual([forward, backward], ["Task name", "Workspace: Acme"]);
 });

@@ -13,6 +13,7 @@ import {
 } from "@luke/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
@@ -28,6 +29,7 @@ import {
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
+  ownFailedAutomationRuns,
   queuedAutomationRuns,
   readAutomation,
   readWebhookAutomation,
@@ -526,6 +528,79 @@ it.layer(getTestDB())("the automation store", (it) => {
           [],
           "nor an automation listening for another event",
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the automation store's failed runs", (it) => {
+  it.effect(
+    "the newest run of each of the account's own automations that failed to start since the instant asked is read, the latest first, a skipped one passed over, and none of another account's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const theirPlan = yield* openPlan(other);
+        const made = (userId: string, onPlan: string, name: string) =>
+          Effect.map(
+            createAutomation(userId, { ...nightly(onPlan), name, nextRunAt: null }),
+            Option.getOrThrow,
+          );
+        const sweep = yield* made(owner, planId, "Nightly flaky-test sweep");
+        const digest = yield* made(owner, planId, "Morning digest");
+        const theirs = yield* made(other, theirPlan, "Their sweep");
+        /** A run of the automation, settled as it came out, a second after the one before. */
+        const ran = (
+          automation: typeof sweep,
+          outcome:
+            | {
+                readonly status: typeof AUTOMATION_RUN_STATUS.FAILED;
+                readonly reason: (typeof AUTOMATION_RUN_REASON)[keyof typeof AUTOMATION_RUN_REASON];
+              }
+            | {
+                readonly status: typeof AUTOMATION_RUN_STATUS.SKIPPED;
+                readonly reason: typeof AUTOMATION_RUN_REASON.CONCURRENCY;
+              },
+        ) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust("1 second");
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(automation, {
+                dedupeKey: randomUUID(),
+                firing: { kind: AUTOMATION_FIRING.MANUAL },
+                firedAt: yield* DateTime.nowAsDate,
+              }),
+            );
+            yield* settleAutomationRun(run.id, outcome);
+            return run.id;
+          });
+        const failed = (
+          reason: (typeof AUTOMATION_RUN_REASON)[keyof typeof AUTOMATION_RUN_REASON],
+        ) => ({ status: AUTOMATION_RUN_STATUS.FAILED, reason }) as const;
+
+        yield* ran(sweep, failed(AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE));
+        const newest = yield* ran(sweep, failed(AUTOMATION_RUN_REASON.MODEL));
+        yield* ran(sweep, {
+          status: AUTOMATION_RUN_STATUS.SKIPPED,
+          reason: AUTOMATION_RUN_REASON.CONCURRENCY,
+        });
+        const digested = yield* ran(digest, failed(AUTOMATION_RUN_REASON.UNAVAILABLE));
+        const theirRun = yield* ran(theirs, failed(AUTOMATION_RUN_REASON.CREATOR_LEFT));
+        const read = (userId: string, sinceSeconds: number) =>
+          Effect.map(ownFailedAutomationRuns(userId, new Date(sinceSeconds * 1000)), (runs) =>
+            runs.map((run) => [run.id, run.automationName, run.reason]),
+          );
+
+        assert.deepEqual(yield* read(owner, 0), [
+          [digested, "Morning digest", AUTOMATION_RUN_REASON.UNAVAILABLE],
+          [newest, "Nightly flaky-test sweep", AUTOMATION_RUN_REASON.MODEL],
+        ]);
+        assert.deepEqual(yield* read(owner, 3), [
+          [digested, "Morning digest", AUTOMATION_RUN_REASON.UNAVAILABLE],
+        ]);
+        assert.deepEqual(yield* read(other, 0), [
+          [theirRun, "Their sweep", AUTOMATION_RUN_REASON.CREATOR_LEFT],
+        ]);
       }),
   );
 });

@@ -64,6 +64,575 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.15.0 — 2026-10-16
+
+### Pictures in plans
+
+Paste or drop a picture into a plan, or insert one with ⌥⌘I: it shows at
+once while it uploads, with its alt text and caption in place, and a failed
+upload offers Retry. A plan's pictures are drawn on its page and in its
+versions, open over the window, and are served only to its workspace's
+members. A coding agent adds a screenshot from its sandbox to the plan, and
+coding agents and Luke look at a plan's pictures when the alt text is not
+enough.
+([#2895](https://github.com/ReviewStage/luke/pull/2895),
+[#2913](https://github.com/ReviewStage/luke/pull/2913),
+[#2914](https://github.com/ReviewStage/luke/pull/2914),
+[#2943](https://github.com/ReviewStage/luke/pull/2943),
+[#2945](https://github.com/ReviewStage/luke/pull/2945),
+[#2991](https://github.com/ReviewStage/luke/pull/2991),
+[#3008](https://github.com/ReviewStage/luke/pull/3008))
+
+### Pictures from coding agents
+
+A coding agent or its worker shows you pictures from its sandbox, such as a
+screenshot of what it built, taken in the sandbox's own Chromium after a
+change to anything visible, and its transcript draws them
+in place: one picture large, a few in a row, many as thumbnails. An
+integration's pictures stand as chips under its call. A picture opens in a
+viewer that walks the whole set, and Add to plan puts it in the agent's plan,
+with Undo.
+([#2911](https://github.com/ReviewStage/luke/pull/2911),
+[#2906](https://github.com/ReviewStage/luke/pull/2906),
+[#2919](https://github.com/ReviewStage/luke/pull/2919),
+[#2927](https://github.com/ReviewStage/luke/pull/2927),
+[#2979](https://github.com/ReviewStage/luke/pull/2979),
+[#3004](https://github.com/ReviewStage/luke/pull/3004))
+
+### A person's page
+
+Press a person anywhere to open their page in the workspace: what they are
+working on now, what waits on their answer, the tasks and automations they
+created, and their other agents. ⌘K's People filter, Settings › Workspace ›
+Members, and Your profile in the account menu lead there too. Their tasks in
+sidebar filters the sidebar to them, and Copy link copies a link to their page.
+A member who left keeps their picture, grayed, and their name says they left.
+([#2982](https://github.com/ReviewStage/luke/pull/2982),
+[#2983](https://github.com/ReviewStage/luke/pull/2983),
+[#2984](https://github.com/ReviewStage/luke/pull/2984),
+[#2985](https://github.com/ReviewStage/luke/pull/2985),
+[#2986](https://github.com/ReviewStage/luke/pull/2986),
+[#2995](https://github.com/ReviewStage/luke/pull/2995),
+[#3001](https://github.com/ReviewStage/luke/pull/3001),
+[#3015](https://github.com/ReviewStage/luke/pull/3015))
+
+### Copy link to anything
+
+Copy link now reaches nearly every place in Luke: an agent, its worker, its
+Changes, a message in its transcript, a page, the Call tab, a version, an Inbox
+item, an automation and its runs, the Factory, and a Settings page. ⌥⌘C copies
+the link of what is open, ⌘K offers Copy link to each thing at hand, and every
+copy says Link copied. A Luke link opens its place in the window, and a place
+the reader cannot reach is Not found.
+([#2950](https://github.com/ReviewStage/luke/pull/2950),
+[#2969](https://github.com/ReviewStage/luke/pull/2969),
+[#2970](https://github.com/ReviewStage/luke/pull/2970),
+[#2971](https://github.com/ReviewStage/luke/pull/2971),
+[#2972](https://github.com/ReviewStage/luke/pull/2972),
+[#2973](https://github.com/ReviewStage/luke/pull/2973),
+[#2974](https://github.com/ReviewStage/luke/pull/2974),
+[#2975](https://github.com/ReviewStage/luke/pull/2975),
+[#3017](https://github.com/ReviewStage/luke/pull/3017))
+
+### Pull requests as you
+
+A coding agent you start commits as you, with Luke as co-author, and its pull
+request is opened as you, so it is yours on GitHub. The Changes tab names Luke
+beside you, and where an agent had to write as the GitHub App, it says why.
+([#2952](https://github.com/ReviewStage/luke/pull/2952),
+[#2963](https://github.com/ReviewStage/luke/pull/2963),
+[#2976](https://github.com/ReviewStage/luke/pull/2976))
+
+### Start a task from Linear
+
+An owner or admin connects Linear once for the whole workspace in Settings ›
+Workspace › Integrations. Then New task in the sidebar offers the workspace's
+Linear issues, and picking one starts the task with that issue as Luke's
+context. Agents in the workspace use its Linear connection.
+([#2859](https://github.com/ReviewStage/luke/pull/2859))
+
+### Several accounts at one integration
+
+Connect more than one account at a provider, such as a work and a personal
+Notion, in Settings › Integrations. Each stands as a row of its own, named for
+its workspace there, in Settings and in the MCP popover, and agents are handed
+each as a connection of its own, asking which one you mean where you have not
+said.
+([#2858](https://github.com/ReviewStage/luke/pull/2858),
+[#2864](https://github.com/ReviewStage/luke/pull/2864),
+[#2867](https://github.com/ReviewStage/luke/pull/2867),
+[#2868](https://github.com/ReviewStage/luke/pull/2868),
+[#2869](https://github.com/ReviewStage/luke/pull/2869),
+[#2896](https://github.com/ReviewStage/luke/pull/2896),
+[#2897](https://github.com/ReviewStage/luke/pull/2897),
+[#2915](https://github.com/ReviewStage/luke/pull/2915),
+[#2994](https://github.com/ReviewStage/luke/pull/2994))
+
+### Agents that talk to each other
+
+On a call, Luke lists, reads, and messages every coding agent in the task's
+workspace, each named with its task, and coding agents list and message the
+other coding agents of their workspace. In an agent's box, @ also offers the
+task's pages and its other agents.
+([#3026](https://github.com/ReviewStage/luke/pull/3026),
+[#3027](https://github.com/ReviewStage/luke/pull/3027),
+[#2822](https://github.com/ReviewStage/luke/pull/2822),
+[#3031](https://github.com/ReviewStage/luke/pull/3031))
+
+### Drafts kept
+
+What you type in an agent's box or an Inbox answer stays when you switch tabs
+or tasks, kept per agent, task, and item on this Mac, and a pencil marks
+a draft waiting out of sight.
+([#2925](https://github.com/ReviewStage/luke/pull/2925),
+[#2948](https://github.com/ReviewStage/luke/pull/2948),
+[#3005](https://github.com/ReviewStage/luke/pull/3005))
+
+### Experiments: video calls, Automations, and the Factory
+
+Settings › Experimental › Video calls puts Luke's face on a call, as a live
+avatar at the top of the Call tab, kept at 16:9 at any width. A new automation
+can start from Code review, which reviews pull requests as Luke, at most five at
+once and fifty a day. Automations choose the MCP servers their runs are handed,
+wear what fires them, and keep running through failures, a failed run saying
+why. An automation's agent is named by its pull request or issue, or from its
+prompt, and its transcript opens on the message that started it. Its agent
+stands among the sidebar's tasks, can be pinned there, and announces its turn's
+end as a task's agent does, and a run that fails to start is told to its owner.
+That agent's page keeps the side panel for its workers, Changes, and Terminal,
+and its box offers @ and / as a task's agent's does. The Factory now reads Talk,
+Build, Ship: the task on your call, the agents at work, failed, or waiting on
+you, and what merged in the last day, each row saying what, which task, who, and
+when. Its rows move with ↑ and ↓, open with Return, and offer Copy link, and ⌘K
+and the sidebar reach it.
+([#2908](https://github.com/ReviewStage/luke/pull/2908),
+[#2923](https://github.com/ReviewStage/luke/pull/2923),
+[#2924](https://github.com/ReviewStage/luke/pull/2924),
+[#2926](https://github.com/ReviewStage/luke/pull/2926),
+[#2929](https://github.com/ReviewStage/luke/pull/2929),
+[#2932](https://github.com/ReviewStage/luke/pull/2932),
+[#2933](https://github.com/ReviewStage/luke/pull/2933),
+[#2936](https://github.com/ReviewStage/luke/pull/2936),
+[#2939](https://github.com/ReviewStage/luke/pull/2939),
+[#2940](https://github.com/ReviewStage/luke/pull/2940),
+[#2941](https://github.com/ReviewStage/luke/pull/2941),
+[#2942](https://github.com/ReviewStage/luke/pull/2942),
+[#2949](https://github.com/ReviewStage/luke/pull/2949),
+[#2962](https://github.com/ReviewStage/luke/pull/2962),
+[#2965](https://github.com/ReviewStage/luke/pull/2965),
+[#2980](https://github.com/ReviewStage/luke/pull/2980),
+[#2996](https://github.com/ReviewStage/luke/pull/2996),
+[#2997](https://github.com/ReviewStage/luke/pull/2997),
+[#2999](https://github.com/ReviewStage/luke/pull/2999),
+[#2937](https://github.com/ReviewStage/luke/pull/2937),
+[#2951](https://github.com/ReviewStage/luke/pull/2951),
+[#2967](https://github.com/ReviewStage/luke/pull/2967),
+[#3009](https://github.com/ReviewStage/luke/pull/3009),
+[#3016](https://github.com/ReviewStage/luke/pull/3016),
+[#2781](https://github.com/ReviewStage/luke/pull/2781),
+[#3018](https://github.com/ReviewStage/luke/pull/3018),
+[#2953](https://github.com/ReviewStage/luke/pull/2953),
+[#2954](https://github.com/ReviewStage/luke/pull/2954),
+[#2955](https://github.com/ReviewStage/luke/pull/2955),
+[#2956](https://github.com/ReviewStage/luke/pull/2956),
+[#2957](https://github.com/ReviewStage/luke/pull/2957),
+[#2958](https://github.com/ReviewStage/luke/pull/2958),
+[#2968](https://github.com/ReviewStage/luke/pull/2968),
+[#2998](https://github.com/ReviewStage/luke/pull/2998),
+[#3020](https://github.com/ReviewStage/luke/pull/3020))
+
+### Improvements
+
+- A review, a comment, or a later failed check on an agent's pull request
+  reaches the agent as a message from GitHub
+  ([#3007](https://github.com/ReviewStage/luke/pull/3007))
+- A coding agent waits on its checks or a deploy without spending a model step
+  on each look ([#3000](https://github.com/ReviewStage/luke/pull/3000))
+- Settings › Notifications sends a test notification and says when macOS has
+  Luke's notifications off
+  ([#3011](https://github.com/ReviewStage/luke/pull/3011))
+- ⌘F finds on every page that stands in the window
+  ([#2964](https://github.com/ReviewStage/luke/pull/2964))
+- ⌘K groups, orders, and filters the sidebar's tasks, and archived tasks are a
+  view of the sidebar's list rather than a group at its foot
+  ([#2904](https://github.com/ReviewStage/luke/pull/2904),
+  [#2905](https://github.com/ReviewStage/luke/pull/2905),
+  [#2966](https://github.com/ReviewStage/luke/pull/2966))
+- Luke and coding agents edit anywhere in the plan, headings included, and a
+  batch of their edits lands whole or not at all
+  ([#2916](https://github.com/ReviewStage/luke/pull/2916))
+- ⌘K offers Pin task or Unpin task for the task on screen
+  ([#3021](https://github.com/ReviewStage/luke/pull/3021))
+- A GitHub bot wears a bot badge beside its own GitHub picture
+  ([#3022](https://github.com/ReviewStage/luke/pull/3022))
+- Mark a task unread from its menus and ⌘K, and read again
+  ([#2961](https://github.com/ReviewStage/luke/pull/2961))
+- A task's last update counts its agents' finished turns, so a task moves up
+  the sidebar when its agent finishes
+  ([#2935](https://github.com/ReviewStage/luke/pull/2935))
+- A task row grouped by creator names no repository
+  ([#3003](https://github.com/ReviewStage/luke/pull/3003))
+- A note typed on an Inbox item that asks nothing back reaches the agent, and
+  the box says so ([#2946](https://github.com/ReviewStage/luke/pull/2946))
+- A task's Inbox heads its list with the Inbox's name and Needs you, as the
+  window's Inbox does ([#2918](https://github.com/ReviewStage/luke/pull/2918))
+- An integration's MCP call wears its logo and names its own tool
+  ([#2934](https://github.com/ReviewStage/luke/pull/2934))
+- New task's workspace and repository chips are the searchable pickers
+  Settings uses, and the repository list drops its "on GitHub" heading
+  ([#2930](https://github.com/ReviewStage/luke/pull/2930),
+  [#2928](https://github.com/ReviewStage/luke/pull/2928))
+- Luke's, an agent's, and an automation's marks stand bare where nothing
+  overlaps them ([#2990](https://github.com/ReviewStage/luke/pull/2990),
+  [#3014](https://github.com/ReviewStage/luke/pull/3014))
+- A hover card offers no Open of its own, since a press on what it hangs from
+  opens it ([#2992](https://github.com/ReviewStage/luke/pull/2992))
+
+### Fixes
+
+- Fixed the agent composer's and the Inbox answer box's controls piling on
+  each other in a narrow column, a ⋯ now taking in what does not fit
+  ([#3013](https://github.com/ReviewStage/luke/pull/3013))
+- Fixed Needs you keeping an answered item in the list, and it now says when
+  nothing needs you ([#3002](https://github.com/ReviewStage/luke/pull/3002))
+- Fixed a message that reached an agent mid-turn being drawn above the turn
+  rather than where it arrived
+  ([#3023](https://github.com/ReviewStage/luke/pull/3023))
+- Fixed a coding agent sometimes never getting its title
+  ([#3024](https://github.com/ReviewStage/luke/pull/3024))
+- Fixed a quote in a transcript or plan standing far indented and in italics
+  ([#3033](https://github.com/ReviewStage/luke/pull/3033))
+- Fixed the page a pasted Luke link opens, and the sign-in pages, showing no
+  icon in the browser's tab
+  ([#3035](https://github.com/ReviewStage/luke/pull/3035))
+- Fixed a message to a coding agent started before October 15 staying at
+  Starting ([#3010](https://github.com/ReviewStage/luke/pull/3010))
+
+### Misc
+
+- Added repository checks that keep logic out of the agents' apps and refuse a
+  tracked literal shaped like a provider's credential
+  ([#2889](https://github.com/ReviewStage/luke/pull/2889),
+  [#2988](https://github.com/ReviewStage/luke/pull/2988))
+
+## 0.14.0 — 2026-10-15
+
+### The Terminal tab
+
+Every coding agent has a Terminal tab: a shell in the agent's own sandbox,
+with its repository checked out and its GitHub sign-in kept fresh. Start,
+rename, and end more shells beside it, each marked while it runs, and ⌘F
+finds in a shell's scrollback. ⌘J, ⌘K's New terminal, the panel's +, and an
+agent's ⋯ and right-click open one. A shell Luke cannot reach says why, and
+the sandbox stays up while a terminal is open, stopping five idle minutes
+after.
+([#2575](https://github.com/ReviewStage/luke/pull/2575),
+[#2592](https://github.com/ReviewStage/luke/pull/2592),
+[#2599](https://github.com/ReviewStage/luke/pull/2599),
+[#2591](https://github.com/ReviewStage/luke/pull/2591),
+[#2639](https://github.com/ReviewStage/luke/pull/2639),
+[#2600](https://github.com/ReviewStage/luke/pull/2600),
+[#2611](https://github.com/ReviewStage/luke/pull/2611),
+[#2622](https://github.com/ReviewStage/luke/pull/2622),
+[#2640](https://github.com/ReviewStage/luke/pull/2640),
+[#2703](https://github.com/ReviewStage/luke/pull/2703),
+[#2814](https://github.com/ReviewStage/luke/pull/2814),
+[#2817](https://github.com/ReviewStage/luke/pull/2817))
+
+![A coding agent's Terminal tab full screen: pnpm test src/members has just passed 54 tests in the agent's sandbox, beside its shells, tests, a running dev server, and psql.](apps/web/public/changelog/0.14.0/the-terminal-tab.png)
+
+### @-mentions
+
+Type @ in the plan or in a coding agent's message box to mention a file, a
+folder, or one of the plan's sections; in the agent's box, @ also offers the
+repository's skills and your MCP servers and their tools. A mention is a chip
+wherever it is drawn, a renamed heading renames its mentions, and Luke never
+drops one when he corrects the plan. The agent is handed what it cannot read
+itself, and a server or tool mentioned rides along on the next turn alone. In
+a File tab, ⌥⌘K mentions the selected lines, pinned to their commit, and a
+pasted link to an integration's page is a chip that brings its server along.
+([#2593](https://github.com/ReviewStage/luke/pull/2593),
+[#2603](https://github.com/ReviewStage/luke/pull/2603),
+[#2586](https://github.com/ReviewStage/luke/pull/2586),
+[#2624](https://github.com/ReviewStage/luke/pull/2624),
+[#2653](https://github.com/ReviewStage/luke/pull/2653),
+[#2664](https://github.com/ReviewStage/luke/pull/2664),
+[#2643](https://github.com/ReviewStage/luke/pull/2643),
+[#2668](https://github.com/ReviewStage/luke/pull/2668),
+[#2683](https://github.com/ReviewStage/luke/pull/2683),
+[#2721](https://github.com/ReviewStage/luke/pull/2721),
+[#2792](https://github.com/ReviewStage/luke/pull/2792),
+[#2795](https://github.com/ReviewStage/luke/pull/2795))
+
+![An agent's message box with a memberships.ts chip and @migr typed, its @ list offering the migrations folder and a migration file, the plan's Migration section, the db-migrations skill, and Neon's migration tools.](apps/web/public/changelog/0.14.0/at-mentions.png)
+
+### Who did what
+
+Everyone is drawn one way: a person on a circle with their picture, and Luke,
+a coding agent, or an automation on a rounded square. A plan's "Edited by"
+line and its section bylines name whoever wrote it, the time opening the
+history, and a task's ⋯ menu ends with who created and last edited it. A
+teammate's call is headed by their face and name, their messages in an
+agent's tab carry it, and an agent a teammate started, an Inbox answer, and a
+command run on someone's Mac each say whose it was. A task someone else
+created wears their face in the sidebar, and its card, crumb, Home, the
+Factory, and ⌘K name who created it.
+([#2784](https://github.com/ReviewStage/luke/pull/2784),
+[#2794](https://github.com/ReviewStage/luke/pull/2794),
+[#2796](https://github.com/ReviewStage/luke/pull/2796),
+[#2793](https://github.com/ReviewStage/luke/pull/2793),
+[#2779](https://github.com/ReviewStage/luke/pull/2779),
+[#2774](https://github.com/ReviewStage/luke/pull/2774),
+[#2775](https://github.com/ReviewStage/luke/pull/2775),
+[#2773](https://github.com/ReviewStage/luke/pull/2773),
+[#2742](https://github.com/ReviewStage/luke/pull/2742),
+[#2748](https://github.com/ReviewStage/luke/pull/2748),
+[#2702](https://github.com/ReviewStage/luke/pull/2702),
+[#2715](https://github.com/ReviewStage/luke/pull/2715),
+[#2638](https://github.com/ReviewStage/luke/pull/2638),
+[#2853](https://github.com/ReviewStage/luke/pull/2853),
+[#2854](https://github.com/ReviewStage/luke/pull/2854),
+[#2873](https://github.com/ReviewStage/luke/pull/2873),
+[#2875](https://github.com/ReviewStage/luke/pull/2875),
+[#2877](https://github.com/ReviewStage/luke/pull/2877))
+
+![The Teammate invitations plan, edited by Dana Moreno on her face under its acme › relay crumb and the five who can edit it, its sections signed by Dana, Luke during your call, a coding agent, and Jordan Lee.](apps/web/public/changelog/0.14.0/who-did-what.png)
+
+### Workspaces, clearer
+
+The workspace heads the sidebar by its tile, its photo or first letter, and
+who shares it, and the window's title, New task, and a task's crumbs say
+where you are: "acme › relay" and "5 can edit" over its title. Switching
+workspaces opens its last task or its home, the Inbox follows, and Search
+names the others. A personal workspace takes your name. Owners and admins
+rename a workspace and set its photo, the owner makes members admins and hands
+the workspace over to leave it, and an invite stays good after whoever sent it
+leaves. A task whose repository its workspace cannot reach says so over every
+tab and offers Move to workspace, which says who loses and gains it.
+([#2718](https://github.com/ReviewStage/luke/pull/2718),
+[#2712](https://github.com/ReviewStage/luke/pull/2712),
+[#2802](https://github.com/ReviewStage/luke/pull/2802),
+[#2719](https://github.com/ReviewStage/luke/pull/2719),
+[#2723](https://github.com/ReviewStage/luke/pull/2723),
+[#2730](https://github.com/ReviewStage/luke/pull/2730),
+[#2808](https://github.com/ReviewStage/luke/pull/2808),
+[#2733](https://github.com/ReviewStage/luke/pull/2733),
+[#2736](https://github.com/ReviewStage/luke/pull/2736),
+[#2741](https://github.com/ReviewStage/luke/pull/2741),
+[#2764](https://github.com/ReviewStage/luke/pull/2764),
+[#2786](https://github.com/ReviewStage/luke/pull/2786),
+[#2788](https://github.com/ReviewStage/luke/pull/2788),
+[#2789](https://github.com/ReviewStage/luke/pull/2789),
+[#2772](https://github.com/ReviewStage/luke/pull/2772),
+[#2749](https://github.com/ReviewStage/luke/pull/2749),
+[#2750](https://github.com/ReviewStage/luke/pull/2750),
+[#2757](https://github.com/ReviewStage/luke/pull/2757),
+[#2820](https://github.com/ReviewStage/luke/pull/2820),
+[#2824](https://github.com/ReviewStage/luke/pull/2824),
+[#2840](https://github.com/ReviewStage/luke/pull/2840),
+[#2845](https://github.com/ReviewStage/luke/pull/2845),
+[#2761](https://github.com/ReviewStage/luke/pull/2761),
+[#2771](https://github.com/ReviewStage/luke/pull/2771),
+[#2803](https://github.com/ReviewStage/luke/pull/2803),
+[#2804](https://github.com/ReviewStage/luke/pull/2804),
+[#2870](https://github.com/ReviewStage/luke/pull/2870))
+
+![The sidebar headed by acme's mark and its five members, its switcher open on Dean's personal workspace, acme, and Harbor Labs, over acme's tasks.](apps/web/public/changelog/0.14.0/workspaces-clearer.png)
+
+### Tasks
+
+What you work through with Luke is now a task, and the plan is the document
+inside it: the sidebar, New task, ⌘K, the Tasks menu, and every notice say
+so. A coding agent's own instructions, and an automation's, are its Prompt.
+([#2835](https://github.com/ReviewStage/luke/pull/2835),
+[#2841](https://github.com/ReviewStage/luke/pull/2841),
+[#2844](https://github.com/ReviewStage/luke/pull/2844),
+[#2848](https://github.com/ReviewStage/luke/pull/2848))
+
+### Luke links
+
+Copy link to task, in a task's ⋯ menu or the ⋯ beside its title, copies a
+link that opens the task in Luke at its section: pressed in the window, from
+another app through tryluke://, or from a browser through a page whose one
+press opens Luke and which says what to check when nothing opens.
+([#2695](https://github.com/ReviewStage/luke/pull/2695),
+[#2696](https://github.com/ReviewStage/luke/pull/2696),
+[#2697](https://github.com/ReviewStage/luke/pull/2697),
+[#2819](https://github.com/ReviewStage/luke/pull/2819),
+[#2831](https://github.com/ReviewStage/luke/pull/2831))
+
+### Experiments: Automations and the Factory
+
+Settings › Experimental turns on features before they are finished. Automations
+start a coding agent on a schedule, on a GitHub event in the workspace's
+repositories (choosing whose events, at which moments, and whether drafts and
+forks count), or from a webhook, for you or the whole workspace, and its page
+lists its runs, each opening the agent it started. An agent an automation
+started belongs to no task: it has a page of its own, its questions wait in
+the Inbox under its automation, and it says what started it. The Factory is a
+read-only board of every task, from Plan to Build to Ship, beside the Inbox.
+([#2709](https://github.com/ReviewStage/luke/pull/2709),
+[#2699](https://github.com/ReviewStage/luke/pull/2699),
+[#2692](https://github.com/ReviewStage/luke/pull/2692),
+[#2752](https://github.com/ReviewStage/luke/pull/2752),
+[#2754](https://github.com/ReviewStage/luke/pull/2754),
+[#2759](https://github.com/ReviewStage/luke/pull/2759),
+[#2760](https://github.com/ReviewStage/luke/pull/2760),
+[#2776](https://github.com/ReviewStage/luke/pull/2776),
+[#2778](https://github.com/ReviewStage/luke/pull/2778),
+[#2768](https://github.com/ReviewStage/luke/pull/2768),
+[#2770](https://github.com/ReviewStage/luke/pull/2770),
+[#2805](https://github.com/ReviewStage/luke/pull/2805),
+[#2780](https://github.com/ReviewStage/luke/pull/2780),
+[#2799](https://github.com/ReviewStage/luke/pull/2799),
+[#2674](https://github.com/ReviewStage/luke/pull/2674),
+[#2720](https://github.com/ReviewStage/luke/pull/2720),
+[#2713](https://github.com/ReviewStage/luke/pull/2713),
+[#2745](https://github.com/ReviewStage/luke/pull/2745),
+[#2765](https://github.com/ReviewStage/luke/pull/2765),
+[#2767](https://github.com/ReviewStage/luke/pull/2767),
+[#2601](https://github.com/ReviewStage/luke/pull/2601),
+[#2608](https://github.com/ReviewStage/luke/pull/2608))
+
+![The Morning Sentry triage automation's page: weekdays at 9:00 on a schedule, its task, repositories, and model, and its runs beside it, one working now and four finished.](apps/web/public/changelog/0.14.0/automations.png)
+
+### Improvements
+
+- The sidebar lists tasks in one section, grouped by repository, by creator,
+  or not at all, in the order you choose, and filters them by who created them
+  ([#2893](https://github.com/ReviewStage/luke/pull/2893),
+  [#2899](https://github.com/ReviewStage/luke/pull/2899))
+- The Changes tab and card name who opened the pull request, its reviewers by
+  where each stands, its commit authors, and its review comments
+  ([#2862](https://github.com/ReviewStage/luke/pull/2862),
+  [#2863](https://github.com/ReviewStage/luke/pull/2863),
+  [#2865](https://github.com/ReviewStage/luke/pull/2865),
+  [#2878](https://github.com/ReviewStage/luke/pull/2878))
+- A Mermaid fence in a plan draws as its diagram, in the read view and under
+  its code in the editor
+  ([#2890](https://github.com/ReviewStage/luke/pull/2890))
+- A workspace holds several GitHub installations, listed in Settings ›
+  Workspace and managed on GitHub
+  ([#2642](https://github.com/ReviewStage/luke/pull/2642),
+  [#2644](https://github.com/ReviewStage/luke/pull/2644))
+- Start a task without a name: it stands as Untitled until you name it
+  ([#2888](https://github.com/ReviewStage/luke/pull/2888))
+- An Inbox item standing alone says where it stands, 2 of 8, and steps through
+  the list by its arrows, J, and K, and a settled one offers the next that
+  needs you where its box stood
+  ([#2882](https://github.com/ReviewStage/luke/pull/2882),
+  [#2885](https://github.com/ReviewStage/luke/pull/2885))
+- A task counts as read the moment it opens, on whichever of its tabs
+  ([#2900](https://github.com/ReviewStage/luke/pull/2900))
+- A pinned task is pinned for you alone, not for the whole workspace
+  ([#2901](https://github.com/ReviewStage/luke/pull/2901))
+- Luke answers sooner on a call, his replies waiting on nothing earlier, and a
+  call greets you from where the last one left off
+  ([#2623](https://github.com/ReviewStage/luke/pull/2623))
+- A link is one quiet underline, a bare address says its host and path with a
+  ↗, and cards, Inbox rows, and notifications name a link rather than print it
+  ([#2800](https://github.com/ReviewStage/luke/pull/2800),
+  [#2815](https://github.com/ReviewStage/luke/pull/2815),
+  [#2798](https://github.com/ReviewStage/luke/pull/2798),
+  [#2797](https://github.com/ReviewStage/luke/pull/2797))
+- Executor joins Settings › Integrations, every tool offered and its approvals
+  put to you ([#2590](https://github.com/ReviewStage/luke/pull/2590))
+- Settings › Integrations searches integrations and tools on its own, and a
+  tool opens onto a page of its own there and in the MCP popover
+  ([#2635](https://github.com/ReviewStage/luke/pull/2635),
+  [#2700](https://github.com/ReviewStage/luke/pull/2700))
+- A window too narrow for the sidebar folds it to float over the work, and a
+  narrow Inbox opens on its item, the list a press of ‹ Inbox away
+  ([#2679](https://github.com/ReviewStage/luke/pull/2679),
+  [#2680](https://github.com/ReviewStage/luke/pull/2680),
+  [#2879](https://github.com/ReviewStage/luke/pull/2879))
+- An Inbox option the agent recommends wears a Recommended badge
+  ([#2881](https://github.com/ReviewStage/luke/pull/2881))
+- A repository out of reach says why under the composer and offers what mends
+  it ([#2573](https://github.com/ReviewStage/luke/pull/2573),
+  [#2588](https://github.com/ReviewStage/luke/pull/2588))
+- A sign-in Connect cancelled or refused says so, with Try again
+  ([#2595](https://github.com/ReviewStage/luke/pull/2595),
+  [#2604](https://github.com/ReviewStage/luke/pull/2604))
+- The repository chip says when a workspace's GitHub was removed or suspended
+  on GitHub, rather than that none is connected
+  ([#2834](https://github.com/ReviewStage/luke/pull/2834))
+- Each column's ⋯ offers the chosen tab's actions, and tab housekeeping stays
+  on the right-click ([#2783](https://github.com/ReviewStage/luke/pull/2783))
+- The sidebar sets an unread task in semibold and a read one in a quieter ink,
+  every row 30px tall ([#2801](https://github.com/ReviewStage/luke/pull/2801))
+- Every window draws its words without the Mac's font smoothing
+  ([#2807](https://github.com/ReviewStage/luke/pull/2807))
+- The sign-in's buttons stand taller and wear "Last used" on the corner of the
+  one it marks ([#2782](https://github.com/ReviewStage/luke/pull/2782),
+  [#2785](https://github.com/ReviewStage/luke/pull/2785))
+- A tool-call group leads with its fold's chevron, wears the failed mark where
+  a call it holds failed, and a subagent's tab groups its calls as its agent's
+  does ([#2892](https://github.com/ReviewStage/luke/pull/2892),
+  [#2907](https://github.com/ReviewStage/luke/pull/2907))
+- No button, menu item, or command ends its name with an ellipsis
+  ([#2821](https://github.com/ReviewStage/luke/pull/2821))
+
+### Fixes
+
+- Fixed a sidebar group not listing its tasks newest updated first
+  ([#2818](https://github.com/ReviewStage/luke/pull/2818))
+- Fixed Settings saying Connected for a GitHub installation that GitHub
+  removed or suspended
+  ([#2828](https://github.com/ReviewStage/luke/pull/2828),
+  [#2829](https://github.com/ReviewStage/luke/pull/2829))
+- Fixed an agent's terminals failing to list in a busy account
+  ([#2809](https://github.com/ReviewStage/luke/pull/2809))
+- Fixed "Changed since you last looked" missing a teammate's saves
+  ([#2689](https://github.com/ReviewStage/luke/pull/2689))
+- Fixed Home missing a teammate's agent's open items
+  ([#2755](https://github.com/ReviewStage/luke/pull/2755))
+- Fixed the Call tab not naming a teammate's call
+  ([#2694](https://github.com/ReviewStage/luke/pull/2694))
+- Fixed Choose a model's menu hanging away from its button and showing a stale
+  catalog ([#2763](https://github.com/ReviewStage/luke/pull/2763))
+- Fixed an open popover jumping as its button grew or shrank
+  ([#2629](https://github.com/ReviewStage/luke/pull/2629))
+- Fixed a call's card floating over a version history's versions
+  ([#2816](https://github.com/ReviewStage/luke/pull/2816))
+- Fixed Contact us opening inside the account menu rather than beside it
+  ([#2649](https://github.com/ReviewStage/luke/pull/2649))
+- Fixed Settings › Profile and Settings › Workspace drawing you unlike the rest
+  of the window, and offering Remove on your own row
+  ([#2810](https://github.com/ReviewStage/luke/pull/2810),
+  [#2813](https://github.com/ReviewStage/luke/pull/2813))
+- Fixed a transparent workspace photo showing its letter tile behind it
+  ([#2769](https://github.com/ReviewStage/luke/pull/2769))
+- Fixed a picture on its own line opening in the plan editor as something you
+  could not edit ([#2886](https://github.com/ReviewStage/luke/pull/2886))
+- Fixed a menu's second submenu item not opening its submenu on hover
+  ([#2917](https://github.com/ReviewStage/luke/pull/2917))
+- Fixed Luke's face moving on the sign-in screen
+  ([#2891](https://github.com/ReviewStage/luke/pull/2891))
+- Fixed an agent's to-do list sitting off its rows' text, its item in progress
+  now wearing the working mark
+  ([#2874](https://github.com/ReviewStage/luke/pull/2874))
+- Fixed an inline chip sitting off its line's baseline, a section's byline
+  sitting off its ⋯, and a page's empty state sitting low
+  ([#2856](https://github.com/ReviewStage/luke/pull/2856),
+  [#2658](https://github.com/ReviewStage/luke/pull/2658),
+  [#2832](https://github.com/ReviewStage/luke/pull/2832))
+
+### Misc
+
+- Updated the renderer to load Settings, analytics, and the markdown parser as
+  chunks of their own, its main bundle 18% smaller
+  ([#2738](https://github.com/ReviewStage/luke/pull/2738),
+  [#2743](https://github.com/ReviewStage/luke/pull/2743))
+- Updated the code's layout so application logic lives in `packages/`, under
+  one `@luke/*` scope ([#2648](https://github.com/ReviewStage/luke/pull/2648),
+  [#2652](https://github.com/ReviewStage/luke/pull/2652),
+  [#2654](https://github.com/ReviewStage/luke/pull/2654),
+  [#2659](https://github.com/ReviewStage/luke/pull/2659),
+  [#2728](https://github.com/ReviewStage/luke/pull/2728))
+- Added screenshots to 0.13.0 from its own build
+  ([#2645](https://github.com/ReviewStage/luke/pull/2645))
+
 ## 0.13.0 — 2026-10-14
 
 ### Workspaces

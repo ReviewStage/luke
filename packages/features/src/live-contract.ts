@@ -6,9 +6,10 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "@luke/live";
-import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
+import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
+import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
@@ -171,6 +172,25 @@ export const VOICE_SERVICE_FRAME = {
    * the call up if the developer speaks first. It carries no words.
    */
   PLAN_CALL_ENDING: "plan.call_ending",
+  /**
+   * The desktop's ask for Luke's avatar on the call: the service mints a
+   * Keyframe session for this voice session on its own key and answers
+   * `avatar.started`, or `avatar.unavailable` where it cannot, each echoing
+   * the request id the host minted for it, as `avatar.stop` does. The relay
+   * reads it and forwards it nowhere, as it reads a report.
+   */
+  AVATAR_START: "avatar.start",
+  /** The desktop's word that the avatar is down, with why; the voice goes on. */
+  AVATAR_STOP: "avatar.stop",
+  /**
+   * The service's answer to `avatar.start`: the room Keyframe renders the
+   * avatar into, the per-call token that joins it, and the identity the
+   * avatar publishes under. The token is the one credential this vocabulary
+   * carries, and it reaches the floating call window alone.
+   */
+  AVATAR_STARTED: "avatar.started",
+  /** The service's answer to an `avatar.start` it could not honour, and why. */
+  AVATAR_UNAVAILABLE: "avatar.unavailable",
 } as const;
 
 /**
@@ -416,6 +436,121 @@ export const planCallEndingFrameSchema = Schema.Struct({
 
 export type PlanCallEndingFrame = typeof planCallEndingFrameSchema.Type;
 
+/**
+ * Why the desktop took the avatar down: the developer turned video off,
+ * Keyframe closed the call window's session, or the session failed there.
+ * A hang-up needs no stop of its own, since the service closes the avatar
+ * with the call.
+ */
+export const AVATAR_STOP_REASON = {
+  USER: "user",
+  SERVER_CLOSED: "server_closed",
+  ERROR: "error",
+} as const;
+
+export type AvatarStopReason = (typeof AVATAR_STOP_REASON)[keyof typeof AVATAR_STOP_REASON];
+
+/**
+ * Why the service could not put the avatar up: this deployment holds no
+ * Keyframe key or persona, the plan's concurrent sessions are all taken, or
+ * anything else Keyframe answered.
+ */
+export const AVATAR_UNAVAILABLE_REASON = {
+  NOT_CONFIGURED: "not_configured",
+  NO_CAPACITY: "no_capacity",
+  ERROR: "error",
+} as const;
+
+export type AvatarUnavailableReason =
+  (typeof AVATAR_UNAVAILABLE_REASON)[keyof typeof AVATAR_UNAVAILABLE_REASON];
+
+/**
+ * The bounds of the avatar frames. A LiveKit participant token is a JWT of a
+ * few hundred bytes, an identity a few dozen characters, a server URL not
+ * much more, and a request id the host's own UUID, so each bound only
+ * refuses a document standing in for one.
+ */
+export const AVATAR_FRAME_BOUNDS = {
+  REQUEST_ID_CHARS: 64,
+  ...AVATAR_GRANT_BOUNDS,
+  REASON_CHARS: 64,
+} as const;
+
+/**
+ * A reason the service answers with. One a newer service added reads as
+ * `fallback` rather than refusing the frame, as an answer's unknown key is
+ * dropped rather than refused, so the desktop still hears the avatar is not
+ * coming when it cannot say why. Past the bound it is refused, since no
+ * reason is that long.
+ */
+function answeredReason<const Reason extends string>(
+  reasons: readonly Reason[],
+  fallback: Reason,
+): Schema.Codec<Reason, UnparsedWireValue> {
+  const listed = Schema.Literals(reasons);
+  const isListed = Schema.is(listed);
+  return declareReader<Reason>((value) => {
+    if (!isWireString(value) || value.length > AVATAR_FRAME_BOUNDS.REASON_CHARS) {
+      return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] };
+    }
+    return { ok: true, value: isListed(value) ? value : fallback };
+  }, emitJsonSchema(listed));
+}
+
+/**
+ * The id the host mints for one `avatar.start`, echoed on every frame about
+ * the session that ask put up, so an answer or a stop that belongs to an
+ * earlier ask is told apart from the current one.
+ */
+const avatarRequestId = verbatimText(AVATAR_FRAME_BOUNDS.REQUEST_ID_CHARS);
+
+/** The desktop's ask for the avatar: its request id alone, since the service picks the persona. */
+export const avatarStartFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_START),
+  requestId: avatarRequestId,
+});
+
+export type AvatarStartFrame = typeof avatarStartFrameSchema.Type;
+
+/** The desktop's word that the avatar its request put up is down, and why. */
+export const avatarStopFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STOP),
+  requestId: avatarRequestId,
+  reason: Schema.Literals(Object.values(AVATAR_STOP_REASON)),
+});
+
+export type AvatarStopFrame = typeof avatarStopFrameSchema.Type;
+
+/** Either avatar frame the desktop sends after the handshake, read by the service and forwarded nowhere. */
+export const avatarRequestFrameSchema = Schema.Union([
+  avatarStartFrameSchema,
+  avatarStopFrameSchema,
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+
+export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
+
+/**
+ * The avatar the request asked for is coming up: Keyframe's session grant
+ * as its create-session call answered it, the LiveKit server, the participant token the call
+ * window joins with, and the identity the avatar publishes its tracks under.
+ */
+export const avatarStartedFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
+  requestId: avatarRequestId,
+  ...avatarGrantSchema.fields,
+});
+
+export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;
+
+/** The avatar the request asked for could not come up, and why; the call goes on as voice. */
+export const avatarUnavailableFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE),
+  requestId: avatarRequestId,
+  reason: answeredReason(Object.values(AVATAR_UNAVAILABLE_REASON), AVATAR_UNAVAILABLE_REASON.ERROR),
+});
+
+export type AvatarUnavailableFrame = typeof avatarUnavailableFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -507,6 +642,26 @@ export function planCallEndingFrameFromWire(
   value: UnparsedWireValue,
 ): PlanCallEndingFrame | undefined {
   return admittedAnswer(planCallEndingFrameSchema, value);
+}
+
+export function avatarRequestFrameFromWire(
+  value: UnparsedWireValue,
+): AvatarRequestFrame | undefined {
+  return admitted(avatarRequestFrameSchema, value);
+}
+
+/** The avatar coming up, read the answering way. */
+export function avatarStartedFrameFromWire(
+  value: UnparsedWireValue,
+): AvatarStartedFrame | undefined {
+  return admittedAnswer(avatarStartedFrameSchema, value);
+}
+
+/** The avatar refused, read the same answering way. */
+export function avatarUnavailableFrameFromWire(
+  value: UnparsedWireValue,
+): AvatarUnavailableFrame | undefined {
+  return admittedAnswer(avatarUnavailableFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

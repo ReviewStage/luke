@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { Plan } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -10,6 +11,7 @@ import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -17,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
@@ -24,6 +27,7 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
@@ -50,7 +54,12 @@ const SETTINGS: SettingsPanelProps = {
     onRequest: ignore,
     onOpenSettings: ignore,
   },
-  notifications: { refused: false, onOpenSettings: ignore },
+  notifications: {
+    status: NOTIFICATIONS_STATUS.UNKNOWN,
+    packaged: true,
+    onOpenSettings: ignore,
+    onTest: ignore,
+  },
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,
@@ -103,6 +112,49 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The shell's props over `plans`, every other door ignored, the sidebar folded unless patched. */
+function shellProps(
+  plans: PlansControl,
+  tab: PanelTab,
+  onTabChange: (tab: PanelTab) => void,
+  sidebarPatch: Partial<SidebarCollapse>,
+): Parameters<typeof DesktopShell>[0] {
+  return {
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+    },
+    tab,
+    onTabChange,
+    plans,
+    history: {
+      canGoBack: false,
+      canGoForward: false,
+      onBack: ignore,
+      onForward: ignore,
+      onLeaveVersionHistory: ignore,
+    },
+    sidebar: {
+      collapsed: true,
+      compact: false,
+      overlay: SIDEBAR_OVERLAY.CLOSED,
+      width: 264,
+      onToggle: ignore,
+      onOverlay: ignore,
+      onResize: ignore,
+      staged: false,
+      ...sidebarPatch,
+    },
+    call: undefined,
+    captions: {
+      caption: { content: undefined, shown: false },
+      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    },
+    settings: SETTINGS,
+  };
+}
+
 /**
  * The window's shell on the home page with the sidebar folded, the Inbox
  * open over it or not, New plan opening its dialog and Cancel putting it
@@ -123,54 +175,21 @@ function mount(
   const control = plansControl();
   function Shell() {
     const [asked, setAsked] = useState(false);
-    return createElement(DesktopShell, {
-      gates: {
-        accountRequired: false,
-        onBeginSignIn: ignore,
-        onCancelSignIn: ignore,
-        signInFace: { play: 0 },
+    const plans = plansControl({
+      page: PLANS_PAGE.HOME,
+      restoring,
+      inboxView: {
+        open: inboxOpen,
+        chosen: undefined,
+        onOpen: ignore,
+        onClose: ignore,
+        onChoose: ignore,
       },
-      tab,
-      onTabChange,
-      plans: plansControl({
-        page: PLANS_PAGE.HOME,
-        restoring,
-        inboxView: {
-          open: inboxOpen,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-        },
-        onNewPlan: () => setAsked(true),
-        newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
-        ...overrides,
-      }),
-      history: {
-        canGoBack: false,
-        canGoForward: false,
-        onBack: ignore,
-        onForward: ignore,
-        onLeaveVersionHistory: ignore,
-      },
-      sidebar: {
-        collapsed: true,
-        compact: false,
-        overlay: SIDEBAR_OVERLAY.CLOSED,
-        width: 264,
-        onToggle: ignore,
-        onOverlay: ignore,
-        onResize: ignore,
-        staged: false,
-        ...sidebarPatch,
-      },
-      call: undefined,
-      captions: {
-        caption: { content: undefined, shown: false },
-        volumeHint: { wanted: false, text: "", onDismiss: ignore },
-      },
-      settings: SETTINGS,
+      onNewPlan: () => setAsked(true),
+      newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
+      ...overrides,
     });
+    return createElement(DesktopShell, shellProps(plans, tab, onTabChange, sidebarPatch));
   }
   act(() => root?.render(onRegistry(registry, createElement(Shell))));
   return container;
@@ -298,6 +317,149 @@ test("the window is called by what stands in it: the plan on screen in its own w
     region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
   });
   assert.equal(document.title, "Factory — Acme");
+});
+
+test("a plan opened on its Inbox tab rather than its own is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
+  const unreadOnOpen = (inboxOpen: boolean) => {
+    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_PLAN.id]: 1 }));
+    window.localStorage.setItem("luke.planLooksSeeded", "1");
+    const page = mount(
+      inboxOpen,
+      false,
+      {
+        page: PLANS_PAGE.DOCUMENT,
+        plans: [DOCUMENT_PLAN],
+        activePlanId: DOCUMENT_PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+        mainTabs: {
+          ...plansControl().mainTabs,
+          tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
+          tab: MAIN_TAB.INBOX,
+        },
+      },
+      PANEL_TAB.PLANS,
+      ignore,
+      { collapsed: false },
+    );
+    const row = page.querySelector(".sidebar-plan");
+    assert.ok(row, "the plan's row stands in the sidebar");
+    const unread = row.getAttribute("data-unread");
+    act(() => root?.unmount());
+    window.localStorage.clear();
+    return unread;
+  };
+
+  assert.equal(unreadOnOpen(false), "false");
+  assert.equal(unreadOnOpen(true), "true");
+});
+
+/** A second plan beside `DOCUMENT_PLAN`, saved after it. */
+const NOTES_PLAN: Plan = {
+  ...DOCUMENT_PLAN,
+  id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+  name: "Release notes",
+  createdAt: 4,
+  updatedAt: 5,
+};
+
+/**
+ * The shell with the sidebar unfolded on `listed`, each looked at up to
+ * the instant `looks` gives it, redrawn over whichever plan `open` names
+ * next and the home page for none, the same shell throughout.
+ */
+function mountListing(
+  listed: readonly Plan[],
+  looks: Readonly<Record<string, number>>,
+): (open: Plan | undefined) => void {
+  window.localStorage.setItem("luke.planLooks", JSON.stringify(looks));
+  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  return (open) => {
+    const plans = plansControl({
+      page: open === undefined ? PLANS_PAGE.HOME : PLANS_PAGE.DOCUMENT,
+      plans: listed.map((plan) => (plan.id === open?.id ? open : plan)),
+      activePlanId: open?.id,
+      region:
+        open === undefined
+          ? { kind: DOCUMENT_REGION.NONE }
+          : { kind: DOCUMENT_REGION.READY, plan: open },
+    });
+    const props = shellProps(plans, PANEL_TAB.PLANS, ignore, { collapsed: false });
+    act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
+  };
+}
+
+/** The sidebar's row for the plan of this name. */
+function sidebarRow(name: string): HTMLButtonElement {
+  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
+    (each) => each.querySelector(".sidebar-plan-name")?.textContent === name,
+  );
+  assert.ok(row, `the sidebar lists ${name}`);
+  return row;
+}
+
+/** Whether the plan's row is drawn in the unread weight. */
+function rowUnread(name: string): string | null {
+  return sidebarRow(name).getAttribute("data-unread");
+}
+
+/** The read mark the row's right-click menu offers, chosen when `choose` says so. */
+function rowReadMark(name: string, choose = false): string | undefined {
+  act(() => {
+    sidebarRow(name).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+  });
+  const menu = document.querySelector('[role="menu"]');
+  assert.ok(menu, `${name}'s menu opens`);
+  const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
+    /^Mark as (un)?read$/u.test(each.textContent ?? ""),
+  );
+  act(() => {
+    if (choose) item?.click();
+    else menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(document.querySelector('[role="menu"]') === null, true, "the menu closes");
+  return item?.textContent ?? undefined;
+}
+
+test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
+    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
+  });
+  draw(DOCUMENT_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "false");
+  assert.equal(rowReadMark(DOCUMENT_NAME, true), "Mark as unread");
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw({ ...DOCUMENT_PLAN, updatedAt: DOCUMENT_PLAN.updatedAt + 1 });
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw(NOTES_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw(DOCUMENT_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "false");
+});
+
+test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
+    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
+  });
+  draw(undefined);
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
+
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_PLAN.name), "false");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
+
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -436,6 +598,7 @@ const PLACE = {
   OTHER_PLAN: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
+  PERSON_PAGE: "a person's page",
   FACTORY: "Factory",
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
@@ -451,6 +614,7 @@ const LEFT_COLUMN = {
   [PLACE.OTHER_PLAN]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.PERSON_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.FACTORY]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AUTOMATIONS]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.SIDE_PANEL_FULL_SCREEN]: { selector: "aside.desktop-sidebar", folds: true },
@@ -470,6 +634,7 @@ function placed(place: Place) {
     [PLACE.OTHER_PLAN]: onPlan,
     [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
+    [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
     [PLACE.FACTORY]: { factoryView: { ...control.factoryView, open: true } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
@@ -494,7 +659,6 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       accountRequired: false,
       onBeginSignIn: ignore,
       onCancelSignIn: ignore,
-      signInFace: { play: 0 },
     },
     tab,
     onTabChange: ignore,
@@ -578,6 +742,70 @@ function pressReturn(page: HTMLElement): void {
 
 const PLACES = Object.values(PLACE);
 
+test("the side panel's toggle stands on a plan and on an agent's page, which keeps a panel of its own, and nowhere else the plan's place is taken", async () => {
+  await handBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const toggled: Partial<Record<Place, boolean>> = {};
+  for (const place of PLACES) {
+    act(() =>
+      root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
+    );
+    await settle();
+    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+  }
+  assert.deepEqual(toggled, {
+    [PLACE.HOME]: false,
+    [PLACE.OTHER_PLAN]: true,
+    [PLACE.INBOX]: false,
+    [PLACE.AGENT_PAGE]: true,
+    [PLACE.PERSON_PAGE]: false,
+    [PLACE.FACTORY]: false,
+    [PLACE.AUTOMATIONS]: false,
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
+    [PLACE.SETTINGS]: false,
+    [PLACE.VERSION_HISTORY]: false,
+  });
+});
+
+test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {
+  await handBridge();
+  const found: Partial<Record<Place, boolean>> = {};
+  for (const place of PLACES) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded: false })),
+      ),
+    );
+    await settle();
+    act(() => {
+      runAppCommand(APP_COMMAND.FIND);
+    });
+    found[place] = container.querySelector("search[aria-label='Find']") !== null;
+    act(() => root?.unmount());
+    container.remove();
+  }
+  assert.deepEqual(found, {
+    [PLACE.HOME]: true,
+    [PLACE.OTHER_PLAN]: true,
+    [PLACE.INBOX]: true,
+    // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
+    [PLACE.AGENT_PAGE]: false,
+    [PLACE.PERSON_PAGE]: true,
+    [PLACE.FACTORY]: true,
+    [PLACE.AUTOMATIONS]: true,
+    // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: false,
+    [PLACE.SETTINGS]: false,
+    [PLACE.VERSION_HISTORY]: true,
+  });
+});
+
 test("walking every place in the window during a call about another plan, the card stays at the foot of the column at the window's left, and its way back asks for the call's plan from each", async () => {
   await handBridge();
   const container = document.createElement("div");
@@ -633,3 +861,31 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     ),
   );
 });
+
+test("no place the window stands on can be scrolled sideways into the room its bars draw past the column's edges, folded sidebar or not", async () => {
+  await handBridge();
+  // Note that the window's stylesheets are laid once, because jsdom takes seconds to lay them.
+  const style = layContainersAt({});
+  const clipped: Record<string, string> = {};
+  for (const folded of [false, true]) {
+    for (const place of PLACES) {
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      act(() =>
+        root?.render(onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded }))),
+      );
+      await settle();
+      const shell = container.querySelector(".desktop-shell");
+      assert.ok(shell, `${place} stands in the window's shell`);
+      clipped[`${place}${folded ? ", folded" : ""}`] = getComputedStyle(shell).overflow;
+      act(() => root?.unmount());
+      container.remove();
+    }
+  }
+  style.remove();
+  assert.deepEqual(
+    clipped,
+    Object.fromEntries(Object.keys(clipped).map((place) => [place, "clip"])),
+  );
+}, 60_000);

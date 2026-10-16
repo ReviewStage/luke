@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { LabelledAgentEdit, StoredPlan } from "@luke/database/models/plan-store";
+import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
 import {
@@ -7,23 +8,28 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
-  type PlanNote,
+  type PlanAgentEdit,
 } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
-import type { UnparsedWireValue, WireRecord } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
+import { type UnparsedWireValue, type WireRecord, WireValueSchema } from "@luke/wire";
+import { emitJsonSchema, verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { ToolDefinition } from "eve/tools";
+import type { ToolDefinition, ToolModelOutput } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
-import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../../plans/board-look.js";
+import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../plans/board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../plans/board-tool.js";
 import { END_CALL_TOOL, runEndCall } from "../../plans/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
+import {
+  LOOK_AT_PICTURE_TOOL,
+  pictureLookModelOutput,
+  runLookAtPicture,
+} from "../../plans/picture-look.js";
 import type { PlanDocumentBinding } from "../../plans/plan-notes.js";
 import {
   QUEUE_QUESTION_TOOL,
@@ -37,14 +43,16 @@ import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import {
   type CodingAgentCall,
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
-  READ_CODING_AGENT_TOOL,
-  runListCodingAgents,
-  runMessageCodingAgent,
-  runReadCodingAgent,
-  runStartCodingAgent,
-  START_CODING_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  LIST_TASKS_TOOL,
+  MESSAGE_AGENT_TOOL,
+  READ_AGENT_TOOL,
+  runListAgents,
+  runListTasks,
+  runMessageAgent,
+  runReadAgent,
+  runStartAgent,
+  START_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -204,15 +212,15 @@ Each call starts a worker on a subagent task, and the worker knows nothing of th
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
-### The task's coding agents
+### Coding agents
 
-Coding agents may already be working on this task, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_coding_agents to see which agents there are and which one they mean, read_coding_agent to read one's recent progress, message_coding_agent to tell one what to do, and start_coding_agent to start a new one.
+Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
 
 On a status question, read the agent and summarise its progress in a sentence or two in your return: what it is doing now, what it has published, and whether it is stuck. Never read its transcript out.
 
-On an instruction, send it when it is clear which agent is meant and what to say: message_coding_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When there is one agent, it is the one they mean.
+On an instruction, send it when it is clear which agent is meant and what to say: message_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When this task has one agent and they name no other task, it is the one they mean.
 
-On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_coding_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read and message.
+On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
 
 Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
 
@@ -229,11 +237,13 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - task_cancel stops a worker's subagent task you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the task's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
+- look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
-- list_coding_agents lists the coding agents working on this task, each with its id, its title as the developer sees it, its status, and what it last did.
-- read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
-- message_coding_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
-- start_coding_agent starts a new coding agent on this task, handed the plan itself or a prompt in its place, as the developer's Start button would.
+- list_agents lists the coding agents of this task's workspace, or of one task of it (this task with thisTask, another by its taskId), each with its id, its title as the developer sees it, its status, what it last did, its task, and whether it is archived.
+- read_agent reads one agent's recent progress, as a short tail of what it said and did.
+- message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
+- start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
+- list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, and who started it, so an agent can be started on another task by its taskId.
 - end_call ends the voice call once the developer asks you to end it or has clearly said they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"), even right after another request such as starting a coding agent. Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 ## Return the result
@@ -253,7 +263,11 @@ export const PLANNING_EXPLORE_ASK =
   "The call has just started, and the developer has not said what they want yet. " +
   "Start exploring the task's folder now, so you already know the code when they do: " +
   "what the project is, how it is laid out, how it is built and tested, and anything the " +
-  "task's name or the plan's saved document points to. Hand anything broader to the worker. " +
+  "task's name or the plan's saved document points to. Where the plan was started from a Linear issue, " +
+  "that issue is the work to plan: research it on your own, reading more of it and what it " +
+  "links to through the Linear connection where you need it, and explore the code it concerns. " +
+  "The issue is context, not a request to change it: change nothing in Linear unless the " +
+  "developer asks. Hand anything broader to the worker. " +
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
@@ -269,17 +283,17 @@ const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
  * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, and a retracted point struck.
+You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, a retracted point deleted, and the doc reorganized when the call asks for it.
 
 The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or remove it. Answer with the notes the latest lines call for, in the order they were said:
+You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or delete it. Answer with the notes the latest lines call for, in the order they were said:
 
 - add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown "- " bullet, a line or two, added at the end of that section at the level of its other points, optionally followed by indented sub-bullets ("  - ") when the point genuinely has parts; never stack markers on one line ("- - "). A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
-- replace: a correction, where the developer corrected something the plan holds, or a section's template guidance you are filling. find is a phrase copied exactly from the saved text, as short as names one place; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does.
-- remove: a point the developer retracted or rejected, or guidance a section no longer needs. find is a phrase copied exactly from the line to strike.
+- replace: any other edit. find is text copied exactly from the saved plan, as short as names one place: a phrase, lines, or whole sections, headings and their #s included; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does. Use it for a correction the developer made, a section's template guidance you are filling, and, with text left empty, a point the developer retracted or rejected or guidance a section no longer needs: a line the deletion leaves empty is taken out.
 
-- Never rewrite or strike a heading: the headings are the developer's.
+- Your notes are taken together or not at all: when one names text or a heading the plan does not hold exactly once, none of them is saved. Copy every find and heading exactly.
+- Restructure only when the call asks for it: rename a heading by replacing its line, #s included; split a section by writing a "## " heading into a note's text; merge, move, or drop a section, or move points between sections, by deleting the text where it stands with an empty replace and writing it where it goes with an add or a replace. Otherwise keep the developer's headings as they stand.
 - Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
@@ -301,6 +315,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const LINEAR_ISSUE_MARKER = "[linear issue the plan was started from]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -317,8 +332,8 @@ function noteWords(words: string): string {
   );
 }
 
-/** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck among them. */
-function agentNoteLine(note: PlanNote): string {
+/** One note an agent took, in a line: what it did, where, and its words, the text it replaced or deleted among them. */
+function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;
@@ -352,9 +367,16 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
   ];
 }
 
+/** The issue the plan was started from, as JSON, as it was read then; nothing for a plan started from none. */
+function linearIssueText(stored: StoredPlan): readonly string[] {
+  if (stored.linearIssue === undefined) return [];
+  return [LINEAR_ISSUE_MARKER, JSON.stringify(stored.linearIssue)];
+}
+
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, the newest saves coding agents
+ * plan's name, the Linear issue it was started from where it was, the saved
+ * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
@@ -372,6 +394,7 @@ export function planningStandingContext(
   return [
     heading,
     `Name: ${plan.name}`,
+    ...linearIssueText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),
@@ -432,13 +455,15 @@ type PlanningToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`); `show_page`
+ * hands back the board as the Mac draws it (`board-look.ts`);
+ * `look_at_picture` hands back one of the plan's pictures (`picture-look.ts`); `show_page`
  * writes an interactive page for the side panel, the coding agents' tool
  * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
- * Every read's result goes back to the model as data, a look's as an image.
+ * Every read's result goes back to the model as data, a look's as an image
+ * (`planningModelOutput`).
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
@@ -484,24 +509,33 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
     run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
   },
   {
+    ...LOOK_AT_PICTURE_TOOL,
+    run: (call, input) =>
+      Effect.map(runLookAtPicture(call.plan, input), (result) => ({ ...result })),
+  },
+  {
     ...SHOW_PAGE_TOOL,
     run: (call, input) => runShowPage(call.plan, input),
   },
   {
-    ...LIST_CODING_AGENTS_TOOL,
-    run: (call) => runListCodingAgents(call.agents),
+    ...LIST_AGENTS_TOOL,
+    run: (call, input) => runListAgents(call.agents, input),
   },
   {
-    ...READ_CODING_AGENT_TOOL,
-    run: (call, input) => runReadCodingAgent(call.agents, input),
+    ...READ_AGENT_TOOL,
+    run: (call, input) => runReadAgent(call.agents, input),
   },
   {
-    ...MESSAGE_CODING_AGENT_TOOL,
-    run: (call, input) => runMessageCodingAgent(call.agents, input),
+    ...MESSAGE_AGENT_TOOL,
+    run: (call, input) => runMessageAgent(call.agents, input),
   },
   {
-    ...START_CODING_AGENT_TOOL,
-    run: (call, input) => runStartCodingAgent(call.agents, input),
+    ...START_AGENT_TOOL,
+    run: (call, input) => runStartAgent(call.agents, input),
+  },
+  {
+    ...LIST_TASKS_TOOL,
+    run: (call, input) => runListTasks(call.agents, input),
   },
   {
     ...END_CALL_TOOL,
@@ -513,7 +547,7 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
 
 /**
  * The tools eve puts beside the planning tools: one per declared subagent,
- * named by its directory under `eve/subagents/`, and the two task controls
+ * named by its directory under `apps/luke/subagents/`, and the two task controls
  * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
  * them, so they are no planning tool, but a turn's rows name them, and the
  * writer holds every row to the hosted tool set. Their tasks are eve's
@@ -535,7 +569,7 @@ const SUBAGENT_CALL_INPUT = Schema.Struct({
 });
 
 /**
- * The planning model's own delegation (`eve/tools/delegate.ts`): one job
+ * The planning model's own delegation (`apps/luke/tools/delegate.ts`): one job
  * handed to the worker, which always runs in the background, because a
  * foreground wait would hold the spoken turn silent for the worker's whole
  * run; and what a stored call carries, the task and the id eve adds to a
@@ -614,6 +648,25 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   }));
 }
 
+/**
+ * The planning model's four tools about the task's coding agents under the
+ * names they had before they were named for every agent that may be offered
+ * them (`../coding-agent-tools.ts`): no call is made under them now, but a
+ * transcript written then names them, so a row is held only to an object,
+ * as eve read its input then.
+ */
+const RETIRED_AGENT_TOOLS = [
+  RETIRED_TOOL.LIST_CODING_AGENTS,
+  RETIRED_TOOL.READ_CODING_AGENT,
+  RETIRED_TOOL.MESSAGE_CODING_AGENT,
+  RETIRED_TOOL.START_CODING_AGENT,
+] as const;
+
+const RETIRED_AGENT_TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
+  type: "object",
+  additionalProperties: true,
+});
+
 /** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation, its skill load, and every integration's calls beside them (`../connection-tools.ts`). */
 export function planningToolSet(): ToolSet {
   return Object.fromEntries([
@@ -633,8 +686,23 @@ export function planningToolSet(): ToolSet {
       PLANNER_DELEGATE_TOOL.name,
       wireValidatedTool(PLANNER_DELEGATE_TOOL.description, PLANNER_DELEGATE_TOOL.storedInputSchema),
     ],
+    ...RETIRED_AGENT_TOOLS.map((name) => [
+      name,
+      wireValidatedTool(`the planning model's retired ${name} tool`, RETIRED_AGENT_TOOL_INPUT),
+    ]),
     ...connectionToolEntries(),
   ]);
+}
+
+/**
+ * What the model is shown of a planning call's result: a look at the board
+ * or at one of the plan's pictures as its image, and anything else as the
+ * JSON it is.
+ */
+export function planningModelOutput(name: string, output: UnparsedWireValue): ToolModelOutput {
+  return name === LOOK_AT_PICTURE_TOOL.name
+    ? pictureLookModelOutput(output)
+    : lookModelOutput(output);
 }
 
 /** Why a planning call ran nothing, in words the model can act on. */

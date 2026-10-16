@@ -20,6 +20,10 @@
     "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
   },
   {
+    "src": "/api/account/integrations/([^/]+)/rename",
+    "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/board",
     "dest": "/api/default.js?route=plans/board&id=$1"
   },
@@ -58,6 +62,14 @@
   {
     "src": "/api/plans/([^/]+)/edit",
     "dest": "/api/default.js?route=plans/edit&id=$1"
+  },
+  {
+    "src": "/api/plans/([^/]+)/attachments/([^/]+)",
+    "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
+  },
+  {
+    "src": "/api/plans/([^/]+)/attachments",
+    "dest": "/api/default.js?route=plans/attachments&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/agents",
@@ -102,6 +114,14 @@
   {
     "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
+  },
+  {
+    "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+    "dest": "/api/default.js?route=agents/picture&id=$1&call=$2&picture=$3"
+  },
+  {
+    "src": "/api/agents/([^/]+)/pictures/([^/]+)",
+    "dest": "/api/default.js?route=agents/picture&id=$1&picture=$2"
   },
   {
     "src": "/api/agents/([^/]+)/messages",
@@ -268,6 +288,18 @@
     "dest": "/api/default.js?route=github/repositories"
   },
   {
+    "src": "/api/github/repositories/pull-request",
+    "dest": "/api/default.js?route=github/repositories/pull-request"
+  },
+  {
+    "src": "/api/github/repositories/skills",
+    "dest": "/api/default.js?route=github/repositories/skills"
+  },
+  {
+    "src": "/api/github/repositories/tree",
+    "dest": "/api/default.js?route=github/repositories/tree"
+  },
+  {
     "src": "/api/github/webhook",
     "dest": "/api/default.js?route=github/webhook"
   },
@@ -322,6 +354,22 @@
   {
     "src": "/api/workspaces/leave",
     "dest": "/api/default.js?route=workspaces/leave"
+  },
+  {
+    "src": "/api/workspaces/linear/connect",
+    "dest": "/api/default.js?route=workspaces/linear/connect"
+  },
+  {
+    "src": "/api/workspaces/linear/connected",
+    "dest": "/api/default.js?route=workspaces/linear/connected"
+  },
+  {
+    "src": "/api/workspaces/linear/disconnect",
+    "dest": "/api/default.js?route=workspaces/linear/disconnect"
+  },
+  {
+    "src": "/api/workspaces/linear/issues",
+    "dest": "/api/default.js?route=workspaces/linear/issues"
   },
   {
     "src": "/api/workspaces/members",

@@ -4,11 +4,15 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { type DraftTabs, useDraftedTabs } from "../composer-drafts";
+import { useCopyLinkItem } from "../copy-link-item";
+import { DraftMark } from "../draft-mark";
 import type { RunOnMacDoors } from "../planning/agent-published";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
@@ -28,6 +32,7 @@ import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-ma
 import type { ColumnPinnableTab, PinnedTab } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { useAgentArchive } from "./agent-archive";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import type { PlanCards } from "./side-panel";
@@ -111,6 +116,9 @@ const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the plan's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
+
+/** What the press that reads the plan's agents again, after a first read did not land, says. */
+const RETRY_AGENTS = "Retry agents";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -210,6 +218,24 @@ function AgentMenuTab({
   );
 }
 
+/**
+ * The tabs of the open plan's column that mark a draft of their own, as the
+ * strip draws them (`agentTabs`, the Inbox's): its open agents' but those a
+ * failure's mark stands on instead, its Inbox while open, and its draft
+ * agent's. The plan's sidebar row marks what none of them does.
+ */
+export function drawnDraftTabs(main: MainTabsControl, agents: CodingAgentsControl): DraftTabs {
+  return {
+    agents: (agents.agents ?? []).flatMap((agent) =>
+      main.openAgents?.includes(agent.id) && agentEndMark(agent, false) === undefined
+        ? [agent.id]
+        : [],
+    ),
+    inbox: main.tabs.includes(MAIN_TAB.INBOX),
+    newAgents: agents.draft === undefined ? [] : [agents.draft.id],
+  };
+}
+
 /** One tab the strip draws: the tab, how it looks, how it closes, how its transcript is copied, and the agent it is, for an agent's. */
 interface DrawnTab {
   tab: MainTab;
@@ -224,7 +250,10 @@ interface DrawnTab {
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
- * latest step from what its tab last held (`heldLatest`).
+ * latest step from what its tab last held (`heldLatest`). An agent's tab
+ * or the draft's whose box holds a draft wears the draft's pencil at its end
+ * while another tab is chosen, since the chosen one's box shows the words,
+ * where a failure's mark does not stand there first (`draft-mark.tsx`).
  */
 function agentTabs(input: {
   main: MainTabsControl;
@@ -232,8 +261,10 @@ function agentTabs(input: {
   unread: readonly StripTab[];
   views: TabViews;
   copied: TranscriptCopier;
+  /** The plan's tabs whose box holds a draft. */
+  drafted: DraftTabs;
 }): DrawnTab[] {
-  const { main, agents, unread, views, copied } = input;
+  const { main, agents, unread, views, copied, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -253,7 +284,9 @@ function agentTabs(input: {
       agent,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-        endMark: agentEndMark(agent, false),
+        endMark:
+          agentEndMark(agent, false) ??
+          (drafted.agents.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined),
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -267,7 +300,16 @@ function agentTabs(input: {
       : [
           {
             tab: { draft },
-            look: look({ draft }, tabLook({ kind: TAB_KIND.DRAFT })),
+            look: look(
+              { draft },
+              {
+                ...tabLook({ kind: TAB_KIND.DRAFT }),
+                endMark:
+                  drafted.newAgents.includes(draft) && !chosen({ draft }) ? (
+                    <DraftMark />
+                  ) : undefined,
+              },
+            ),
             close: () => {
               main.onClose({ draft });
               agents.onDiscardDraft(draft);
@@ -402,6 +444,7 @@ export function MainTabStrip({
   onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const drafted = useDraftedTabs(plan.id);
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
   // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
@@ -413,6 +456,7 @@ export function MainTabStrip({
           look: {
             ...tabLook({ kind: TAB_KIND.INBOX }),
             detail: inbox === 0 ? undefined : String(inbox),
+            endMark: drafted.inbox && main.tab !== MAIN_TAB.INBOX ? <DraftMark /> : undefined,
             selected: main.tab === MAIN_TAB.INBOX,
             onSelect: () => main.onChoose(MAIN_TAB.INBOX),
           },
@@ -423,7 +467,7 @@ export function MainTabStrip({
   // The agents', the draft's, and the Inbox's tabs in the column's order,
   // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
   const own = inPlanOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab],
+    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -440,6 +484,7 @@ export function MainTabStrip({
     close: undefined,
   };
   const strip = [planTab, ...own];
+  const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
@@ -450,6 +495,12 @@ export function MainTabStrip({
     };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
+    const linked: LinkPlace | undefined =
+      entry.agent !== undefined
+        ? { kind: LINK_PLACE.AGENT, planId: plan.id, agentId: entry.agent.id }
+        : entry.tab === MAIN_TAB.PLAN
+          ? { kind: LINK_PLACE.TASK, planId: plan.id }
+          : undefined;
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
@@ -473,6 +524,7 @@ export function MainTabStrip({
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
       onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
+      copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
   return (
@@ -513,12 +565,17 @@ export function MainTabStrip({
             />
           ),
         )}
-        {/* The first read of the plan's agents did not land: nothing is known
-            to draw, so the strip offers the read again where the tabs would be. */}
-        {agents.listFailed && agents.agents === undefined ? (
-          <RetryButton label="Retry agents" onRetry={agents.onRetryList} />
-        ) : null}
       </TabStrip>
+      {/* The first read of the plan's agents did not land: nothing is known
+          to draw, so the row offers the read again where the tabs would be,
+          after the strip rather than in it, so the strip's scrolling never
+          takes it out of reach, and as its glyph alone where the bar is
+          short of room (desktop.css's `plan-toolbar`). */}
+      {agents.listFailed && agents.agents === undefined ? (
+        <Tooltip label={RETRY_AGENTS}>
+          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        </Tooltip>
+      ) : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"
@@ -573,14 +630,14 @@ export function MainTabContent({
     task: string,
     status: CodingAgentStatus,
   ) => void;
-  /** Opens the agent's changes in the side panel, by the agent. */
-  onOpenChanges: (agentId: string) => void;
+  /** Opens the agent's changes in the side panel, by the agent; none where no side panel stands to show them. */
+  onOpenChanges?: ((agentId: string) => void) | undefined;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
-  /** Running an agent's pull request on this Mac, by the agent, in a tab of the side panel's own. */
-  runOnMac: (agentId: string) => RunOnMacDoors;
+  /** Running an agent's pull request on this Mac, by the agent, in a tab of the side panel's own; none where no panel draws the run. */
+  runOnMac?: ((agentId: string) => RunOnMacDoors) | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -603,11 +660,42 @@ export function MainTabContent({
       control={agents}
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
-      onOpenChanges={() => onOpenChanges(agent.id)}
-      runOnMac={runOnMac(agent.id)}
+      onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
+      runOnMac={runOnMac?.(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
+      run={agents.origin}
     />
+  );
+}
+
+/**
+ * One agent's pane: what an agent's or the draft's tab shows
+ * (`MainTabContent`), at the document's reading width (`.desktop-agent`).
+ * The task column draws it for the tab it shows, as the panel of that tab,
+ * and the page of an agent no plan holds draws it for its agent
+ * (`desktop-agent-page.tsx`), so an agent reads, finds, and is written to
+ * alike wherever it stands.
+ */
+export function AgentPane({
+  label,
+  tabbed,
+  ...content
+}: Parameters<typeof MainTabContent>[0] & {
+  /** What the pane is called to a reader: the agent's tab's name. */
+  label: string | undefined;
+  /** Whether the pane is the panel of a tab in a strip, as the task column's is. */
+  tabbed: boolean;
+}): React.JSX.Element {
+  return (
+    <section
+      className="desktop-agent"
+      role={tabbed ? "tabpanel" : undefined}
+      aria-label={label}
+      data-popover-room=""
+    >
+      <MainTabContent {...content} />
+    </section>
   );
 }

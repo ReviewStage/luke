@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCreateParams,
@@ -9,13 +11,20 @@ import {
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+} from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
@@ -24,12 +33,16 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
-import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
 import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
@@ -134,6 +147,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a Run now is held unanswered, as one still out on the wire. */
+let runHeld = false;
 /** What a Run now answers where it does not start a run. */
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
 /** Every agent whose page a run opened. */
@@ -174,8 +189,10 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
+  factoryOpens = [];
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
@@ -235,6 +252,18 @@ beforeEach(() => {
             : { automation: made };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
+        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+          // Linear and Sentry are connected; the rest are not.
+          const integrations = Object.fromEntries(
+            INTEGRATION_PROVIDER_LIST.map((provider) => [
+              provider,
+              provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+                ? INTEGRATION_STATUS.CONNECTED
+                : INTEGRATION_STATUS.DISCONNECTED,
+            ]),
+          );
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { integrations } });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
           catalogReads += 1;
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
@@ -257,6 +286,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
           runsAsked.push(request.payload.automationId);
+          if (runHeld) return new Promise<never>(() => undefined);
           if (runRefusal !== undefined) {
             return Promise.resolve({
               status: ACT_OUTCOME_STATUS.DONE,
@@ -304,7 +334,20 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
+
+/** The window's own stylesheet, which says how tall a row's field stands. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
+
+/** How tall the field stands as the window's stylesheet draws it. */
+function heightOf(field: Element | null): string {
+  assert.ok(field, "the field stands");
+  if (document.head.querySelector("style") === null) {
+    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  }
+  return getComputedStyle(field).getPropertyValue("height");
+}
 
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
@@ -347,7 +390,7 @@ async function settle(): Promise<void> {
 function rows(page: HTMLElement): string[][] {
   return [...page.querySelectorAll(".automation-row")].map((row) => [
     row.querySelector(".automation-row-name")?.textContent ?? "",
-    row.querySelector(".automation-owner")?.textContent ?? "",
+    row.querySelector(".automation-owner-name")?.textContent ?? "",
   ]);
 }
 
@@ -359,6 +402,15 @@ function rowOf(page: HTMLElement, name: string): Element {
   assert.ok(row, `no row for ${name}`);
   return row;
 }
+
+test("a schedule's time and a custom schedule's cron stand at the height of the pickers beside them", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  assert.equal(heightOf(page.querySelector("input[aria-label='Time']")), "var(--control-height)");
+  pick(page, "Repeats", "Custom");
+  assert.equal(heightOf(page.querySelector("input[aria-label='Cron']")), "var(--control-height)");
+});
 
 test("the listed workspace's automations stand before the personal ones, under a heading each, every row naming its owner", async () => {
   const page = mount();
@@ -540,9 +592,17 @@ test("with no automations the page says what one is, and with no workspace liste
 /** The workspace the account made first, its personal one, where everything is its own. */
 const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
 
+/** Each time Factory was opened past the page, as the sidebar's row opens it. */
+let factoryOpens: number[] = [];
+
+/** Opens Factory as the sidebar's row would, through the window's guarded door. */
+let openFactory: () => void = () => undefined;
+
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
+/** Sends the window to a place among the automations, as a link opened there does. */
+let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
 let moveTo: (workspace: Workspace) => void = () => undefined;
 
@@ -555,12 +615,21 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
   places = [start];
   function Pages() {
     const [place, setPlace] = useState(start);
+    sendTo = setPlace;
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
+    // The window's own guard, over doors guarded as the Plans tab guards its own.
+    const leaveGuard = useLeaveGuard();
     const plans = plansControl({
+      leaveGuard,
       agentView: {
         agentId: undefined,
-        onOpen: (agentId) => agentsOpened.push(agentId),
+        onOpen: leaveGuard.guard((agentId: string) => agentsOpened.push(agentId)),
+        onClose: () => undefined,
+      },
+      factoryView: {
+        open: false,
+        onOpen: leaveGuard.guard(() => factoryOpens.push(1)),
         onClose: () => undefined,
       },
       workspace: listed,
@@ -568,14 +637,15 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
       automationsView: {
         open: true,
         place,
-        onOpen: (next = { kind: AUTOMATIONS_PAGE.LIST }) => {
+        onOpen: leaveGuard.guard((next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => {
           places.push(next);
           setPlace(next);
-        },
+        }),
         onClose: () => undefined,
       },
     });
     const base = plans.newPlan;
+    openFactory = plans.factoryView.onOpen;
     return createElement(AutomationsPage, {
       plans: {
         ...plans,
@@ -615,6 +685,28 @@ function button(name: string): HTMLButtonElement {
     (each) => each.textContent === name || each.getAttribute("aria-label") === name,
   );
   assert.ok(found, `no button ${name}`);
+  return found;
+}
+
+/** The item of the menu standing open whose words are `name`. */
+function menuItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="menu"]:not([data-leaving]) [role="menuitem"]',
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no menu item ${name}`);
+  return found;
+}
+
+/** The button of the dialog standing whose words are `name`. */
+function dialogButton(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      "[role=dialog] button, [role=alertdialog] button",
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no dialog button ${name}`);
   return found;
 }
 
@@ -662,12 +754,64 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
+/** The titles of the page's cards, in order. */
+function cards(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".settings-group-title")].map(
+    (title) => title.textContent ?? "",
+  );
+}
+
+/** The switch named, wherever it is drawn. */
+function switchNamed(name: string): HTMLButtonElement {
+  const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
+  assert.ok(found, `no switch ${name}`);
+  return found;
+}
+
+/** Whether the switch named is on. */
+function isOn(name: string): boolean {
+  return switchNamed(name).getAttribute("aria-checked") === "true";
+}
+
 /** The crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
   return page.querySelector(".automation-crumbs")?.textContent ?? "";
 }
 
-test("a row opens its automation's page, under crumbs naming its owner, with what it was saved as", async () => {
+test("an automation's whole row is its press: its owner and its next run open it too, and its switch only switches it", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const row = rowOf(page, "Nightly flaky-test sweep");
+  const owner = row.querySelector<HTMLElement>(".automation-owner");
+  assert.ok(owner, "the row names its owner");
+  act(() => owner.click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const when = rowOf(list, "Nightly flaky-test sweep").querySelector<HTMLElement>(
+    ".automation-row-when",
+  );
+  assert.ok(when, "the row says when it runs next");
+  act(() => when.click());
+  await settle();
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button(`Turn off ${SWEEP.name}`).click());
+  await settle();
+  assert.deepEqual(places, [{ kind: AUTOMATIONS_PAGE.LIST }], "the switch opens nothing");
+  assert.ok(changes.length > 0, "and switches it");
+});
+
+test("a row opens its automation's page, under crumbs naming it, with what it was saved as", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
@@ -679,22 +823,19 @@ test("a row opens its automation's page, under crumbs naming its owner, with wha
   await settle();
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  assert.equal(crumbs(page), "AutomationsAcmeNightly flaky-test sweep");
+  assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
   );
-  assert.match(
-    page.textContent ?? "",
-    /A workspace automation: everyone in Acme sees and runs it\./u,
-  );
+  assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
 });
 
 test("a new automation is created only once it is named and told its task, and then stands as its own page", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(crumbs(page), "AutomationsPersonalNew automation");
+  assert.equal(crumbs(page), "AutomationsNew automation");
 
   act(() => button("Create").click());
   await settle();
@@ -723,7 +864,7 @@ test("a new automation is created only once it is named and told its task, and t
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsPersonalMorning triage");
+  assert.equal(crumbs(page), "AutomationsMorning triage");
 });
 
 test("an edit says it is unsaved and saves only what moved", async () => {
@@ -738,7 +879,9 @@ test("an edit says it is unsaved and saves only what moved", async () => {
   assert.deepEqual(changes, [
     {
       automationId: SWEEP.id,
-      change: { action: { ...SWEEP.action, prompt: "Fix the two flakiest tests." } },
+      change: {
+        action: { ...SWEEP.action, prompt: "Fix the two flakiest tests.", disabledServers: [] },
+      },
     },
   ]);
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
@@ -768,10 +911,11 @@ test("a deletion asks first, then goes back to the list without the automation",
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  act(() => button(`Delete ${SWEEP.name}`).click());
+  act(() => button("Automation actions").click());
+  act(() => menuItem("Delete").click());
   await settle();
   assert.deepEqual(deletes, []);
-  act(() => button("Delete").click());
+  act(() => dialogButton("Delete").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
@@ -779,17 +923,68 @@ test("a deletion asks first, then goes back to the list without the automation",
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 
-test("Escape leaves a page with nothing unsaved for the list, and keeps one whose draft would be lost", async () => {
+/** The leave dialog's question, while it stands. */
+function leaveAsked(): string | undefined {
+  return [...document.querySelectorAll("[role=dialog], [role=alertdialog]")]
+    .map((dialog) => dialog.textContent ?? "")
+    .find((words) => words.includes("Leave with unsaved changes?"));
+}
+
+test("Escape leaves a page with nothing unsaved for the list, and asks first where its draft would be lost", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
+  assert.match(leaveAsked() ?? "", /What you changed here is lost\./u);
+  act(() => button("Cancel").click());
+  await settle();
+  assert.equal(leaveAsked(), undefined);
 
   type(page.querySelector("input[aria-label='Automation name']"), SWEEP.name);
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
+test("a new automation with something written asks before any way out leaves it, and Leave goes where was asked", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Automations").click());
+  assert.equal(places.length, 1, "the crumb waits on the question");
+  assert.match(
+    leaveAsked() ?? "",
+    /This automation isn't created yet, and what you wrote here is lost\./u,
+  );
+  act(() => button("Cancel").click());
+  await settle();
+
+  act(() => openFactory());
+  assert.deepEqual(factoryOpens, [], "the sidebar's row waits on the question too");
+  act(() => button("Leave").click());
+  await settle();
+  assert.deepEqual(factoryOpens, [1]);
+});
+
+test("a new automation with nothing written leaves at once, and one just created stands as its own page without asking", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  act(() => button("Automations").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.equal(leaveAsked(), undefined);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
+  assert.equal(leaveAsked(), undefined);
 });
 
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
@@ -802,27 +997,338 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
   const personal = mountPages({ kind: AUTOMATIONS_PAGE.NEW }, PERSONAL);
   await settle();
   assert.equal(personal.querySelector("button[aria-label^='Owner: ']"), null);
-  assert.match(personal.textContent ?? "", /Your automation, in your personal workspace\./u);
 });
 
-test("an automation's page says it is an experiment, and its Send feedback is about Automations", async () => {
+/** The groups of the editor's form, by their titles, top to bottom. */
+function formGroups(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".automation-form .settings-group-title")].map(
+    (title) => title.textContent ?? "",
+  );
+}
+
+test("who owns an automation is the editor's first setting, and nowhere else on its page", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  assert.equal(page.querySelector(".experiment-badge")?.textContent, "Experimental");
-  act(() => button("Send feedback").click());
-
-  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS]);
+  assert.equal(formGroups(page)[0], "Sharing");
+  assert.equal(picked(page, "Owner"), "Acme");
+  assert.equal(page.querySelector(".automation-editor .automation-owner"), null);
+  assert.equal(page.querySelector(".automation-crumbs .automation-owner"), null);
 });
 
-test("a page naming an automation the list no longer holds says it is gone", async () => {
+test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  const chip = picker(page, "Owner");
+  assert.ok(
+    chip.querySelector(".actor-mark[data-kind='person']"),
+    "Personal wears the account's mark",
+  );
+  act(() => chip.click());
+  const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
+    row.querySelector(".plan-compose-menu-name")?.textContent,
+    row.querySelector(".actor-mark") !== null
+      ? "person"
+      : row.querySelector(".workspace-tile") !== null
+        ? "tile"
+        : "none",
+  ]);
+  assert.deepEqual(marks, [
+    ["Personal", "person"],
+    ["Acme", "tile"],
+  ]);
+
+  const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Acme",
+  );
+  assert.ok(acme, "the menu offers the workspace");
+  act(() => acme.click());
+  assert.ok(picker(page, "Owner").querySelector(".workspace-tile"), "the workspace wears its tile");
+});
+
+test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
+  handState({});
+  standing = [{ ...DIGEST, mine: false }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
+  await settle();
+
+  assert.equal(
+    picker(page, "Owner").querySelector(".actor-mark")?.getAttribute("data-kind"),
+    "someone",
+  );
+});
+
+test("the list's Owner column draws the workspace by its tile, the account's own by its picture, and another's personal one unnamed", async () => {
+  handState({});
+  standing = [
+    SWEEP,
+    { ...DIGEST, mine: true },
+    { ...FAILING, scope: AUTOMATION_SCOPE.PERSONAL, mine: false },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const markOf = (name: string) => {
+    const owner = rowOf(page, name).querySelector(".automation-owner");
+    if (owner?.querySelector(".workspace-tile")) return "tile";
+    return owner?.querySelector(".actor-mark")?.getAttribute("data-kind") ?? "none";
+  };
+  assert.equal(markOf(SWEEP.name), "tile");
+  assert.equal(markOf(DIGEST.name), "person");
+  assert.equal(markOf(FAILING.name), "someone");
+});
+
+test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
+  standing = [{ ...SWEEP, mine: true }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const chip = button("MCP servers");
+  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.equal(chip.querySelectorAll(".provider-mark").length, 2, "Linear's and Sentry's marks");
+
+  act(() => chip.click());
+  await settle();
+  const sentry = document.querySelector<HTMLButtonElement>(
+    "[role=switch][aria-label='Sentry for this agent']",
+  );
+  assert.ok(sentry, "the agent box's own switches stand");
+  act(() => sentry.click());
+  assert.match(page.textContent ?? "", /Sentry off\./u);
+  assert.equal(chip.querySelectorAll(".provider-mark").length, 1, "Linear's mark alone");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: { action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] } },
+  });
+});
+
+test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
+  standing = [
+    {
+      ...SWEEP,
+      mine: false,
+      action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY, "notion-2"] },
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.match(
+    page.textContent ?? "",
+    /Its creator's connected servers, but Sentry, Notion \(account 2\) switched off\./u,
+  );
+  assert.equal(
+    [...page.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === "MCP servers",
+    ),
+    undefined,
+  );
+});
+
+test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.ok(page.querySelector("aside[aria-label='Runs']"), "it stands at first");
+
+  act(() => button("Hide runs").click());
+  assert.equal(page.querySelector("aside[aria-label='Runs']"), null);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const again = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(again.querySelector("aside[aria-label='Runs']"), null, "folded as it was left");
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
+  assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
+  window.localStorage.clear();
+});
+
+test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
+  window.localStorage.clear();
+  const list = mount();
+  await settle();
+  const rows = list.querySelector(".automations-scroll") ?? assert.fail("the list scrolls");
+  act(() => root?.unmount());
+
+  const edit = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const form = edit.querySelector(".automations-scroll") ?? assert.fail("the page scrolls");
+  const runs = edit.querySelector("aside[aria-label='Runs']") ?? assert.fail("the runs stand");
+  const sheets = layFades();
+  try {
+    for (const scroller of [rows, form, runs]) {
+      assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+    }
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const pane = () => document.querySelector<HTMLElement>(".automation-runs-pane");
+  const edge = page.querySelector<HTMLElement>("[role=separator][aria-label='Resize runs']");
+  assert.ok(edge, "the panel has a resize edge");
+  assert.equal(pane()?.style.width, "340px");
+
+  act(() => edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+  assert.equal(pane()?.style.width, "356px", "the arrow away from the panel widens it");
+  act(() => edge.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+  assert.equal(pane()?.style.width, "280px", "Home is its least width");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(pane()?.style.width, "280px");
+  window.localStorage.clear();
+});
+
+test("the list and an automation's page each say they are an experiment, and each Send feedback is about Automations", async () => {
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  assert.equal(list.querySelector(".experiment-tag")?.textContent, "Experimental");
+  act(() => button("Send feedback").click());
+  act(() => root?.unmount());
+
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(page.querySelector(".experiment-tag")?.textContent, "Experimental");
+  act(() => button("Send feedback").click());
+
+  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
+});
+
+/** The pill the pointer resting on `element` raises, or nothing where it raises none. */
+function pillOver(element: Element): string | undefined {
+  act(() => element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
+  act(() => element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  return pill;
+}
+
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
+  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
+  const acts = () =>
+    ["Automations", "Send feedback", "Run now"].map((name) => {
+      const press =
+        [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
+        assert.fail(`no ${name}`);
+      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
+      return {
+        name,
+        drawn: shown(words),
+        labelled: press.getAttribute("aria-label"),
+        pill: pillOver(press),
+      };
+    });
+
+  // A 760 window's toolbar, past the traffic lights.
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
+      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+    ]);
+    assert.equal(shown(status), false);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "automation-toolbar": 1100 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: true, labelled: null, pill: undefined },
+      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
+      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+    ]);
+    assert.equal(shown(status), true);
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
+
+  assert.equal(pillOver(crumb), undefined);
+  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
+  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
+  act(() => relayout());
+  assert.equal(pillOver(crumb), SWEEP.name);
+});
+
+test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  const chip = picker(page, "Owner");
+  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
+  // The form beside the runs, 300px from its left edge to the chip's right one.
+  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
+  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
+
+  const sheets = layContainersAt({});
+  try {
+    act(() => chip.click());
+    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
+    assert.equal(getComputedStyle(menu).width, "max-content");
+    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  runHeld = true;
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    const run = button("Run now");
+    act(() => run.click());
+    await settle();
+
+    assert.deepEqual(
+      {
+        pressable: !run.disabled,
+        ring: run.querySelector('.spinner[role="status"]') !== null,
+        glyph: run.querySelector("svg.lucide-play") !== null,
+      },
+      { pressable: false, ring: true, glyph: false },
+    );
+  } finally {
+    narrow.remove();
+  }
+});
+
+test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {
   const page = mountPages({
     kind: AUTOMATIONS_PAGE.EDIT,
     automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
   });
   await settle();
 
-  assert.match(page.textContent ?? "", /This automation is gone/u);
+  assert.match(
+    page.textContent ?? "",
+    /Not foundThis automation doesn't exist, or you don't have access to it\./u,
+  );
 });
 
 test("what is typed while a save is out stands, unsaved, once the save lands", async () => {
@@ -888,7 +1394,10 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
   await settle();
 
-  assert.equal(pickerDetail(page, "Type"), "When an issue is opened in acme/ledger labelled bug");
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When an issue by people is opened in acme/ledger labelled bug",
+  );
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
   type(page.querySelector("textarea[aria-label='Prompt']"), "Reproduce the bug first.");
@@ -898,7 +1407,9 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   assert.deepEqual(changes, [
     {
       automationId: onEvent.id,
-      change: { action: { ...onEvent.action, prompt: "Reproduce the bug first." } },
+      change: {
+        action: { ...onEvent.action, prompt: "Reproduce the bug first.", disabledServers: [] },
+      },
     },
   ]);
 });
@@ -941,7 +1452,8 @@ test("the repository chosen first is not said again among the others its runs wo
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
@@ -990,7 +1502,8 @@ test("the agent a same-agent automation was saved with is not offered once its r
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Choose an agent");
   act(() => picker(page, "Agent").click());
@@ -1025,6 +1538,67 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
       automationId: SWEEP.id,
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
     },
+  ]);
+});
+
+/** What each glyph inside `within` draws, in order: GitHub's mark, or the lucide icon's name. */
+function glyphs(within: Element | null, rows: string): string[] {
+  return [...(within?.querySelectorAll(rows) ?? [])].map((row) => {
+    if (row.querySelector(".provider-mark") !== null) return "github";
+    const icon = row.querySelector(".state-glyph svg");
+    const named = [...(icon?.classList ?? [])].find(
+      (name) => name.startsWith("lucide-") && name !== "lucide-icon",
+    );
+    return named?.slice("lucide-".length) ?? "none";
+  });
+}
+
+test("each run and each automation wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play", async () => {
+  standing = [
+    SWEEP,
+    automation(7, {
+      name: "Review pull requests",
+      trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED },
+    }),
+    automation(8, {
+      name: "Deploy hook",
+      trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+      webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
+    }),
+  ];
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  assert.deepEqual(glyphs(list, ".automation-row"), ["clock", "github", "webhook"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fired = (n: number, firing: AutomationRunSummary["firing"]): AutomationRunSummary => ({
+    id: `1c2d3e4f-5a6b-4c7d-8e9f-${String(n).padStart(12, "0")}`,
+    firing,
+    status: AUTOMATION_RUN_STATUS.SKIPPED,
+    reason: null,
+    agent: null,
+    firedAt: n,
+    settledAt: n,
+  });
+  runs = [
+    fired(4, { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 4 }),
+    fired(3, {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+      repository: "acme/ledger",
+      number: 12,
+    }),
+    fired(2, { kind: AUTOMATION_TRIGGER.WEBHOOK, bytes: 40 }),
+    fired(1, { kind: "manual" }),
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.deepEqual(glyphs(page.querySelector("aside[aria-label='Runs']"), ".automation-run"), [
+    "clock",
+    "github",
+    "webhook",
+    "play",
   ]);
 });
 
@@ -1188,18 +1762,25 @@ test("a GitHub automation's row says its trigger as one sentence, naming the rep
 
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 
-test("a new automation set to a GitHub event is created on it, the trigger said as one sentence, and the list's row says it too", async () => {
+test("a new automation set to a GitHub event takes its settings as switches in the Trigger card, is created on them, and the list's row says it too", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
   pick(page, "Type", "GitHub event");
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
+  );
+  act(() => switchNamed("From Luke's agents").click());
+  assert.equal(isOn("Skip drafts"), true);
+  assert.equal(isOn("Include forks"), false);
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -1209,12 +1790,16 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   assert.deepEqual(creates[0]?.trigger, {
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: "pull-request-updated",
+    senders: ["people", "luke-agents"],
+    moments: ["opened", "ready", "pushed"],
+    drafts: false,
+    forks: false,
   });
   act(() => button("Automations").click());
   await settle();
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 
@@ -1356,4 +1941,189 @@ test("a webhook not yet saved as one says it gets its address once it is saved",
   assert.equal(page.querySelector("input[aria-label='Webhook address']"), null);
   assert.match(page.textContent ?? "", /Save it as a webhook to get its address/u);
   assert.equal(pickerDetail(page, "Type"), "When its webhook is called");
+});
+
+test("an automation's ⋯ in its editor, its row's right-click in the list, and the right-click of a run that started an agent each offer Copy link, copying its link under the listed workspace", async () => {
+  runs = [
+    {
+      id: "6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d",
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 1,
+      settledAt: 1,
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  act(() => button("Automation actions").click());
+  await act(async () => menuItem("Copy link").click());
+  const run = page.querySelector<HTMLElement>(".automation-run");
+  assert.ok(run, "the run is listed");
+  act(() => {
+    run.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => menuItem("Copy link").click());
+  act(() => button("Automations").click());
+  await settle();
+  act(() => {
+    rowOf(page, SWEEP.name)
+      .querySelector(".automation-row-open")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => menuItem("Copy link").click());
+
+  const automationLink = `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
+  assert.deepEqual(copied.slice(-3), [
+    automationLink,
+    `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
+    automationLink,
+  ]);
+});
+
+test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
+  window.localStorage.clear();
+  runs = [
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  act(() => button("Hide runs").click());
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  await settle();
+  const current = page.querySelector(".automation-run")?.getAttribute("aria-current");
+  act(() => button("Hide runs").click());
+  const folded = page.querySelector("aside[aria-label='Runs']");
+  act(() =>
+    sendTo({
+      kind: AUTOMATIONS_PAGE.EDIT,
+      automationId: SWEEP.id,
+      runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+    }),
+  );
+
+  assert.equal(current, "true");
+  assert.equal(folded, null, "the fold after it stands");
+  assert.ok(page.querySelector("aside[aria-label='Runs']"), "the same link opened again shows it");
+  window.localStorage.clear();
+});
+
+test("a link to a run opens its automation's editor with that run marked current among its runs", async () => {
+  runs = [
+    {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 3,
+      settledAt: 3,
+    },
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-run")].map((row) => row.getAttribute("aria-current")),
+    [null, "true"],
+  );
+});
+
+test("an automation whose task opens with no code review settings shows no Code review card", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.ok(!cards(page).includes("Code review"));
+});
+
+test("a new automation started from Code review is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  // Note that the press fills the draft in at once, so a Create pressed straight after it saves the review.
+  // Note that the owner is chosen first, as Dean asked, and the preset is offered under it.
+  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Start from", "Trigger"]);
+  act(() => button("Start from Code review").click());
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  );
+  // Its own settings, Cursor Bugbot's kind, in a card of their own and written into the lines its task opens with.
+  assert.ok(cards(page).includes("Code review"));
+  act(() => switchNamed("Comment when no issues are found").click());
+  pick(page, "Most findings", "3");
+  type(page.querySelector("input[aria-label='Rules file']"), ".cursor/BUGBOT.md");
+  act(() => button("Create").click());
+  await settle();
+
+  const made = creates[0];
+  assert.ok(made, "the automation is made");
+  assert.deepEqual(
+    {
+      name: made.name,
+      trigger: made.trigger,
+      archiveSuccessful: made.archiveSuccessful,
+      guards: made.guards,
+      target: made.target,
+      repositories: made.repositories,
+    },
+    {
+      name: "Code review",
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: "pull-request-updated",
+        senders: ["people", "luke-agents"],
+        moments: ["opened", "ready", "pushed"],
+        drafts: false,
+        forks: false,
+      },
+      archiveSuccessful: true,
+      guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+      repositories: ["acme/ledger"],
+    },
+  );
+  assert.match(made.action.prompt, /post what you find as one GitHub review/u);
+  assert.ok(
+    made.action.prompt.startsWith(
+      [
+        "Code review settings:",
+        "- Comment when you find nothing: no",
+        "- Most findings to post: 3",
+        "- Rules file: .cursor/BUGBOT.md",
+        "- Fix what you find: no",
+      ].join("\n"),
+    ),
+    "the settings open the task the agent is handed",
+  );
+  assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
 });

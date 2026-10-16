@@ -24,6 +24,18 @@ import {
   TRANSCRIPT_SPEAKER,
   unmuteEvent,
 } from "@luke/live";
+import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "@luke/voice/avatar";
+import {
+  AVATAR_HANDOVER_DIRECT,
+  type AvatarHandover,
+  avatarVoiced,
+  handoverInterrupt,
+  handoverOnFeed,
+  handoverOnStatus,
+  handoverOnTee,
+} from "@luke/voice/avatar-handover";
+import { PCM_SAMPLE_RATE } from "@luke/voice/avatar-pcm";
+import { TURN_GATE } from "@luke/voice/avatar-turn-gate";
 import { LiveCaptions } from "@luke/voice/live-captions";
 import type {
   LiveCaptionRow,
@@ -45,6 +57,7 @@ import {
   Result,
   type Scope,
 } from "effect";
+import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
 import {
   acquireLivePeer,
   LIVE_PEER_OUTCOME,
@@ -53,6 +66,7 @@ import {
   type LiveSilence,
   stopDevice,
 } from "./live-peer";
+import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice-level-meter";
 
 /** How long a created session may take to announce itself started before the peer gives up on it. */
 const SESSION_START_TIMEOUT_MS = 15_000;
@@ -74,6 +88,31 @@ const SPEAKING_HANGOVER_MS = 1_500;
 /** How often the caption rows are re-read for ones that have settled since their last fragment. */
 const CAPTION_SETTLE_TICK_MS = 500;
 
+/**
+ * How long Luke's track must be quiet under a held talk key before his avatar
+ * is flushed, and how long after one flush the next may go: HeyGen's GPT
+ * Live demo's bounds. GPT Live's own barge-in is the model's to decide, so
+ * the avatar, which runs a second behind it, is flushed only once the model
+ * has yielded. The meter reports quiet only after its own hangover, so the
+ * wait armed on its report is what is left of the bound.
+ */
+const BARGE_IN = {
+  QUIET_MS: 350,
+  COOLDOWN_MS: 1_000,
+} as const;
+
+const BARGE_IN_WAIT_MS = Math.max(0, BARGE_IN.QUIET_MS - VOICE_ACTIVITY_HANGOVER_MS);
+
+/**
+ * How long after the meter reports Luke quiet his turn still stands, by the
+ * tee's own reckoning: the gate closes a turn on its quiet, and the meter's
+ * report already comes its own hangover late.
+ */
+const TURN_QUIET_WAIT_MS = Math.max(
+  0,
+  (TURN_GATE.QUIET_SAMPLES * 1_000) / PCM_SAMPLE_RATE - VOICE_ACTIVITY_HANGOVER_MS,
+);
+
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
@@ -83,6 +122,24 @@ interface LiveCallActs {
   /** The peer connection's state as it changed, and at the peer's end, why it ended, about the call's own session. */
   reportTransport: (report: VoiceReportLiveTransportParams) => void;
   reportActivity: (idle: boolean) => void;
+}
+
+/** Where the voice window's avatar feed goes: main, for the panel (`voice-host.tsx`). */
+export interface AvatarFeedActs {
+  feed: (feed: AvatarFeed) => void;
+}
+
+/** The call's avatar feed path: where it goes, the tee it reads, and the element it mutes. */
+interface LiveAvatarFeedOptions {
+  acts: AvatarFeedActs;
+  /** The tee over Luke's remote track, standing for as long as the scope it is run in, answering whether it stood up. */
+  startTee: (options: AvatarFeedOptions) => Effect.Effect<boolean, never, Scope.Scope>;
+  /**
+   * Whether the avatar voices Luke in the element's place. The element is
+   * muted while it does and never paused: a track no playing element holds
+   * hands every context reading it zeros, the tee's among them.
+   */
+  onAvatarVoiced: (voiced: boolean) => void;
 }
 
 /**
@@ -112,6 +169,8 @@ export interface LiveCallOptions {
    * is heard at once rather than when the model obeys.
    */
   onOutputSilenced: (silenced: boolean) => void;
+  /** The avatar feed path; a call without one is voice alone, whatever the avatar's status. */
+  avatarFeed?: LiveAvatarFeedOptions;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
@@ -196,6 +255,25 @@ export class LiveCall implements LiveVoiceCall {
   #idleReported = false;
   #speakingHangover: Fiber.Fiber<void> | undefined;
   #captionTick: Fiber.Fiber<void> | undefined;
+  #avatarStatus: AvatarStatus = AVATAR_STATUS.OFF;
+  #handover: AvatarHandover = AVATAR_HANDOVER_DIRECT;
+  /** The tee's fiber, holding its scope for as long as the avatar is starting or live. */
+  #tee: Fiber.Fiber<void> | undefined;
+  #talkKeyDown = false;
+  /**
+   * Whether Luke is in a turn as the tee's gate would count it: from the
+   * meter hearing him until his track has been as long quiet as the gate's
+   * quiet. A tee standing up inside a pause meets the turn the pause is in,
+   * and one standing up after it, though still in the status's longer
+   * hangover, meets none.
+   */
+  #directInTurn = false;
+  #directTurnQuiet: Fiber.Fiber<void> | undefined;
+  /** Whether Luke's track has been quiet for the barge-in's bound, which it has before he first speaks. */
+  #directQuietLong = true;
+  #directQuiet: Fiber.Fiber<void> | undefined;
+  /** The barge-in's cooldown after an interrupt, while it stands. */
+  #interruptCooling: Fiber.Fiber<void> | undefined;
   /** Counts the mutes, so an unmute still opening its device learns the key came up while it waited. */
   #muteEpoch = 0;
   /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
@@ -314,6 +392,7 @@ export class LiveCall implements LiveVoiceCall {
    * keeps the idle window open too.
    */
   reportRemoteAudioLevel(active: boolean): void {
+    this.#noteDirectLevel(active);
     if (this.#speakingHangover !== undefined) {
       this.#disarm(this.#speakingHangover);
       this.#speakingHangover = undefined;
@@ -332,6 +411,34 @@ export class LiveCall implements LiveVoiceCall {
       this.#restoreOutput();
       this.#refreshStatus();
     });
+  }
+
+  /**
+   * The avatar's status as the document moved it. The tee stands while the
+   * avatar is starting or live, so a turn already open when it goes live is
+   * known to be, and is left to finish on the element; Luke's voice stays on
+   * the element until the tee stands.
+   */
+  reportAvatarStatus(status: AvatarStatus): void {
+    this.#avatarStatus = status;
+    this.#route(handoverOnStatus(this.#handover, status));
+    this.#syncTee();
+  }
+
+  /** The talk key going down or up: held over Luke gone quiet, it flushes his avatar. */
+  reportTalkKey(down: boolean): void {
+    this.#talkKeyDown = down;
+    this.#bargeIn();
+  }
+
+  /**
+   * The stop key: the avatar is flushed of what it has still to say, at
+   * once and whatever the direct track is doing, since the avatar runs a
+   * second behind it. Keyframe carries an interrupt on a lossy channel, and
+   * one lost is not sent again.
+   */
+  interruptAvatar(): void {
+    this.#interrupt();
   }
 
   /** Speech energy on the microphone, from the level meter: what resets the idle window. */
@@ -428,6 +535,7 @@ export class LiveCall implements LiveVoiceCall {
         onRemoteStream: (stream) => {
           this.#remoteStream = stream;
           this.#options.remoteStream.show(stream);
+          this.#syncTee();
         },
       });
       if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
@@ -706,6 +814,12 @@ export class LiveCall implements LiveVoiceCall {
     this.#captionTick = undefined;
     if (this.#speakingHangover !== undefined) this.#disarm(this.#speakingHangover);
     this.#speakingHangover = undefined;
+    for (const bound of [this.#directQuiet, this.#directTurnQuiet, this.#interruptCooling]) {
+      if (bound !== undefined) this.#disarm(bound);
+    }
+    this.#directQuiet = undefined;
+    this.#directTurnQuiet = undefined;
+    this.#interruptCooling = undefined;
     this.#settleSwitch(false);
     Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
     if (peer) {
@@ -722,8 +836,10 @@ export class LiveCall implements LiveVoiceCall {
     this.#micLive = false;
     this.#lukeSpeaking = false;
     // Note that the element outlives the call, so a silence left standing
-    // would mute the next call's first words.
+    // would mute the next call's first words, and so would the avatar's.
     this.#restoreOutput();
+    this.#route(AVATAR_HANDOVER_DIRECT);
+    this.#syncTee();
     // Note that a newer call may already be showing its own streams, since
     // this one can end long after it was let go of.
     this.#withdraw(this.#options.localStream, peer?.microphoneStream);
@@ -737,6 +853,110 @@ export class LiveCall implements LiveVoiceCall {
     if (!this.#outputSilenced) return;
     this.#outputSilenced = false;
     this.#options.onOutputSilenced(false);
+  }
+
+  /** Moves the handover, muting or unmuting the element where the avatar took Luke's voice or gave it back. */
+  #route(next: AvatarHandover): void {
+    const voiced = avatarVoiced(this.#handover);
+    this.#handover = next;
+    if (avatarVoiced(next) !== voiced) this.#options.avatarFeed?.onAvatarVoiced(!voiced);
+  }
+
+  /** One message off the tee, handed over or dropped, and dropped while the stop's silence stands. */
+  #onTeeFeed(feed: AvatarFeed): void {
+    const step = handoverOnFeed(this.#handover, feed, this.#outputSilenced);
+    this.#route(step.handover);
+    if (step.feed) this.#options.avatarFeed?.acts.feed(step.feed);
+  }
+
+  /** The tee up: the status is applied again, now that the avatar can be fed. */
+  #onTeeStanding(): void {
+    const standing = handoverOnTee(this.#handover, true, this.#directInTurn);
+    this.#route(handoverOnStatus(standing, this.#avatarStatus));
+  }
+
+  /** Flushes the avatar where it has audio to flush, and starts the barge-in's cooldown. */
+  #interrupt(): void {
+    const step = handoverInterrupt(this.#handover);
+    this.#route(step.handover);
+    if (!step.feed) return;
+    this.#options.avatarFeed?.acts.feed(step.feed);
+    if (this.#interruptCooling !== undefined) this.#disarm(this.#interruptCooling);
+    this.#interruptCooling = this.#arm(BARGE_IN.COOLDOWN_MS, () => {
+      this.#interruptCooling = undefined;
+      this.#bargeIn();
+    });
+  }
+
+  /** The barge-in, where every condition of it stands: the key held, Luke quiet long enough, no cooldown. */
+  #bargeIn(): void {
+    if (!this.#talkKeyDown || !this.#directQuietLong || this.#interruptCooling !== undefined) {
+      return;
+    }
+    this.#interrupt();
+  }
+
+  /** Luke's track heard or gone quiet, timed for the barge-in and for the turn a late tee meets. */
+  #noteDirectLevel(active: boolean): void {
+    if (!this.#options.avatarFeed || this.#ended) return;
+    for (const bound of [this.#directQuiet, this.#directTurnQuiet]) {
+      if (bound !== undefined) this.#disarm(bound);
+    }
+    this.#directQuiet = undefined;
+    this.#directTurnQuiet = undefined;
+    this.#directQuietLong = false;
+    if (active) {
+      this.#directInTurn = true;
+      return;
+    }
+    this.#directTurnQuiet = this.#arm(TURN_QUIET_WAIT_MS, () => {
+      this.#directTurnQuiet = undefined;
+      this.#directInTurn = false;
+    });
+    this.#directQuiet = this.#arm(BARGE_IN_WAIT_MS, () => {
+      this.#directQuiet = undefined;
+      this.#directQuietLong = true;
+      this.#bargeIn();
+    });
+  }
+
+  /**
+   * Stands the tee up or takes it down: it reads Luke's track while this call
+   * stands with a feed path and the avatar is starting or live. Taken down,
+   * its scope closes the context and owes the avatar the `turn_end` of a turn
+   * still open, which the handover drops once the voice is back on the element.
+   * A tee that could not stand ends its fiber and leaves the voice on the
+   * element; the next time the avatar starts tries it again.
+   */
+  #syncTee(): void {
+    const avatarFeed = this.#options.avatarFeed;
+    const stream = this.#remoteStream;
+    const wanted =
+      avatarFeed !== undefined &&
+      stream !== undefined &&
+      !this.#ended &&
+      (this.#avatarStatus === AVATAR_STATUS.STARTING || this.#avatarStatus === AVATAR_STATUS.LIVE);
+    if (!wanted) {
+      if (this.#tee !== undefined) this.#disarm(this.#tee);
+      this.#tee = undefined;
+      this.#route(handoverOnTee(this.#handover, false, false));
+      return;
+    }
+    if (this.#tee !== undefined) return;
+    this.#tee = this.#fork(
+      Effect.scoped(
+        Effect.flatMap(
+          avatarFeed.startTee({ stream, onFeed: (feed) => this.#onTeeFeed(feed) }),
+          (standing) =>
+            standing
+              ? Effect.andThen(
+                  Effect.sync(() => this.#onTeeStanding()),
+                  Effect.never,
+                )
+              : Effect.void,
+        ),
+      ),
+    );
   }
 
   /**
@@ -803,10 +1023,13 @@ export class LiveCall implements LiveVoiceCall {
    * fiber, and re-arming interrupts the one it replaces.
    */
   #arm(delayMs: number, work: () => void): Fiber.Fiber<void> {
+    return this.#fork(Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)));
+  }
+
+  /** Work of the call's own, run under the renderer's services and gone with the session's scope. */
+  #fork(effect: Effect.Effect<void>): Fiber.Fiber<void> {
     const scope = this.#scope;
-    const fiber = Effect.runForkWith(this.#services)(
-      Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)),
-    );
+    const fiber = Effect.runForkWith(this.#services)(effect);
     return scope ? Fiber.runIn(fiber, scope) : fiber;
   }
 

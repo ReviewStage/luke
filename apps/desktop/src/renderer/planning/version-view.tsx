@@ -12,6 +12,7 @@ import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { type MentionedPlan, useMentionLink } from "./plan-mentions";
+import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { useOpenLink } from "./use-open-link";
@@ -29,7 +30,10 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its colour alone
- * (`plan-history-model.ts`). A version is drawn under the plan's name, as
+ * (`plan-history-model.ts`). A Mermaid fence draws as its diagram, and one
+ * whose code the revision changed as its code with the changes marked,
+ * since two diagrams side by side would hide what changed (`../plan-diagram.tsx`).
+ * A version is drawn under the plan's name, as
  * the plan's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
  * list is drawn alone, without the plan's name over it, marked as the whole
@@ -95,6 +99,7 @@ function VersionBody({
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
   const link = useMentionLink(plan);
   const openLink = useOpenLink();
+  const picture = usePlanPictureDrawer();
   return (
     <div className="plan-body">
       {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
@@ -108,6 +113,8 @@ function VersionBody({
           edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
           link={link}
           openLink={openLink}
+          diagrams
+          picture={picture}
         />
       ))}
     </div>
@@ -158,7 +165,17 @@ function VersionContent({
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
-      <VersionBody diff={diff} title={title} section={section} plan={plan} />
+      {plan === undefined ? (
+        <VersionBody diff={diff} title={title} section={section} plan={plan} />
+      ) : (
+        // A version struck a picture as well as wrote one in, so both texts name the pictures it draws.
+        <PlanPictures
+          planId={plan.planId}
+          text={`${read.document.body}\n${read.previous?.body ?? ""}`}
+        >
+          <VersionBody diff={diff} title={title} section={section} plan={plan} />
+        </PlanPictures>
+      )}
     </>
   );
 }
@@ -276,7 +293,7 @@ export function VersionView({
         ) : null}
       </header>
       <div className="desktop-document">
-        <div className="plan-document-scroll">
+        <div className="plan-document-scroll scroll-fade">
           <VersionContent viewing={viewing} title={title} section={section} plan={plan} />
         </div>
       </div>

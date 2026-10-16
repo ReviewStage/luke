@@ -1,8 +1,8 @@
 import type { InboxImageType } from "@luke/features/inbox-wire";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
 import { sql } from "drizzle-orm";
-import { check, customType, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { timestamptz } from "./_helpers.js";
+import { check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
 import { plan } from "./plan.js";
@@ -26,10 +26,6 @@ import { plan } from "./plan.js";
  * A row no block names any longer, once the agent posted its item again
  * without the picture, is deleted with that post (`inbox-store.ts`).
  */
-const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
-  dataType: () => "bytea",
-});
-
 export const inboxAttachment = pgTable(
   "inbox_attachment",
   {

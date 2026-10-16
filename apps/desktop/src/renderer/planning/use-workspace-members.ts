@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useState } from "react";
 import { useAct } from "../act";
@@ -46,4 +46,40 @@ export function useWorkspaceMembers(
   const current =
     read !== undefined && read.workspaceId === workspaceId && read.memberCount === memberCount;
   return current ? read.members : undefined;
+}
+
+/**
+ * Who a workspace's work names but who left it, read as its members are, and
+ * again whenever its count changes; none while unread, refused, from a
+ * service that names nobody, or for no workspace. Note that a read that
+ * failed leaves them unread, since someone who left still stands grayed by
+ * their letter without their picture.
+ */
+export function useFormerMembers(
+  workspace: Pick<Workspace, "id" | "memberCount"> | undefined,
+): readonly FormerMember[] | undefined {
+  const { act } = useAct();
+  const [read, setRead] = useState<{
+    workspaceId: string;
+    memberCount: number | undefined;
+    former: readonly FormerMember[];
+  }>();
+  const workspaceId = workspace?.id;
+  const memberCount = workspace?.memberCount;
+  useEffect(() => {
+    if (workspaceId === undefined) return;
+    let live = true;
+    act(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, { workspaceId }).then(
+      (former) => {
+        if (live) setRead({ workspaceId, memberCount, former });
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, workspaceId, memberCount]);
+  const current =
+    read !== undefined && read.workspaceId === workspaceId && read.memberCount === memberCount;
+  return current ? read.former : undefined;
 }

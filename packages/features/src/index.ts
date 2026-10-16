@@ -38,10 +38,15 @@ export {
 } from "./github-install-wire.js";
 export {
   GITHUB_REPOSITORIES_QUERY,
+  type GitHubPullRequestSummary,
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
+  type GitHubRepositoryPullRequestAnswer,
+  githubPullRequestNumberSchema,
+  githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
+  githubRepositoryPullRequestAnswerSchema,
   githubRepositorySchema,
 } from "./github-repositories-wire.js";
 export {
@@ -49,6 +54,21 @@ export {
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
 export {
+  AVATAR_FRAME_BOUNDS,
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarRequestFrame,
+  type AvatarStartedFrame,
+  type AvatarStartFrame,
+  type AvatarStopFrame,
+  type AvatarStopReason,
+  type AvatarUnavailableFrame,
+  type AvatarUnavailableReason,
+  avatarRequestFrameFromWire,
+  avatarStartedFrameFromWire,
+  avatarStartFrameSchema,
+  avatarStopFrameSchema,
+  avatarUnavailableFrameFromWire,
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,

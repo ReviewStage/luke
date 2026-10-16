@@ -1,3 +1,4 @@
+import { githubUserAvatarUrl } from "@luke/features/account-picture";
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -7,6 +8,7 @@ import {
   type PlanSectionEdit,
 } from "@luke/features/plan-wire";
 import {
+  type FormerMember,
   WORKSPACE_ROLE,
   type WorkspaceMember,
   type WorkspaceRole,
@@ -94,6 +96,10 @@ export type Actor =
       readonly reason: SomeoneReason;
       /** The name the service still holds for a member who left; none for the rest. */
       readonly name?: string;
+      /** A member who left's account id, which their page is opened by; none for the rest. */
+      readonly userId?: string;
+      /** A member who left's sign-in picture, which the window draws grayed; none where the service names none. */
+      readonly pictureUrl?: string;
     }
   | GitHubActor;
 
@@ -158,9 +164,26 @@ export function identityLetter(name: string): string {
 /** The suffix GitHub gives an App's bot's login, which its name drops since its square says it is one. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
+/** Whether a GitHub login is an App's bot's, which GitHub spells with its suffix. */
+function isBotLogin(login: string): boolean {
+  return login.endsWith(BOT_LOGIN_SUFFIX);
+}
+
+/**
+ * Someone GitHub names by their login alone, as a line GitHub told an agent
+ * of does: an App's bot by its login's suffix, on its robot, since GitHub
+ * serves its App's picture only at an address the login does not name, and
+ * a person by the avatar GitHub serves for their login.
+ */
+export function githubLoginActor(login: string): GitHubActor {
+  const bot = isBotLogin(login);
+  const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login, bot };
+  return bot ? actor : { ...actor, avatarUrl: githubUserAvatarUrl({ login }) };
+}
+
 /** What a GitHub account is called: its login, an App's bot's without the suffix GitHub gives it. */
 function githubName(actor: GitHubActor): string {
-  return actor.bot && actor.login.endsWith(BOT_LOGIN_SUFFIX)
+  return actor.bot && isBotLogin(actor.login)
     ? actor.login.slice(0, -BOT_LOGIN_SUFFIX.length)
     : actor.login;
 }
@@ -206,18 +229,28 @@ export function actorName(
  * workspace's `members` for their picture, email, and role, and as the
  * reader where the id is the reader's own. While the members are unread
  * the wire's name stands alone; once read, a member they no longer list has
- * left the workspace. A ref the service named nobody for is someone unnamed.
+ * left the workspace, and keeps the picture `former` names them by. A ref the service named nobody for is someone unnamed.
  */
 export function personActor(
   ref: { readonly userId: string; readonly name: string } | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor {
   if (ref === undefined) return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
-    return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: ref.name };
+    // Note that the read of who left names them as their account does now, so a name changed since the work stood is the new one.
+    const named = former?.find((each) => each.userId === ref.userId);
+    const left = {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: named?.name ?? ref.name,
+      userId: ref.userId,
+    } as const;
+    const pictureUrl = named?.pictureUrl;
+    return pictureUrl === undefined ? left : { ...left, pictureUrl };
   }
   const person: PersonActor = { kind: ACTOR_KIND.PERSON, userId: ref.userId, name: ref.name, you };
   return member === undefined ? person : memberActor(member, readerId);
@@ -273,12 +306,34 @@ export function creatorActor(
 ): Actor {
   const { createdBy, ownerId } = plan;
   if (createdBy !== undefined || ownerId === undefined) {
-    return personActor(createdBy, reader.members, reader.readerId);
+    return personActor(createdBy, reader.members, reader.readerId, reader.former);
   }
   const member = reader.members?.find((each) => each.userId === ownerId);
   if (member !== undefined) return memberActor(member, reader.readerId);
   if (ownerId === reader.readerId && account !== undefined) return account;
   return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
+}
+
+/**
+ * Who created a task someone else created, as its row wears them: the
+ * creator `creatorActor` names, where the creator is not the reader. Note
+ * that a task is the reader's own, and wears nobody, wherever its creator's
+ * id is theirs, and that one whose creator nobody names, from a service
+ * before either field, or read before the reader's own id is known, wears
+ * nobody either, since the row cannot say it is someone else's. A creator
+ * whose account is gone is named by `ownerId` alone, and stands on the
+ * quiet outline.
+ */
+export function teammateCreator(
+  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  reader: EditReader,
+): Actor | undefined {
+  const creatorId = plan.createdBy?.userId ?? plan.ownerId;
+  const { readerId } = reader;
+  if (creatorId === undefined || readerId === undefined || creatorId === readerId) {
+    return undefined;
+  }
+  return creatorActor(plan, reader, undefined);
 }
 
 /**
@@ -290,6 +345,8 @@ export function creatorActor(
 export interface EditReader {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures they keep, grayed. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly owner?: PersonActor | undefined;
 }
 
@@ -301,7 +358,7 @@ export interface EditAgent {
 
 /** The member an edit names, for the reader: the owner where every edit is theirs, a member as the directory reads them otherwise. */
 function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
-  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId);
+  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
 /**
@@ -408,7 +465,7 @@ function sameAgent(
   return one.agentId === other.agentId;
 }
 
-/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by, someone on GitHub by their login in any case. */
+/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why, their account id, and the name they go by, someone on GitHub by their login in any case. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -420,8 +477,12 @@ function sameActor(one: Actor, other: Actor): boolean {
     case ACTOR_KIND.AUTOMATION:
       return other.kind === one.kind && other.name === one.name;
     case ACTOR_KIND.SOMEONE:
+      // Note that two who left may share a name, so their account ids tell them apart.
       return (
-        other.kind === ACTOR_KIND.SOMEONE && other.reason === one.reason && other.name === one.name
+        other.kind === ACTOR_KIND.SOMEONE &&
+        other.reason === one.reason &&
+        other.userId === one.userId &&
+        other.name === one.name
       );
     case ACTOR_KIND.GITHUB:
       // Note that GitHub reads a login whatever its case, and its answers do not always spell one alike.
@@ -444,6 +505,8 @@ export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
 export interface GitHubPlace {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures a linked login who left keeps. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly agent: Actor | undefined;
 }
 
@@ -461,7 +524,7 @@ export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
   if (person.userId !== undefined) {
     const member = place.members?.find((each) => each.userId === person.userId);
     const ref = { userId: person.userId, name: member?.name ?? person.login };
-    return personActor(ref, place.members, place.readerId);
+    return personActor(ref, place.members, place.readerId, place.former);
   }
   const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login: person.login, bot: person.bot };
   return person.avatarUrl === undefined ? actor : { ...actor, avatarUrl: person.avatarUrl };

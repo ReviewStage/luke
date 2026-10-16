@@ -14,6 +14,7 @@ import {
   INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
+  type IntegrationAccount,
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
@@ -28,6 +29,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
@@ -83,6 +85,18 @@ const touched = new Map<IntegrationProvider, IntegrationStatus>();
 const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
 /** The sign-in failures the service's next read names, as it names each once while it ends it. */
 let signInFailures: IntegrationSignInFailure[] = [];
+/** The accounts the service's reads name, past a provider's own word. */
+let accounts: IntegrationAccount[] = [];
+/** The providers the service's reads say another account may be added at. */
+let addable: IntegrationProvider[] = [];
+/** The name the service gives an account added. */
+let addedConnection = "notion-3";
+/** Whether a statuses read waits to be let go, answering what stood when it was sent. */
+let holdReads = false;
+/** The statuses reads held, each let go by its own call, in the order they were sent. */
+const heldReads: (() => void)[] = [];
+/** Where a Cancel leaves an account the service holds by connection name, past a provider's own word. */
+const cancelled = new Map<string, IntegrationStatus>();
 
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
@@ -119,13 +133,25 @@ beforeEach(() => {
   touched.clear();
   listed.clear();
   signInFailures = [];
+  addedConnection = "notion-3";
+  cancelled.clear();
+  holdReads = false;
+  heldReads.length = 0;
+  accounts = [];
+  addable = [];
   reopenedDuringCancel = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       act: (request: Act): Promise<ActOutcome> => {
         sent.push(request);
-        return Promise.resolve(answerOf(request));
+        const answer = answerOf(request);
+        if (!holdReads || request.kind !== ACT_KIND.INTEGRATIONS_STATUS) {
+          return Promise.resolve(answer);
+        }
+        const { promise, resolve } = Promise.withResolvers<ActOutcome>();
+        heldReads.push(() => resolve(answer));
+        return promise;
       },
       recordSurfaceEvent: () => undefined,
     },
@@ -149,17 +175,24 @@ function answerOf(request: Act): ActOutcome {
             status: DONE,
             value: {
               integrations: serviceStatuses(),
+              ...(accounts.length > 0 ? { accounts } : undefined),
+              ...(addable.length > 0 ? { addable } : undefined),
               ...(signInFailures.length > 0
                 ? { signInFailures: signInFailures.splice(0) }
                 : undefined),
             },
           };
     case ACT_KIND.INTEGRATIONS_CONNECT:
+      if (request.payload.add === true) {
+        return { status: DONE, value: { opened: true, connection: addedConnection } };
+      }
       touched.set(request.payload.provider, INTEGRATION_STATUS.PENDING);
       return { status: DONE, value: { opened: true } };
     // A Cancel ends a sign-in still pending; one that finished first stays connected.
     case ACT_KIND.INTEGRATIONS_CANCEL: {
       const provider = request.payload.provider;
+      const account = cancelled.get(request.payload.connection ?? provider);
+      if (account !== undefined) return { status: DONE, value: { status: account } };
       if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
         touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
       }
@@ -1085,4 +1118,391 @@ test("a tool its server says nothing of has a page that says so", async () => {
   );
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
+});
+
+test("a connected row's line wraps between its state and its count of tools, never inside either", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  await searchFor(page, "deploy");
+  const line =
+    rowNamed(page, "Vercel").querySelector(".settings-state") ?? assert.fail("no state line");
+
+  const sheets = layContainersAt({});
+  try {
+    const drawn = getComputedStyle(line);
+    assert.deepEqual([drawn.flexWrap, drawn.whiteSpace], ["wrap", "nowrap"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("a tool's page under a list too narrow to stand beside it gives its title a line of its own and its name the line under it, and beside the list keeps both on one line", async () => {
+  connectVercelAndLinear();
+  listed.set(INTEGRATION_PROVIDER.VERCEL, [
+    {
+      name: "create_issue_with_template",
+      title: "Create issue with template and attachments",
+      description: "Creates an issue from a template.",
+    },
+  ]);
+  const page = await mount();
+  openRow(page, "Vercel");
+  const head =
+    page.querySelector(".integration-tools-panel .integration-tool-detail-head") ??
+    assert.fail("no tool page");
+  const parts = () => {
+    const title = head.querySelector(".integration-tool-detail-title") ?? assert.fail("no title");
+    const name = head.querySelector(".integration-tool-detail-name") ?? assert.fail("no name");
+    return {
+      wraps: getComputedStyle(head).flexWrap,
+      title: getComputedStyle(title).whiteSpace,
+      name: getComputedStyle(name).flexBasis,
+    };
+  };
+
+  // A Settings card in the smallest window beside the widest page list.
+  const narrow = layContainersAt({ "integration-tools": 268 });
+  try {
+    assert.deepEqual(parts(), { wraps: "wrap", title: "normal", name: "100%" });
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "integration-tools": 638 });
+  try {
+    assert.deepEqual(parts(), { wraps: "nowrap", title: "nowrap", name: "auto" });
+  } finally {
+    wide.remove();
+  }
+});
+
+test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const rowOf = (label: string) =>
+    [...page.querySelectorAll(".settings-row")].find((row) =>
+      row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
+    ) ?? assert.fail(`Notion · ${label} has a row`);
+
+  for (const label of ["Acme", "Personal"]) {
+    assert.deepEqual(menuOf(rowOf(label)).items, [
+      "Rename",
+      "Add another account",
+      "Reconnect",
+      "Disconnect",
+    ]);
+  }
+
+  await choose(rowOf("Acme"), "Add another account");
+  const connects = sent.filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT);
+  assert.deepEqual(
+    connects.map((request) => request.payload),
+    [{ provider: notion, add: true }],
+  );
+  // The new account stands pending under the name the service gave it, as a row of its own.
+  assert.ok(
+    [...page.querySelectorAll(".settings-copy strong")].some(
+      (name) => name.textContent === "Notion · Account 3",
+    ),
+  );
+});
+
+test("an added account whose first sign-in Connect refused keeps its row with the reason and Try again, which signs in a new account", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const acme =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    ) ?? assert.fail("Notion has a row");
+  await choose(acme, "Add another account");
+
+  // The service ended the refused sign-in and deleted its row, naming the failure once.
+  signInFailures = [
+    {
+      provider: notion,
+      connection: "notion-3",
+      reason: INTEGRATION_SIGN_IN_FAILURE.ERROR,
+      message: "access_denied",
+    },
+  ];
+  await focusWindow();
+  const added =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    ) ?? assert.fail("the refused account keeps its row");
+  assert.match(added.querySelector(".settings-state")?.textContent ?? "", /access_denied/u);
+
+  sent = [];
+  act(() =>
+    (
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Try again") ??
+      assert.fail("no Try again")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT)
+      .map((request) => request.payload),
+    [{ provider: notion, add: true }],
+  );
+});
+
+test("an account added under the provider's own name, beside one that stands, waits as a row of its own with Reopen and Cancel", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.DISCONNECTED);
+  addable = [notion];
+  addedConnection = notion;
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const personal =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    ) ?? assert.fail("Notion has a row");
+  await choose(personal, "Add another account");
+
+  const added =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 1",
+    ) ?? assert.fail("the account added has a row of its own");
+  assert.deepEqual(
+    [...added.querySelectorAll("button")]
+      .map((button) => button.textContent)
+      .filter((text) => text === "Reopen" || text === "Cancel"),
+    ["Reopen", "Cancel"],
+  );
+});
+
+test("an added account whose first sign-in is cancelled leaves its row, so the next one is added rather than reopened", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  cancelled.set("notion-2", INTEGRATION_STATUS.DISCONNECTED);
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+    {
+      provider: notion,
+      connection: "notion-2",
+      status: INTEGRATION_STATUS.PENDING,
+    },
+  ];
+  const page = await mount();
+  const pending =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 2",
+    ) ?? assert.fail("the pending account has a row");
+  // The service deletes the cancelled first sign-in's account, so its next read lists Acme alone.
+  accounts = accounts.slice(0, 1);
+  act(() =>
+    (
+      [...pending.querySelectorAll("button")].find((button) => button.textContent === "Cancel") ??
+      assert.fail("no Cancel")
+    ).click(),
+  );
+  await settle();
+
+  assert.equal(
+    [...page.querySelectorAll(".settings-copy strong")].some(
+      (name) => name.textContent === "Notion · Account 2",
+    ),
+    false,
+  );
+});
+
+test("a cancelled sign-in that held a provider's last place frees it at once, offering Add another account again", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  cancelled.set("notion-5", INTEGRATION_STATUS.DISCONNECTED);
+  accounts = [1, 2, 3, 4, 5].map((place) => ({
+    provider: notion,
+    connection: place === 1 ? notion : `notion-${place}`,
+    label: `Workspace ${place}`,
+    status: place === 5 ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.CONNECTED,
+  }));
+  const page = await mount();
+  const rowOf = (label: string) =>
+    [...page.querySelectorAll(".settings-row")].find((row) =>
+      row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
+    ) ?? assert.fail(`Notion · ${label} has a row`);
+  assert.ok(!menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
+
+  // The service's next read counts four accounts, so the provider is addable again.
+  accounts = accounts.slice(0, 4);
+  addable = [notion];
+  act(() =>
+    (
+      [...rowOf("Workspace 5").querySelectorAll("button")].find(
+        (button) => button.textContent === "Cancel",
+      ) ?? assert.fail("no Cancel")
+    ).click(),
+  );
+  await settle();
+
+  assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
+});
+
+test("a statuses read answered after a newer one changes nothing the newer one drew", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  const acme = {
+    provider: notion,
+    connection: "notion",
+    label: "Acme",
+    status: INTEGRATION_STATUS.CONNECTED,
+  };
+  accounts = [acme];
+  const page = await mount();
+  holdReads = true;
+  await focusWindow();
+  accounts = [
+    acme,
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  await focusWindow();
+
+  // The newer read lands first, then the older.
+  const [older, newer] = heldReads;
+  act(() => newer?.());
+  await settle();
+  act(() => older?.());
+  await settle();
+
+  assert.ok(
+    [...page.querySelectorAll(".settings-copy strong")].some(
+      (name) => name.textContent === "Notion · Personal",
+    ),
+  );
+});
+
+test("a statuses read answered after a newer one still says why the sign-in it settled failed", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  signInFailures = [
+    { provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message: "access_denied" },
+  ];
+  holdReads = true;
+  // The first read settles the sign-in and is told why it failed; the second is told nothing of it.
+  await focusWindow();
+  await focusWindow();
+  const [older, newer] = heldReads;
+  act(() => newer?.());
+  await settle();
+  act(() => older?.());
+  await settle();
+
+  assert.deepEqual(granolaRow(page), {
+    line: "Couldn't connect to Granola: access_denied.",
+    buttons: ["Try again"],
+  });
+});
+
+test("a failure an older read was told never comes back over a sign-in a newer read found connected, so a later disconnect offers Connect", async () => {
+  const page = await mount();
+  await pressOnGranola(page, "Connect");
+
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  signInFailures = [
+    { provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message: "access_denied" },
+  ];
+  holdReads = true;
+  await focusWindow();
+  // Another window connects Granola before the next read.
+  touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
+  await focusWindow();
+  const [older, newer] = heldReads;
+  act(() => newer?.());
+  await settle();
+  act(() => older?.());
+  await settle();
+
+  holdReads = false;
+  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
+  await focusWindow();
+  assert.deepEqual(granolaRow(page).buttons, ["Connect"]);
+});
+
+test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const acme =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    ) ?? assert.fail("Notion has a row");
+  await choose(acme, "Add another account");
+  const added =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    ) ?? assert.fail("the account added has a row");
+
+  sent = [];
+  act(() =>
+    (
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Reopen") ??
+      assert.fail("no Reopen")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT)
+      .map((request) => request.payload),
+    [{ provider: notion, connection: "notion-3" }],
+  );
 });

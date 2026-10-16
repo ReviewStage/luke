@@ -17,6 +17,14 @@ test("a signed-in device forwards nothing, is read for its hang-up, its idle rep
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.REPORT);
   }
   assert.equal(deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY), FRAME_DECISION.REPORT);
+  // The avatar asks are the service's to answer, never OpenAI's to hear.
+  for (const type of [VOICE_SERVICE_FRAME.AVATAR_START, VOICE_SERVICE_FRAME.AVATAR_STOP]) {
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.AVATAR);
+  }
+  // The service's own answers are never the device's to send.
+  for (const type of [VOICE_SERVICE_FRAME.AVATAR_STARTED, VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE]) {
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.REFUSE);
+  }
   // The exchange's own appends from an older build, the microphone switch
   // that never crosses this socket, the device's own audio, a handshake frame
   // after the handshake, and a frame whose type cannot be read: each closes

@@ -8,10 +8,12 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
-  /** The read-only Plan → Build → Ship board beside the Inbox. */
+  /** The read-only Talk → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
   /** Coding agents started on a schedule, listed and made on their own page. */
   AUTOMATIONS: "automations",
+  /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
+  VIDEO_CALLS: "video-calls",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -36,6 +38,15 @@ export interface ExperimentEntry {
  */
 export const EXPERIMENTS = [
   {
+    key: EXPERIMENT.VIDEO_CALLS,
+    name: "Video calls",
+    detail:
+      "Calls open with Luke on video at the top of the Call tab. Keyframe Labs animates him from his " +
+      "voice, so what he says about your plan reaches Keyframe. Your own voice never does.",
+    owner: "Charles",
+    since: "2026-10-15",
+  },
+  {
     key: EXPERIMENT.AUTOMATIONS,
     name: "Automations",
     detail:
@@ -47,7 +58,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.FACTORY,
     name: "Factory",
     detail:
-      "Every task on one board, from Plan to Build to Ship, beside the Inbox. Read-only for now.",
+      "Every task on one board, from Talk to Build to Ship, beside the Inbox. Read-only for now.",
     owner: "Dean",
     since: "2026-10-14",
   },

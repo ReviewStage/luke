@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
@@ -17,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
@@ -41,9 +43,53 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 import { WorkspaceTile } from "./workspace-tile";
+
+/** What a page's row's right-click menu is called. */
+const PAGE_ACTIONS = "Settings page actions";
+
+/** A page's row in the sidebar: its glyph and title, a note where one stands, and a right-click offering the page's Copy link. */
+function SettingsPageRow({
+  view,
+  current,
+  note,
+  onOpen,
+}: {
+  view: SettingsView;
+  current: boolean;
+  note: string | undefined;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const page = settingsPageOf(view);
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
+  return (
+    <li>
+      <button
+        type="button"
+        className="sidebar-item"
+        aria-current={current ? "page" : undefined}
+        onClick={onOpen}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+      >
+        {page.icon}
+        {page.title}
+        {note ? <AttentionMark note={note} /> : null}
+      </button>
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={PAGE_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
+    </li>
+  );
+}
 
 /** A group's heading: the listed workspace's tile and name over its own group, the group's words otherwise. */
 function GroupHeading({
@@ -220,38 +266,30 @@ export function DesktopSettings({
             if (first) openResult(first);
           }}
         />
-        <div className="sidebar-section">
-          {search ? (
-            <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
-          ) : (
-            SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
-              <section key={group} className="settings-nav-group">
-                <GroupHeading group={group} listed={listed} />
-                <ul>
-                  {pages.map((view) => {
-                    const page = settingsPageOf(view);
-                    return (
-                      <li key={view}>
-                        <button
-                          type="button"
-                          className="sidebar-item"
-                          aria-current={view === settings.view ? "page" : undefined}
-                          onClick={() => open(view)}
-                        >
-                          {page.icon}
-                          {page.title}
-                          {view === SETTINGS_VIEW.VOICE && voiceNote ? (
-                            <AttentionMark note={voiceNote} />
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))
-          )}
-        </div>
+        <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
+          <div className="sidebar-section scroll-fade">
+            {search ? (
+              <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
+            ) : (
+              SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+                <section key={group} className="settings-nav-group">
+                  <GroupHeading group={group} listed={listed} />
+                  <ul>
+                    {pages.map((view) => (
+                      <SettingsPageRow
+                        key={view}
+                        view={view}
+                        current={view === settings.view}
+                        note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
+                        onOpen={() => open(view)}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))
+            )}
+          </div>
+        </LinkWorkspaceProvider>
         <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
@@ -269,7 +307,7 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <div key={settings.view} className="settings-page-scroll">
+          <div key={settings.view} className="settings-page-scroll scroll-fade-top">
             <header className="settings-page-head">
               <h1 className="settings-page-title">{title}</h1>
               {reset}

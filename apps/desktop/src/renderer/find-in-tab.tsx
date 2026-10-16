@@ -71,11 +71,27 @@ interface FindTally {
   readonly more?: boolean;
 }
 
-/** What a scope shows: the plan, and its tab. */
-export interface FindSubject {
-  readonly plan: string;
-  readonly tab: StripTab;
-}
+/** The pages that stand in the plan's place, each finding in its words as one scope (`PageFind`). */
+export const FIND_PAGE = {
+  HOME: "home",
+  INBOX: "inbox",
+  FACTORY: "factory",
+  AUTOMATIONS: "automations",
+  VERSION_HISTORY: "version-history",
+  PERSON: "person",
+} as const;
+
+type FindPage = (typeof FIND_PAGE)[keyof typeof FIND_PAGE];
+
+/**
+ * What a scope shows: a plan's tab, the page of an agent no plan holds, or
+ * a page standing in the plan's place, at the place on it where one page
+ * holds several, as the Automations page holds its list and each editor.
+ */
+export type FindSubject =
+  | { readonly plan: string; readonly tab: StripTab }
+  | { readonly agent: string }
+  | { readonly page: FindPage; readonly at?: string | undefined };
 
 /** The bar standing open: what it was opened over, and how many times ⌘F has summoned it there. */
 interface OpenBar {
@@ -112,9 +128,11 @@ const FindSourceContext = createContext<(source: FindSource | undefined) => void
 /** No matches, and no match the find is at. */
 const NO_TALLY: FindTally = { count: 0, at: -1 };
 
-/** Whether two subjects name the same tab of the same plan. */
+/** Whether two subjects name the same tab of the same plan, the same agent's page, or the same place on the same page. */
 function sameSubject(a: FindSubject, b: FindSubject): boolean {
-  return a.plan === b.plan && sameTab(a.tab, b.tab);
+  if ("plan" in a) return "plan" in b && a.plan === b.plan && sameTab(a.tab, b.tab);
+  if ("agent" in a) return "agent" in b && a.agent === b.agent;
+  return "page" in b && a.page === b.page && a.at === b.at;
 }
 
 /** The words the bar says of the matches: where the find is among them, or how many there are while it is at none counted. */
@@ -331,8 +349,8 @@ export function useFindSource(source: FindSource | undefined): void {
  * is open, only while `active`, the column holding the window's keys with
  * a tab that has words to find; the bar stays open over a column that
  * loses them, so its matches stay tinted, as an unfocused editor's do.
- * `subject` names the tab shown and its plan: another closes the bar, which
- * a return to the first does not open again.
+ * `subject` names the tab shown and its plan, or the agent's page: another
+ * closes the bar, which a return to the first does not open again.
  */
 export function FindScope({
   active,
@@ -405,5 +423,33 @@ export function FindScope({
         <FindOpenContext.Provider value={open}>{children}</FindOpenContext.Provider>
       </FindSourceContext.Provider>
     </div>
+  );
+}
+
+/**
+ * A page standing in the plan's place, found in as one scope: Home, the
+ * window's Inbox, Factory, the Automations page, and a version history. It
+ * fills the place as the page did, its bar under the page's toolbar
+ * (`.page-find`), and finds in the page's words, never in what a field
+ * holds, since a field's value is no text of the page's; Settings keeps ⌘F
+ * on its own search. `at` names the place on a page that holds several,
+ * whose change closes the bar as another tab's does.
+ */
+export function PageFind({
+  page,
+  at,
+  active,
+  children,
+}: {
+  page: FindPage;
+  at?: string | undefined;
+  /** Whether the page holds the window's keys: the window's Plans tab on screen. */
+  active: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <FindScope className="page-find" active={active} subject={{ page, at }}>
+      {children}
+    </FindScope>
   );
 }

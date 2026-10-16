@@ -1,7 +1,7 @@
 # @luke/service
 
 The hosted service's logic: what the web deployment's functions and its two eve
-services (`apps/web/eve`, `apps/web/coder`) compose and run. The deployment
+services (`apps/luke`, `apps/dev`) compose and run. The deployment
 keeps only its shell in `apps/web/server` — the Vercel function entries under
 `routes/`, the runtime edge `runtime.ts`, the function layout and bundling, and
 the voice function's edge — and reaches everything else here.
@@ -22,7 +22,7 @@ package.
 ## The auth group
 
 `src/auth/auth-app.ts` is the auth route group: Better Auth's own `fetch`
-handler on the path set `apps/web/vercel.json` routes here, and the hosted
+handler on the path set the root `vercel.json` routes here, and the hosted
 vocabulary's `not-found` on any other path, which nothing routes to this
 function. The handler is held as a passthrough rather than described as
 endpoints — an `HttpApi` declaring them would be a second copy of a contract
@@ -148,6 +148,19 @@ names the workspace the listing is for, to a member of it; none named is the
 account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
 the service could not reach is `unavailable`.
+`GET /api/github/repositories/tree` and `GET /api/github/repositories/skills`
+read one repository of that installation for a place no task names, such as
+an agent an automation started: the `workspaceId` and `repository` queries
+name it, each exactly once, and the answer is a task's own tree or skills
+read (`src/plans/plan-tree.ts`, `src/plans/plan-skills.ts`), through the
+same reach, to a member of the workspace; a repository the installation does
+not reach is refused as `not-reachable`, as a task's is.
+`GET /api/github/repositories/pull-request` reads one pull request of such a
+repository by the `number` query beside those two, for a link to it to draw:
+its number, title, page, and state (`src/github/pull-requests.ts`), on a
+token minted for that one repository; a repository the installation does not
+reach and a number it holds no pull request under both answer
+`{ pullRequest: null }`.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
@@ -307,7 +320,7 @@ groups are handed as their `resolveUserId`, and the voice function's own
 resolver are Effect-shaped, so each reads the bearer on its own fiber instead
 of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
-`apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
+`apps/luke/channels/eve.ts` satisfies by running the resolution once at
 that authored file — eve's own edge — rather than keeping a promise-shaped
 door beside the effect in `src/auth/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
@@ -497,10 +510,52 @@ take effect regardless of any cache. The migration that made the table copied
 every row of Linear's own table in as Linear's, and the one after it dropped
 that table.
 
-**The routes** (`src/integrations/integrations-app.ts`):
+**More than one account at a provider.** A Luke account may hold more than
+one account at a provider (two Notion workspaces), each its own row and its
+own grant. Connect keys a grant by connector and subject, so each row keeps
+the subject it asks under (`connect_subject`): the Luke account's own user
+id for the first account at a provider, as every ask was before a second
+was possible, and a minted `luke_acct_…` id for another. Each row also keeps
+the one name the account goes by everywhere (`connection_name`): the
+provider's own for the first (`notion`), the provider and its place for
+another (`notion-2`), minted once (`mintIntegrationConnectionName` in
+`@luke/features/integration-wire`) and read back from the row after. That
+name is the eve connection an agent reaches the account through, a coding
+agent's switch and mention, and the routes' `connection` query, so every
+name stored before a second account was possible keeps naming the first.
+A row also keeps a `label`, the account's name at the provider where
+Connect's grant carries one shaped like no credential, or the developer's
+own; it is an identity at the provider, never a credential, answered to the
+desktop and to no log line, span, counted event, or fixture. An account
+that carries no label, one connected before labels were kept among them,
+is read for one from its grant's fields at the next statuses read, once: a
+grant that names nothing leaves an empty label, and the account is called
+by its place ("Account 2"). No account at
+a provider is primary: the agents are told each by its label, and to ask
+which one where the developer has not said.
+A provider offers more than one account where its catalog entry names a
+`MULTIPLE_ACCOUNTS_VARIABLE` (Notion, Linear, Slack, Supabase, PostHog,
+Executor), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
+`false`, or `0`, which switches it back to one at once where a provider
+turns out to revoke an earlier grant when a later one completes for the
+same user and client; at most `INTEGRATION_ACCOUNTS_MAX` (five) per provider,
+counting an account connected or expired and a sign-in still within its
+window. A sign-in left past its window holds no place, and adding an account
+lets it go, so its name is free again.
+Deleting the Luke account reads every row's subject before the cascade and
+revokes each.
+
+**The routes** (`src/integrations/integrations-app.ts`). Every route about
+one account reads it from a `connection` query beside the provider, and
+without one means the provider's first account, so a desktop that predates
+more than one sees exactly what it saw before:
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
-  status }, signInFailures?: [{ provider, reason, message? }] }`, each
+  status }, accounts?: [{ provider, connection, label?, status }],
+  addable?: [provider], signInFailures?: [{ provider, connection?, reason,
+  message? }] }`: each provider's first account's word, every account the
+  Luke account holds but one whose first sign-in ended without a grant, the
+  providers it may add another account at, and each failure; each
   status `connected`, `pending`, `expired`, `disconnected`, or
   `unavailable` (no connector for it on this deployment). A sign-in still
   under way, begun within the last fifteen minutes, is settled here by
@@ -516,19 +571,27 @@ that table.
   Connect's error message, cut to 200 characters, where it is shaped like no
   credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
-  `startAuthorization` for the account, with Luke's own user id as the
-  subject and `/api/account/integrations/connected?state=…` as the callback,
-  records the sign-in's one-time state and Connect's verifier, and answers
-  the address. The
-  desktop's host opens it through the native node; no window draws it and
-  nothing logs it.
+  `startAuthorization` for the account under its row's subject, with
+  `/api/account/integrations/connected?state=…` as the callback, records the
+  sign-in's one-time state and Connect's verifier, and answers the address
+  and the account it signs in (`{ url, connection }`). With `add=true` it
+  signs in a new account under a minted subject and the next free name,
+  where the provider offers more than one and the account holds fewer than
+  the most, refused as unavailable otherwise; Linear's asks for its
+  documented `prompt=consent`. The desktop's host opens the address through
+  the native node; no window draws it and nothing logs it.
+- `POST /api/account/integrations/{provider}/rename` names the account a
+  `connection` names, `{ label }` trimmed to between 1 and 64 characters,
+  and answers `{ account }` as it then stands; one the account does not hold
+  is `not-found`.
 - `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
   way and nothing else: a first sign-in's row goes, any other row keeps its
   status, and no grant is revoked, so a sign-in that completed just before
   the press stays connected. It answers `{ status }` as it then stands. The
   desktop's Cancel asks it, never a Disconnect.
-- `POST /api/account/integrations/{provider}/disconnect` deletes the row
-  first, then asks Connect to revoke the grant. A failed revoke is logged and
+- `POST /api/account/integrations/{provider}/disconnect` deletes the
+  account's row first, then asks Connect to revoke its grant under that
+  row's subject; every other account at the provider stands. A failed revoke is logged and
   the account is disconnected all the same. Connect revokes at the provider
   where the provider allows it; otherwise its token stands until it expires,
   though Luke no longer uses it. Deleting the account revokes every
@@ -548,8 +611,8 @@ that table.
   the schema gives them, the required first and 64 at most, and none at all where the schema
   cannot be read as an object's (`src/integrations/mcp-tool-parameters.ts`).
   None of it is what a model is handed. It is held in the instance's memory
-  for five minutes per account and provider. A provider the account has not
-  connected is refused as unavailable before any token is read.
+  for five minutes per account and connection. An account not connected is
+  refused as unavailable before any token is read.
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on
@@ -574,9 +637,20 @@ none of its parent's connections, so each of the four agents registers one
 starts, which hands the turn every server its role's policy has on
 (`src/agents/agent-runtime/servers.ts`), each the one definition over its provider and
 that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. Luke's brain and its worker are handed every integration; a coding
+`admitDelegated`. Each account the caller holds at a provider, standing
+connected or expired, is handed as a connection of its own under its
+connection name and keyed in eve by its own grant's subject, which its
+token read is held to, so a name a later account takes never reaches it from
+a turn handed the old one, and a provider with none is handed bare, so its first call says how to connect it. Where a
+provider hands more than one account, each description gains one sentence
+naming which account it is and the others, by their labels alone, each
+quoted as a string, asking the agent to ask which account before a write
+the developer has not pointed at one, and to say which it used; a
+developer with one account per provider is told the same bytes as before.
+A conversation whose workspace connected Linear for every member is handed
+Linear once, bare, on the workspace's grant. Luke's brain and its worker are handed every integration; a coding
 agent and its worker are handed every one the developer has not switched off
-for that agent. The
+for that agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
 principal. That matters because a spoken turn runs as the
@@ -594,10 +668,17 @@ asks them to.
 **Transcripts** (`src/integrations/connection-tools.ts`). eve offers a
 connection through `connection_search` and `connection_execute`, and tells a
 remote call as a call of its own nested under the `connection_execute` that
-ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
-the nested call under the provider's fixed name (`linear_remote` for
-Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
-with what the provider answered, before the wrapper's own result. Every name
+ran it, named `<connection>__<tool>` (`linear__list_issues`,
+`notion-2__notion-fetch` for a second Notion account), with id
+`<wrapper>:1`. The relay stores the nested call under the provider's fixed
+name (`linear_remote` for Linear), whose input is `{ remoteTool,
+parentCallId, input }` and, for an account past the provider's first, its
+`connection`, and settles it with what the provider answered, before the
+wrapper's own result. Both the names and that envelope are the wire's
+(`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
+`integrationRemoteCallSchema`), because the desktop draws the nested call as
+the provider's tool, under the provider's mark, and leaves its wrapper's row
+out. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
@@ -754,8 +835,8 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_U
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
 `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
-production, preview, and development. The web, `eve`, and `coder` are services of that
-one project (`apps/web/vercel.json`'s `services`), so its variables and the
+production, preview, and development. The web, `luke`, and `dev` are services of that
+one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
 tokens too. Asking Connect about an arbitrary user id needs the deployment's
 own Vercel OIDC token, which the SDK reads from the request
@@ -873,8 +954,8 @@ for it. Disconnect and deleting the account still revoke its grant.
 
 ## The coding-agent service
 
-`apps/web/coder/` is the second eve app root, built and deployed as the `coder`
-service beside `eve` on the same terms (`apps/web/vercel.json`): its own
+`apps/dev/` is the second standalone eve app, built and deployed as the `dev`
+service beside `luke` on the same terms (the root `vercel.json`): its own
 `package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
@@ -884,7 +965,14 @@ carries into the service, whose own one `routes` entry turns it back into
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
 `src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
-`apps/web/tests/vercel-services.test.ts` holds the three services and that routing.
+The package's name, unscoped, is the agent's name to eve, which names the
+Workflow queue every deployment of the service consumes after it: a session
+stays owned by the deployment it started on until a newer one's message wakes
+it, so a renamed package strands every standing agent, whose next message
+lands on a queue its owner never reads. The name stays `coder` whatever the
+directory or service is called.
+`apps/web/tests/vercel-services.test.ts` holds the three services, that routing,
+and those names.
 
 A coding agent is one eve session over a `coding_agent` conversation
 (`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
@@ -896,11 +984,11 @@ Start and a Stop come from a route still holding it, and a follow-up
 steers; the deployment acting for the account is admitted for the two things
 the voice brain does there on the developer's behalf, a typed opening that
 starts an agent and a typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier. The agent (`apps/web/coder/agent.ts`) runs none of eve's default
-tools and authors its own under `apps/web/coder/tools/`, which is exactly the set the
+developer's own principal with the deployment named as its carrier. The agent (`apps/dev/agent.ts`) runs none of eve's default
+tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
-`apps/web/eve/extensions/code/tools`, Luke's own `search_web` and
+`apps/luke/extensions/code/tools`, Luke's own `search_web` and
 `read_web_page` (`public-research.ts`: the search screened, cited, and
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
@@ -913,14 +1001,30 @@ row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and Luke's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next call while the
-agent runs on, and a turn may take only so many notes. The
+agent runs on, and a turn may take only so many notes. `edit_plan` and
+`show_page` resolve at each turn's start (`tool-set.ts`'s `planToolsOf`):
+an agent on no plan, as an automation's run starts one, is offered
+neither, and one handed a prompt on a plan only `show_page`, so no agent is
+offered a tool its every call would refuse.
+Beside them stand
+the agent tools Luke on a call is offered too, one implementation for both
+(`src/agents/coding-agent-tools.ts`): `list_agents`, every other agent on
+any task and by any member, each with its task, narrowed to one task or its
+own where asked, archived ones marked; `message_agent`, which takes the
+message box's own steer path under eve's id for the call, as the deployment
+acting for the agent's starter, kept under the sending agent's name
+(`MESSAGE_SENDER.AGENT`) and opening with who sent it, and which an archived
+agent or one of another workspace refuses; `start_agent`, which starts
+another on its own task, or on another task of its workspace by the
+`taskId` that `list_tasks` answers, by the Start button's own path, telling
+it which agent started it; and `list_tasks`, the workspace's open tasks. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
 session's input tokens are uncapped and compaction is eve's default.
 
-The worker (`apps/web/coder/subagents/worker/`) is Luke's own declared subagent, in
-the shape of Luke's own worker (`apps/web/eve/subagents/worker/`): read-only in the
+The worker (`apps/dev/subagents/worker/`) is Luke's own declared subagent, in
+the shape of Luke's own worker (`apps/luke/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
 (`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
@@ -928,7 +1032,7 @@ agent's own sandbox and checkout, uncommitted edits included
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`apps/web/coder/tools/delegate.ts`), a resumable subagent task
+model sees `delegate` (`apps/dev/tools/delegate.ts`), a resumable subagent task
 (`serve`, the shape eve gives every agent call) whose input is
 `{ task, model?, effort?, background? }`. The call answers with eve's
 receipt at once and the worker's answer reaches the agent as a subagent task's result,
@@ -938,7 +1042,7 @@ delegation in eve's terms, and a developer's message during the wait reaches
 the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
 session. Luke delegates through the same shape
-(`apps/web/eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
+(`apps/luke/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
 and on its own model, its worker declared hidden too; the Work tab reads its
 calls as worker calls under either name, eve's `worker` in earlier
 transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
@@ -996,7 +1100,7 @@ words as a key to replace in Settings. An agent's title stays on Luke's
 Anthropic key. Reading the row every
 step means a later change to it is the next step's model.
 
-The sandbox (`apps/web/coder/sandbox.ts`) is one Vercel Sandbox per session at the
+The sandbox (`apps/dev/sandbox.ts`) is one Vercel Sandbox per session at the
 platform's 24-hour maximum timeout, prepared with the code extension's
 tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
 beside the image's Node and git. As it opens, the agent's repository is
@@ -1009,14 +1113,27 @@ Actions read where the installation has granted the App those
 granted fails whole, so they are asked only where granted), and the token is
 then set at the firewall for the session's own `gh` and `git` through eve's
 `authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. The session's instructions say whether that read was granted
+environment. Who the agent writes as is settled once, as its first session
+starts, and kept on its row (`coder-host/checkout.ts`, `CODING_AGENT_AUTHOR`):
+an agent a developer started writes as them where their GitHub sign-in may
+push to the repository, its commits authored as their GitHub account and
+ending on a `Co-authored-by` trailer naming the App's bot; an automation's
+agent, and one whose developer has no GitHub sign-in or may not push, writes
+as the App's bot. The agent opens its pull request with `open_pull_request`
+(`coder-host/pull-request.ts`), which the service runs with the developer's
+own GitHub App token where the agent writes as them, in one `POST
+/repos/{owner}/{name}/pulls` on the agent's repository, and with the App's
+token otherwise; where GitHub refuses the developer's token the App opens it
+in their place and the row records why. No developer's token stands at the
+firewall, because the sandbox is the workspace's: any member may steer the
+agent or open a terminal in it. The session's instructions say whether the CI read was granted
 (`host.prompt`, through `repositoryCiReadable`): where it was, the agent
 watches its pull request's checks with `gh pr checks` and fixes what fails
 for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
 not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
-The store hook (`apps/web/coder/hooks/store.ts`) relays every event into the store
+The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
 through the relay the hosted brain shares (`src/agents/brain-host/relay.ts`), composed
 with no ask record, so an agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
@@ -1031,7 +1148,7 @@ the agent is never handed the plan, and the instructions are worded for a
 prompt in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
 `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
-selects the scripted model for `apps/web/coder/evals/coder.eval.ts`, which
+selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
 `pnpm --filter @luke/web test:agent` runs beside the brain's eval and which
 runs a turn under the scripted model with no tool call, so no sandbox opens,
 and a second turn that delegates to the worker, whose only call is the
@@ -1217,12 +1334,16 @@ of a workspace the account is not in, or a call that made no delegation, is
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with
-it; the coder agent reads the row at every step (`apps/web/coder/agent.ts`'s
+it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
 `defineDynamic`, through `src/agents/coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
-default as it was.
+default as it was. The same PATCH taking `{ pinned }` pins the agent for the
+asking member alone, or unpins it (`pinCodingAgent`): a pin is the account's
+own row of `agent_pin`, as a task's is of `plan_pin`, kept from the first
+pin's instant and gone with the agent or the account, and the plan list's
+`planlessAgents` answer it as `pinnedAt` only where the reader holds one.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.
@@ -1234,7 +1355,7 @@ additions, deletions, and changed files; null for a branch or a pull
 request it has not. The agent reaches GitHub through `git` and `gh` in its
 shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
-the service's hook (`apps/web/coder/hooks/store.ts`) runs `git branch
+the service's hook (`apps/dev/hooks/store.ts`) runs `git branch
 --show-current` in the checkout as each turn ends and writes the answer on
 the agent's row (`coding_agent.branch`, through `src/agents/coder-host/host.ts`'s
 `recordBranch`), null for a detached HEAD, ahead of relaying the end (a
@@ -1324,10 +1445,19 @@ coder channel already admits for the voice brain. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
+The MCP servers the action switches off (`disabledServers`) are switched off
+for the run's new agent, as a Start's draft switches them off; every other
+server the owner connected is handed to it.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
-the next firing tries again. A `paused_reason` an older build wrote still
-reads, and a resume clears it. The agent's
+the next firing tries again. The newest failed run of each of the owner's
+automations in the last week rides the account's inbox read
+(`GET /api/inbox`'s `failedRuns`, `src/agents/coder-host/inbox-page.ts`)
+and moves its cursor, so the owner's desktop announces it as it fails and
+marks Automations until that automation is opened; it is no inbox item. A
+row an older build paused for its failures stands turned off, its reason's
+column read no longer (and dropped by the release after), and the answer's
+`pausedReason` is always null, kept for the desktops that read it. The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.
 
@@ -1411,10 +1541,17 @@ repositories; a run whose automation no longer lists that repository by the
 time the sweep acts on it is skipped as `repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
 redelivery carries again, so each automation records one run per
 delivery, and the sweep starts its agent within the minute rather than
-inside GitHub's ten seconds. An automation cannot fire itself: a pull
-request, issue, or push whose sender is a bot, the App's own installation
-token among them, fires nothing, and neither does a failed check on a
-`luke/` branch, where a coding agent works and already watches its checks.
+inside GitHub's ten seconds. Each event is read with who sent it: Luke's
+agents where the sender is the App's own bot (`<slug>[bot]`), another bot,
+or a person; and, for a pull request, its moment (opened or reopened, marked
+ready, pushed to), whether it is a draft, and whether it comes from a fork
+(its head in another repository, or in none). The trigger's settings choose
+among them (`senders`, `moments`, `drafts`, `forks` in
+`@luke/features/automation-wire`): people's events alone, every moment, and
+no draft or fork where it names none. An automation cannot fire itself
+whatever its settings say: a push by Luke's agents, to a branch or to a pull
+request, fires nothing, and neither does a failed check on a `luke/` branch,
+where a coding agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
 as entities so it cannot close the fence, and reads the rest with `gh`. The App must subscribe to the Issues and Push events beside the pull
@@ -1436,8 +1573,10 @@ in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, the workspace it belongs to, or several at
-once, each pin and archive a stamp on the row (`pinned_at`, `archived_at`)
-answered as `pinnedAt` and `archivedAt` only where it stands; a move
+once, an archive a stamp on the row (`archived_at`) and a pin the
+account's own row of `plan_pin`, so one member's pin of a shared task is
+theirs alone, answered as `archivedAt` and `pinnedAt` only where it stands;
+a move
 (`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
@@ -1640,11 +1779,16 @@ task the conversation belongs to (`readPlanOfConversation`), the two public
 research reads beside it, `queue_question`
 (`src/plans/queue-question.ts`), which runs nothing: its journaled call is
 how a question reaches the voice while the turn still runs, and the four
-tools about the task's coding agents (`src/agents/coding-agent-tools.ts`):
-a list with each agent's status and what it published, one agent's recent
+tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
+`list_agents`, `message_agent`, `start_agent`, and `list_tasks` every coding
+agent is offered and `read_agent` beside them: a list
+of the task's workspace's agents, on any task and by any member, with each
+agent's status, task, and what it published, narrowed to this task or
+another where asked (`src/agents/workspace-agents.ts`), one agent's recent
 progress as a bounded tail, a message to one, which takes the message
-box's own steer path (`src/agents/coder-host/steer.ts`), and a start of
-a new one on the call's task, which takes the Start button's own path
+box's own steer path (`src/agents/coder-host/steer.ts`), the workspace's
+open tasks, and a start of a new one on the call's task or another task of
+the workspace by its id, which takes the Start button's own path
 (`src/agents/coder-host/start.ts`) under the tool call's id as its key;
 both reach eve as the deployment acting for the account, the two rows the
 coder channel's deployment table admits. A resumed session
@@ -1659,7 +1803,7 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/web/coder/tools/` and
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
 its worker's are held to their roles by `coder-agent.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
@@ -1668,7 +1812,7 @@ every module may import it. eve's own injected tools (`task_wait`,
 listed.
 
 Luke's session is offered the skills the task's repository keeps
-(`apps/web/eve/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
+(`apps/luke/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which
 is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
 says where the skill stands in the repository, so its files are read with
@@ -1735,13 +1879,13 @@ tasks and the re-attach over the real store.
 Luke reads source through one tool,
 `run_in_repository({ command })` (`src/agents/repository-shell.ts`), which
 runs the command in Luke's session's own Vercel Sandbox, the one eve
-opens per session from `apps/web/eve/sandbox.ts` and hands a tool through
+opens per session from `apps/luke/sandbox.ts` and hands a tool through
 `ctx.getSandbox()`, on a checkout of the task's repository. The first call
 that finds no checkout of the task's repository makes one, at the
 repository's current default branch and one commit deep, and later calls
 reuse it; a task whose repository changed meanwhile is checked out again,
 and the worker subagent shares the session's sandbox
-(`apps/web/eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
+(`apps/luke/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
 the installation of the task's workspace still reaches the repository and
 mints a token for that one
@@ -2356,6 +2500,47 @@ function and the maintenance sweep write `voice_sessions`; the seconds ledger an
 the user row. The seconds ledger meters nothing on its own: a session still
 counts one call when it opens.
 
+### Luke's avatar
+
+A call can show Luke on video: a Keyframe Labs avatar, lip-synced to his
+voice, at the top of the call's Call tab in the Mac's panel, while the
+developer has the Video calls experiment on in Settings › Experimental.
+The voice itself is untouched: GPT Live still runs over the Mac's WebRTC and this service's
+sideband, and the panel sends Keyframe Luke's synthesized audio straight from the Mac. What
+crosses this service is the session alone, as four frames in the service's
+own vocabulary on the device socket (`live-contract.ts`), read here and never
+forwarded to OpenAI (`frames.ts`): the device's `avatar.start` and
+`avatar.stop {reason}`, each naming the request id the Mac's host minted, and
+the service's answer to a start, `avatar.started {serverUrl,
+participantToken, agentIdentity}` or `avatar.unavailable {reason}`, the id
+echoed. `src/voice/avatar.ts` answers them in turn on one fiber of the
+session's scope, so a stop right behind its start closes what that start
+opened. A start mints a session through `src/voice/keyframe.ts`, one
+`POST /v1/sessions` on Keyframe's API under `KEYFRAME_API_KEY` naming the
+persona `LUKE_KEYFRAME_PERSONA_ID` (a stock persona), and hands its grant to
+the device socket and nowhere else: a grant joins once, so each start mints
+its own and none is kept, and the log keeps only the room's host. The key is
+the bearer of that one request. A failure is a fixed kind and Keyframe's
+status, never its body: 429 and 503 answer `no_capacity` (every session the
+plan allows is standing, and the call goes on as voice), anything else
+`error`, and a deployment missing either variable answers `not_configured`
+to every start and leaves the voice as it was.
+
+Each session minted is a `voice_avatar_sessions` row (the call's
+`voice_sessions` row, the account, the persona, when it started and ended,
+whole seconds rounded up, and why it ended), opened only on a voice row the
+account owns that is still open, and cascading with either. Keyframe answers
+no session id, so the seconds are this side's estimate from start to close,
+not Keyframe's meter. A row closes once, whichever close comes first: the
+device's stop (`user`, `server_closed`, or `error`, as the Mac reports
+it), the next start on the call, since a call holds one avatar, and the
+call's end (`call_ended`), at the hang-up or when the voice row closes,
+which is written first so a start racing it opens nothing. A close that
+missed is the maintenance sweep's to repair: when `orphan-sweep.ts` closes an
+orphaned voice row, the avatar rows open on it close behind it as
+`orphaned`, and every sweep then closes any avatar row still open on a call
+already closed, as of that call's own close.
+
 ### How a refusal looks
 
 Before any socket stands, an HTTP status on the upgrade: `401` for
@@ -2376,7 +2561,7 @@ answered 429.
 ## The scheduled sweep
 
 `apps/web/server/routes/maintenance/sweep.ts` is what Vercel's cron calls:
-`apps/web/vercel.json` schedules it every minute (`* * * * *`) and
+the root `vercel.json` schedules it every minute (`* * * * *`) and
 `apps/web/server/function-durations.ts` gives its function group, `maintenance-sweep`,
 a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 `src/maintenance/maintenance-bounds.ts`). The logic lives in
@@ -2417,7 +2602,7 @@ bearer is 401, compared in constant time, and any method but GET is 405.
 `src/events/events-app.ts` and `src/maintenance/maintenance-app.ts` are two route groups of
 one path each — `apps/web/server/routes/events.ts` mounts `eventsApp()` and
 `apps/web/server/routes/maintenance/sweep.ts` mounts `maintenanceApp()` — since
-`apps/web/vercel.json` already sends each function only the requests for its own path.
+the root `vercel.json` already sends each function only the requests for its own path.
 Each path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
 method-specific builder, because each handler still enforces its own method
 and answers its own 405 exactly as it did before conversion; only a path

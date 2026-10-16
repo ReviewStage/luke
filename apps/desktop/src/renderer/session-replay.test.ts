@@ -20,6 +20,8 @@ test("the installed bundles still know every name the masking and the recorder r
     "_POSTHOG_REMOTE_CONFIG",
     "captureCanvas",
     "recordCanvas",
+    "capture_performance",
+    "enable_recording_console_log",
   ];
   for (const name of names) assert.ok(client.includes(name) || recorder.includes(name), name);
   assert.ok(recorder.includes("__PosthogExtensions__.initSessionRecording"));

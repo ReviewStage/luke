@@ -76,6 +76,7 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
         ),
         models: [],
         pullRequest: drawn,
+        people: undefined,
         onOpenAgent: ignore,
       }),
     ],

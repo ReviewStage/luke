@@ -116,8 +116,8 @@ The cards, all on `HoverCard`, `CardHead`, `CardNote` and `CardRule`, with a
 |---|---|---|
 | Person | Photo, name, "You", email, role as the corner, latest activity in this plan | None |
 | Luke | "During Charles Pan's call · 2h ago", then what he wrote | None |
-| Agent | `AgentTabCard`: model, working or ended. "Started by" draws its starter as an actor, its PR sits in the corner, and "Open agent" stands under a rule | Opens its tab |
-| Automation | Schedule, next run, whose it is, last run, "Open automation" | Opens its page |
+| Agent | `AgentTabCard`: model, working or ended. "Started by" draws its starter as an actor, and its PR sits in the corner. No "Open agent": the press on its name is the way to its tab (Dean, 2026-10-16) | Opens its tab |
+| Automation | Schedule, next run, whose it is, last run. No "Open automation"; hung from a control that does not open it, the Inbox's group header, its name is the way in | Opens its page |
 | Someone | "Former member" or "Not named", and why the window can't say more | None |
 
 A line that names an actor sets its words and the actor in one row centred

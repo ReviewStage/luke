@@ -18,14 +18,19 @@ import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.j
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryPullRequestAnswer,
   githubRepositoriesAnswerSchema,
+  githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
+import { imageBodyOf } from "./image-body.js";
 import {
   type PageLine,
   type PageVersion,
   planPagesAnswerSchema,
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
+import { pictureTypeSchema } from "./picture-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL, planAttachmentAnswerSchema } from "./plan-attachment-wire.js";
 import {
   type PlanEditAnswer,
   type PlanEditRequest,
@@ -39,11 +44,11 @@ import {
   type PlanCreateRequest,
   type PlanFileAnswer,
   type PlanFileRequest,
+  type PlanListAnswer,
   type PlanRenameRequest,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSkillsAnswer,
-  type PlanSummary,
   type PlanTreeAnswer,
   type PlanTreeRequest,
   type PlanUpdateRequest,
@@ -65,17 +70,23 @@ import {
   repositoryPinsAnswerSchema,
 } from "./plan-wire.js";
 import {
+  PICTURE_KEEP_FAILURE,
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
   type PlanCodeAnswer,
+  type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
   type PlanWorkAnswer,
   planCodeAnswerSchema,
   planWorkAnswerSchema,
   type RepositoryCallFailure,
   type RepositoryListFailure,
+  type StartCallFailure,
 } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planAttachmentPath,
+  planAttachmentsPath,
   planBoardPath,
   planCodePath,
   planEditPath,
@@ -90,6 +101,10 @@ import {
   planTranscriptPath,
   planTreePath,
   planWorkPath,
+  type RepositoryPlace,
+  repositoryPullRequestPath,
+  repositorySkillsPath,
+  repositoryTreePath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -139,11 +154,22 @@ const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
+/** The refusals a start can answer with: a repository out of reach, or the Linear issue it was to start from unread. */
+const START_REFUSALS = {
+  ...REPOSITORY_REFUSALS,
+  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE,
+} as const;
+
 /** The refusals a move can answer with: the plan or the workspace not the account's, the plan archived, or the workspace not reaching its repository. */
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+} as const;
+
+/** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
+const NOT_FOUND_REFUSAL = {
+  [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
 } as const;
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
@@ -174,9 +200,9 @@ export class HostedPlanClient {
     });
   }
 
-  /** Every plan the account owns, newest started first, the archived ones among them. */
+  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived ones of each among them. */
   list(): Effect.Effect<
-    PlanCallResult<readonly PlanSummary[], typeof PLAN_CALL_FAILURE.UNANSWERED>,
+    PlanCallResult<PlanListAnswer, typeof PLAN_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
@@ -185,7 +211,7 @@ export class HostedPlanClient {
         { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
         planListAnswerSchema,
       ),
-      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer.plans)),
+      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
     );
   }
 
@@ -425,6 +451,45 @@ export class HostedPlanClient {
     );
   }
 
+  /**
+   * One folder of a repository the workspace's installation reaches, as
+   * `readTree` reads a plan's, for a place with no plan to name it by;
+   * nothing where the service did not answer, or where the folder asked is
+   * not one the wire admits.
+   */
+  readRepositoryTree(
+    place: RepositoryPlace,
+    folder: PlanTreeRequest,
+  ): Effect.Effect<PlanTreeAnswer | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planTreeRequestSchema)(folder));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositoryTreePath(place, admitted) },
+      planTreeAnswerSchema,
+    );
+  }
+
+  /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
+  readRepositorySkills(
+    place: RepositoryPlace,
+  ): Effect.Effect<PlanSkillsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
+      planSkillsAnswerSchema,
+    );
+  }
+
+  /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
+  readRepositoryPullRequest(
+    place: RepositoryPlace,
+    number: number,
+  ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
+      githubRepositoryPullRequestAnswerSchema,
+    );
+  }
+
   /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
   readRevisions(
     planId: string,
@@ -448,6 +513,69 @@ export class HostedPlanClient {
       ),
       (answer) => answer?.revision,
     );
+  }
+
+  /**
+   * One picture of one plan, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with a type a picture
+   * may be; not found where the plan is not one the account reaches or holds
+   * no such picture; unanswered for anything else, another media type
+   * included, so nothing a window draws is a type it did not expect.
+   */
+  readPicture(
+    planId: string,
+    attachmentId: string,
+  ): Effect.Effect<PlanningPictureAnswer, never, HttpClient.HttpClient> {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.GET,
+        path: planAttachmentPath(planId, attachmentId),
+      });
+      if (!callAnswered(answer)) return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+      if (!answer.response.ok) {
+        const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
+        return { failure: refused.ok ? PLAN_CALL_FAILURE.UNANSWERED : refused.failure };
+      }
+      const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
+      return picture ?? { failure: PLAN_CALL_FAILURE.UNANSWERED };
+    });
+  }
+
+  /**
+   * One picture kept on one plan, sent as the `data:` URL the Mac made of
+   * it: the id the plan's text then names it by; too many where the plan
+   * holds its bound; not found where the plan is not one the account may
+   * write, an archived one among them; unanswered for anything else.
+   */
+  keepPicture(
+    planId: string,
+    picture: string,
+  ): Effect.Effect<PlanningPictureKeepAnswer, never, HttpClient.HttpClient> {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.POST,
+        path: planAttachmentsPath(planId),
+        body: JSON.stringify({ picture }),
+      });
+      if (!callAnswered(answer)) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (!answer.response.ok) {
+        const refused = refusedAs(payload, NOT_FOUND_REFUSAL);
+        return { failure: refused.ok ? PICTURE_KEEP_FAILURE.UNANSWERED : refused.failure };
+      }
+      const kept = Result.getOrUndefined(readServiceAnswer(planAttachmentAnswerSchema)(payload));
+      if (kept === undefined) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
+      return "id" in kept
+        ? { id: kept.id }
+        : {
+            failure:
+              kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
+                ? PICTURE_KEEP_FAILURE.TOO_MANY
+                : PICTURE_KEEP_FAILURE.UNANSWERED,
+          };
+    });
   }
 
   /** One plan's pages, each by its newest version; nothing where the service did not answer them. */
@@ -612,7 +740,7 @@ export class HostedPlanClient {
    */
   create(
     request: PlanCreateRequest,
-  ): Effect.Effect<PlanCallResult<Plan, RepositoryCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<PlanCallResult<Plan, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     const call = this.#call;
@@ -628,7 +756,7 @@ export class HostedPlanClient {
         const started = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
         return started === undefined ? UNANSWERED : succeeded(started.plan);
       }
-      return refusedAs(payload, REPOSITORY_REFUSALS);
+      return refusedAs(payload, START_REFUSALS);
     });
   }
 }

@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "avatar.start"
+      ]
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64
+    }
+  },
+  "required": [
+    "type",
+    "requestId"
+  ],
+  "additionalProperties": false
+}

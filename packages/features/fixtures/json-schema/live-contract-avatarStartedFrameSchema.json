@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "avatar.started"
+      ]
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "serverUrl": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "participantToken": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "agentIdentity": {
+      "type": "string",
+      "maxLength": 256
+    }
+  },
+  "required": [
+    "type",
+    "requestId",
+    "serverUrl",
+    "participantToken",
+    "agentIdentity"
+  ],
+  "additionalProperties": false
+}

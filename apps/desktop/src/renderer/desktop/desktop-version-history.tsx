@@ -1,18 +1,21 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
-import { ArrowUpRightIcon, FileDiffIcon, RotateCcwIcon } from "lucide-react";
+import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
+import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../planning/code-pane";
 import {
@@ -39,7 +42,7 @@ import {
   type ViewedVersion,
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { useWorkspaceMembers } from "../planning/use-workspace-members";
+import { useFormerMembers, useWorkspaceMembers } from "../planning/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
@@ -176,6 +179,7 @@ function RevisionRow({
   onOpenSections,
   source,
   onRestore,
+  onCopyLink,
   summary,
 }: {
   line: PlanRevisionLine;
@@ -190,6 +194,8 @@ function RevisionRow({
   source: SourceDoor | undefined;
   /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived plan's. */
   onRestore: (() => void) | undefined;
+  /** Copies the version's link; none for a history with no link of its own. */
+  onCopyLink: (() => void) | undefined;
   /** What the revision did, in a few words. */
   summary: string;
 }): React.JSX.Element {
@@ -202,6 +208,11 @@ function RevisionRow({
         ? []
         : [{ label: SECTIONS_LABEL, icon: <FileDiffIcon />, onSelect: onOpenSections }]),
       ...(source === undefined ? [] : [sourceItem(source)]),
+      ...(onCopyLink === undefined
+        ? []
+        : [
+            { label: LINK_COPY.LABEL, icon: <LinkIcon aria-hidden="true" />, onSelect: onCopyLink },
+          ]),
     ],
     onRestore === undefined
       ? []
@@ -226,6 +237,7 @@ function RevisionRow({
           <span className="version-row-head">
             <span className="version-row-author" data-author={author.kind}>
               {actorName(author)}
+              <LeftWords actor={author} />
             </span>
             <RelativeTime className="version-row-time" at={lastEdit.at} now={now} />
           </span>
@@ -274,6 +286,7 @@ function SectionsHead({
       <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
       <span className="version-row-author" data-author={author.kind}>
         {actorName(author)}
+        <LeftWords actor={author} />
       </span>
     </>
   );
@@ -346,12 +359,14 @@ function SectionRow({
 function readerOf(
   account: AccountSnapshot,
   members: readonly WorkspaceMember[] | undefined,
+  former: readonly FormerMember[] | undefined,
 ): HistoryReader {
   const reader =
     account.status === ACCOUNT_STATUS.SIGNED_IN
       ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
       : { id: undefined, name: undefined, pictureUrl: undefined };
-  return members === undefined ? reader : { ...reader, members };
+  const read = members === undefined ? reader : { ...reader, members };
+  return former === undefined ? read : { ...read, former };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -534,7 +549,7 @@ function VersionPage({
           </div>
         </header>
         <div className="desktop-document">
-          <div className="plan-document-scroll">
+          <div className="plan-document-scroll scroll-fade">
             <VersionSkeleton />
           </div>
         </div>
@@ -626,7 +641,11 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
   const members = useWorkspaceMembers(subject.workspace);
-  const reader = readerOf(account, members);
+  // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
+  const copy = useCopyToast();
+  const linked = subject.plan;
+  const former = useFormerMembers(subject.workspace);
+  const reader = readerOf(account, members, former);
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);
@@ -707,7 +726,7 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
-            <div ref={log} className="sidebar-section">
+            <div ref={log} className="sidebar-section scroll-fade">
               {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
               <ol className="version-list">
                 {revisions.map((line) => {
@@ -729,6 +748,22 @@ export function DesktopVersionHistory({
                         opensSections(line) ? () => openSections(line.seq) : undefined
                       }
                       onRestore={restoreOf(line)}
+                      onCopyLink={
+                        linked === undefined
+                          ? undefined
+                          : () =>
+                              copy(
+                                linkOf(
+                                  {
+                                    kind: LINK_PLACE.VERSION,
+                                    planId: linked.planId,
+                                    revision: line.seq,
+                                  },
+                                  linked.place.workspace,
+                                ),
+                                LINK_COPY.COPIED,
+                              )
+                      }
                       summary={subject.summary(line)}
                     />
                   );
@@ -740,7 +775,7 @@ export function DesktopVersionHistory({
             </div>
           </div>
           <section
-            className="sidebar-section version-log-pane"
+            className="sidebar-section version-log-pane scroll-fade"
             aria-label="Sections changed"
             inert={opened === undefined}
           >
@@ -776,11 +811,13 @@ export function DesktopVersionHistory({
         <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
-        <VersionPage
-          subject={subject}
-          restore={restore}
-          section={opened === undefined ? undefined : unit}
-        />
+        <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
+          <VersionPage
+            subject={subject}
+            restore={restore}
+            section={opened === undefined ? undefined : unit}
+          />
+        </PageFind>
       </section>
     </div>
   );

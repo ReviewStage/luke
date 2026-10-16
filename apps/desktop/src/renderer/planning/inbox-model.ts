@@ -28,8 +28,8 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan or in one run, and Needs you lists only what waits
- * and the item chosen. A settled item keeps everything its agent offered,
+ * first, under its plan or in one run, and Needs you lists only what waits,
+ * though the steps through it keep the item chosen. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
  * wrote. A plan's board, which counts what waits, holds what waits the
  * oldest posted first, since it has held its agent longest, and what is
@@ -277,7 +277,8 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
 /**
  * The Inbox's one name for an item waiting on the developer's answer, in
  * each form its surfaces say it: the list's filter, a count's words after
- * its figure, and the line where nothing is listed. A settled item reads as
+ * its figure, the line where nothing is listed, and the line under it where
+ * the filter leaves out every item listed. A settled item reads as
  * answered. Every surface reads its words here, so the name is changed in
  * this one place.
  */
@@ -285,6 +286,7 @@ export const NEEDS_YOU = {
   LABEL: "Needs you",
   COUNT: { one: "needs you", many: "need you" } satisfies CountNoun,
   NONE: "Nothing needs you",
+  ANSWERED: "You've answered everything",
 } as const;
 
 /** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
@@ -311,6 +313,18 @@ export type InboxHolder =
       readonly repository: string;
       readonly agents: ReadonlyMap<string, InboxAgentLine>;
     };
+
+/** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
+export type PlanlessAgent = Pick<
+  AppInboxPlanlessItem,
+  | "agentId"
+  | "agentTitle"
+  | "agentModel"
+  | "automationId"
+  | "automationName"
+  | "repository"
+  | "workspaceId"
+>;
 
 /** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
@@ -360,7 +374,7 @@ export function listedIn(
  * them.
  */
 export function planlessGroups(
-  waiting: readonly AppInboxPlanlessItem[],
+  waiting: readonly PlanlessAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {
@@ -423,7 +437,10 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
  * The list from every plan's items: each item the latest changed first,
  * under its plan or in one run, the plans in the order their latest item
  * changed. Needs you lists only what waits on the developer, and the item
- * chosen, so the item answered does not slip away from under them.
+ * chosen where one is given. Note that the rows a list draws are given none,
+ * so a settled item leaves a list filtered to exclude it, while the steps
+ * through the list are given the item the pane shows, which keeps its place
+ * among them so K, J, and Next still reach the rows either side of it.
  */
 export function inboxList(
   plans: readonly InboxGroup[],
@@ -455,6 +472,57 @@ export function anyNeedsYou(plans: readonly InboxGroup[]): boolean {
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
   return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
+}
+
+/** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
+export interface InboxSteps {
+  readonly at: number;
+  readonly total: number;
+  readonly previous: InboxListed | undefined;
+  readonly next: InboxListed | undefined;
+}
+
+/**
+ * The items a reader steps through, in the list's order: every one listed
+ * but a folded group's, though the chosen item keeps its place where its
+ * group folds, since it stays open, so the steps from it still reach the
+ * rows either side.
+ */
+function rowedItems(
+  view: InboxListView,
+  folded: (key: string) => boolean,
+  chosen: string | undefined,
+): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  return view.groups.flatMap(({ holder, items }) => {
+    const shut = folded(holderKey(holder));
+    return items.filter((item) => !shut || item.id === chosen).map((item) => ({ holder, item }));
+  });
+}
+
+/** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's other items left out; none where the list does not hold it. */
+export function inboxSteps(
+  view: InboxListView,
+  chosen: string | undefined,
+  folded: (key: string) => boolean,
+): InboxSteps | undefined {
+  const rowed = rowedItems(view, folded, chosen);
+  const at = rowed.findIndex(({ item }) => item.id === chosen);
+  if (at < 0) return undefined;
+  return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
+}
+
+/** The first row after the chosen one whose item needs the developer, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+export function nextNeedingYou(
+  view: InboxListView,
+  chosen: string | undefined,
+  folded: (key: string) => boolean,
+): InboxListed | undefined {
+  const listed = rowedItems(view, folded, chosen);
+  const at = listed.findIndex(({ item }) => item.id === chosen);
+  return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
+    ({ item }) => item.status === INBOX_STATUS.OPEN && item.id !== chosen,
+  );
 }
 
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */

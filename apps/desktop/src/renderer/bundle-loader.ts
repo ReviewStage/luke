@@ -7,18 +7,20 @@ import { rendererRuntime } from "./renderer-runtime";
  * bundle-loader.ts -- a bundle of the panel's own that is too large for the one every window parses, loaded the first time it is needed and kept for the window's life.
  *
  * The whiteboard (`whiteboard/`), a File tab's tree (`file-tree/`), the panel's
- * editors (`plan-editor/`), a Terminal tab's screen (`terminal/`), and the
- * session recorder (`session-recorder/`) each
- * ship as a script of their own beside `index.html` that sets one global
- * once it has run. Loading one adds its stylesheet, where it has one, and
+ * editors (`plan-editor/`), a Terminal tab's screen (`terminal/`), the
+ * session recorder (`session-recorder/`), and a plan's diagrams (`diagram/`)
+ * each ship as a script of their own beside `index.html` that sets one global
+ * once it has run; the diagrams' is an ES module, whose chunks it imports
+ * as it needs them. Loading one adds its stylesheet, where it has one, and
  * its script to the document, and answers with what the script set; the
  * answer is kept alive, so leaving the surface and coming back loads
  * nothing.
  */
 
-/** A bundle's files beside `index.html`: its script, and its stylesheet where it has one. */
+/** A bundle's files beside `index.html`: its script, whether that script is an ES module, and its stylesheet where it has one. */
 export interface BundleAsset {
   readonly script: string;
+  readonly module?: boolean;
   readonly stylesheet?: string;
 }
 
@@ -31,6 +33,7 @@ export interface BundleAsset {
 export function appendBundle(asset: BundleAsset, onLoad: () => void, onError: () => void): void {
   const script = document.createElement("script");
   script.src = asset.script;
+  if (asset.module === true) script.type = "module";
   script.addEventListener("load", onLoad);
   script.addEventListener("error", onError);
   if (asset.stylesheet === undefined) {

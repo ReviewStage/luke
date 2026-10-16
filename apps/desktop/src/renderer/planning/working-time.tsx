@@ -106,7 +106,8 @@ export function WorkingTime({
  * line is only as wide as its words, so the card answers the words and not
  * the empty column beside them, and that it stands inside its message, so
  * its margin and the message's gap together are the room a working line
- * has above it.
+ * has above it. A narrow column breaks it between its two parts, never
+ * inside either (planning.css).
  */
 export function WorkedFor({
   startedAt,

@@ -3,7 +3,6 @@
   "properties": {
     "name": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 200
     },
     "workspaceId": {
@@ -21,10 +20,13 @@
           "type": "null"
         }
       ]
+    },
+    "linearIssueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
     }
   },
-  "required": [
-    "name"
-  ],
+  "required": [],
   "additionalProperties": false
 }

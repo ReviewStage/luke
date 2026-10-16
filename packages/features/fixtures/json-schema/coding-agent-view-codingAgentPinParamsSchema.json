@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pinned": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "agentId",
+    "pinned"
+  ],
+  "additionalProperties": false
+}

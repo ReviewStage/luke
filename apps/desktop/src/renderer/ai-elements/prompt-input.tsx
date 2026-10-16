@@ -143,7 +143,7 @@ export function PromptInputTextarea({
   );
 }
 
-export type PromptInputFooterProps = HTMLAttributes<HTMLDivElement>;
+export type PromptInputFooterProps = ComponentProps<"div">;
 
 /** The row under the field: what the owner puts at its left and at its right. */
 export function PromptInputFooter({ className, ...props }: PromptInputFooterProps): ReactNode {

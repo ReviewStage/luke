@@ -4,6 +4,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
+  type CodingAgentOrigin,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
@@ -14,27 +15,37 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { BotIcon } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef } from "react";
+import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
-import { ActorRef } from "../actor-ref";
+import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
+import {
+  AgentPicturesProvider,
+  CallPictures,
+  ShownPictures,
+  useAgentPictureDoor,
+} from "./agent-pictures";
 import { type PublishedDoors, PublishedRow, type RunOnMacDoors } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
@@ -56,15 +67,24 @@ import {
   macOwnerOf,
   messageWords,
   newestTodos,
+  placedMessages,
   settledPlanEdits,
   showsPublishedRow,
+  startedAgentIds,
   teammateStarter,
+  turnStretches,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import {
+  agentMessagePlace,
+  MESSAGE_GONE,
+  MessagePlaceProvider,
+  useMessageReveal,
+} from "./message-links";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
@@ -73,6 +93,7 @@ import {
   delegationView,
   loadedSkill,
   TARGET_HINT,
+  TOOL_TARGET,
   type ToolTarget,
   todoFocus,
   todosSummary,
@@ -107,8 +128,14 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Call tab alike, from the
  * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
- * pane: the plan it was handed is a card at the top, folded under its
- * title; each of its own turns runs the column's width with its text as
+ * pane: what it was handed opens it as a message sent to it, at a sent
+ * message's measure under the line naming who sent it, a card folded under
+ * its title: the plan, sent by its task, which opens the plan, beside the
+ * teammate who started the agent; an automation's prompt alone, sent by the
+ * automation, which opens its page where the window can, with the pull
+ * request its event named, who ran it now, and a webhook's body folded
+ * inside the card; and a worker's task, sent by the agent that delegated it.
+ * Each of its own turns runs the column's width with its text as
  * markdown, its reasoning folded under one quiet line, each tool call one
  * collapsible row saying what it did (`tool-call-model.ts`), with the
  * input and the answer under the row once opened and a call that ended in
@@ -164,8 +191,6 @@ interface TranscriptLead {
   icon: ReactNode;
   /** What the tab says before the first message lands; a turn that ended before one says how instead. */
   startingLine: string;
-  /** Whether runs of calls fold under one line; a worker's session is read for its detail, so its do not. */
-  grouped: boolean;
 }
 
 /** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
@@ -177,8 +202,10 @@ export const AGENT_LEAD: TranscriptLead = {
     </span>
   ),
   startingLine: "The agent is starting.",
-  grouped: true,
 };
+
+/** The plan's own tab, which a task's name over its plan's card opens. */
+const PLAN_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
@@ -188,8 +215,43 @@ const WORKER_LEAD: TranscriptLead = {
   label: "Subagent task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting.",
-  grouped: false,
 };
+
+/** An automation's run: the prompt it handed the agent, and the agent starting. */
+const AUTOMATION_LEAD: TranscriptLead = {
+  label: "Prompt",
+  icon: <ZapIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
+  startingLine: "The agent is starting.",
+};
+
+/** What a webhook call's body is called, folded under the prompt it rode in with. */
+const WEBHOOK_BODY_LABEL = "Webhook body";
+
+/** What an automation's sender line says beside its name once it is deleted. */
+const DELETED_WORDS = "(deleted)";
+
+/** What an automation's sender line names it where no name was kept, as an agent started before it was is. */
+const AUTOMATION_WORDS = "Automation";
+
+/**
+ * What a transcript opens on where something handed it its first message:
+ * the sender line over the card, naming who, the card's kind where it is not
+ * the transcript's own lead, and the card's words where they are not the
+ * message's own, an automation's prompt without the lines Luke adds of its
+ * firing, with the webhook body that rode in with it.
+ */
+export interface TranscriptOrigin {
+  readonly sender: ReactNode;
+  readonly lead?: TranscriptLead | undefined;
+  readonly text?: string | undefined;
+  readonly body?: string | undefined;
+}
+
+/** The task an agent's plan is the plan of, as its card's sender line names it: its name, and the card its sidebar row hangs. */
+export interface BriefTask {
+  readonly name: string;
+  readonly card: ReactNode;
+}
 
 /** A worker as its delegation's row knows it: the call that started it, the task it was handed, and where it stands. */
 interface DelegatedWorker {
@@ -207,6 +269,8 @@ interface DelegatedWorker {
 export interface TranscriptCards {
   readonly target: (target: ToolTarget) => ReactNode;
   readonly worker: (worker: DelegatedWorker) => ReactNode;
+  /** The task whose plan an agent was handed, which its card's sender line names; none where the place knows no task. */
+  readonly task?: BriefTask | undefined;
 }
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -237,16 +301,20 @@ function ToolCallView({
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   return (
-    <TranscriptTool
-      data-call-id={part.callId}
-      state={part.state}
-      kind={view.kind}
-      subject={view.subject}
-      description={view.description}
-      input={view.input}
-      output={view.output}
-      errorText={part.errorText}
-    />
+    <>
+      <TranscriptTool
+        data-call-id={part.callId}
+        state={part.state}
+        kind={view.kind}
+        provider={view.provider}
+        subject={view.subject}
+        description={view.description}
+        input={view.input}
+        output={view.output}
+        errorText={part.errorText}
+      />
+      <CallPictures tool={part.tool} input={part.input} output={part.output} />
+    </>
   );
 }
 
@@ -435,6 +503,10 @@ function AgentPartView({
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL: {
+      // A set of pictures the agent showed, or is showing, is drawn as itself; one refused keeps its row, where its error is read.
+      if (part.tool === AGENT_TOOL.SHOW_IMAGE && part.state !== TOOL_STATE.OUTPUT_ERROR) {
+        return <ShownPictures input={part.input} output={part.output} />;
+      }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
       const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
@@ -461,32 +533,240 @@ function AgentPartView({
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
+    // A line that reached the turn is drawn as the developer's own message between the turn's stretches (`turnStretches`), never inside one.
+    case AGENT_PART.ARRIVED:
       return null;
   }
 }
 
-/** The plan the agent was handed, or the task a worker was: a card across the column, folded under its title. */
+/** A webhook call's body inside the card of the prompt it rode in with, folded again under its own line, as the caller sent it. */
+function OriginBody({ body }: { body: string }): React.JSX.Element {
+  return (
+    <Fold className="agent-origin-body text-[12.5px]">
+      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <FoldChevron />
+        <WebhookIcon className="size-4 shrink-0" aria-hidden="true" />
+        {WEBHOOK_BODY_LABEL}
+      </FoldSummary>
+      <FoldBody>
+        <pre className="m-0 whitespace-pre-wrap px-1 py-1 font-mono text-[12px] [overflow-wrap:anywhere]">
+          {body}
+        </pre>
+      </FoldBody>
+    </Fold>
+  );
+}
+
+/**
+ * What the transcript opens on: the plan the agent was handed, an
+ * automation's prompt, or the task a worker was, as a message sent to the
+ * agent, at a sent message's measure under the line naming who sent it,
+ * where the transcript names anyone: a card folded under its title, and a
+ * webhook's body folded again inside it.
+ */
 function PlanCard({
   text,
   lead,
   title = cardTitle(text),
+  sender,
+  body,
+  messageId,
 }: {
   text: string;
   lead: TranscriptLead;
+  /** The message the card draws, which a link to it is brought into view by; none where it draws no message of the transcript's. */
+  messageId?: string | undefined;
   /** The card's line: the text's first line as plain words, unless the transcript names it otherwise. */
   title?: string | undefined;
+  /** The line naming who sent it (`TranscriptOrigin`); none where the transcript names nobody. */
+  sender?: ReactNode;
+  /** A webhook call's body, which rode in with an automation's prompt. */
+  body?: string | undefined;
 }): ReactNode {
   return (
-    <Plan data-plan-card="" aria-label={lead.label}>
-      <PlanHeader>
-        {lead.icon}
-        <PlanTitle label={lead.label}>{title}</PlanTitle>
-      </PlanHeader>
-      <PlanContent>
-        <TranscriptWords text={text} />
-      </PlanContent>
-    </Plan>
+    <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
+      {sender == null ? null : <span className="message-sender">{sender}</span>}
+      <Plan data-plan-card="" aria-label={lead.label} className="agent-origin-card">
+        <PlanHeader>
+          {lead.icon}
+          <PlanTitle label={lead.label}>{title}</PlanTitle>
+        </PlanHeader>
+        <PlanContent>
+          <TranscriptWords text={text} />
+          {body === undefined ? null : <OriginBody body={body} />}
+        </PlanContent>
+      </Plan>
+    </Message>
   );
+}
+
+/** A task named as the sender of its plan: its document glyph and its name as one target, hanging its card and opening its plan where the place can. */
+function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
+  const inner = (
+    <>
+      <span className="agent-origin-glyph" aria-hidden="true">
+        <DocumentIcon />
+      </span>
+      <span className="actor-ref-name">{task.name}</span>
+    </>
+  );
+  return (
+    <Tooltip label={task.name} card={task.card}>
+      {onOpen === undefined ? (
+        <span className="actor-ref">{inner}</span>
+      ) : (
+        <button type="button" className="actor-ref" data-plan-ref="" onClick={onOpen}>
+          {inner}
+        </button>
+      )}
+    </Tooltip>
+  );
+}
+
+/** Who sent a task's agent its plan: the task, then the teammate who started the agent, never the reader. */
+function TaskSender({
+  task,
+  onOpen,
+  starter,
+}: {
+  task: BriefTask | undefined;
+  onOpen: (() => void) | undefined;
+  starter: Actor | undefined;
+}): React.JSX.Element {
+  return (
+    <ActorLine>
+      {task === undefined ? null : <TaskRef task={task} onOpen={onOpen} />}
+      {starter === undefined ? null : (
+        <ActorLine>
+          {task === undefined ? "Started by " : " · started by "}
+          <ActorRef actor={starter} sentence />
+        </ActorLine>
+      )}
+    </ActorLine>
+  );
+}
+
+/** The issue or pull request an automation's GitHub event named, by number and title, opening on GitHub where the event gave its address. */
+function OriginSubject({
+  subject,
+  openGitHub,
+}: {
+  subject: NonNullable<CodingAgentOrigin["subject"]>;
+  openGitHub: (url: string) => void;
+}): React.JSX.Element {
+  const words =
+    subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
+  const { url } = subject;
+  if (url === undefined) return <span className="agent-origin-subject">{words}</span>;
+  return (
+    <a
+      className="text-link agent-origin-subject"
+      href={url}
+      onClick={(event) => {
+        event.preventDefault();
+        openGitHub(url);
+      }}
+    >
+      {words}
+    </a>
+  );
+}
+
+/**
+ * Who sent an automation's agent its prompt: the automation, hanging its
+ * card and opening its page where the window can open it, and named plainly
+ * where it cannot, deleted, someone else's personal one, or the Automations
+ * experiment off; then the issue or pull request its GitHub event named,
+ * and who asked for a run now. A webhook's body is the card's, never this
+ * line's. Each part after the first is a line of its own, separator and
+ * all, so a narrow line breaks between the parts (desktop.css).
+ */
+function AutomationSender({
+  automationId,
+  name,
+  run,
+  openGitHub,
+}: {
+  automationId: string | undefined;
+  /** The automation's name as the run started it, which a deleted one is still named by. */
+  name: string | undefined;
+  run: CodingAgentOrigin | undefined;
+  openGitHub: (url: string) => void;
+}): React.JSX.Element {
+  const known = useAutomation(automationId);
+  const runner = usePerson(run?.runBy);
+  const plain =
+    automationId === undefined && name !== undefined
+      ? `${name} ${DELETED_WORDS}`
+      : (name ?? AUTOMATION_WORDS);
+  const subject = run?.subject;
+  return (
+    <ActorLine>
+      {known === undefined ? (
+        <ActorRef actor={{ kind: ACTOR_KIND.AUTOMATION, name: plain, state: ACTOR_STATE.REST }} />
+      ) : (
+        <ActorRef
+          actor={automationActor(known.automation)}
+          card={
+            <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+          }
+          onOpen={known.onOpen}
+        />
+      )}
+      {subject === undefined ? null : (
+        <ActorLine>
+          {" · "}
+          <OriginSubject subject={subject} openGitHub={openGitHub} />
+        </ActorLine>
+      )}
+      {run?.runBy === undefined ? null : (
+        <ActorLine>
+          {" · Run by "}
+          <ActorRef actor={runner} sentence />
+        </ActorLine>
+      )}
+    </ActorLine>
+  );
+}
+
+/**
+ * What an agent's transcript opens on: an automation's prompt, from the
+ * automation, where an automation's run started it; the plan, from its task
+ * and the teammate who started the agent, where it was handed the plan; and
+ * nothing for an agent handed a prompt by hand, whose prompt is the
+ * developer's message as any other.
+ */
+function agentOrigin(input: {
+  agent: CodingAgentSummary;
+  run: CodingAgentOrigin | undefined;
+  task: BriefTask | undefined;
+  onOpenPlan: (() => void) | undefined;
+  starter: Actor | undefined;
+  openGitHub: (url: string) => void;
+}): TranscriptOrigin | undefined {
+  const { agent, run, task, starter } = input;
+  if (agent.automationId !== undefined || agent.automationName !== undefined) {
+    return {
+      lead: AUTOMATION_LEAD,
+      sender: (
+        <AutomationSender
+          automationId={agent.automationId}
+          name={agent.automationName}
+          run={run}
+          openGitHub={input.openGitHub}
+        />
+      ),
+      text: run?.prompt,
+      body: run?.body,
+    };
+  }
+  if (agent.brief === CODING_AGENT_BRIEF.PROMPT) return undefined;
+  return {
+    sender:
+      task === undefined && starter === undefined ? undefined : (
+        <TaskSender task={task} onOpen={input.onOpenPlan} starter={starter} />
+      ),
+  };
 }
 
 /** Who wrote or said a message, over it: their mark and their name, hanging their card. */
@@ -498,11 +778,22 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
+export interface ArrivedLine {
+  readonly message: CodingAgentMessage;
+  readonly sender: Actor | undefined;
+}
+
+/** No line reached the turn while it ran. */
+const NO_ARRIVED: readonly ArrivedLine[] = [];
+
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
  * agent's own turns, with a copy of its words under it where it has any,
  * ending once it has finished on how long it worked and when it ended.
+ * A line that reached a turn while it ran is drawn inside it, as its own
+ * bubble between the work before it and the work after it.
  */
 export function AgentMessage({
   message,
@@ -514,10 +805,14 @@ export function AgentMessage({
   briefTitle,
   said = false,
   sender,
+  origin,
+  arrived = NO_ARRIVED,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
+  /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
+  origin?: TranscriptOrigin | undefined;
   /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
   briefTitle?: string | undefined;
   lead: TranscriptLead;
@@ -529,13 +824,26 @@ export function AgentMessage({
   said?: boolean;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
+  /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
+  arrived?: readonly ArrivedLine[];
 }): ReactNode {
   const words = messageWords(message);
-  if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
+  if (plan) {
+    return (
+      <PlanCard
+        text={origin?.text ?? words}
+        lead={origin?.lead ?? lead}
+        title={briefTitle}
+        sender={origin?.sender}
+        body={origin?.body}
+        messageId={message.id}
+      />
+    );
+  }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
-      <Message from={message.role}>
+      <Message from={message.role} data-message-id={message.id}>
         {named}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
@@ -543,14 +851,18 @@ export function AgentMessage({
             <MessageContent>
               <SentWords text={words} />
             </MessageContent>
-            <CopyMessageAction words={words} />
+            <CopyMessageAction words={words} messageId={message.id} />
           </>
         )}
       </Message>
     );
   }
   const { startedAt, finishedAt } = message;
-  const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
+  const workers = new Map(
+    [...(delegation?.standings?.values() ?? [])].map(
+      (standing) => [standing.callId, workerToolState(standing.status)] as const,
+    ),
+  );
   const workedFor =
     moving || startedAt === undefined || finishedAt === undefined ? null : (
       <WorkedFor
@@ -560,26 +872,52 @@ export function AgentMessage({
         models={delegation?.models}
       />
     );
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
-  return (
-    <Message from={message.role}>
-      {named}
-      <MessageContent>
-        <TranscriptRows
-          rows={agentRows(message, moving, lead.grouped, {
-            newestTodos: todos.kept,
-            workers,
-            said,
-          })}
-          trailer={said ? workedFor : undefined}
-        >
-          {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
-        </TranscriptRows>
-      </MessageContent>
-      {said ? null : workedFor}
-      {words === "" || said ? null : <CopyMessageAction words={words} />}
-    </Message>
+  const stretches = turnStretches(
+    agentRows(message, moving, {
+      newestTodos: todos.kept,
+      workers,
+      said,
+      arrived: arrived.map((line) => line.message),
+    }),
   );
+  const last = stretches.findLastIndex((stretch) => stretch.line === undefined);
+  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  return stretches.map((stretch, index) => {
+    if (stretch.line !== undefined) {
+      const line = stretch.line;
+      return (
+        <AgentMessage
+          key={line.id}
+          message={line}
+          plan={false}
+          lead={lead}
+          moving={false}
+          delegation={delegation}
+          sender={arrived.find((each) => each.message.id === line.id)?.sender}
+        />
+      );
+    }
+    // Note that only the turn's first stretch carries its id and its sender, because a link to the turn brings its start into view.
+    const ends = index === last;
+    return (
+      <Message
+        key={index === 0 ? message.id : (stretch.rows[0]?.key ?? message.id)}
+        from={message.role}
+        data-message-id={index === 0 ? message.id : undefined}
+      >
+        {index === 0 ? named : null}
+        <MessageContent>
+          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
+            {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
+          </TranscriptRows>
+        </MessageContent>
+        {said || !ends ? null : workedFor}
+        {words === "" || said || !ends ? null : (
+          <CopyMessageAction words={words} messageId={message.id} />
+        )}
+      </Message>
+    );
+  });
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
@@ -602,6 +940,7 @@ function AgentTranscriptView({
   earlierOmitted = false,
   briefTitle,
   briefSender,
+  origin,
   readerId,
 }: {
   messages: readonly CodingAgentMessage[];
@@ -636,39 +975,54 @@ function AgentTranscriptView({
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
+  /** Who handed the agent what it opens on, which is then its card under their line, a prompt among them; none where only a plan is, whose card names nobody. */
+  origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
 }): React.JSX.Element {
-  const { members } = useMemberDirectory();
+  const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
-    // any other is; the rest the developer sent since.
+    // any other is, but where something sent it, an automation, when it is
+    // that sender's card; the rest the developer sent since.
     const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
-    const plan = brief === CODING_AGENT_BRIEF.PROMPT ? undefined : first;
-    const task = brief === CODING_AGENT_BRIEF.PROMPT ? first : undefined;
+    const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
+    const plan = carded ? first : undefined;
+    const task = carded ? undefined : first;
+    // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
+    const placed = placedMessages(messages);
     return (
       <Conversation>
-        {/* The plan's card stands off the tab row by the gap between a column's groups. */}
+        {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
         <ConversationContent
           className={
-            overComposer ? "agent-log-over-composer pt-(--section-gap)" : "pt-(--section-gap)"
+            overComposer
+              ? "scroll-fade agent-log-over-composer pt-(--section-gap)"
+              : "scroll-fade pt-(--section-gap)"
           }
         >
-          {messages.map((message, index) => (
+          {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
                 message={message}
                 plan={message === plan}
                 lead={lead}
-                moving={working && index === messages.length - 1}
+                moving={working && index === placed.length - 1}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
+                origin={message === plan ? origin : undefined}
                 sender={
-                  message === task ? briefSender : lineSender(message.sentBy, readerId, members)
+                  message === task
+                    ? briefSender
+                    : lineSender(message.sentBy, readerId, members, former)
                 }
+                arrived={arrived.map((line) => ({
+                  message: line,
+                  sender: lineSender(line.sentBy, readerId, members, former),
+                }))}
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -747,8 +1101,11 @@ function AgentTabView({
   skills,
   starter,
   readerId,
+  run,
 }: {
   agent: CodingAgentSummary;
+  /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
+  run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
   readModels: () => void;
   transcript: AgentTranscriptControl;
@@ -786,40 +1143,52 @@ function AgentTabView({
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
   const starterActor = usePerson(agent.startedBy);
-  const { members } = useMemberDirectory();
+  const pictures = useAgentPictureDoor(agent.id);
+  const { members, former } = useMemberDirectory();
+  const origin = agentOrigin({
+    agent,
+    run,
+    task: cards?.task,
+    onOpenPlan: onOpenTarget === undefined ? undefined : () => onOpenTarget(PLAN_TARGET),
+    starter: starter === undefined ? undefined : starterActor,
+    openGitHub,
+  });
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
-        <AgentTranscriptView
-          messages={lines}
-          brief={agent.brief}
-          briefSender={starter === undefined ? undefined : starterActor}
-          readerId={readerId}
-          delegation={{
-            models,
-            own: { model: agent.model, effort: agent.effort },
-            starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-            onOpen: onOpenSubagent,
-            onOpenTarget,
-            cards,
-            standings: transcript.subagents,
-          }}
-          reading={transcript.reading}
-          failed={transcript.failed}
-          working={working}
-          sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-          startedAt={startedAt}
-          ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-          endReason={endLineReason(transcript.failure, starter)}
-          onOpenApiKeys={onOpenApiKeys}
-          onRetry={transcript.onRetry}
-          footer={
-            showsPublishedRow(agent.status, published) ? (
-              <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-            ) : null
-          }
-          overComposer
-        />
+      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
+        <AgentPicturesProvider value={pictures}>
+          <AgentTranscriptView
+            messages={lines}
+            brief={agent.brief}
+            briefSender={starter === undefined ? undefined : starterActor}
+            origin={origin}
+            readerId={readerId}
+            delegation={{
+              models,
+              own: { model: agent.model, effort: agent.effort },
+              starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+              onOpen: onOpenSubagent,
+              onOpenTarget,
+              cards,
+              standings: transcript.subagents,
+            }}
+            reading={transcript.reading}
+            failed={transcript.failed}
+            working={working}
+            sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+            startedAt={startedAt}
+            ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+            endReason={endLineReason(transcript.failure, starter)}
+            onOpenApiKeys={onOpenApiKeys}
+            onRetry={transcript.onRetry}
+            footer={
+              showsPublishedRow(agent.status, published) ? (
+                <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+              ) : null
+            }
+            overComposer
+          />
+        </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
@@ -830,6 +1199,7 @@ function AgentTabView({
           />
         ) : (
           <AgentComposer
+            agentId={agent.id}
             status={agent.status}
             composer={composer}
             model={model}
@@ -864,8 +1234,11 @@ export function AgentTab({
   cards,
   onHeld,
   runOnMac,
+  run,
 }: {
   agent: CodingAgentSummary;
+  /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
+  run?: CodingAgentOrigin | undefined;
   control: CodingAgentsControl;
   /** Whether the tab is on screen: the plan's column showing it, on the Plans tab. */
   shown: boolean;
@@ -909,6 +1282,16 @@ export function AgentTab({
     seenEdits.current = settledEdits;
     tell(ACT_KIND.PLANNING_REFRESH);
   }, [settledEdits, tell]);
+  // An agent this one started joins the plan's agents only once they are read again, so
+  // one that landed after the tab opened has them read; those already there were read with the plan.
+  const started = useMemo(() => startedAgentIds(transcript.messages), [transcript.messages]);
+  const seenStarts = useRef<ReadonlySet<string>>(new Set(started));
+  const readAgents = control.onRetryList;
+  useEffect(() => {
+    const landed = started.some((id) => !seenStarts.current.has(id));
+    seenStarts.current = new Set(started);
+    if (landed) readAgents();
+  }, [started, readAgents]);
   const composer = useAgentComposer({
     agentId: agent.id,
     planId: agent.planId,
@@ -931,36 +1314,50 @@ export function AgentTab({
   });
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
+  const toast = useToast();
+  useMessageReveal({
+    agentId: agent.id,
+    shown,
+    caughtUp: transcript.caughtUp,
+    pages: transcript.pages,
+    settled: !agentStillWriting(agent.status),
+    drawn: (messageId) => messages.some((message) => message.id === messageId),
+    gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+  });
   return (
-    <AgentTabView
-      agent={agent}
-      models={control.models}
-      readModels={control.readModels}
-      transcript={transcript}
-      composer={composer}
-      model={model}
-      servers={servers}
-      published={published}
-      doors={{
-        openGitHub,
-        copy: copyWithToast,
-        openChanges: onOpenChanges,
-        runOnMac,
-      }}
-      startedAt={shown ? agent.runStartedAt : undefined}
-      delegationStarts={shown ? transcript.delegations : undefined}
-      onStop={() => control.onStop(agent.id)}
-      onUnarchive={control.onUnarchive}
-      onOpenSubagent={onOpenSubagent}
-      onOpenTarget={onOpenTarget}
-      cards={cards}
-      openGitHub={openGitHub}
-      onOpenApiKeys={control.onOpenApiKeys}
-      keywords={control.keywords}
-      skills={control.readSkills}
-      starter={teammateStarter(agent.startedBy, control.me)}
-      readerId={control.me}
-    />
+    <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
+      <AgentTabView
+        agent={agent}
+        models={control.models}
+        readModels={control.readModels}
+        transcript={transcript}
+        composer={composer}
+        model={model}
+        servers={servers}
+        published={published}
+        doors={{
+          openGitHub,
+          copy: copyWithToast,
+          openChanges: onOpenChanges,
+          runOnMac,
+        }}
+        startedAt={shown ? agent.runStartedAt : undefined}
+        delegationStarts={shown ? transcript.delegations : undefined}
+        onStop={() => control.onStop(agent.id)}
+        onUnarchive={control.onUnarchive}
+        onOpenSubagent={onOpenSubagent}
+        onOpenTarget={onOpenTarget}
+        cards={cards}
+        openGitHub={openGitHub}
+        onOpenApiKeys={control.onOpenApiKeys}
+        keywords={control.keywords}
+        skills={control.readSkills}
+        starter={teammateStarter(agent.startedBy, control.me)}
+        readerId={control.me}
+        run={run}
+      />
+    </MessagePlaceProvider>
   );
 }
 
@@ -983,10 +1380,13 @@ export function AgentSubagentTab({
   shown,
   onStatus,
   onHeld,
+  sender,
 }: {
   agentId: string;
   callId: string;
   task: string;
+  /** Who handed the worker its task, named over its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
+  sender?: ReactNode;
   status: CodingAgentStatus;
   control: CodingAgentsControl;
   shown: boolean;
@@ -1010,8 +1410,9 @@ export function AgentSubagentTab({
   const owner =
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
-  const { members } = useMemberDirectory();
-  const macOwner = macOwnerOf(owner?.startedBy, members, control.me);
+  const pictures = useAgentPictureDoor(agentId, callId);
+  const { members, former } = useMemberDirectory();
+  const macOwner = macOwnerOf(owner?.startedBy, members, control.me, former);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;
@@ -1021,18 +1422,21 @@ export function AgentSubagentTab({
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
-        <AgentTranscriptView
-          messages={workerLines(task, transcript.messages)}
-          lead={WORKER_LEAD}
-          delegation={{ models: control.models }}
-          reading={transcript.reading}
-          failed={transcript.failed}
-          working={agentStillWriting(status)}
-          sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-          startedAt={shown ? transcript.runStartedAt : undefined}
-          ended={endLine(status, transcript.failure)}
-          onRetry={transcript.onRetry}
-        />
+        <AgentPicturesProvider value={pictures}>
+          <AgentTranscriptView
+            messages={workerLines(task, transcript.messages)}
+            lead={WORKER_LEAD}
+            origin={sender === undefined ? undefined : { sender }}
+            delegation={{ models: control.models }}
+            reading={transcript.reading}
+            failed={transcript.failed}
+            working={agentStillWriting(status)}
+            sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+            startedAt={shown ? transcript.runStartedAt : undefined}
+            ended={endLine(status, transcript.failure)}
+            onRetry={transcript.onRetry}
+          />
+        </AgentPicturesProvider>
       </MacOwnerProvider>
     </section>
   );

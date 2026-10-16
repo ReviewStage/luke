@@ -3,11 +3,9 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { workspaceReaches } from "@luke/ui/planning-model";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
-import { CHIP_LOOK, Chip } from "../chip";
-import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { WORKSPACE_REF_SIZE, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { ModalShell } from "../modal-shell";
+import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
@@ -21,11 +19,15 @@ import type { PlansControl } from "./use-plans-tab";
  * chip. Its title says where the plan will start, "New plan in Acme", the
  * workspace a chip there that chooses another, as Linear's team chip and
  * GitHub's Owner do; the repository chip then lists that workspace's
- * repositories, under where they come from. The chip leads the card's foot with Cancel and Create task at its
- * end, as the feedback dialog's screenshot button leads its own. The field
+ * repositories. Both chips are the app's one picker, Settings' bordered chip
+ * and its menu, which hangs from the chip's leading edge here because each
+ * chip leads its line. The repository chip leads the card's foot with Cancel
+ * and Create task at its end, as the feedback dialog's screenshot button
+ * leads its own. The field
  * takes focus, Tab stays inside the card, and focus goes back to whatever
- * opened it. The name is one line, so Return creates the plan with any
- * modifier held; Escape, Cancel, and a press on the dimmed window put the
+ * opened it. The name is optional: a plan started with none stands as
+ * "Untitled" until the developer renames it. The name is one
+ * line, so Return creates the plan with any modifier held; Escape, Cancel, and a press on the dimmed window put the
  * card away with nothing started, its words with it. Nothing typed here
  * reaches the model as conversation. The repository starts on the one the
  * press chose (a repository group's +), else the one the newest plan in the
@@ -42,10 +44,13 @@ import type { PlansControl } from "./use-plans-tab";
 /** Create task's chord: Return alone, from the name field. */
 const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
+/** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
+const NO_WORKSPACE_MATCH = "No workspaces match";
+
 /**
  * The title's workspace: the one the plan starts in, by its tile and name, a
- * press away from the menu of every workspace the account is in, the one
- * chosen checked; nothing before the workspaces are read.
+ * press away from the picker's menu of every workspace the account is in,
+ * the one chosen checked; nothing before the workspaces are read.
  */
 function WorkspaceChip({
   workspaces,
@@ -58,30 +63,24 @@ function WorkspaceChip({
   disabled: boolean;
   onChoose: (workspaceId: string) => void;
 }): React.JSX.Element | null {
-  const menu = useActionMenu(true);
   const workspace = workspaces.find((each) => each.id === chosen);
   if (workspace === undefined) return null;
-  const choices: MenuAction[] = workspaces.map((each) => ({
-    label: each.name,
-    icon: <WorkspaceTile workspace={each} />,
-    checked: each.id === workspace.id,
-    onSelect: () => onChoose(each.id),
-  }));
   return (
-    <div className="new-plan-workspace">
-      <Chip
-        look={CHIP_LOOK.PILL}
-        aria-label={`Workspace: ${workspace.name}`}
-        disabled={disabled}
-        chevron
-        {...menu.trigger(dropBelowStart)}
-      >
-        <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} />
-      </Chip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label="Workspace" menu={menu.drawn} groups={[choices]} onClose={menu.close} />
-      )}
-    </div>
+    <Picker
+      label="Workspace"
+      value={workspace.id}
+      valueLabel={workspace.name}
+      valueIcon={<WorkspaceTile workspace={workspace} />}
+      rows={workspaces.map((each) => ({
+        id: each.id,
+        label: each.name,
+        icon: <WorkspaceTile workspace={each} />,
+      }))}
+      noMatch={NO_WORKSPACE_MATCH}
+      align={PICKER_ALIGN.START}
+      disabled={disabled}
+      onPick={onChoose}
+    />
   );
 }
 
@@ -119,7 +118,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
       ? null
       : chosen;
   const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
-  const canStart = name.trim().length > 0 && !starting;
+  const canStart = !starting;
 
   const start = () => {
     if (!canStart) return;
@@ -167,7 +166,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
         className="dialog-name-field"
         aria-label="Task name"
         aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-        placeholder="Task name"
+        placeholder="Task name (optional)"
         maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
         spellCheck
         value={name}
@@ -183,7 +182,8 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
       <div className="confirm-dialog-actions">
         <RepositoryChip
           key={repositories.scope}
-          place={CHIP_PLACE.COMPOSER}
+          place={CHIP_PLACE.FIELD}
+          align={PICKER_ALIGN.START}
           value={repository}
           chooser={repositories}
           onChoose={setChosen}

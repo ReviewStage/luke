@@ -1,4 +1,4 @@
-import { timestamp } from "drizzle-orm/pg-core";
+import { customType, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * An instant column: `timestamp with time zone`, so the value stored is a
@@ -21,3 +21,12 @@ export const createdAt = () => timestamptz("created_at").notNull().defaultNow();
  * sets `updatedAt` itself from the instant its own clock read.
  */
 export const updatedAt = () => timestamptz("updated_at").notNull().defaultNow();
+
+/**
+ * A column of raw bytes, `bytea`, read and written as a `Uint8Array`: a
+ * picture kept beside the row it belongs to, since this deployment keeps no
+ * blob store.
+ */
+export const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+});

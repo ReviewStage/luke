@@ -3,6 +3,11 @@ import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
+import {
+  keepPlanAttachment,
+  PLAN_ATTACHMENT_KEEP,
+  readPlanAttachment,
+} from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import {
@@ -26,23 +31,21 @@ import {
   codingAgentCursorSchema,
 } from "@luke/features/coding-agent-wire";
 import { pageVersionNumberSchema } from "@luke/features/page-wire";
+import { PICTURE_BOUNDS, pictureOfDataUrl } from "@luke/features/picture-wire";
+import {
+  PLAN_ATTACHMENT_REFUSAL,
+  planAttachmentRequestSchema,
+} from "@luke/features/plan-attachment-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@luke/features/plan-edit";
 import {
   PLAN_BOUNDS,
   type PlanFileRequest,
-  type PlanTreeRequest,
   planFileRequestSchema,
   planRevisionSeqSchema,
-  planTreeRequestSchema,
 } from "@luke/features/plan-wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type EveReach, eveFor, stoppedForGood } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
@@ -52,7 +55,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
-import { withPlanAgents } from "../agents/plan-agents.js";
+import { listPlanlessAgents, withPlanAgents } from "../agents/plan-agents.js";
 import { retireSessions } from "../agents/retire-sessions.js";
 import {
   PLAN_LIST_ARCHIVED,
@@ -76,6 +79,12 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import type { IntegrationConnect } from "../integrations/integration-connect.js";
+import {
+  linearIssue,
+  linearOrRefused,
+  throughWorkspaceLinear,
+} from "../integrations/linear-issues.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
@@ -87,7 +96,7 @@ import {
   saveDeveloperEdit,
 } from "./plan-notes.js";
 import { readPlanSkills } from "./plan-skills.js";
-import { readPlanTree } from "./plan-tree.js";
+import { readPlanTree, treeRequestOf } from "./plan-tree.js";
 import { readPlanCode, readPlanWork } from "./plan-work-store.js";
 import {
   PLANNER_POLL,
@@ -118,7 +127,8 @@ import {
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
  * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
- * and an archive are changes like a rename, and the list leaves the archived
+ * and an archive are changes like a rename, though a pin is the asking
+ * member's own and reads pinned for no one else, and the list leaves the archived
  * plans out unless `archived=include` asks for them, so a build from before
  * archiving, which never asks, draws none of them rather than all of them.
  *
@@ -203,6 +213,10 @@ const PLANS_PATH = {
   PAGES: "/api/plans/pages",
   /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
   PAGE: "/api/plans/page",
+  /** POST keeps one picture on the plan, answering the id its text names it by; the rewrite moves the path's id into the `id` query. */
+  ATTACHMENTS: "/api/plans/attachments",
+  /** GET serves one picture of the plan as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
+  ATTACHMENT: "/api/plans/attachment",
 } as const;
 
 const HTTP_METHOD = {
@@ -244,17 +258,28 @@ const FILE_QUERY = {
   REF: "ref",
 } as const;
 
-/** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
-const TREE_PATH_QUERY = "path";
+/** The query naming one picture of the plan by its id. */
+const ATTACHMENT_QUERY = "attachment";
 
-/** The query asking everything under the folder rather than its own entries, `1` where it asks. */
-const TREE_RECURSIVE_QUERY = "recursive";
+/**
+ * The headers a picture's bytes are served under beside their type: the
+ * browser is told not to sniff them for another type, since the type is
+ * what the service sniffed them to be as they were kept, and nothing on the
+ * way may keep a copy, since the bytes are a workspace's own.
+ */
+const PICTURE_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "cache-control": "private, no-store",
+} as const;
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = PLAN_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
+
+/** An upload is one picture as a `data:` URL at its byte bound, base64 being four characters for every three bytes, with room for its type and key. */
+const MAXIMUM_ATTACHMENT_BODY_BYTES = Math.ceil(PICTURE_BOUNDS.MAX_BYTES / 3) * 4 + 1_024;
 
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
@@ -266,7 +291,12 @@ export interface PlansAppSeams extends EveReach {
 }
 
 /** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
-export type PlansAppServices = DatabaseServices | GitHubApp | HttpClient.HttpClient | ModelCatalog;
+export type PlansAppServices =
+  | DatabaseServices
+  | GitHubApp
+  | HttpClient.HttpClient
+  | ModelCatalog
+  | IntegrationConnect;
 
 type PlansServices = PlansAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -397,13 +427,26 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return first.value;
 });
 
+/**
+ * The Linear issue a plan starts from, read through the workspace's own
+ * Linear connection whatever team it is in, or the Linear refusal: the
+ * workspace has none connected, its grant is refused, or the issue is none
+ * it reaches. Nothing is written before it is read, so a refusal starts no
+ * plan.
+ */
+const startingLinearIssue = (organizationId: string, issueId: string) =>
+  linearOrRefused(
+    throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
+    "Linear gave no issue to start a plan from",
+  );
+
 /** Whether a list read asks for the archived plans too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
   const asked = new URL(request.url).searchParams.get(PLAN_LIST_QUERY.ARCHIVED);
   return asked === PLAN_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans; POST starts one with an empty document, and its repository confirmed first. */
+/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue read first. */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: PlansAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
@@ -414,12 +457,16 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
+    const includeArchived = listsArchived(request);
     const plans = yield* hostedStoreOrUnavailable(
-      Effect.flatMap(listPlans(userId, { includeArchived: listsArchived(request) }), (listed) =>
+      Effect.flatMap(listPlans(userId, { includeArchived }), (listed) =>
         withPlanAgents(userId, listed),
       ),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans });
+    const planlessAgents = yield* hostedStoreOrUnavailable(
+      listPlanlessAgents(userId, { includeArchived }),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans, planlessAgents });
   }
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(planCreateRequestSchema)(body);
@@ -429,8 +476,17 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     Effect.succeed(organizationId),
     started.success.repository,
   );
+  const issue =
+    started.success.linearIssueId === undefined
+      ? undefined
+      : yield* startingLinearIssue(organizationId, started.success.linearIssueId);
   const plan = yield* hostedStoreOrUnavailable(
-    createPlan(userId, { organizationId, name: started.success.name, repository }),
+    createPlan(userId, {
+      organizationId,
+      ...(started.success.name === undefined ? undefined : { name: started.success.name }),
+      repository,
+      ...(issue === undefined ? undefined : { linearIssue: issue }),
+    }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });
 });
@@ -818,33 +874,6 @@ const fileEndpoint = /* @__PURE__ */ Effect.fn("web/planFileEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
 });
 
-/**
- * The folder the query names, named at most once, the root where it is not
- * named, and whether everything under it is asked, or the invalid-request
- * refusal.
- */
-const treeRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<PlanTreeRequest, HostedRefusal> {
-  const query = new URL(request.url).searchParams;
-  const named = query.getAll(TREE_PATH_QUERY);
-  const recursive = query.getAll(TREE_RECURSIVE_QUERY);
-  if (
-    named.length > 1 ||
-    recursive.length > 1 ||
-    (recursive.length === 1 && recursive[0] !== "1")
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const folder = {
-    path: named[0] ?? "",
-    ...(recursive.length === 1 ? { recursive: true } : undefined),
-  };
-  const read = readEither(planTreeRequestSchema)(unparsedWire(folder));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return read.success;
-});
-
 /** GET lists one folder of the plan's repository, or why it is not listed. */
 const treeEndpoint = /* @__PURE__ */ Effect.fn("web/planTreeEndpoint")(function* (
   seams: PlansAppSeams,
@@ -1059,6 +1088,66 @@ const pageEndpoint = /* @__PURE__ */ Effect.fn("web/planPageEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { page: page.value });
 });
 
+/**
+ * POST keeps one picture on the plan, pasted, dropped, or chosen into its
+ * text by any member of its workspace, and answers the id the text then
+ * names it by, or refuses in band where the plan holds its bound of
+ * pictures. A plan the account does not reach, or an archived one, which no
+ * editor is drawn on, keeps nothing and answers as not found.
+ */
+const attachmentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentsEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_ATTACHMENT_BODY_BYTES);
+  const upload = readEither(planAttachmentRequestSchema)(body);
+  const picture = Result.isSuccess(upload) ? pictureOfDataUrl(upload.success.picture) : undefined;
+  if (picture === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const kept = yield* hostedStoreOrUnavailable(keepPlanAttachment(userId, planId, picture));
+  switch (kept.status) {
+    case PLAN_ATTACHMENT_KEEP.KEPT:
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { id: kept.id });
+    case PLAN_ATTACHMENT_KEEP.TOO_MANY:
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+        refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY,
+      });
+    case PLAN_ATTACHMENT_KEEP.NO_PLAN:
+      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+});
+
+/**
+ * GET serves one picture of the plan as its bytes, under the media type the
+ * service sniffed them to be as they were kept, to the members of the plan's
+ * workspace alone: a picture of a plan the account does not reach, or of
+ * another plan, is not found, as a plan is.
+ */
+const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const attachmentId = yield* idOf(request, ATTACHMENT_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const found = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, planId, attachmentId));
+  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(found.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: found.value.contentType,
+    headers: PICTURE_HEADERS,
+  });
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -1084,6 +1173,8 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGES, hostedRefusing(pagesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGE, hostedRefusing(pageEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.ATTACHMENTS, hostedRefusing(attachmentsEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.ATTACHMENT, hostedRefusing(attachmentEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

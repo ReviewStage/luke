@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "avatar.unavailable"
+      ]
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "not_configured",
+        "no_capacity",
+        "error"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "requestId",
+    "reason"
+  ],
+  "additionalProperties": false
+}

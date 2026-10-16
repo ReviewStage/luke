@@ -150,3 +150,61 @@ test("a block the developer changed after the save went out stays theirs when th
     "+Model an invite as one `memberships` row, pending.",
   ]);
 });
+
+/** A plan whose picture stands on its own line, as a coding agent may write one. */
+const PICTURED = [
+  "## Approach",
+  "",
+  "The invite email follows the mock.",
+  "",
+  '![Invite email](https://example.com/invite.png "The mock")',
+  "",
+  "Then the accept page.",
+  "",
+].join("\n");
+
+/** Where the first picture stands in the editor's document. */
+function picturePosition(editor: Editor): number {
+  let at = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (at === -1 && node.type.name === "image") at = pos;
+  });
+  assert.notEqual(at, -1, "the picture is in the document");
+  return at;
+}
+
+test("Enter after a picture on its own line opens a line under it, and what is typed there is saved", () => {
+  const { editor, handedOver } = opened(PICTURED);
+
+  editor.commands.setTextSelection(picturePosition(editor) + 1);
+  editor.commands.enter();
+  editor.commands.insertContent("And a reminder a day before.");
+
+  assert.equal(
+    handedOver(),
+    PICTURED.replace('"The mock")\n', '"The mock")\n\nAnd a reminder a day before.\n'),
+  );
+});
+
+test("Backspace at the start of the line under a picture joins that line to the picture's", () => {
+  const { editor, handedOver } = opened(PICTURED);
+  editor.commands.setTextSelection(picturePosition(editor) + 3);
+
+  editor.commands.joinBackward();
+
+  assert.ok(handedOver().includes('"The mock")Then the accept page.'));
+});
+
+test("a picture whose alt text, address, and title need escaping reads back as the same picture once edited", () => {
+  const alt = "Step [2] of the invite";
+  const src = "https://example.com/flow_(v2).png";
+  const title = 'The "accept" page';
+  const { editor, handedOver } = opened(PICTURED);
+  editor.commands.setNodeSelection(picturePosition(editor));
+  editor.commands.updateAttributes("image", { alt, src, title });
+
+  const reopened = opened(handedOver()).editor;
+  const read = reopened.state.doc.nodeAt(picturePosition(reopened))?.attrs;
+
+  assert.deepEqual([read?.alt, read?.src, read?.title], [alt, src, title]);
+});

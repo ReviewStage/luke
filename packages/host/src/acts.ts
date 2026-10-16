@@ -50,6 +50,8 @@ import {
   codingAgentModelsAnswerSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
+  codingAgentPictureParamsSchema,
+  codingAgentPinParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
@@ -80,16 +82,20 @@ import {
   feedbackSubmission,
 } from "@luke/features/feedback";
 import {
+  type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
+  integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationProviderParamsSchema,
+  integrationRenameParamsSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -98,6 +104,9 @@ import {
   type PlanningFileAnswer,
   type PlanningMoveAnswer,
   type PlanningPageSourceAnswer,
+  type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
+  type PlanningPullRequest,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -112,13 +121,20 @@ import {
   planningEditParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
+  planningLinearIssuesParamsSchema,
   planningMessagesParamsSchema,
   planningMoveAnswerSchema,
   planningMoveParamsSchema,
   planningPageParamsSchema,
   planningPageSourceAnswerSchema,
+  planningPictureAnswerSchema,
+  planningPictureKeepAnswerSchema,
+  planningPictureKeepParamsSchema,
+  planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
+  planningPullRequestParamsSchema,
+  planningPullRequestSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
   planningRepositoriesParamsSchema,
@@ -172,6 +188,8 @@ import {
   workspaceInvitationSchema,
 } from "@luke/features/workspace-invitation-wire";
 import {
+  type FormerMember,
+  formerMemberSchema,
   type Workspace,
   type WorkspaceMember,
   workspaceMemberSchema,
@@ -184,6 +202,7 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
 } from "@luke/gateway";
 import type { LiveDiagnostics } from "@luke/live";
 import {
@@ -197,6 +216,7 @@ import {
 import type { UpdateSnapshot } from "@luke/settings/update";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
+import { avatarStateSchema } from "@luke/voice/avatar";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
@@ -246,8 +266,10 @@ export const ACT_KIND = {
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** The tools one provider's server offers the account's agents, read from the service when a list of them is shown. */
+  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
   INTEGRATIONS_TOOLS: "integrations.tools",
+  /** One account at a provider named as the developer calls it. */
+  INTEGRATIONS_RENAME: "integrations.rename",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   /** One experiment turned on or off for the signed-in account, answering the settings as they then stand. */
@@ -307,6 +329,8 @@ export const ACT_KIND = {
   PLANNING_TREE: "planning.tree",
   /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
   PLANNING_SKILLS: "planning.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  PLANNING_PULL_REQUEST: "planning.pullRequest",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -317,6 +341,10 @@ export const ACT_KIND = {
   PLANNING_RESTORE: "planning.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   PLANNING_PAGE_SOURCE: "planning.pageSource",
+  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  PLANNING_PICTURE_READ: "planning.pictureRead",
+  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -342,7 +370,11 @@ export const ACT_KIND = {
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
+  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
+  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
+  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",
@@ -374,6 +406,7 @@ export const ACT_KIND = {
   CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  CODING_AGENTS_PIN: "codingAgents.pin",
   /**
    * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item
@@ -431,6 +464,7 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  CODING_AGENTS_PICTURE: "codingAgents.picture",
   /**
    * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
    * listed, started, named, and ended, its sandbox resumed on the
@@ -465,6 +499,10 @@ export const ACT_KIND = {
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
+  /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
+  AVATAR_REPORT: "avatar.report",
+  /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
+  VOICE_SET_VIDEO: "voice.setVideo",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
    * which creates the one session and answers the SDP; the hang-up it asks
@@ -487,6 +525,8 @@ export const ACT_KIND = {
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
+  /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
+  NOTIFICATIONS_TEST: "notifications.test",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
@@ -578,12 +618,19 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+const formerMembersSchema = EffectSchema.Array(formerMemberSchema);
+
+const linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
 
 const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
   "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected." as const;
+
+/** What a Linear read is refused with where the workspace's Linear could not be read. */
+export const LINEAR_UNAVAILABLE_REFUSAL =
+  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it in Settings › Workspace." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =
@@ -903,10 +950,30 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not disconnect GitHub from that workspace on this system.",
   },
+  [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not connect Linear to that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not disconnect Linear from that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: {
+    payload: actSchema(planningLinearIssuesParamsSchema),
+    result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
+    refusal: "Could not read that workspace's Linear issues on this system.",
+  },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
     payload: actSchema(planningWorkspaceMembersParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not read that workspace's members on this system.",
+  },
+  [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: {
+    payload: actSchema(planningWorkspaceMembersParamsSchema),
+    result: wireResult<readonly FormerMember[]>(isReadable(formerMembersSchema)),
+    refusal: "Could not read who left that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
     payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),
@@ -960,6 +1027,11 @@ export const ACT = {
     result: wireResult<PlanningSkillsAnswer>(isReadable(planningSkillsAnswerSchema)),
     refusal: "Could not read this repository's skills on this system.",
   },
+  [ACT_KIND.PLANNING_PULL_REQUEST]: {
+    payload: actSchema(planningPullRequestParamsSchema),
+    result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
+    refusal: "Could not read that pull request on this system.",
+  },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     payload: record({
       language: exactText(FENCE_LANGUAGE_MAX_CHARS),
@@ -982,6 +1054,16 @@ export const ACT = {
     payload: actSchema(planningRevisionParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not restore that version on this system.",
+  },
+  [ACT_KIND.PLANNING_PICTURE_READ]: {
+    payload: actSchema(planningPictureParamsSchema),
+    result: wireResult<PlanningPictureAnswer>(isReadable(planningPictureAnswerSchema)),
+    refusal: "Could not read that picture on this system.",
+  },
+  [ACT_KIND.PLANNING_PICTURE_KEEP]: {
+    payload: actSchema(planningPictureKeepParamsSchema),
+    result: wireResult<PlanningPictureKeepAnswer>(isReadable(planningPictureKeepAnswerSchema)),
+    refusal: "Could not keep that picture on this system.",
   },
   [ACT_KIND.PLANNING_PAGE_SOURCE]: {
     payload: actSchema(planningPageParamsSchema),
@@ -1025,6 +1107,11 @@ export const ACT = {
     payload: actSchema(integrationProviderParamsSchema),
     result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
     refusal: "Could not disconnect that integration on this system.",
+  },
+  [ACT_KIND.INTEGRATIONS_RENAME]: {
+    payload: actSchema(integrationRenameParamsSchema),
+    result: wireResult<IntegrationAccountView>(isReadable(integrationAccountViewSchema)),
+    refusal: "Could not rename that account on this system.",
   },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,
@@ -1092,6 +1179,11 @@ export const ACT = {
     payload: actSchema(codingAgentArchiveParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not archive the agent on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PIN]: {
+    payload: actSchema(codingAgentPinParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not pin the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     payload: record({
@@ -1230,6 +1322,13 @@ export const ACT = {
     ),
     refusal: "Could not read the inbox item's image on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_PICTURE]: {
+    payload: actSchema(codingAgentPictureParamsSchema),
+    result: wireResult<CodingAgentInboxAttachmentView>(
+      isReadable(codingAgentInboxAttachmentViewSchema),
+    ),
+    refusal: "Could not read the agent's picture on this system.",
+  },
   [ACT_KIND.TERMINAL_LIST]: {
     payload: actSchema(terminalAgentParamsSchema),
     result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
@@ -1363,9 +1462,20 @@ export const ACT = {
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
+  [ACT_KIND.NOTIFICATIONS_TEST]: press("Could not post a notification on this system."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's task forward on this system."),
+  [ACT_KIND.AVATAR_REPORT]: {
+    payload: actSchema(avatarStateSchema),
+    result: answersNothing,
+    refusal: "Could not report the video on this system.",
+  },
+  [ACT_KIND.VOICE_SET_VIDEO]: {
+    payload: actSchema(voiceSetVideoParamsSchema),
+    result: answersNothing,
+    refusal: "Could not turn the video on or off on this system.",
+  },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

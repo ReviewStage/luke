@@ -5,20 +5,28 @@ import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
+  readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
-import { hostTurnId } from "@luke/database/models/ids";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { turns } from "@luke/database/schemas/storage";
+import { conversations, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Base64 } from "effect/encoding";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import {
@@ -30,7 +38,9 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
+  type WireRecord,
 } from "../../core.js";
+import { PICTURE_LOOK_STATUS } from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
@@ -39,7 +49,9 @@ import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type CoderHost, coderHost } from "./host.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
+import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
@@ -60,6 +72,9 @@ import { CURSOR_START, transcriptPast } from "./transcript.js";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** A sandbox door no call of notes alone opens: one that fails if it is. */
+const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
 const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
@@ -98,6 +113,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,
@@ -275,6 +291,27 @@ function codingTurn(
   ];
 }
 
+/** A title model answering each call with the next of `answers`, nothing once they run out, keeping each prompt it was asked. */
+function scriptedTitleModel(answers: readonly string[]) {
+  const asked: string[] = [];
+  const model = new MockLanguageModelV4({
+    doGenerate: async (options) => {
+      const text = answers[asked.length] ?? "";
+      asked.push(JSON.stringify(options.prompt));
+      return {
+        content: [{ type: "text", text }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  return { model, asked };
+}
+
 const STEP_START = "step-start";
 
 const TurnRowSchema = Schema.Struct({
@@ -359,6 +396,50 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an agent started on its plan is titled from the plan as its first turn's words are received, long before the turn ends",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["Teammate invitations by email"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        for (const event of [started, received]) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Teammate invitations by email");
+        assert.equal(asked.length, 1);
+        assert.match(asked[0] ?? "", /Invite a teammate by email/u);
+      }),
+  );
+
+  it.effect(
+    "an opening the title model names nothing from is asked again as the turn ends, with the answer beside it",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Read the agent guide");
+        assert.equal(asked.length, 2);
+        assert.match(asked[1] ?? "", /The guide is read; the plan fits the code\./u);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
@@ -419,31 +500,44 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       }),
   );
   it.effect(
-    "an agent's notes are taken into its plan as the notetaker's are, the ones the plan cannot take reported, and read back in the plan",
+    "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, admitted } = yield* openAgent(host);
-        const input = unparsedWire({
-          notes: [
-            {
-              kind: "add",
-              section: "Open questions",
-              text: "- Who may withdraw an invite? Going on as: the member who sent it.",
-            },
-            { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
-            { kind: "replace", find: "a phrase the plan never held", text: "an owner" },
-          ],
-        });
-
-        const answer = yield* host.editPlan(admitted, input, 0);
-
-        assert.deepEqual(answer, {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          taken: 2,
-          missed: ["replace a phrase the plan never held"],
-        });
         assert.ok(agent.planId !== null);
+        const before = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const notes = [
+          {
+            kind: "add",
+            section: "Open questions",
+            text: "- Who may withdraw an invite? Going on as: the member who sent it.",
+          },
+          { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
+        ];
+
+        const missed = yield* host.editPlan(
+          admitted,
+          unparsedWire({
+            notes: [...notes, { kind: "replace", find: "a phrase the plan never held", text: "x" }],
+          }),
+          0,
+          noSandbox,
+        );
+
+        assert.deepEqual(missed, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.CONFLICT,
+          missed: "replace a phrase the plan never held",
+          current: before.text,
+        });
+        const untouched = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.equal(untouched.text, before.text);
+        assert.deepEqual(untouched.agentEdits, []);
+
+        const answer = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
+
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         const sectionText = (heading: string) =>
           planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";
@@ -465,6 +559,65 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an agent's look at a picture of its plan answers the picture, and the transcript keeps only that it looked",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        assert.ok(agent.planId !== null);
+        const picture = {
+          contentType: PICTURE_TYPE.PNG,
+          bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 2]),
+        };
+        const kept = yield* keepPlanAttachment(userId, agent.planId, picture);
+        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
+        const ref = { planId: agent.planId, attachmentId: kept.id };
+        const input = { address: planAttachmentAddress(ref, "acme") };
+
+        const answer = yield* host.lookAtPicture(admitted, unparsedWire(input));
+        assert.equal(answer.status, PICTURE_LOOK_STATUS.LOOKED);
+        if (answer.status !== PICTURE_LOOK_STATUS.LOOKED) return;
+        assert.equal(answer.image, Base64.encode(picture.bytes));
+
+        const call = { callId: "call-look", toolName: CODER_TOOL.LOOK_AT_PICTURE };
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: [{ kind: "tool-call", ...call, input }] },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...at,
+              status: "completed",
+              result: { kind: "tool-result", ...call, output: { ...answer } },
+            },
+          }),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const look = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(look);
+        assert.equal(look.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(look.output, { status: PICTURE_LOOK_STATUS.LOOKED });
+        assert.equal(JSON.stringify(page).includes(answer.image), false);
+      }),
+  );
+
+  it.effect(
     "the turn-end stop is told an agent's sandbox is held while a developer's terminal lease reaches past now, and not once it lapsed",
     () =>
       Effect.gen(function* () {
@@ -478,6 +631,69 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(yield* host.sandboxHeld(held.admitted), true);
         assert.equal(yield* host.sandboxHeld(lapsed.admitted), false);
         assert.equal(yield* host.sandboxHeld(untouched.admitted), false);
+      }),
+  );
+
+  it.effect(
+    "show_image keeps an agent's pictures beside its own transcript, and a worker's beside the worker's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, admitted } = yield* openAgent(host);
+        const header = new Uint8Array(33);
+        header.set([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+        ]);
+        new DataView(header.buffer).setUint32(16, 1200);
+        new DataView(header.buffer).setUint32(20, 720);
+        const sandbox = () =>
+          Promise.resolve({
+            readFile: () =>
+              Promise.resolve(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(header);
+                    controller.close();
+                  },
+                }),
+              ),
+          });
+        const input = unparsedWire({ images: [{ path: "shot.png", caption: "Members page" }] });
+        const shownId = (answer: WireRecord) => {
+          const read = Schema.decodeUnknownSync(
+            Schema.Struct({ pictures: Schema.Tuple([Schema.Struct({ id: Schema.String })]) }),
+          )(answer);
+          return read.pictures[0].id;
+        };
+        const workerCall = "call-worker";
+        const child = childConversationId(target.conversationId, workerCall);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: child,
+          userId: target.userId,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: target.conversationId,
+        });
+        const turn = { id: "turn_0", sequence: 0 };
+        const worker = {
+          id: mintSession(),
+          auth,
+          turn,
+          parent: { callId: workerCall, rootSessionId: "root", sessionId: "root", turn },
+        };
+
+        const agentPicture = shownId(yield* host.showImage(admitted, input, sandbox));
+        const workerPicture = shownId(yield* host.showDelegatedImage(worker, input, sandbox));
+
+        assert.ok(
+          Option.isSome(yield* readConversationPicture(target.conversationId, agentPicture)),
+        );
+        assert.ok(Option.isSome(yield* readConversationPicture(child, workerPicture)));
+        assert.deepEqual(
+          yield* readConversationPicture(target.conversationId, workerPicture),
+          Option.none(),
+          "a worker's picture is its own transcript's",
+        );
       }),
   );
 });

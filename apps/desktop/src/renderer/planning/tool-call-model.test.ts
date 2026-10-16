@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { cardTitle, toolCallView } from "./tool-call-model";
+import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -268,14 +268,24 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
     },
     { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
     { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+    { kind: "replace", find: "## Assumptions\n\n- Invites expire.", text: "" },
   ];
   const view = toolCallView({
     tool: "edit_plan",
     input: { notes },
-    output: { status: "accepted", taken: 3, missed: [] },
+    output: { status: "accepted", taken: 4 },
   });
   assert.equal(view.kind, CALL_KIND.EDIT_PLAN);
-  assert.equal(view.subject, "2 added, 1 corrected");
+  assert.equal(view.subject, "2 added, 1 corrected, 1 struck");
+  const pictured = toolCallView({
+    tool: "edit_plan",
+    input: {
+      notes: notes.slice(0, 1),
+      pictures: [{ section: "Approach", path: "shot.png", alt: "The members page" }],
+    },
+    output: undefined,
+  });
+  assert.equal(pictured.subject, "1 added, 1 picture added");
   assert.equal(view.input.kind, TOOL_BLOCK.JSON);
   assert.equal(
     toolCallView({ tool: "edit_plan", input: undefined, output: undefined }).subject,
@@ -424,4 +434,68 @@ test("the planning model's own calls draw from their parts as a coding agent's d
     output: "Stopped delegate-7k2m9q.",
   });
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
+});
+
+test("a look at one of the plan's pictures says it looked and opens the plan, and one refused shows why and opens nothing", () => {
+  const input = {
+    address:
+      "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
+  };
+  const looked = { tool: "look_at_picture", callId: "call-1", input, output: { status: "looked" } };
+  const refused = {
+    ...looked,
+    output: { status: "not-looked", reason: "Not looked: this task's plan holds no such picture." },
+  };
+
+  assert.equal(toolCallView(looked).kind, CALL_KIND.LOOK_AT_PICTURE);
+  assert.deepEqual(toolTarget(looked), { kind: TOOL_TARGET.PLAN });
+  const shown = toolCallView(refused).output;
+  assert.equal(shown?.kind, TOOL_BLOCK.JSON);
+  assert.ok(shown?.text.includes(refused.output.reason));
+  assert.equal(toolTarget(refused), undefined);
+});
+
+test("an agent a call starts, reads, or messages opens its tab while it is on the call's own task, and nothing once its answer says it is on another, which this task's column has no tab for", () => {
+  const agent = (onYourTask?: boolean) => ({
+    id: "agent-2",
+    ...(onYourTask === undefined ? undefined : { onYourTask }),
+  });
+  const call = (tool: string, onYourTask?: boolean) => ({
+    tool,
+    callId: "call-1",
+    input: { agentId: "agent-2", text: "Rebase on main." },
+    output: { status: "accepted", agent: agent(onYourTask) },
+  });
+  for (const tool of ["start_agent", "read_agent", "message_agent"]) {
+    const opened = { kind: TOOL_TARGET.AGENT, agent: "agent-2" };
+    assert.deepEqual(toolTarget(call(tool, true)), opened, tool);
+    assert.deepEqual(toolTarget(call(tool)), opened, `${tool}, answered before the service said`);
+    assert.equal(toolTarget(call(tool, false)), undefined, tool);
+  }
+});
+
+test("a pause names how long it waits, and its answer how long it waited or that a message ended it early", () => {
+  const paused = (seconds: number, output?: Record<string, number | boolean>) =>
+    toolCallView({ tool: "sleep", input: { seconds }, output });
+  assert.deepEqual(
+    [paused(45), paused(300), paused(5_400), paused(3_600)].map((view) => [
+      view.kind,
+      view.subject,
+    ]),
+    [
+      [CALL_KIND.SLEEP, "45 seconds"],
+      [CALL_KIND.SLEEP, "5 minutes"],
+      [CALL_KIND.SLEEP, "1 hour 30 minutes"],
+      [CALL_KIND.SLEEP, "1 hour"],
+    ],
+  );
+  assert.equal(paused(300).output, undefined, "a pause still under way has no answer yet");
+  assert.deepEqual(paused(300, { waitedSeconds: 300 }).output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Waited 5 minutes.",
+  });
+  assert.deepEqual(paused(300, { interrupted: true }).output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Stopped early: a message arrived.",
+  });
 });

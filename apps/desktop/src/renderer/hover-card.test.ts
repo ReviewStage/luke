@@ -177,6 +177,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
       ),
       models: [],
       pullRequest: PULL_REQUEST,
+      people: undefined,
       onOpenAgent: () => undefined,
     }),
   );
@@ -252,4 +253,29 @@ test("a call's card is a turn's card: the model at the head over when it ran, ho
   for (const card of [turn, callCard]) {
     assert.ok(card.querySelector(".card > .card-rule + dl"), "the figures stand under a rule");
   }
+});
+
+test("a plan's card says in its corner when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
+  const worked: PlanSummary = {
+    ...SUMMARY,
+    agents: {
+      total: 1,
+      working: 0,
+      activityAt: STARTED_AT + 2 * 3_600_000,
+      agents: [],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const card = drawn(
+    createElement(PlanCard, {
+      plan: worked,
+      models: [],
+      pictures: false,
+      now: STARTED_AT + 3 * 3_600_000,
+      onOpenGitHub: ignore,
+      onShowAgent: ignore,
+    }),
+  );
+  assert.equal(headOf(card).corner, "1h");
 });

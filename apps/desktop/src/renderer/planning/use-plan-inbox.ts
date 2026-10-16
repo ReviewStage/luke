@@ -13,9 +13,12 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
+  inboxAnswerHeard,
   knownBlock,
 } from "@luke/features/inbox-wire";
+import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DRAFT_PLACE, useDraftWriter, useInboxDrafts } from "../composer-drafts";
 import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
@@ -56,6 +59,13 @@ import {
  * posted its item again, is let go, since the service deleted it too. A
  * read that did not answer is held as failed, and the card offers to try
  * again.
+ *
+ * What the developer has put on a card and not sent is its draft, kept by
+ * item at the revision it was written against (`../composer-drafts.ts`), so
+ * it waits through a look at another tab, task, or page, the Inbox's and the
+ * plan's tab reading the same one, and outlasts a relaunch. A read of the
+ * inbox lets go of the drafts of items no longer open at their revision,
+ * and an answer taken lets go of its own.
  */
 
 /** How one read is asked: the plan and the cursor to read past, answered as the view hears it. */
@@ -100,12 +110,6 @@ export interface PlanInboxControl {
   readonly onImage: (itemId: string, attachmentId: string) => void;
   /** Reads an image again whose read did not answer. */
   readonly onRetryImage: (attachmentId: string) => void;
-}
-
-/** A card's draft as the hook keeps it: the revision it was written against, and what it holds. */
-interface KeptDraft {
-  readonly revision: number;
-  readonly draft: InboxDraft;
 }
 
 /** What a card says when its answer was not taken, by what had become of the item. */
@@ -211,11 +215,14 @@ export function usePlanInbox(input: {
   const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
-  // Note that the drafts are kept here rather than on the cards, because a
-  // card is let go whenever the tab is, and an unsent answer must outlast a
-  // look at another tab; a draft stands only at the revision it was written
-  // against, so a change of the agent's starts its card afresh.
-  const [drafts, setDrafts] = useState<ReadonlyMap<string, KeptDraft>>(new Map());
+  // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
+  // shares them, under the plan, or under none where the inbox is an agent's with no plan.
+  const ownPlan = input.reader === undefined ? planId : undefined;
+  const draftsOn = ownPlan ?? null;
+  // Note that an agent with no plan is the planId its inbox is read by.
+  const readAgent = input.reader === undefined ? undefined : planId;
+  const drafts = useInboxDrafts(draftsOn);
+  const writer = useDraftWriter();
   const attempts = useRef(new Map<string, Attempt>());
   const latest = useRef({ ...agents, planId, reader: input.reader });
   latest.current = { ...agents, planId, reader: input.reader };
@@ -297,15 +304,12 @@ export function usePlanInbox(input: {
             note(item.id, notTakenNote(answer.item));
             return;
           }
-          setDrafts((standing) => {
-            const next = new Map(standing);
-            next.delete(item.id);
-            return next;
-          });
-          if (item.needsReply) latest.current.onRetryList();
+          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
+          // Note that an answer the agent hears may open its turn, so the agents are read again.
+          if (inboxAnswerHeard(item, reply)) latest.current.onRetryList();
         });
     },
-    [sending, note, planId],
+    [sending, note, planId, writer],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -359,17 +363,51 @@ export function usePlanInbox(input: {
     });
   }, []);
 
+  // A read lets go of the drafts of the items it covers that are no longer open at the revision
+  // they were written against: a plan's, or, for an agent with no plan, that agent's alone.
+  const { drop } = writer;
+  useEffect(() => {
+    if (!held.read || (ownPlan === undefined && readAgent === undefined)) return;
+    const stale = drafts.filter(
+      (kept) =>
+        (ownPlan !== undefined || kept.place.agentId === readAgent) &&
+        !held.items.some(
+          (item) =>
+            item.id === kept.place.itemId &&
+            item.revision === kept.place.revision &&
+            item.status === INBOX_STATUS.OPEN,
+        ),
+    );
+    if (stale.length === 0) return;
+    drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
+  }, [held.read, held.items, ownPlan, readAgent, drafts, drop]);
+
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
-      const kept = drafts.get(item.id);
-      return kept !== undefined && kept.revision === item.revision ? kept.draft : EMPTY_INBOX_DRAFT;
+      const kept = drafts.find(
+        (each) => each.place.itemId === item.id && each.place.revision === item.revision,
+      );
+      return kept === undefined
+        ? EMPTY_INBOX_DRAFT
+        : { choices: kept.choices, values: kept.values, note: kept.text };
     },
     [drafts],
   );
-  const onDraft = useCallback((item: InboxItem, draft: InboxDraft) => {
-    setDrafts((standing) => new Map(standing).set(item.id, { revision: item.revision, draft }));
-  }, []);
+  const onDraft = useCallback(
+    (item: InboxItem, draft: InboxDraft) =>
+      writer.update(
+        {
+          kind: DRAFT_PLACE.INBOX,
+          planId: draftsOn,
+          agentId: item.agentId,
+          itemId: item.id,
+          revision: item.revision,
+        },
+        (was) => ({ ...was, text: draft.note, choices: draft.choices, values: draft.values }),
+      ),
+    [writer, draftsOn],
+  );
 
   return {
     board,

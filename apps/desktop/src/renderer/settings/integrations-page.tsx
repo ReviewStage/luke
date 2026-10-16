@@ -14,23 +14,34 @@ import {
 import { byName } from "@luke/features/integration-tool-model";
 import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
+  INTEGRATION_ACCOUNTS_MAX,
+  INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
+  integrationAccountLabel,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ChevronRightIcon, CloseIcon, ProviderMark, SearchIcon, TrashIcon } from "@luke/ui";
-import { serverGroups, serverRows } from "@luke/ui/agent-servers-model";
+import {
+  namedServers,
+  type ServerRow,
+  serverGroups,
+  serverRows,
+} from "@luke/ui/agent-servers-model";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { RefreshCwIcon } from "lucide-react";
+import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
@@ -47,7 +58,9 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
  *
- * One row per provider, under Connected or Not connected as the MCP popover
+ * One row per account at a provider (two Notion workspaces are two rows,
+ * "Notion · Acme" and "Notion · Personal", each its own grant), and one for
+ * a provider where the account holds none, under Connected or Not connected as the MCP popover
  * sections its servers (`../planning/agent-servers-model.ts`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
  * stands once that needs saying — connected with the count of its server's
@@ -60,7 +73,11 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * and Reconnect where a sign-in expired or a broken connection is mended by
  * one. A connected row that works stands quiet, and its ⋯ (or a right-click
  * on it) keeps Reconnect, which signs in with the provider again, beside
- * Disconnect, which asks first in the confirm dialog. GitHub is granted by the
+ * Disconnect, which asks first in the confirm dialog and ends that account
+ * alone. Where the provider offers more than one account, the ⋯ keeps Add
+ * another account, which begins a sign-in for a new one that stands pending
+ * as a row of its own until it settles; and where it holds more than one,
+ * Rename, which names the account in place. GitHub is granted by the
  * account's own GitHub (`integration-grant.ts`), which lets agents use
  * GitHub's tools as the developer and is linked nowhere else, as its ⋯ says
  * over its acts: its Connect links that GitHub in the browser, and its
@@ -123,9 +140,14 @@ const PAGE_LINE = {
 /** What a row offers to mend its connection, on its button or in its ⋯. */
 const ROW_ACT = {
   RECONNECT: "Reconnect",
+  ADD_ACCOUNT: "Add another account",
+  RENAME: "Rename",
 } as const;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
+const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 
 /** What a row's line looks like: connected with its dot, a problem in the attention tint, a wait with its ring, or plain. */
 const LINE_STATE = {
@@ -248,7 +270,7 @@ function ToolsLine({
   tools: RowTools;
 }): React.JSX.Element {
   return (
-    <small className="settings-state" data-state={LINE_STATE.CONNECTED}>
+    <small className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
       <button
         type="button"
@@ -415,30 +437,37 @@ function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Elem
 }
 
 /**
- * Disconnects one provider: a Connect grant at the service, and GitHub by
+ * Disconnects one account: a Connect grant at the service, and GitHub by
  * unlinking the account's GitHub under the Mac's session, whose refusal is
- * the window's toast, so the dialog closes either way.
+ * the window's toast, so the dialog closes either way. The integrations
+ * are read again after, so an account past the provider's first leaves the
+ * page with its row.
  */
-function disconnectProvider(
+function disconnectAccount(
   act: ActHandle["act"],
   github: GitHubConnectControl,
-  provider: IntegrationProvider,
-  settle: IntegrationStatuses["settle"],
+  row: ServerRow,
+  statuses: IntegrationStatuses,
 ): Promise<ActionResult> {
+  const { provider, connection, name } = row;
   const refused: ActionResult = {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: `Luke could not disconnect ${INTEGRATION_NAME[provider]}. Try again in a moment.`,
+    reason: `Luke could not disconnect ${name}. Try again in a moment.`,
   };
   if (grantedBySignIn(provider)) {
     return github.disconnect().then((disconnected) => {
-      if (disconnected) settle(provider, INTEGRATION_STATUS.DISCONNECTED);
+      if (disconnected) statuses.settle(provider, INTEGRATION_STATUS.DISCONNECTED);
       return ACCEPTED;
     });
   }
-  return act(ACT_KIND.INTEGRATIONS_DISCONNECT, { provider }).then(
+  return act(ACT_KIND.INTEGRATIONS_DISCONNECT, {
+    provider,
+    ...(connection === provider ? undefined : { connection }),
+  }).then(
     (answer: IntegrationStatusView) => {
       if ("failure" in answer) return refused;
-      settle(provider, answer.status);
+      statuses.settle(connection, answer.status);
+      void statuses.read();
       return ACCEPTED;
     },
     () => refused,
@@ -446,56 +475,83 @@ function disconnectProvider(
 }
 
 function IntegrationRow({
-  provider,
+  row,
   status,
   health,
   statuses,
   tools,
 }: {
-  provider: IntegrationProvider;
+  row: ServerRow;
   /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
   status: IntegrationStatus | undefined;
-  /** How a connected provider's server answered when asked for its tools. */
+  /** How a connected account's server answered when asked for its tools. */
   health: ConnectionHealth;
   statuses: IntegrationStatuses;
   tools: RowTools;
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
-  const name = INTEGRATION_NAME[provider];
-  const { settle, cancelSignIn } = statuses;
+  const { provider, connection, name, account } = row;
+  const { cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
   const bySignIn = grantedBySignIn(provider);
   const github = useGitHubConnection();
-  const signIn = statuses.signInOf(provider);
+  const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
+  // Several accounts at a provider each name themselves; one alone is the provider, as ever.
+  const several = row.accounts > 1 && account !== undefined;
+
+  /** How a grant begun went, said under the row where it could not begin. */
+  const began = (outcome: (typeof GRANT_OUTCOME)[keyof typeof GRANT_OUTCOME]) => {
+    setConnecting(false);
+    if (outcome === GRANT_OUTCOME.NOT_OPENED) setRejection(PAGE_LINE.NOT_OPENED);
+    if (outcome === GRANT_OUTCOME.REFUSED) {
+      setRejection(`Luke could not start connecting ${name}. Try again in a moment.`);
+    }
+  };
 
   const connect = useCallback(() => {
     setConnecting(true);
     setRejection(undefined);
-    void grant.begin(provider).then((outcome) => {
-      setConnecting(false);
-      if (outcome === GRANT_OUTCOME.NOT_OPENED) setRejection(PAGE_LINE.NOT_OPENED);
-      if (outcome === GRANT_OUTCOME.REFUSED) {
-        setRejection(`Luke could not start connecting ${name}. Try again in a moment.`);
-      }
-    });
-  }, [grant, provider, name]);
+    void grant.begin(connection).then(began);
+  }, [grant, connection, name]);
+
+  const addAccount = () => {
+    setConnecting(true);
+    setRejection(undefined);
+    void grant.add(provider).then(began);
+  };
 
   const cancel = useCallback(() => {
     setConnecting(true);
     setRejection(undefined);
-    void cancelSignIn(provider).then((cancelled) => {
+    void cancelSignIn(connection).then((cancelled) => {
       setConnecting(false);
       if (!cancelled)
         setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
     });
-  }, [cancelSignIn, provider, name]);
+  }, [cancelSignIn, connection, name]);
+
+  /** A rename ended: a new label asked of the service, and the integrations read again so every surface draws it. */
+  const renamed = ({ name: label }: NameEdit) => {
+    setEditing(false);
+    if (label === undefined || label === account?.label) return;
+    setRejection(undefined);
+    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then(
+      (answer) => {
+        if ("failure" in answer)
+          setRejection(`Luke could not rename ${name}. Try again in a moment.`);
+        void statuses.read();
+      },
+      () => setRejection(`Luke could not rename ${name}. Try again in a moment.`),
+    );
+  };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
-    disconnectProvider(act, github, provider, settle),
+    disconnectAccount(act, github, row, statuses),
   );
 
   const line = rowLine(provider, status, health, signIn);
@@ -515,22 +571,51 @@ function IntegrationRow({
     danger: true,
     onSelect: disconnect.ask,
   };
-  const actions = connected ? [...(broken ? [] : [reconnect]), leave] : [];
+  const naming = several
+    ? [{ label: ROW_ACT.RENAME, icon: <PencilIcon />, onSelect: () => setEditing(true) }]
+    : [];
+  const adding =
+    !bySignIn && statuses.canAdd(provider) && row.accounts < INTEGRATION_ACCOUNTS_MAX
+      ? [
+          {
+            label: ROW_ACT.ADD_ACCOUNT,
+            icon: <PlusIcon />,
+            disabled: connecting,
+            onSelect: addAccount,
+          },
+        ]
+      : [];
+  const actions = connected
+    ? [
+        [...naming, ...adding],
+        [...(broken ? [] : [reconnect]), leave],
+      ].filter((group) => group.length > 0)
+    : [];
   return (
     <>
       <MenuRow
         label={`${name} actions`}
         actions={actions}
-        anchor={provider}
+        anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
       >
         <span className="settings-row-mark">
           <ProviderMark provider={provider} />
         </span>
         <span className="settings-copy">
-          <strong>
-            <Highlighted text={name} tokens={tools.tokens} />
-          </strong>
+          {editing && account !== undefined ? (
+            <PlanNameField
+              name={integrationAccountLabel(account)}
+              className="settings-input integration-account-input"
+              label={`${name} account name`}
+              maxLength={INTEGRATION_LABEL_MAX}
+              onEnd={renamed}
+            />
+          ) : (
+            <strong>
+              <Highlighted text={name} tokens={tools.tokens} />
+            </strong>
+          )}
           {connected && tools.all.length > 0 ? (
             <ToolsLine name={name} panelId={panelId} tools={tools} />
           ) : line === undefined ? null : (
@@ -587,7 +672,11 @@ function IntegrationRow({
           title: `Disconnect ${name}?`,
           ...(bySignIn
             ? { body: "Coding agents lose GitHub until you connect it again." }
-            : undefined),
+            : several
+              ? {
+                  body: `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`,
+                }
+              : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
         }}
@@ -596,9 +685,9 @@ function IntegrationRow({
   );
 }
 
-/** One provider the page draws, and the tools a search found among its server's. */
+/** One account the page draws, and the tools a search found among its server's. */
 interface FoundRow {
-  readonly provider: IntegrationProvider;
+  readonly row: ServerRow;
   readonly health: ConnectionHealth;
   readonly all: readonly IntegrationTool[];
   /** The tools the search found, else every one. */
@@ -613,15 +702,20 @@ interface FoundRow {
  * opened onto the tools it found, else onto every one.
  */
 function foundRow(
-  provider: IntegrationProvider,
+  row: ServerRow,
   health: ConnectionHealth,
   tokens: readonly string[],
 ): FoundRow | undefined {
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
-  const match = matchIntegration(provider, all, tokens);
+  // An account's label finds its row too, so "personal" finds Notion · Personal.
+  const labelled =
+    row.accounts > 1 && tokens.every((token) => row.name.toLowerCase().includes(token));
+  const match =
+    matchIntegration(row.provider, all, tokens) ??
+    (labelled ? { named: true, tools: [] } : undefined);
   if (match === undefined) return undefined;
   return {
-    provider,
+    row,
     health,
     all,
     shown: shownTools(match, all),
@@ -629,13 +723,10 @@ function foundRow(
   };
 }
 
-/** A set with `provider` turned: taken out where it stood, put in where it did not. */
-function turned(
-  set: ReadonlySet<IntegrationProvider>,
-  provider: IntegrationProvider,
-): ReadonlySet<IntegrationProvider> {
+/** A set with `server` turned: taken out where it stood, put in where it did not. */
+function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
   const next = new Set(set);
-  if (!next.delete(provider)) next.add(provider);
+  if (!next.delete(server)) next.add(server);
   return next;
 }
 
@@ -651,14 +742,16 @@ function turned(
 function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const reads = useIntegrationTools(
-    INTEGRATION_PROVIDER_LIST.filter(
-      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
-    ),
+    namedServers({
+      statusOf: statuses.statusOf,
+      accountsOf: statuses.accountsOf,
+      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
+    }).map((server) => server.connection),
   );
-  const [opened, setOpened] = useState<ReadonlySet<IntegrationProvider>>(new Set());
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [turnedInSearch, setTurnedInSearch] = useState<{
     readonly query: string;
-    readonly providers: ReadonlySet<IntegrationProvider>;
+    readonly providers: ReadonlySet<string>;
   }>({ query: "", providers: new Set() });
   const { query } = filter;
 
@@ -669,7 +762,8 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
-  const healthOf = (provider: IntegrationProvider) => connectionHealth(provider, reads[provider]);
+  const healthOf = (server: string) =>
+    connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);
   // Note that the rows stand in the order of their names within each
   // section, so no provider is pinned above the rest by the order its value
   // set happens to list it in.
@@ -678,6 +772,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       statusOf: statuses.statusOf,
       healthOf,
       signInOf: statuses.signInOf,
+      accountsOf: statuses.accountsOf,
       readFailed: statuses.readFailed,
       disabled: [],
     }).toSorted((one, other) => one.name.localeCompare(other.name, "en")),
@@ -687,20 +782,22 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
     .map((group) => ({
       heading: group.heading,
       rows: group.rows.flatMap((row) => {
-        const kept = foundRow(row.provider, healthOf(row.provider), tokens);
+        const kept = foundRow(row, healthOf(row.connection), tokens);
         return kept === undefined ? [] : [kept];
       }),
     }))
     .filter((group) => group.rows.length > 0);
   // A turn made under an older query is forgotten with it.
-  const turnedNow: ReadonlySet<IntegrationProvider> =
+  const turnedNow: ReadonlySet<string> =
     turnedInSearch.query === query ? turnedInSearch.providers : new Set();
-  const expanded = (row: FoundRow) =>
-    tokens.length === 0 ? opened.has(row.provider) : row.toolsFound !== turnedNow.has(row.provider);
-  const toggle = (provider: IntegrationProvider) =>
+  const expanded = (found: FoundRow) =>
     tokens.length === 0
-      ? setOpened((now) => turned(now, provider))
-      : setTurnedInSearch({ query, providers: turned(turnedNow, provider) });
+      ? opened.has(found.row.connection)
+      : found.toolsFound !== turnedNow.has(found.row.connection);
+  const toggle = (server: string) =>
+    tokens.length === 0
+      ? setOpened((now) => turned(now, server))
+      : setTurnedInSearch({ query, providers: turned(turnedNow, server) });
   return (
     <>
       {statuses.readFailed ? (
@@ -716,19 +813,19 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       ) : null}
       {found.map((group) => (
         <SettingsGroup key={group.heading ?? "unread"} title={group.heading}>
-          {group.rows.map((row) => (
+          {group.rows.map((found) => (
             <IntegrationRow
-              key={row.provider}
-              provider={row.provider}
-              status={statuses.statusOf(row.provider)}
-              health={row.health}
+              key={found.row.connection}
+              row={found.row}
+              status={statuses.statusOf(found.row.connection)}
+              health={found.health}
               statuses={statuses}
               tools={{
-                shown: row.shown,
-                all: row.all,
-                found: row.toolsFound,
-                expanded: expanded(row),
-                onToggle: () => toggle(row.provider),
+                shown: found.shown,
+                all: found.all,
+                found: found.toolsFound,
+                expanded: expanded(found),
+                onToggle: () => toggle(found.row.connection),
                 tokens,
               }}
             />

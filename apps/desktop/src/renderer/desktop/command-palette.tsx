@@ -45,12 +45,15 @@
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
-import { GearIcon, SearchIcon } from "@luke/ui";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
+import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
+import { DOCUMENT_REGION, PLAN_MARK } from "@luke/ui/planning-model";
+import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { Command, defaultFilter } from "cmdk";
+import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APP_COMMAND,
@@ -61,17 +64,23 @@ import {
   commandForKey,
   isKeyedCommand,
   type KeyedCommand,
+  PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "#shared/shortcuts";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
+import { markReadItem } from "../planning/plan-menu-items";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
+import { type ReadMarks, useReadMarks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
+import { useWorkspaceMembers } from "../planning/use-workspace-members";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { settingsPageOf } from "../settings/pages";
@@ -84,6 +93,7 @@ import {
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
+import { planOf } from "./plan-actions";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -92,6 +102,7 @@ const PALETTE_FILTER = {
   ALL: "all",
   PLANS: "plans",
   AGENTS: "agents",
+  PEOPLE: "people",
   FILES: "files",
   ACTIONS: "actions",
   SETTINGS: "settings",
@@ -109,6 +120,7 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.PLANS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
+  [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
   [PALETTE_FILTER.SETTINGS]: "Settings",
@@ -116,9 +128,10 @@ const FILTER_LABEL = {
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search tasks, agents, files, actions, and settings…",
+  [PALETTE_FILTER.ALL]: "Search tasks, agents, people, files, actions, and settings…",
   [PALETTE_FILTER.PLANS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
+  [PALETTE_FILTER.PEOPLE]: "Search people…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
   [PALETTE_FILTER.SETTINGS]: "Search settings…",
@@ -152,7 +165,7 @@ type FilesRead =
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
   | { read: typeof FILES_READ.MISSED; notice: string };
 
-/** What the Files filter says while no plan with a repository is open. */
+/** What the Files filter says while no plan with a repository stands open, as under an agent's page. */
 const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
 /** What the Files filter says where the read did not land. */
@@ -207,15 +220,19 @@ const FILTER_HINT = {
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
 
-/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
-const PALETTE_COMMANDS: readonly AppCommand[] = [
+/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
   APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
+  ...PALETTE_COMMANDS,
 ];
 
 /** One row as the palette draws it, the words its search reads, and what choosing it does. */
+/** Words a Copy link row is found by beside its name. */
+const COPY_LINK_TERMS = ["link", "share", "url"] as const;
+
 interface PaletteRow {
   icon?: React.ReactNode;
   label: string;
@@ -223,8 +240,10 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's. */
+  /** The mark at the row's end: a failed agent's, or a teammate's task's creator's face. */
   endMark?: React.JSX.Element | undefined;
+  /** A task's creator's name, said after the detail where the query found it. */
+  creator?: string | undefined;
   /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
   card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
@@ -368,25 +387,48 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
 }
 
 /**
- * Every plan, the sidebar's first in its order, then the archived ones, each
+ * Every plan, the pinned first, then the rest by their last activity
+ * (`taskTime`), then the archived ones, each
  * in its tab's look, an archived one saying so in its detail. Within each,
  * the listed workspace's plans come first and every other workspace's after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it.
  */
-function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
+function planRows(
+  plans: PlansControl,
+  members: readonly WorkspaceMember[] | undefined,
+  open: (planId: string) => void,
+): readonly PaletteRow[] {
   const listedId = plans.workspace?.id;
+  // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
+  const creatorOf = (plan: PlanSummary) =>
+    teammateCreator(plan, {
+      members: plan.workspaceId === listedId ? members : undefined,
+      readerId: plans.me,
+    });
   const elsewhereOf = (plan: PlanSummary): Workspace | undefined =>
     listedId === undefined || plan.workspaceId === listedId
       ? undefined
       : plans.workspaces.find((each) => each.id === plan.workspaceId);
   const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
     const elsewhere = elsewhereOf(plan);
+    const creator = creatorOf(plan);
+    const createdBy = plan.createdBy?.name ?? null;
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
       detail: planDetail(plan, archived),
       workspace: elsewhere,
-      terms: [plan.name, plan.repository, elsewhere?.name ?? null].filter((term) => term !== null),
+      endMark:
+        creator === undefined ? undefined : (
+          <>
+            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+            <CreatorHeard actor={creator} />
+          </>
+        ),
+      creator: createdBy ?? undefined,
+      terms: [plan.name, plan.repository, elsewhere?.name ?? null, createdBy].filter(
+        (term) => term !== null,
+      ),
       onChoose: () => open(plan.id),
     };
   };
@@ -394,8 +436,17 @@ function planRows(plans: PlansControl, open: (planId: string) => void): readonly
     ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
     ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
   ];
+  // The pinned stand first, as the sidebar's; the rest by their last
+  // activity, as the sidebar, Home's Recent, and the row's time read it.
+  const standing = [
+    ...plans.plans.filter((plan) => plan.pinnedAt !== undefined),
+    ...orderTasks(
+      plans.plans.filter((plan) => plan.pinnedAt === undefined),
+      TASK_ORDER.UPDATED,
+    ),
+  ];
   return [
-    ...listedFirst(plans.plans).map((plan) => row(plan, false)),
+    ...listedFirst(standing).map((plan) => row(plan, false)),
     ...listedFirst(plans.archived).map((plan) => row(plan, true)),
   ];
 }
@@ -425,13 +476,16 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     ...entry,
     onPick: () => plans.onShowAgent(planId, entry.row.id),
   }));
-  const subagents = panelEntries({
-    panel: plans.sidePanel,
-    kinds: [],
-    workers,
-    files: [],
-    changes: changesOffers(plans.agents, plans.sidePanel.changes),
-  }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }));
+  // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
+  const subagents = holdsPlanPanel(plans)
+    ? panelEntries({
+        panel: plans.sidePanel,
+        kinds: [],
+        workers,
+        files: [],
+        changes: changesOffers(plans.agents, plans.sidePanel.changes),
+      }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }))
+    : [];
   const entries = [...inbox, ...agents, ...subagents];
   return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
@@ -450,10 +504,33 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   }));
 }
 
+/**
+ * The listed workspace's members, the reader among them, each by their
+ * face, name, and role, found by their name and email, a choice opening
+ * their page; none until the members are read.
+ */
+function peopleRows(
+  members: readonly WorkspaceMember[] | undefined,
+  readerId: string | undefined,
+  open: (userId: string) => void,
+): readonly PaletteRow[] {
+  return (members ?? []).map((member) => ({
+    icon: <ActorMark actor={memberActor(member, readerId)} />,
+    label: member.name,
+    detail:
+      member.userId === readerId ? `You · ${ROLE_WORDS[member.role]}` : ROLE_WORDS[member.role],
+    terms: [member.name, member.email],
+    onChoose: () => open(member.userId),
+  }));
+}
+
 /** The commands offered now, the palette's own left out, each with its chord. */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
-  return PALETTE_COMMANDS.filter(
-    (command) => command !== APP_COMMAND.COMMAND_PALETTE && appCommandOffered(command),
+  return LISTED_COMMANDS.filter(
+    (command) =>
+      command !== APP_COMMAND.COMMAND_PALETTE &&
+      command !== APP_COMMAND.COPY_LINK &&
+      appCommandOffered(command),
   ).map((command) => ({
     label: appCommandLabel(command),
     command: isKeyedCommand(command) ? command : undefined,
@@ -462,25 +539,134 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   }));
 }
 
+/** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
+function holdsPlanPanel(plans: PlansControl): boolean {
+  return plans.agentView.agentId === undefined;
+}
+
+/**
+ * Copy link to each thing the window can copy a link to now, the most
+ * specific first (`links-at-hand.ts`), named by what it is and, where the
+ * window holds it, its name; the first wears ⌥⌘C, which copies it.
+ */
+function copyLinkRows(
+  links: readonly LinkAtHand[],
+  copy: (held: LinkAtHand) => void,
+): readonly PaletteRow[] {
+  return links.map((held, index) => {
+    const label = `${appCommandLabel(APP_COMMAND.COPY_LINK)} to ${held.thing}`;
+    return {
+      icon: <LinkIcon aria-hidden="true" />,
+      label,
+      detail: held.name,
+      command: index === 0 ? APP_COMMAND.COPY_LINK : undefined,
+      terms: [label, ...COPY_LINK_TERMS],
+      onChoose: () => copy(held),
+    };
+  });
+}
+
 /**
  * The side panel's kinds, listed with the commands as Show board and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
  * its tab as the panel's "+" does, over the version history; none while
- * the plan is not drawn, since there is no panel to show. No chord reaches
+ * the plan is not drawn, since there is no panel to show, nor while an
+ * agent's page holds the panel, which is that agent's. No chord reaches
  * them.
  */
 function panelTabRows(
   plans: PlansControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  if (plans.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(plans)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
     const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
     return { icon: look.icon, label, terms: [label], onChoose: () => show(pick) };
   });
+}
+
+/**
+ * Mark as unread for the plan on screen, or Mark as read once it is marked
+ * so, as the plan's menus offer it; none while no plan is looked at. Note
+ * that a plan Settings or the Inbox covers is offered nothing, because the
+ * row does not name the plan, and going back to it opens it, which takes
+ * the mark back before it is ever seen. No chord reaches it, since Mail's
+ * ⇧⌘U is Automations' here.
+ */
+function readMarkRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  const { plan } = plans.region;
+  if (plan.id !== reads.watched) return [];
+  const item = markReadItem({
+    unread: reads.markedUnread(plan.id),
+    onMark: (unread) => reads.mark(plan, unread),
+  });
+  return [
+    {
+      icon: item.icon,
+      label: item.label,
+      terms: [item.label],
+      onChoose: () => choose(item.onSelect),
+    },
+  ];
+}
+
+/**
+ * Pin task, or Unpin task once it is pinned, for the plan on screen, as its
+ * sidebar row's menu offers it: the reader's own pin, through the same mark.
+ * None while no plan is looked at, nor for an archived plan, which offers
+ * no pin.
+ */
+function planPinRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const plan = reads.watched === undefined ? undefined : planOf(plans, reads.watched);
+  if (plan === undefined || plan.archivedAt !== undefined) return [];
+  const pinned = plan.pinnedAt !== undefined;
+  const label = pinned ? "Unpin task" : "Pin task";
+  const mark = pinned ? PLAN_MARK.UNPIN : PLAN_MARK.PIN;
+  return [
+    {
+      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      label,
+      terms: [label],
+      onChoose: () => choose(() => plans.onMarkPlan(plan.id, mark)),
+    },
+  ];
+}
+
+/**
+ * Pin agent, or Unpin agent once it is pinned, for the agent whose page
+ * stands, as its sidebar row's menu offers it: the reader's own pin. None
+ * while no agent's page stands, nor for an archived agent, which offers no
+ * pin, as an archived task's row offers none.
+ */
+function agentPinRows(
+  plans: PlansControl,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const { agentId } = plans.agentView;
+  const agent = plans.listedAgents.standing.find((each) => each.id === agentId);
+  if (agent === undefined) return [];
+  const pinned = agent.pinnedAt !== undefined;
+  const label = pinned ? "Unpin agent" : "Pin agent";
+  return [
+    {
+      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      label,
+      terms: [label],
+      onChoose: () => choose(() => plans.onPinAgent(agent.id, !pinned)),
+    },
+  ];
 }
 
 /** Every Settings page, in the sidebar's order, under its own glyph and name. */
@@ -513,22 +699,42 @@ function settingRows(
   }));
 }
 
+/**
+ * Whether a row's creator explains why the query found it: their name holds a
+ * word of the query, or the query reaches the row only with the name among
+ * its words, as a loose match on the name, or one running from the task's
+ * name into its creator's, does.
+ */
+function creatorExplains(row: PaletteRow, query: string, tokens: readonly string[]): boolean {
+  const { creator } = row;
+  if (creator === undefined || tokens.length === 0) return false;
+  if (matchRanges(creator, tokens).length > 0) return true;
+  const others = row.terms.filter((term) => term !== creator).join(" ");
+  return fuzzyScore(others, query) === 0;
+}
+
 function PaletteItem({
   row,
   value,
+  query,
   tokens,
 }: {
   row: PaletteRow;
   value: string;
+  query: string;
   tokens: readonly string[];
 }): React.JSX.Element {
+  // A task found by its creator's name says the name after its detail, so the match is in sight.
+  const detail = creatorExplains(row, query, tokens)
+    ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
+    : row.detail;
   const item = (
     <Command.Item className="menu-item" value={value} onSelect={row.onChoose}>
       {row.icon === undefined ? null : <span className="menu-item-glyph">{row.icon}</span>}
       <span className="command-palette-name">
         <Highlighted text={row.label} tokens={tokens} />
       </span>
-      {row.detail === undefined && row.workspace === undefined ? null : (
+      {detail === undefined && row.workspace === undefined ? null : (
         <span className="command-palette-detail">
           {row.workspace === undefined ? null : (
             <WorkspaceRef
@@ -536,8 +742,8 @@ function PaletteItem({
               name={<Highlighted text={row.workspace.name} tokens={tokens} />}
             />
           )}
-          {row.workspace === undefined || row.detail === undefined ? null : " · "}
-          {row.detail === undefined ? null : <Highlighted text={row.detail} tokens={tokens} />}
+          {row.workspace === undefined || detail === undefined ? null : " · "}
+          {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
         </span>
       )}
       {/* Spoken, since a palette row is an option, which carries no
@@ -613,6 +819,7 @@ export function CommandPalette({
   tab,
   onTabChange,
   plans,
+  links,
   settings,
   readFiles,
 }: {
@@ -620,6 +827,8 @@ export function CommandPalette({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
+  /** The links the window can copy now, the most specific first, and their copy (`useCopyLink`). */
+  links: CopyLink;
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
@@ -642,6 +851,8 @@ export function CommandPalette({
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
   const invoker = useRef<HTMLElement | null>(null);
+  // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
+  const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
   const field = useRef<HTMLInputElement>(null);
@@ -652,6 +863,7 @@ export function CommandPalette({
       ? () => {
           invoker.current =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setFromPanel(inSidePanel(document.activeElement));
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
           // The files are read afresh by the first search of each opening,
@@ -742,6 +954,9 @@ export function CommandPalette({
   };
 
   const tokens = searchTokens(query);
+  // The listed workspace's members, read once for it, name a teammate's task's creator by face.
+  const members = useWorkspaceMembers(plans.workspace);
+  const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const planId = plans.activePlanId;
   const repository =
@@ -751,7 +966,9 @@ export function CommandPalette({
     files !== undefined && files.planId === planId && files.repository === repository
       ? files
       : undefined;
-  const filesAsked = open && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
+  // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
+  const filesOpen = holdsPlanPanel(plans) && planId !== undefined && repository !== null;
+  const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
@@ -789,14 +1006,21 @@ export function CommandPalette({
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
     [PALETTE_FILTER.PLANS]: () => [
-      plans.signedIn ? planRows(plans, (id) => onPlans(() => plans.onSelect(id))) : [],
+      plans.signedIn ? planRows(plans, members, (id) => onPlans(() => plans.onSelect(id))) : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onPlans)],
+    [PALETTE_FILTER.PEOPLE]: () => [
+      peopleRows(members, plans.me, (userId) => onPlans(() => plans.personView.onOpen(userId))),
+    ],
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
+        ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
+        ...readMarkRows(plans, reads, choose),
+        ...planPinRows(plans, reads, choose),
+        ...agentPinRows(plans, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
@@ -807,7 +1031,7 @@ export function CommandPalette({
     onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
-      ? matchedPaths.map((path) =>
+      ? (filesOpen ? matchedPaths : []).map((path) =>
           fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
@@ -821,11 +1045,12 @@ export function CommandPalette({
         .map((kind) => ({ kind, rows: rowsFor(kind) }))
         .filter((section) => section.rows.length > 0)
     : [];
-  const notice =
-    filter === PALETTE_FILTER.FILES
-      ? filesNotice(planId !== undefined && repository !== null, held)
-      : undefined;
-  const cut = filter === PALETTE_FILTER.FILES && held?.read === FILES_READ.LISTED && held.truncated;
+  const notice = filter === PALETTE_FILTER.FILES ? filesNotice(filesOpen, held) : undefined;
+  const cut =
+    filesOpen &&
+    filter === PALETTE_FILTER.FILES &&
+    held?.read === FILES_READ.LISTED &&
+    held.truncated;
   let place = 0;
 
   return (
@@ -852,7 +1077,7 @@ export function CommandPalette({
         />
       </div>
       <FilterChips filter={filter} onFilter={changeFilter} />
-      <Command.List className="command-palette-list" label="Results">
+      <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
           <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
         ) : (
@@ -862,7 +1087,15 @@ export function CommandPalette({
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
             {section.rows.map((row) => {
               place += 1;
-              return <PaletteItem key={place} row={row} value={String(place)} tokens={tokens} />;
+              return (
+                <PaletteItem
+                  key={place}
+                  row={row}
+                  value={String(place)}
+                  query={query}
+                  tokens={tokens}
+                />
+              );
             })}
           </Command.Group>
         ))}

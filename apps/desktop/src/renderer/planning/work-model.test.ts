@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import {
   PLAN_WORK_STATE,
   type PlanWorkState,
@@ -126,9 +126,9 @@ test("a finished turn folds everything ahead of its last words into one line say
 test("a finished turn's calls ahead of its words are folded once, under the lead's line, never a group inside it, whether they ran in one step or across several", () => {
   const rows = rowsOf([
     workTurn(PLAN_WORK_STATE.DONE, [
-      toolCall(AGENT_TOOL.LIST_CODING_AGENTS, "a", {}, { output: [] }),
-      toolCall(AGENT_TOOL.READ_CODING_AGENT, "b", { agentId: "agent-1" }, { output: {} }),
-      toolCall(AGENT_TOOL.READ_CODING_AGENT, "c", { agentId: "agent-2" }, { output: {} }),
+      toolCall(AGENT_TOOL.LIST_AGENTS, "a", {}, { output: [] }),
+      toolCall(AGENT_TOOL.READ_AGENT, "b", { agentId: "agent-1" }, { output: {} }),
+      toolCall(AGENT_TOOL.READ_AGENT, "c", { agentId: "agent-2" }, { output: {} }),
       words("Both agents are done."),
     ]),
   ]);
@@ -202,13 +202,14 @@ test("a finished turn's fold names the coding agents it started apart from its t
   };
   const started = (id: string, agent: string) =>
     toolCall(
-      AGENT_TOOL.START_CODING_AGENT,
+      AGENT_TOOL.START_AGENT,
       id,
       { task: "Investigate a Tailwind migration." },
       { output: { status: "accepted", agent: { id: agent, modelName: "Opus 5.5" } } },
     );
+  // A start journaled under the tool's earlier name reads as one.
   const refused = toolCall(
-    AGENT_TOOL.START_CODING_AGENT,
+    RETIRED_TOOL.START_CODING_AGENT,
     "r",
     { task: "Fix the invite emails." },
     { output: { status: "rejected", reason: "The plan has no repository." } },

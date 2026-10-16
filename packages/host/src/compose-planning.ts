@@ -35,8 +35,12 @@ import {
   type PlanningFileAnswer,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningLinearIssuesAnswer,
   type PlanningMoveAnswer,
   type PlanningPageAnswer,
+  type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
+  type PlanningPullRequestAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -58,11 +62,15 @@ import {
   planningBoardSaveParamsSchema,
   planningEditParamsSchema,
   planningFileParamsSchema,
+  planningLinearIssuesParamsSchema,
   planningMessagesParamsSchema,
   planningMoveParamsSchema,
   planningPageParamsSchema,
+  planningPictureKeepParamsSchema,
+  planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
+  planningPullRequestParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesParamsSchema,
   planningRevisionParamsSchema,
@@ -280,10 +288,15 @@ export type PlanningClient = Pick<
   | "readFile"
   | "readTree"
   | "readSkills"
+  | "readRepositoryTree"
+  | "readRepositorySkills"
+  | "readRepositoryPullRequest"
   | "readRevisions"
   | "readRevision"
   | "readPages"
   | "readPageVersion"
+  | "readPicture"
+  | "keepPicture"
   | "restore"
   | "repositories"
   | "setRepository"
@@ -299,7 +312,10 @@ export type PlanningClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "members"
+    | "linearConnect"
+    | "linearDisconnect"
+    | "linearIssues"
+    | "people"
     | "photo"
     | "removeMember"
     | "changeRole"
@@ -499,7 +515,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // failed beside the plans it already drew rather than emptying them.
     write(
       listed.ok
-        ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
+        ? {
+            plans: listed.answer.plans,
+            planlessAgents: listed.answer.planlessAgents ?? [],
+            listStatus: PLANNING_READ.READY,
+          }
         : { listStatus: PLANNING_READ.FAILED },
     );
   });
@@ -1162,12 +1182,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningTreeParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("listing a folder names a plan and the folder's path");
+          return yield* invalid(
+            "listing a folder names a plan, or a workspace and its repository, and the folder's path",
+          );
         }
         if (!gate()) return carried<PlanningTreeAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        const { planId, ...folder } = read.success;
+        const asked = read.success;
+        const folder = {
+          path: asked.path,
+          ...(asked.recursive === undefined ? undefined : { recursive: asked.recursive }),
+        };
         const answer = yield* Effect.provide(
-          client.readTree(planId, folder),
+          "planId" in asked
+            ? client.readTree(asked.planId, folder)
+            : client.readRepositoryTree(asked, folder),
           FetchHttpClient.layer,
         );
         return carried<PlanningTreeAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
@@ -1178,16 +1206,41 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningSkillsParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("reading a repository's skills names the plan");
+          return yield* invalid(
+            "reading a repository's skills names the plan, or a workspace and its repository",
+          );
         }
         if (!gate()) {
           return carried<PlanningSkillsAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         }
+        const asked = read.success;
         const answer = yield* Effect.provide(
-          client.readSkills(read.success.planId),
+          "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
           FetchHttpClient.layer,
         );
         return carried<PlanningSkillsAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      }),
+    // A pull request is answered to the link that asked and held nowhere:
+    // its title and where it stands are read again on the next ask.
+    [GATEWAY_METHOD.PLANNING_PULL_REQUEST]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPullRequestParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a pull request names a workspace, its repository, and the pull request's number",
+          );
+        }
+        if (!gate()) {
+          return carried<PlanningPullRequestAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { number, ...place } = read.success;
+        const answer = yield* Effect.provide(
+          client.readRepositoryPullRequest(place, number),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPullRequestAnswer>(
+          answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+        );
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
@@ -1243,6 +1296,38 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         return carried<PlanningPageAnswer>(
           page === undefined ? { failure: PLAN_CALL_FAILURE.UNANSWERED } : { page },
         );
+      }),
+    // A picture's bytes are answered to the window that asked and held
+    // nowhere, so they never enter the view every window is told.
+    [GATEWAY_METHOD.PLANNING_PICTURE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPictureParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading a picture names a plan and the picture");
+        if (!gate()) {
+          return carried<PlanningPictureAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const picture = yield* Effect.provide(
+          client.readPicture(read.success.planId, read.success.attachmentId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPictureAnswer>(picture);
+      }),
+    // The picture is kept and its id answered to the editor that took it;
+    // the plan's text names it once the editor lays its address in.
+    [GATEWAY_METHOD.PLANNING_PICTURE_KEEP]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPictureKeepParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("keeping a picture names a plan and the picture");
+        if (!gate()) {
+          return carried<PlanningPictureKeepAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const kept = yield* Effect.provide(
+          client.keepPicture(read.success.planId, read.success.picture),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPictureKeepAnswer>(kept);
       }),
     // The service answers the plan as restored, so the list's row and the
     // open document take it in place and nothing is read again.
@@ -1604,7 +1689,54 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
         );
       }),
-    // The members are answered to the window that asked and held nowhere:
+    // Vercel Connect's address is answered to the caller that opens it and
+    // held nowhere: the grant lands in the browser, and the workspaces read
+    // after it, as the panel comes forward, carry the connection.
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("connecting Linear names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
+        const begun = yield* Effect.provide(
+          client.workspaces.linearConnect(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        // The sign-in finishes in the browser, so the panel coming forward again reads the workspaces whatever the bound says.
+        workspacesAskedAt = undefined;
+        return carried<PlanningWorkspaceGitHubConnectAnswer>(
+          begun.ok ? { url: begun.answer } : { failure: begun.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("disconnecting Linear names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const disconnected = yield* workspaceCall(
+          client.workspaces.linearDisconnect(read.success.workspaceId),
+          { plans: false },
+        );
+        return carried<PlanningWorkspaceAnswer>(
+          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
+        );
+      }),
+    // The issues are answered to the window that asked and held nowhere: a
+    // picker reads them as it opens and as its search changes.
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningLinearIssuesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading Linear issues names a workspace");
+        if (!gate()) return carried<PlanningLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
+        const listed = yield* Effect.provide(
+          client.workspaces.linearIssues(read.success),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningLinearIssuesAnswer>(
+          listed.ok ? { issues: listed.answer } : { failure: listed.failure },
+        );
+      }),
+    // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:
     // it keeps what it read, and reads again as it opens. A read moves
     // nothing, so nothing else is read with it.
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
@@ -1612,12 +1744,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const read = readEither(planningWorkspaceMembersParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
         if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const members = yield* Effect.provide(
-          client.workspaces.members(read.success.workspaceId),
+        const people = yield* Effect.provide(
+          client.workspaces.people(read.success.workspaceId),
           FetchHttpClient.layer,
         );
         return carried<PlanningWorkspaceMembersAnswer>(
-          members.ok ? { members: members.answer } : { failure: members.failure },
+          !people.ok
+            ? { failure: people.failure }
+            : people.answer.former.length === 0
+              ? { members: people.answer.members }
+              : { members: people.answer.members, former: people.answer.former },
         );
       }),
     // A photo is answered to the window that asked and held nowhere, as

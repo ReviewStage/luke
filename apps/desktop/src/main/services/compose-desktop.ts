@@ -14,7 +14,7 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -22,6 +22,7 @@ import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
 import { askEndCallAndQuit } from "../window/quit-dialog";
+import { type AvatarLink, linkAvatar } from "./avatar-link";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
@@ -52,6 +53,10 @@ export interface DesktopServices {
   readonly windows: WindowService;
   /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
   readonly notices: AgentNotices;
+  /** Posts Settings' test notification now, whose click brings Luke's window forward. */
+  readonly testNotification: () => void;
+  /** Luke's avatar as the host holds it, which the panel's acts reach. */
+  readonly avatar: AvatarLink;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
@@ -204,6 +209,14 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
+      // The host's avatar, bound from the launch on: its grants to the panel
+      // alone and where it stands to the document.
+      const avatar = yield* linkAvatar({
+        host: host.avatar,
+        state,
+        panel: windows.panels,
+        setVideo: (on) => operator.host.setVideo(on),
+      });
       // A quit asked for while a call stands asks first, as a call app does,
       // and nothing else holds one.
       quit.holdWhile(
@@ -223,8 +236,20 @@ export function composeDesktop(
       // handed to the panels' toast. Whose inbox is read follows the
       // document's account, which the launch's bootstrap writes as well as
       // every change after it.
+      const noticeDoors = electronNoticeDoors({
+        toPanels: windows.toastAgentEnd,
+        inboxToPanels: windows.toastInboxItem,
+        failedRunToPanels: windows.toastFailedRun,
+        onAnswered: (status) => {
+          if (state.snapshot().notifications.status !== status) {
+            state.update({ notifications: { status } });
+          }
+        },
+        report: config.report,
+      });
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
+        readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
         planName: (planId) => noticePlanTitle(state.snapshot().planning, planId),
         open: (place) => {
@@ -258,20 +283,33 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInboxItem(item);
         },
+        openFailedRun: (place) => {
+          windows.panels.focusExpanded();
+          windows.showFailedRun(place);
+        },
+        automationsOn: () =>
+          experimentOn(
+            state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
+            EXPERIMENT.AUTOMATIONS,
+          ),
         report: config.report,
-      }).pipe(
-        Effect.provideService(
-          AgentNoticeDoors,
-          electronNoticeDoors({
-            toPanels: windows.toastAgentEnd,
-            inboxToPanels: windows.toastInboxItem,
-            onRefused: (refused) => {
-              if (state.snapshot().notifications.refused !== refused) {
-                state.update({ notifications: { refused } });
-              }
-            },
-            report: config.report,
-          }),
+      }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
+      // The agents with no plan each list read carries are the notices' to
+      // hold, as every answer naming an agent is. A note that throws is
+      // reported rather than left to end the fiber, which would never resume.
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Stream.changes(Stream.map(state.changes, (document) => document.planning.planlessAgents)),
+          (agents) =>
+            Effect.catchDefect(
+              Effect.sync(() => notices.observePlanless(agents ?? [])),
+              (defect) =>
+                Effect.sync(() =>
+                  config.report(
+                    `the agents with no plan could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+                  ),
+                ),
+            ),
         ),
       );
       // A panel coming forward reads the account's workspaces again, which
@@ -307,7 +345,19 @@ export function composeDesktop(
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
-      return { config, state, telemetry, native, updates, operator, windows, notices, run };
+      return {
+        config,
+        state,
+        telemetry,
+        native,
+        updates,
+        operator,
+        windows,
+        notices,
+        testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
+        avatar,
+        run,
+      };
     }),
   );
 

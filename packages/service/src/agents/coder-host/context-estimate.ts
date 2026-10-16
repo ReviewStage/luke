@@ -4,6 +4,13 @@ import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
 import { SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL } from "../../plans/picture-look.js";
+import {
+  LIST_AGENTS_TOOL,
+  LIST_TASKS_TOOL,
+  MESSAGE_AGENT_TOOL,
+  START_AGENT_TOOL,
+} from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
@@ -11,7 +18,10 @@ import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { OPEN_PULL_REQUEST_TOOL } from "./pull-request.js";
 import { bashStartingIn } from "./shell.js";
+import { SHOW_IMAGE_TOOL } from "./show-image.js";
+import { SLEEP_TOOL } from "./sleep.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -24,7 +34,7 @@ import { CODER_TOOL } from "./tool-set.js";
  * so they are estimated here the way eve's own compaction estimates a
  * message, the bytes of its JSON over four: the instructions the session
  * runs under, the definitions of the tools the coder project authors
- * (`coder/tools/`), built from the same functions and words those files
+ * (`apps/dev/tools/`), built from the same functions and words those files
  * are, and the plan or task the agent was handed as its first message. The tools are the same
  * for every agent, so they are estimated once, as the module loads, which
  * is in eve's service alone: this module reaches eve's tools, which no
@@ -72,6 +82,10 @@ const AUTHORED_TOOLS = {
     description: EDIT_PLAN_TOOL.description,
     inputSchema: emitJsonSchema(EDIT_PLAN_TOOL.inputSchema),
   },
+  [CODER_TOOL.LOOK_AT_PICTURE]: {
+    description: LOOK_AT_PICTURE_TOOL.description,
+    inputSchema: emitJsonSchema(LOOK_AT_PICTURE_TOOL.inputSchema),
+  },
   [CODER_TOOL.WRITE_TODOS]: {
     description: TODOS_TOOL.description,
     inputSchema: emitJsonSchema(TODOS_TOOL.inputSchema),
@@ -88,6 +102,26 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.OPEN_PULL_REQUEST]: {
+    description: OPEN_PULL_REQUEST_TOOL.description,
+    inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_AGENTS]: {
+    description: LIST_AGENTS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_AGENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.MESSAGE_AGENT]: {
+    description: MESSAGE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.START_AGENT]: {
+    description: START_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_TASKS]: {
+    description: LIST_TASKS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
@@ -97,6 +131,11 @@ const AUTHORED_TOOLS = {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
   },
+  [CODER_TOOL.SHOW_IMAGE]: {
+    description: SHOW_IMAGE_TOOL.description,
+    inputSchema: emitJsonSchema(SHOW_IMAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.SLEEP]: shown(SLEEP_TOOL),
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */

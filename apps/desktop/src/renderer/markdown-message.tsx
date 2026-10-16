@@ -1,7 +1,11 @@
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
-import { type ReactNode, useMemo } from "react";
+import { isWireString } from "@luke/wire";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PlanDiagram } from "./plan-diagram";
 import { TextLink } from "./text-link";
 
 const SAFE_LINK = /^https?:\/\//i;
@@ -144,6 +148,23 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
 }
 
 /**
+ * A picture inside the change mark that covers it whole, so a picture
+ * written in or struck out reads as the change it is; one no mark covers is
+ * left as it is, since a picture holds no words to cut.
+ */
+function markedPicture(picture: HastNode, start: number, end: number, walk: EditWalk): HastNode {
+  const mark = walk.edit.marks?.find((each) => each.from <= start && end <= each.to);
+  if (mark === undefined || picture.type !== "element") return picture;
+  const drawn = MARK_DRAWN[mark.kind];
+  return {
+    type: "element",
+    tagName: drawn.tagName,
+    properties: { className: [drawn.className] },
+    children: [picture],
+  };
+}
+
+/**
  * Draws an edit over a parent's children in place. Every node carries its
  * place in the words, so the edit is made on the drawn tree rather than on
  * the Markdown, and a half-typed emphasis or list is still drawn whole. The
@@ -180,6 +201,10 @@ function editChildren(
       if (reaches) walk.caretPlaced = true;
       return;
     }
+    if (child.type === "element" && child.tagName === "img") {
+      kept.push(markedPicture(child, start, end, walk));
+      return;
+    }
     if (child.type === "element") {
       editChildren(child, start, end, walk);
       const caret = walk.edit.caret;
@@ -195,11 +220,54 @@ function editChildren(
   parent.children.splice(0, original.length, ...(kept as typeof parent.children));
 }
 
+/** The lines a fenced block opens on. */
+const FENCE_OPENINGS = ["```", "~~~"] as const;
+
+/** Whether a run of text inside a block is that block's code. */
+function isCodeOf(parent: HastParent, code: HastElement): boolean {
+  return parent.type === "element" && parent.tagName === "pre" && code.tagName === "code";
+}
+
+/**
+ * Gives each fenced block's code its place in the words, which the tree
+ * leaves off the run of text the code is, so an edit marks, hides, and
+ * places the caret inside code as it does anywhere else. A fence's code is
+ * the words letter for letter from the line after its opening one, unless
+ * it stands in a list or a quote, whose lines lose their indent; a code that
+ * does not read back from there keeps no place, and is drawn whole.
+ */
+function placeFencedCode(parent: HastParent, words: string): void {
+  for (const child of parent.children) {
+    if (child.type !== "element") continue;
+    const opened = child.position?.start;
+    const [text, ...rest] = child.children;
+    if (!isCodeOf(parent, child) || opened?.offset === undefined) {
+      placeFencedCode(child, words);
+      continue;
+    }
+    if (text?.type !== "text" || rest.length > 0 || text.position !== undefined) continue;
+    const fenced = FENCE_OPENINGS.some((opening) => words.startsWith(opening, opened.offset));
+    const from = words.indexOf("\n", opened.offset) + 1;
+    if (!fenced || from === 0 || !words.startsWith(text.value, from)) continue;
+    const lines = text.value.split("\n");
+    text.position = {
+      start: { line: opened.line + 1, column: 1, offset: from },
+      end: {
+        line: opened.line + lines.length,
+        column: (lines.at(-1)?.length ?? 0) + 1,
+        offset: from + text.value.length,
+      },
+    };
+  }
+}
+
 /** The rehype step that draws a message mid-edit, the caret at the end of the drawing when its offset falls past every run. */
 const drawEdit =
-  (edit: MarkdownEdit, end: number) =>
+  (edit: MarkdownEdit, words: string) =>
   (tree: HastParent): void => {
+    const end = words.length;
     const walk: EditWalk = { edit, end, caretPlaced: false };
+    placeFencedCode(tree, words);
     editChildren(tree, 0, end, walk);
     if (edit.caret !== undefined && !walk.caretPlaced) {
       lastParent(tree).children.push(structuredClone(CARET));
@@ -250,6 +318,43 @@ const markFound =
     for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
   };
 
+/** Whether a node is a link the place draws itself, a mention's chip say. */
+function isDrawnLink(node: HastElementChild, link: LinkDrawer): boolean {
+  if (node.type !== "element" || node.tagName !== "a") return false;
+  const href = node.properties.href;
+  // Note that a link whose label a change marks in part is drawn as words, which must still wrap (`drawnMarked`).
+  if (marksOf(node) === LINK_MARKS.MIXED) return false;
+  return isWireString(href) && link(href, labelOf(node)) !== undefined;
+}
+
+/** An element's children, and theirs, with each link the place draws itself held with the punctuation written against it (`link-glue.ts`). */
+function gluedChildren(element: HastElement, link: LinkDrawer): HastElementChild[] {
+  for (const child of element.children) {
+    if (child.type === "element" && !isDrawnLink(child, link))
+      child.children = gluedChildren(child, link);
+  }
+  return gluedRun<HastElementChild>(element.children, {
+    held: (child) => isDrawnLink(child, link),
+    text: (value) => ({ type: "text", value }),
+    box: (inside) => ({
+      type: "element",
+      tagName: "span",
+      properties: { className: [LINK_GLUE.CLASS] },
+      children: inside,
+    }),
+    markWords: (child) => (isMark(child) ? wordsOf(child) : undefined),
+  });
+}
+
+/** The rehype step that holds every drawn link with the punctuation written against it, so a comma never starts a line alone after a chip. */
+const glueDrawnLinks =
+  (link: LinkDrawer) =>
+  (tree: HastParent): void => {
+    for (const child of tree.children) {
+      if (child.type === "element") child.children = gluedChildren(child, link);
+    }
+  };
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -275,7 +380,9 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
- * to draw in a caption, so its alternative words stand in for it.
+ * to draw in a caption, so its alternative words stand in for it. A fence
+ * is its code, and a Mermaid one draws as its diagram only where the place
+ * showing the words asks for it (`diagrams`), as a plan's page does.
  */
 const COMPONENTS: Components = {
   a: ({ href, children, node }) => plainLink(href, children, node, undefined),
@@ -286,6 +393,7 @@ const COMPONENTS: Components = {
   h5: ({ children }) => heading(5, children),
   h6: ({ children }) => heading(6, children),
   img: ({ alt }) => <>{alt ?? ""}</>,
+  blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
 /** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
@@ -309,6 +417,17 @@ function plainLink(
  * and its label's words; nothing for one it leaves drawn as any link is.
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+
+/**
+ * Draws a picture the place showing the words knows how to, a plan's say,
+ * from its address, its alt text, and its title; nothing for one it leaves
+ * drawn as its alt text, as every picture is where no drawer is handed.
+ */
+export type PictureDrawer = (
+  src: string,
+  alt: string,
+  title: string | undefined,
+) => ReactNode | undefined;
 
 /** The marks a link's words wear, drawn mid-edit: none, one over every word, or a change inside its label. */
 const LINK_MARKS = {
@@ -382,6 +501,58 @@ function plainLabelOf(link: HastParent | undefined): string | undefined {
   return marked ? undefined : labelOf(link);
 }
 
+/** The class a fence's code wears when the fence names Mermaid as its language. */
+const DIAGRAM_FENCE_CLASS = "language-mermaid";
+
+/**
+ * A fence's code where it may be drawn as its diagram: a Mermaid fence whose
+ * code holds its words alone. Nothing for any other fence, or for one whose
+ * code wears a change mark, the caret, a selection, or a search's match,
+ * since a diagram drawn from marked words would hide what is marked, and
+ * two diagrams side by side would hide what changed between them.
+ */
+function diagramCode(pre: HastElement | undefined): string | undefined {
+  const [code, ...rest] = (pre?.children ?? []).filter((child) => !isBlockBreak(child));
+  if (rest.length > 0 || code?.type !== "element" || code.tagName !== "code") return undefined;
+  const classes = code.properties.className;
+  if (!Array.isArray(classes) || !classes.includes(DIAGRAM_FENCE_CLASS)) return undefined;
+  if (!code.children.every((child) => child.type === "text")) return undefined;
+  // Note that the fence's closing line break is dropped, so the code is the editor's block's own and one picture serves both.
+  return wordsOf(code).replace(/\n$/u, "");
+}
+
+/** The edit the words are drawn partway through, which a fence reads to know whether it is being changed. */
+const FenceEdit = createContext<MarkdownEdit | undefined>(undefined);
+
+/**
+ * Whether an edit reaches into a block: a change mark, the caret, a
+ * selection, or a stretch still hidden. Read off the block's own place, so
+ * a fence whose code keeps no place of its own (`placeFencedCode`) is still
+ * known to be changed.
+ */
+function editReaches(edit: MarkdownEdit | undefined, block: HastElement | undefined): boolean {
+  const from = block?.position?.start.offset;
+  const to = block?.position?.end.offset;
+  if (edit === undefined || from === undefined || to === undefined) return false;
+  if (edit.caret !== undefined && edit.caret >= from && edit.caret <= to) return true;
+  const spans = [edit.hidden, edit.selection, ...(edit.marks ?? [])];
+  return spans.some((span) => span !== undefined && span.from < to && span.to > from);
+}
+
+/** A fence drawn as its diagram where it may be, and as its code while an edit reaches into it. */
+function DiagramFence({
+  node,
+  children,
+}: {
+  node?: HastElement | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  const edit = useContext(FenceEdit);
+  const source = <pre>{children}</pre>;
+  const code = editReaches(edit, node) ? undefined : diagramCode(node);
+  return code === undefined ? source : <PlanDiagram code={code} source={source} />;
+}
+
 function heading(level: number, children: ReactNode): React.JSX.Element {
   return (
     <p className="markdown-heading" data-level={level}>
@@ -412,7 +583,9 @@ export function MarkdownMessage({
   edit,
   link,
   openLink,
+  picture,
   found,
+  diagrams,
 }: {
   words: string;
   className?: string;
@@ -422,41 +595,58 @@ export function MarkdownMessage({
   link?: LinkDrawer | undefined;
   /** Opens a plain link pressed; every plain link is words going nowhere without one. */
   openLink?: ((href: string) => void) | undefined;
+  /** Draws the pictures the place knows how to, a plan's say; every picture is its alt text without one. */
+  picture?: PictureDrawer | undefined;
   /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
+  /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
+  diagrams?: boolean | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
-  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
+  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
   if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
+  if (link !== undefined) rehypePlugins.push([glueDrawnLinks, link]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
-  const components = useMemo<Components>(
-    () =>
-      link === undefined && openLink === undefined
-        ? COMPONENTS
-        : {
-            ...COMPONENTS,
-            a: ({ href, children, node }) => {
-              const drawn =
-                href === undefined || link === undefined ? undefined : link(href, labelOf(node));
-              return drawn === undefined || href === undefined
-                ? plainLink(href, children, node, openLink)
-                : drawnMarked(drawn, node, href, children, openLink);
-            },
-          },
-    [link, openLink],
-  );
+  const components = useMemo<Components>(() => {
+    if (
+      link === undefined &&
+      openLink === undefined &&
+      diagrams !== true &&
+      picture === undefined
+    ) {
+      return COMPONENTS;
+    }
+    const drawing: Components = {
+      ...COMPONENTS,
+      a: ({ href, children, node }) => {
+        const drawn =
+          href === undefined || link === undefined ? undefined : link(href, labelOf(node));
+        return drawn === undefined || href === undefined
+          ? plainLink(href, children, node, openLink)
+          : drawnMarked(drawn, node, href, children, openLink);
+      },
+    };
+    if (diagrams === true) drawing.pre = DiagramFence;
+    if (picture !== undefined) {
+      drawing.img = ({ src, alt, title }) =>
+        (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
+    }
+    return drawing;
+  }, [link, openLink, diagrams, picture]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
-      <Markdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={rehypePlugins}
-        components={components}
-        urlTransform={link === undefined ? safeUrl : keptUrl}
-      >
-        {words}
-      </Markdown>
+      <FenceEdit.Provider value={edit}>
+        <Markdown
+          remarkPlugins={REMARK_PLUGINS}
+          rehypePlugins={rehypePlugins}
+          components={components}
+          urlTransform={link === undefined ? safeUrl : keptUrl}
+        >
+          {words}
+        </Markdown>
+      </FenceEdit.Provider>
     </div>
   );
 }

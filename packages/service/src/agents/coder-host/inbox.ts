@@ -52,14 +52,15 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * same key again, which never posts it twice. No call holds the turn, since
  * a coder session takes no input mid-turn
  * (`brain-host/eve-sessions.ts`'s `requestInput`): an answer the agent
- * needs to hear reaches it as one of the developer's messages, and one it
- * does not is kept for it to read. Every call answers with the agent's
+ * needs to hear reaches it as one of the developer's messages, and so does
+ * any carrying a note the developer typed; a bare press on one it does not
+ * need is kept for it to read. Every call answers with the agent's
  * whole inbox as it stands, answers and all, so the model holds its items
  * whatever its context has lost to compaction. A worker gets none of these
  * tools, because the developer answers the agent it works for.
  */
 
-/** The tools as the model is shown them (`coder/tools/`): each one's name, words, and input. */
+/** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,
@@ -83,7 +84,7 @@ export const INBOX_TOOLS = {
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
       "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
       "should know; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
-      "need done or an item that asks nothing, and its answer is kept for you to read. " +
+      "need done or an item that asks nothing, and its answer is kept for you to read, though a note they type with it still reaches you as a message. " +
       `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxPostInputSchema,

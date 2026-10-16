@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -41,6 +43,11 @@ const PLAN: Plan = {
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LEE = { userId: "user-lee", name: "Lee Park" };
+/** Who the workspace's work names but left, as the read of who left answers. */
+const LEE_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
+const FORMER = [{ ...LEE, pictureUrl: LEE_PICTURE }];
+/** The window's own stylesheet, which says what each mark stands on. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const ACME: Workspace = {
   id: "workspace-acme",
@@ -74,6 +81,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 async function settle(): Promise<void> {
@@ -100,7 +108,9 @@ async function draw(plan: Plan, drawn: Drawn = {}): Promise<HTMLElement> {
         Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
             ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+            : request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: FORMER }
+              : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
         ),
     },
   });
@@ -192,7 +202,7 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
   assert.equal(charles.querySelectorAll(".plan-edit-note .actor-mark").length, 1);
 });
 
-test("an edit the service names no member for, or read without an account id, is never yours, and a member who left stands on an outline", async () => {
+test("an edit the service names no member for, or read without an account id, is never yours, and a member who left keeps their face, grayed, and is heard as having left", async () => {
   const unnamed = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false };
 
   assert.equal(
@@ -204,11 +214,10 @@ test("an edit the service names no member for, or read without an account id, is
     "Edited by Dean Stratakos · now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[0], "Edited by Lee Park · now");
-  assert.equal(
-    former.querySelector(".plan-edit-note .actor-mark")?.getAttribute("data-kind"),
-    "someone",
-  );
+  assert.equal(editedLines(former)[0], "Edited by Lee Park (former member) · now");
+  const mark = former.querySelector(".plan-edit-note .actor-mark");
+  assert.equal(mark?.getAttribute("data-left"), "true");
+  assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
 
 test("the time opens the version history, on the plan as it stands or on the section's last save, and the writer opens nothing", async () => {
@@ -327,4 +336,43 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(line.querySelector(".visually-hidden")?.textContent, "Charles Pan, Luke");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
+});
+
+/** What a mark stands on as the window's stylesheet draws it: "none" where its glyph stands bare on the ground. */
+function groundOf(mark: Element): string {
+  if (document.head.querySelector("style") === null) {
+    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  }
+  return getComputedStyle(mark).getPropertyValue("background");
+}
+
+/** The ground of each face beside "Changed since you last looked", by its kind. */
+async function changedFaces(
+  sectionEdits: NonNullable<Plan["sectionEdits"]>,
+): Promise<[string, string][]> {
+  const looks: PlanLooks = {
+    changed: new Set(sectionEdits.map(({ section }) => section)),
+    dismiss: () => undefined,
+  };
+  const view = await draw({ ...PLAN, sectionEdits }, { readerId: DEAN.userId, looks });
+  const line = view.querySelector(".plan-changed-note") ?? assert.fail("the line stands");
+  return [...line.querySelectorAll(".actor-mark")].map((mark) => [
+    mark.getAttribute("data-kind") ?? "",
+    groundOf(mark),
+  ]);
+}
+
+test("Luke alone beside the sections changed since the last look stands bare, as he does in a line, and on his tile only where a face overlaps his", async () => {
+  const at = Date.now();
+  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: true } as const;
+
+  assert.deepEqual(await changedFaces([{ section: "Goal", ...byLuke }]), [["luke", "none"]]);
+
+  const [person, luke] = await changedFaces([
+    { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
+    { section: "Rollout", ...byLuke },
+  ]);
+  assert.equal(person?.[0], "person");
+  assert.equal(luke?.[0], "luke");
+  assert.notEqual(luke?.[1], "none");
 });

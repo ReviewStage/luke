@@ -83,12 +83,30 @@
             "member",
             "former",
             "luke",
-            "automation"
+            "automation",
+            "github"
           ]
         }
       },
       "required": [
         "name"
+      ],
+      "additionalProperties": false
+    },
+    "arrivedIn": {
+      "type": "object",
+      "properties": {
+        "journalId": {
+          "type": "string"
+        },
+        "afterStep": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "journalId",
+        "afterStep"
       ],
       "additionalProperties": false
     },

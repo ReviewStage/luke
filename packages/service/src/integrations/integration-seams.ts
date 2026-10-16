@@ -2,13 +2,16 @@ import { resolveHostedUserId } from "../auth/bearer.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
-  deleteIntegrationConnection,
+  deleteIntegrationAccount,
   endIntegrationSignIn,
+  fillIntegrationLabel,
   readIntegrationConnections,
   readIntegrationSignIn,
+  renameIntegrationConnection,
 } from "./integration-store.js";
 import type { IntegrationsAppSeams } from "./integrations-app.js";
-import { mintIntegrationState } from "./integrations-app.js";
+import { mintIntegrationState, mintIntegrationSubject } from "./integrations-app.js";
+import type { WorkspaceLinearAppSeams } from "./workspace-linear-app.js";
 
 /**
  * integration-seams.ts -- the integrations group's seams over this deployment's real database and auth session.
@@ -27,7 +30,19 @@ export function integrationsAppSeams(): IntegrationsAppSeams {
     beginSignIn: beginIntegrationSignIn,
     completeSignIn: completeIntegrationSignIn,
     endSignIn: endIntegrationSignIn,
-    deleteConnection: deleteIntegrationConnection,
+    deleteAccount: deleteIntegrationAccount,
+    fillLabel: fillIntegrationLabel,
+    renameConnection: renameIntegrationConnection,
+    mintState: mintIntegrationState,
+    mintSubject: mintIntegrationSubject,
+    now: () => Date.now(),
+  };
+}
+
+/** The workspace Linear group's seams, over the same bearer resolver and the same state minting. */
+export function workspaceLinearAppSeams(): WorkspaceLinearAppSeams {
+  return {
+    resolveUserId: resolveHostedUserId,
     mintState: mintIntegrationState,
     now: () => Date.now(),
   };

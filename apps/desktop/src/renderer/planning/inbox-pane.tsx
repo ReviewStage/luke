@@ -14,6 +14,7 @@ import {
   type InboxItem,
   type InboxReadResponse,
   type InboxReplyKind,
+  inboxAnswerHeard,
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
@@ -22,7 +23,7 @@ import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -73,6 +74,7 @@ import {
   withChoice,
   withValue,
 } from "./inbox-model";
+import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
@@ -105,7 +107,8 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * asking nothing are answered by presses in its footer, the one that holds
  * back and the one that goes ahead, as a confirm's are; words, a choice,
  * and a form by the box's own Send. A card whose agent need not hear back
- * says so, since answering it messages nobody. Once the item is settled,
+ * says whether its answer will message the agent: a bare press does not, and
+ * a typed note does. Once the item is settled,
  * nothing it offered goes: the options, or the presses it was answered by,
  * stand with the developer's pick marked and the rest stepped back, and
  * the developer's reply follows as their own bubble, what they wrote in it
@@ -152,6 +155,16 @@ const NEWER_LUKE = {
 /** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
 const THREAD_TIME_CLASS =
   "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
+
+/**
+ * What the box says on an item whose agent need not hear back: a bare
+ * press, Done or Got it, is kept for the agent to read, and a typed note is
+ * sent to it as a message, so the line says which the answer will be.
+ */
+const QUIET_LINE = {
+  BARE: "Without a note, this won't message the agent.",
+  NOTED: "Your note will be sent to the agent.",
+} as const;
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
@@ -432,7 +445,42 @@ function Blocks({
   );
 }
 
-/** A choice's options, each pressed to pick it, the agent's recommendation said after its label; several stay pressed where the choice allows. */
+/**
+ * An option's head: its label, what is said of it beside the label, and,
+ * where the agent recommended it, a badge at the option's top right, so it
+ * stands in one place however the label wraps. The badge is filled with
+ * the accent while the item waits and steps back to the quiet badge once
+ * it is settled, when the recommendation is history rather than a call to
+ * act. It is drawn inside the option alone, so wherever an option is drawn
+ * it wears it.
+ */
+function OptionHead({
+  label,
+  recommended,
+  settled,
+  children,
+}: {
+  label: string;
+  recommended: boolean;
+  settled: boolean;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="inbox-option-head">
+      <span className="inbox-option-label">
+        <span className="font-medium">{label}</span>
+        {children}
+      </span>
+      {recommended ? (
+        <span className="inbox-recommended" data-settled={String(settled)}>
+          Recommended
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A choice's options, each pressed to pick it, the one the agent recommends wearing its badge; several stay pressed where the choice allows. */
 function ChoiceOptions({
   choice,
   draft,
@@ -456,12 +504,11 @@ function ChoiceOptions({
           disabled={disabled}
           onClick={() => onDraft(withChoice(draft, option.label, multiple))}
         >
-          <span>
-            <span className="font-medium">{option.label}</span>
-            {choice.recommended === option.label ? (
-              <span className="text-muted-foreground"> · Recommended</span>
-            ) : null}
-          </span>
+          <OptionHead
+            label={option.label}
+            recommended={choice.recommended === option.label}
+            settled={false}
+          />
           {option.detail === undefined ? null : (
             <span className="text-muted-foreground">{option.detail}</span>
           )}
@@ -590,7 +637,7 @@ function SendPresses({
   if (presses !== undefined) {
     const { back, ahead } = presses;
     return (
-      <div className="flex shrink-0 gap-(--control-gap)">
+      <div className="inbox-presses flex gap-(--control-gap)">
         {back === undefined ? null : (
           <button
             type="button"
@@ -672,9 +719,11 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
   return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
 }
 
-/** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or kept for it to read. */
+/** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
-  if (!item.needsReply) return <>Saved for the agent to read</>;
+  // Note that an answered item the wire carries without its answer was heard where it asked to be.
+  const heard = item.answer === undefined ? item.needsReply : inboxAnswerHeard(item, item.answer);
+  if (!heard) return <>Saved for the agent to read</>;
   return (
     <ActorLine>
       {"Sent to "}
@@ -688,7 +737,8 @@ function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.
  * developer's pick in the look of a picked option, a check and whose pick
  * it was, "[disc] Your pick" or "[disc] Charles Pan’s pick", beside its
  * label, and the rest stepped back to an outline, so what was offered and
- * what was chosen read together.
+ * what was chosen read together. The option the agent recommended keeps
+ * its badge, gone quiet.
  */
 function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
@@ -698,11 +748,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
     <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What the agent offered">
       {options.map((option) => (
         <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
-          <span>
-            <span className="font-medium">{option.label}</span>
-            {option.recommended ? (
-              <span className="text-muted-foreground"> · Recommended</span>
-            ) : null}
+          <OptionHead label={option.label} recommended={option.recommended} settled>
             {option.picked ? (
               <span className="inbox-picked">
                 <CheckIcon aria-hidden="true" />
@@ -712,7 +758,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
                 </ActorLine>
               </span>
             ) : null}
-          </span>
+          </OptionHead>
           {option.detail === undefined ? null : (
             <span className="text-muted-foreground">{option.detail}</span>
           )}
@@ -817,6 +863,8 @@ function AnswerBox({
     <div className="agent-composer">
       {knownResponse(item.response) ? (
         <PromptInput
+          className="inbox-answer"
+          data-presses={byPress ? "" : undefined}
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
         >
@@ -830,10 +878,12 @@ function AnswerBox({
               control.onDraft(item, { ...draft, note: event.currentTarget.value })
             }
           />
-          <PromptInputFooter>
-            <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
+          <PromptInputFooter className="inbox-answer-foot">
+            <PromptInputTools className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
               {item.needsReply ? null : (
-                <span data-inbox-quiet="">Answering doesn't message the agent.</span>
+                <span data-inbox-quiet="">
+                  {draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED}
+                </span>
               )}
             </PromptInputTools>
             <SendPresses
@@ -908,7 +958,11 @@ function AutomationCrumb({
   return (
     <Tooltip
       label={holder.name}
-      card={known === undefined ? undefined : <AutomationCard {...known} />}
+      card={
+        known === undefined ? undefined : (
+          <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+        )
+      }
     >
       <button type="button" className="tab-button" disabled={onOpen === undefined} onClick={onOpen}>
         <CrumbWords look={{ icon, label: holder.name }} />
@@ -978,10 +1032,13 @@ function Crumbs({
  * the box is docked at the pane's foot. Once it is settled, the options
  * stand with the developer's pick marked, and the developer's reply follows
  * as their bubble, with what they did, when, and whether it reached the
- * agent; or the agent's own message says it took the item back, and why.
+ * agent; or the agent's own message says it took the item back, and why;
+ * and where the box stood, the next item that needs the developer is
+ * offered (`inbox-pager.tsx`).
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
- * chord, which goes back as Escape does.
+ * chord, which goes back as Escape does, and the bar ends in the pager,
+ * "2 of 8" and the arrows up and down the list (`inbox-pager.tsx`).
  */
 export function InboxPane({
   holder,
@@ -991,6 +1048,8 @@ export function InboxPane({
   doors,
   hidden,
   onBack,
+  pager,
+  next,
 }: {
   /** What holds the item: its plan, or the automation that started its agent with no plan. */
   holder: InboxHolder;
@@ -1003,8 +1062,17 @@ export function InboxPane({
   hidden: boolean;
   /** Goes back to the list, where the item stands alone. */
   onBack: (() => void) | undefined;
+  /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
+  pager: InboxPager | undefined;
+  /** The next item that needs the developer, offered where the box stood once the item is settled. */
+  next: InboxNext | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const board = useRef<HTMLDivElement>(null);
+  // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
+  useLayoutEffect(() => {
+    if (board.current !== null) board.current.scrollTop = 0;
+  }, [item.id]);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -1017,19 +1085,29 @@ export function InboxPane({
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
           <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-            <button type="button" className="toolbar-button inbox-back" onClick={onBack}>
+            <button
+              type="button"
+              className="toolbar-button inbox-back"
+              aria-label="Inbox"
+              onClick={onBack}
+            >
               <BackIcon />
-              Inbox
+              <span className="inbox-back-word">Inbox</span>
             </button>
           </Tooltip>
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
+        {pager === undefined ||
+        (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+          <InboxPagerControls pager={pager} />
+        )}
       </header>
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
+          className={`inbox-board scroll-fade ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
+          ref={board}
         >
           <Message from="assistant">
             <Byline by={by} did="asked" at={item.postedAt} now={now} />
@@ -1063,7 +1141,11 @@ export function InboxPane({
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}
         </div>
-        {open ? <AnswerBox item={item} control={control} /> : null}
+        {open ? (
+          <AnswerBox item={item} control={control} />
+        ) : next === undefined ? null : (
+          <InboxNextUp next={next} />
+        )}
       </div>
     </section>
   );

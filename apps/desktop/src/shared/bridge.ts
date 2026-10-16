@@ -6,11 +6,15 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
+import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
+import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
 import { liveExchangeActive } from "@luke/live";
+import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
+import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
 import {
   isVoiceCommand,
   isVoiceView,
@@ -140,6 +144,30 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:record-agent-trace",
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
+  }),
+  /**
+   * One message of Luke's voice feed for his avatar, from the voice window
+   * alone, which main relays to the panel while the avatar is starting
+   * or live. A send rather than an act: it is 25 messages a second, and
+   * nothing reads an answer.
+   */
+  feedAvatar: entry({
+    kind: "send",
+    channel: "app:feed-avatar",
+    args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
+  }),
+  /**
+   * One signal of the call window's view of Luke's avatar: the call window's
+   * offer and close, which main relays to the panel, or the panel's answer,
+   * which main relays to the call window. A send rather than an act: it is
+   * a relay between two windows, and nothing reads an answer.
+   */
+  signalAvatarView: entry({
+    kind: "send",
+    channel: "app:signal-avatar-view",
+    args: args<[AvatarViewSignal]>(
+      (v) => v.length === 1 && avatarViewSignalFromWire(v[0]) !== undefined,
+    ),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({
@@ -276,6 +304,23 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * A failed run's notification clicked: the panel is to open the run, in
+   * its automation's workspace. An event, as an agent's notification's click
+   * is, because it is an ask the window answers once.
+   */
+  onShowFailedRun: entry({
+    kind: "subscribe",
+    channel: "app:show-failed-run",
+    args: noArgs,
+    result: result<{ automationId: string; runId: string; workspaceId: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.automationId) &&
+        isWireString(value.runId) &&
+        isWireString(value.workspaceId),
+    ),
+  }),
+  /**
    * The floating call window moved under a pointer that did not: a drag of
    * its own. The page is told so the hover its buttons were left with is not
    * believed, since the engine keeps the hover the pointer had before.
@@ -285,6 +330,43 @@ export const BRIDGE = {
     channel: "app:call-window-moved",
     args: noArgs,
     result: result<void>((v) => v === undefined),
+  }),
+  /**
+   * Keyframe's grant for the call's own avatar, sent to the panel window
+   * alone, or nothing once the session is to close. A one-shot rather
+   * than a slice of the document, because the document reaches every window
+   * and the grant may reach this one only.
+   */
+  onAvatarSession: entry({
+    kind: "subscribe",
+    channel: "app:avatar-session",
+    args: noArgs,
+    result: result<AvatarGrant | undefined>(
+      (value) => value === undefined || avatarGrantFromWire(value) !== undefined,
+    ),
+  }),
+  /**
+   * One message of Luke's voice feed, relayed to the panel window alone for
+   * the avatar to lip-sync. A reading that expires as the next
+   * chunk arrives, so nothing bootstraps from it.
+   */
+  onAvatarFeed: entry({
+    kind: "subscribe",
+    channel: "app:avatar-feed",
+    args: noArgs,
+    result: result<AvatarFeed>((value) => avatarFeedFromWire(value) !== undefined),
+  }),
+  /**
+   * One signal of the call window's view of Luke's avatar, relayed from the
+   * other end: the call window's offer or close to the panel, the panel's
+   * answer to the call window. An event, as the feed is, because a signal is
+   * read once and never bootstrapped from.
+   */
+  onAvatarViewSignal: entry({
+    kind: "subscribe",
+    channel: "app:avatar-view-signal",
+    args: noArgs,
+    result: result<AvatarViewSignal>((value) => avatarViewSignalFromWire(value) !== undefined),
   }),
   /**
    * The call card's way back pressed, in the floating window or a panel's
@@ -298,32 +380,30 @@ export const BRIDGE = {
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
-   * A Luke link the system handed the app: the panel is to open its plan,
-   * scrolled to its section where it names one. An event, as a click is,
+   * A Luke link the system handed the app: the panel is to open the place it
+   * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
    */
   onShowLink: entry({
     kind: "subscribe",
     channel: "app:show-link",
     args: noArgs,
-    result: result<{ planId: string; anchor?: string }>(
-      (value) =>
-        isRecord(value) &&
-        isWireString(value.planId) &&
-        (value.anchor === undefined || isWireString(value.anchor)),
+    result: result<ReadLink>(
+      (value) => isRecord(value) && isWireString(value.workspace) && isLinkPlace(value.place),
     ),
   }),
   /**
    * A coding agent's turn ended while the window was focused: the panel says
-   * so in its toast, whose View opens the plan on that agent's tab. An event,
-   * as a click is, because it is said once and never bootstrapped from.
+   * so in its toast, whose View opens the plan on that agent's tab, or the
+   * agent's own page for one with no plan. An event, as a click is, because
+   * it is said once and never bootstrapped from.
    */
   onAgentEnded: entry({
     kind: "subscribe",
     channel: "app:agent-ended",
     args: noArgs,
     result: result<{
-      planId: string;
+      planId: string | null;
       agentId: string;
       words: string;
       detail: string;
@@ -331,7 +411,7 @@ export const BRIDGE = {
     }>(
       (value) =>
         isRecord(value) &&
-        isWireString(value.planId) &&
+        (value.planId === null || isWireString(value.planId)) &&
         isWireString(value.agentId) &&
         isWireString(value.words) &&
         isWireString(value.detail) &&
@@ -353,6 +433,31 @@ export const BRIDGE = {
         isRecord(value) &&
         isWireString(value.planId) &&
         isWireString(value.itemId) &&
+        isWireString(value.words) &&
+        isWireString(value.detail),
+    ),
+  }),
+  /**
+   * A run of one of the account's automations failed to start while the
+   * window was focused: the panel says so in its toast, in the failed tone,
+   * whose View opens the run. An event, as an agent's end is.
+   */
+  onRunFailed: entry({
+    kind: "subscribe",
+    channel: "app:run-failed",
+    args: noArgs,
+    result: result<{
+      automationId: string;
+      runId: string;
+      workspaceId: string;
+      words: string;
+      detail: string;
+    }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.automationId) &&
+        isWireString(value.runId) &&
+        isWireString(value.workspaceId) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

@@ -1,4 +1,11 @@
 import {
+  CODE_REVIEW_DESCRIPTION,
+  type CodeReviewSettings,
+  codeReviewPreset,
+  readCodeReviewSettings,
+  withCodeReviewSettings,
+} from "@luke/features/automation-code-review";
+import {
   type AutomationDraft,
   automationDraft,
   changeOf,
@@ -10,6 +17,8 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  type GitHubTriggerSettings,
+  presetDraft,
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
@@ -34,32 +43,45 @@ import {
   type AutomationSummary,
   type AutomationTargetKind,
   type AutomationTriggerKind,
+  GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  type GitHubSender,
   type GitHubTriggerEvent,
+  PULL_REQUEST_MOMENT,
+  type PullRequestMoment,
 } from "@luke/features/automation-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+  integrationConnectionOf,
+} from "@luke/features/integration-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import {
-  BuildingIcon,
-  ChevronRightIcon,
-  LockIcon,
-  PlayIcon,
-  Trash2Icon,
-  ZapIcon,
-} from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { ChevronRightIcon, GitPullRequestIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { useOpenFeedback } from "../open-feedback";
+import { useCopyLinkItem } from "../copy-link-item";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FoldingButton } from "../folding-button";
+import { useIntegrationStatuses } from "../integration-statuses";
+import { useOpenSettings } from "../open-settings";
 import { AgentModelChip } from "../planning/agent-model-chip";
+import { AgentServersButton } from "../planning/agent-servers";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
+import type { LeaveAsk, LeaveGuard } from "../planning/use-plans-tab";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
@@ -67,22 +89,27 @@ import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
+import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
+import { type RunsPanel, useRunsPanel } from "./folded-groups";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
- * automation-editor.tsx -- one automation's page, or a new one's: under breadcrumbs that name its owner, its name, its schedule, its task, its repository, and who owns it, saved by an explicit Create or Save.
+ * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
  * It stands where the list stood, in the plan's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a
  * Settings picker on the window's menu and every yes or no a switch. Who
- * owns it is said three times over, since it is what the list must never
- * leave in doubt: in the crumbs, under its name, and in the Owner row a
- * team workspace offers. Where its runs land is picked: a new agent each
+ * owns it is the form's first row, wherever a team workspace offers the
+ * choice: Personal under the account's own picture, or the workspace under
+ * its photo (`automation-owner.tsx`). Where its runs land is picked: a new agent each
  * run, on the agent box's model chip and archived once it succeeds where
  * asked, or the same agent, chosen from the workspace's agents on its
  * repository. Its runs stand in the panel on
@@ -188,9 +215,6 @@ function releaseOnEscape(event: React.KeyboardEvent<HTMLElement>): void {
   event.currentTarget.blur();
 }
 
-/** Escape kept and spent on nothing, while leaving would lose what was written. */
-function keepEscape(): void {}
-
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -225,38 +249,173 @@ function ownerName(owner: AutomationScope, workspace: Workspace | undefined): st
   return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Personal";
 }
 
-/** The line under the name that says who sees and changes it. */
-function ownerLine(
-  owner: AutomationScope,
-  workspace: Workspace | undefined,
-  offersOwner: boolean,
-): string {
-  if (owner === AUTOMATION_SCOPE.WORKSPACE) {
-    return `A workspace automation: everyone in ${workspace?.name ?? "the workspace"} sees and runs it.`;
-  }
-  return offersOwner
-    ? "A personal automation: only you see and change it."
-    : "Your automation, in your personal workspace.";
-}
-
-/** Who owns it, as a glyph and its name. */
-function OwnerMark({
+/**
+ * Who owns it, the form's first row: Personal under the account's own
+ * picture, or the workspace under its photo, on the chip and in its menu
+ * alike.
+ */
+function OwnerRow({
   owner,
+  owners,
+  mine,
   workspace,
+  onOwner,
 }: {
   owner: AutomationScope;
+  owners: readonly { value: AutomationScope; label: string }[];
+  /** Whether the reading account made it, so Personal is drawn as its own; a new one is. */
+  mine: boolean;
   workspace: Workspace | undefined;
+  onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
-  const name = ownerName(owner, workspace);
+  const parse = optionValue(owners);
+  const detailId = useId();
   return (
-    <span className="automation-owner" data-owner={owner} title={name}>
-      {owner === AUTOMATION_SCOPE.WORKSPACE ? (
-        <BuildingIcon aria-hidden="true" />
-      ) : (
-        <LockIcon aria-hidden="true" />
-      )}
-      <span className="automation-owner-name">{name}</span>
-    </span>
+    <PickerRow
+      copy={
+        <>
+          <strong>Owner</strong>
+          <small id={detailId}>
+            {owner === AUTOMATION_SCOPE.WORKSPACE
+              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+              : "Only you see and change it. Owners and admins can see it and turn it off."}
+          </small>
+        </>
+      }
+      label="Owner"
+      describedBy={detailId}
+      value={owner}
+      valueLabel={ownerName(owner, workspace)}
+      valueIcon={
+        <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+      }
+      rows={owners.map((each) => ({
+        id: each.value,
+        label: each.label,
+        icon: (
+          <OwnerMark
+            owner={each.value}
+            workspace={workspace}
+            mine={mine}
+            size={OWNER_MARK_SIZE.ROW}
+          />
+        ),
+      }))}
+      noMatch="No owner matches"
+      onPick={(id) => {
+        const picked = parse(id);
+        if (picked !== undefined) onOwner(picked);
+      }}
+    />
+  );
+}
+
+/** A server the creator switched off, as another reader sees it: its provider's name, and its place where it is not the provider's first account. */
+function switchedOffName(connection: string): string {
+  const account = integrationConnectionOf(connection);
+  if (account === undefined) return connection;
+  const name = INTEGRATION_NAME[account.provider];
+  return account.place === 1 ? name : `${name} (account ${account.place})`;
+}
+
+/**
+ * Which of the owner's connected MCP servers a run's new agent is handed:
+ * a field chip like its neighbours', holding the marks of those left on and
+ * opening the agent box's own servers popover, whose switches, search, and
+ * way to Settings › Integrations are the ones a task's Start offers, with the
+ * row's words naming those switched off. Every server is on until switched
+ * off. Note that a run starts on its creator's connections, so only its
+ * creator is shown them to switch; anyone else reads which the creator
+ * switched off.
+ */
+function ServersRow({
+  mine,
+  disabled,
+  onSwitch,
+}: {
+  /** Whether the reading account made it, so its connections are the ones a run is handed. */
+  mine: boolean;
+  disabled: readonly string[];
+  onSwitch: (disabled: readonly string[]) => void;
+}): React.JSX.Element {
+  if (!mine) {
+    return (
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>MCP servers</strong>
+          <small>
+            {disabled.length === 0
+              ? "Its creator's connected servers, every one."
+              : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
+          </small>
+        </span>
+      </div>
+    );
+  }
+  return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
+}
+
+/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion and Sentry". */
+function namesSaid(providers: readonly IntegrationProvider[]): string {
+  const names = providers.map((provider) => INTEGRATION_NAME[provider]);
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
+const SERVERS_CHIP_MARKS = 4;
+
+/** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
+function OwnServersRow({
+  disabled,
+  onSwitch,
+}: {
+  disabled: readonly string[];
+  onSwitch: (disabled: readonly string[]) => void;
+}): React.JSX.Element {
+  const statuses = useIntegrationStatuses();
+  const openSettings = useOpenSettings();
+  const connected = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
+  );
+  const on = connected.filter((provider) => !disabled.includes(provider));
+  const off = connected.filter((provider) => disabled.includes(provider));
+  const shown = on.slice(0, SERVERS_CHIP_MARKS);
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>MCP servers</strong>
+        <small>
+          {connected.length === 0
+            ? "None connected yet."
+            : off.length === 0
+              ? "Every connected server is on."
+              : `${namesSaid(off)} off.`}
+        </small>
+      </span>
+      <AgentServersButton
+        servers={{
+          disabled,
+          onSwitch,
+          onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+        }}
+        statuses={statuses}
+        face={
+          on.length === 0 ? (
+            <span className="chip-name">None</span>
+          ) : (
+            <span className="automation-servers">
+              {shown.map((provider) => (
+                <ProviderMark key={provider} provider={provider} />
+              ))}
+              {on.length > shown.length ? (
+                <span className="chip-name">{`+${on.length - shown.length}`}</span>
+              ) : null}
+            </span>
+          )
+        }
+      />
+    </div>
   );
 }
 
@@ -386,11 +545,64 @@ function ScheduleRows({
   );
 }
 
-/** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its delete. */
-function EditorToolbar({
-  draft,
+/** What the editor's ⋯ is called. */
+const ACTIONS_LABEL = "Automation actions";
+
+/** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
+function AutomationActions({
   automation,
-  workspace,
+  onDelete,
+}: {
+  automation: AutomationSummary;
+  onDelete: () => void;
+}): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const remove: MenuAction = {
+    label: "Delete",
+    icon: <Trash2Icon />,
+    onSelect: onDelete,
+    danger: true,
+  };
+  return (
+    <>
+      <Tooltip label={ACTIONS_LABEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={ACTIONS_LABEL}
+          {...menu.trigger()}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** The crumb naming the automation, cut short with an ellipsis where the toolbar is narrow, the pointer reading it whole. */
+function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
+  const [words, clipped] = useClipped();
+  return (
+    <Tooltip label={clipped ? name : undefined}>
+      <span ref={words} className="automation-crumb">
+        {name}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
+function EditorToolbar({
+  automation,
   dirty,
   saving,
   onBack,
@@ -399,10 +611,9 @@ function EditorToolbar({
   onDelete,
   running,
   onRunNow,
+  runsPanel,
 }: {
-  draft: AutomationDraft;
   automation: AutomationSummary | undefined;
-  workspace: Workspace | undefined;
   dirty: boolean;
   saving: boolean;
   onBack: () => void;
@@ -412,8 +623,9 @@ function EditorToolbar({
   /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
+  runsPanel: RunsPanel;
 }): React.JSX.Element {
-  const openFeedback = useOpenFeedback();
+  const runsLabel = runsPanel.open ? "Hide runs" : "Show runs";
   const status =
     automation === undefined
       ? "Not created yet"
@@ -424,76 +636,242 @@ function EditorToolbar({
           : "Saved";
   return (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <nav className="automation-crumbs" aria-label="Path">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
-            Automations
-          </button>
-          <ChevronRightIcon aria-hidden="true" />
-          <OwnerMark owner={draft.owner} workspace={workspace} />
-          <ChevronRightIcon aria-hidden="true" />
-          <span className="automation-crumb">
-            {automation === undefined ? "New automation" : automation.name}
+      {/* The toolbar's own width, which a container query reads, folds its acts' words before they crowd its crumbs. */}
+      <div className="automation-toolbar">
+        <div className="desktop-toolbar-heading">
+          <nav className="automation-crumbs" aria-label="Path">
+            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <ChevronRightIcon aria-hidden="true" />
+            <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
+          </nav>
+          <ExperimentTag />
+        </div>
+        <div className="desktop-toolbar-actions">
+          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
+          <span className="automation-editor-status" data-dirty={String(dirty)}>
+            {status}
           </span>
-        </nav>
-        <span className="integration-tool-badge experiment-badge">Experimental</span>
-      </div>
-      <div className="desktop-toolbar-actions">
-        <button
-          type="button"
-          className="experiment-feedback"
-          onClick={() => openFeedback(EXPERIMENT.AUTOMATIONS)}
-        >
-          Send feedback
-        </button>
-        <span className="automation-editor-status" data-dirty={String(dirty)}>
-          {status}
-        </span>
-        {automation === undefined ? null : (
+          {automation === undefined ? null : (
+            <FoldingButton
+              label="Run now"
+              glyph={<PlayIcon />}
+              busy={running ? "Running" : undefined}
+              className="toolbar-button bordered-button"
+              disabled={running}
+              onClick={onRunNow}
+            >
+              <BusyLabel busy={running} label="Running">
+                Run now
+              </BusyLabel>
+            </FoldingButton>
+          )}
           <button
             type="button"
-            className="toolbar-button bordered-button"
-            disabled={running}
-            onClick={onRunNow}
+            className="primary-button"
+            disabled={saving || !(automation === undefined || dirty)}
+            onClick={onSave}
           >
-            <PlayIcon />
-            <BusyLabel busy={running} label="Running">
-              Run now
+            <BusyLabel busy={saving} label="Saving">
+              {automation === undefined ? "Create" : "Save"}
             </BusyLabel>
           </button>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={saving || !(automation === undefined || dirty)}
-          onClick={onSave}
-        >
-          <BusyLabel busy={saving} label="Saving">
-            {automation === undefined ? "Create" : "Save"}
-          </BusyLabel>
-        </button>
-        {automation === undefined ? null : (
-          <>
-            <Switch
-              checked={automation.enabled}
-              label={
-                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-              }
-              onChange={(enabled) => onToggle(enabled)}
-            />
+          {automation === undefined ? null : (
+            <>
+              <Switch
+                checked={automation.enabled}
+                label={
+                  automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+                }
+                onChange={(enabled) => onToggle(enabled)}
+              />
+              <AutomationActions automation={automation} onDelete={onDelete} />
+            </>
+          )}
+          {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
+          <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
             <button
               type="button"
-              className="icon-button"
-              aria-label={`Delete ${automation.name}`}
-              onClick={onDelete}
+              className="icon-button side-panel-toggle"
+              aria-label={runsLabel}
+              aria-expanded={runsPanel.open}
+              data-open={String(runsPanel.open)}
+              onClick={runsPanel.onToggle}
             >
-              <Trash2Icon />
+              <SidePanelIcon />
             </button>
-          </>
-        )}
+          </Tooltip>
+        </div>
       </div>
     </header>
+  );
+}
+
+/** Whose events a GitHub trigger may hear, as its switches name them. */
+const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: string }[] = [
+  { value: GITHUB_SENDER.PEOPLE, label: "From people" },
+  {
+    value: GITHUB_SENDER.LUKE_AGENTS,
+    label: "From Luke's agents",
+    detail: "What Luke's coding agents open, as you or as the workspace's GitHub App.",
+  },
+  {
+    value: GITHUB_SENDER.OTHER_BOTS,
+    label: "From other bots",
+    detail: "Dependabot, Renovate, and every other app.",
+  },
+];
+
+/** The moments of a pull request an update may fire on, as its switches name them. */
+const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail?: string }[] = [
+  { value: PULL_REQUEST_MOMENT.OPENED, label: "When opened" },
+  { value: PULL_REQUEST_MOMENT.READY, label: "When marked ready" },
+  {
+    value: PULL_REQUEST_MOMENT.PUSHED,
+    label: "When pushed to",
+    detail:
+      "A push by Luke's own agents never starts a run, so a run that pushes cannot start itself.",
+  },
+];
+
+/** The GitHub events a pull request's drafts and forks speak to. */
+const PULL_REQUEST_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+]);
+
+/** A list with a value in it or out of it, as a switch leaves it. */
+function toggled<Value>(list: readonly Value[], value: Value, on: boolean): readonly Value[] {
+  return on
+    ? [...list.filter((each) => each !== value), value]
+    : list.filter((each) => each !== value);
+}
+
+/**
+ * A GitHub trigger's settings, as rows of the Trigger card, a switch each
+ * as Settings lists several: whose events fire it, the moments an update
+ * fires on, and whether drafts are skipped and forks heard, each shown
+ * only for the events it speaks to. A check names no sender, so it shows none.
+ */
+function GitHubSettingsRows({
+  event,
+  settings,
+  onSettings,
+}: {
+  event: GitHubTriggerEvent;
+  settings: GitHubTriggerSettings;
+  onSettings: (settings: GitHubTriggerSettings) => void;
+}): React.JSX.Element | null {
+  if (event === GITHUB_TRIGGER_EVENT.CHECK_FAILED) return null;
+  return (
+    <>
+      {SENDER_CHOICES.map((choice) => (
+        <SwitchRow
+          key={choice.value}
+          label={choice.label}
+          detail={choice.detail}
+          checked={settings.senders.includes(choice.value)}
+          onChange={(on) =>
+            onSettings({ ...settings, senders: toggled(settings.senders, choice.value, on) })
+          }
+        />
+      ))}
+      {event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED
+        ? MOMENT_CHOICES.map((choice) => (
+            <SwitchRow
+              key={choice.value}
+              label={choice.label}
+              detail={choice.detail}
+              checked={settings.moments.includes(choice.value)}
+              onChange={(on) =>
+                onSettings({ ...settings, moments: toggled(settings.moments, choice.value, on) })
+              }
+            />
+          ))
+        : null}
+      {PULL_REQUEST_EVENTS.has(event) ? (
+        <>
+          <SwitchRow
+            label="Skip drafts"
+            detail="A draft starts a run once it is marked ready."
+            checked={!settings.drafts}
+            onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
+          />
+          <SwitchRow
+            label="Include forks"
+            detail="A fork's pull request is code from outside the repository, read by an agent that can push to it."
+            checked={settings.forks}
+            onChange={(forks) => onSettings({ ...settings, forks })}
+          />
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** The most findings a review may be set to post, as its picker offers them. */
+const MOST_FINDINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((most) => ({
+  value: most,
+  label: String(most),
+}));
+
+/** The most findings a review may post, read back from its picker's row. */
+function mostFindingsOf(raw: string): number | undefined {
+  return MOST_FINDINGS.find((option) => String(option.value) === raw)?.value;
+}
+
+/**
+ * A code review's own settings, modelled on Cursor Bugbot's, as a card of
+ * Settings rows: whether a clean first review says so, the most findings it
+ * posts, the rules file it reads, and whether it pushes fixes. Each is a
+ * line the task opens with, written back as it changes, so the task stays
+ * the one place the review is described; when it runs and on whose pull
+ * requests are the Trigger card's.
+ */
+function CodeReviewGroup({
+  settings,
+  onSettings,
+}: {
+  settings: CodeReviewSettings;
+  onSettings: (settings: CodeReviewSettings) => void;
+}): React.JSX.Element {
+  return (
+    <SettingsGroup title="Code review">
+      <SwitchRow
+        label="Comment when no issues are found"
+        detail="A first review that finds nothing says so. A later one that finds nothing new posts nothing."
+        checked={settings.commentWhenClean}
+        onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
+      />
+      <SelectRow
+        label="Most findings"
+        detail="The most one review posts, the most severe first."
+        value={settings.mostFindings}
+        options={MOST_FINDINGS}
+        parse={mostFindingsOf}
+        onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
+      />
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Rules file</strong>
+          <small>Read from the base branch, beside AGENTS.md and CLAUDE.md.</small>
+        </span>
+        <input
+          className="settings-input automation-rules-file"
+          aria-label="Rules file"
+          spellCheck={false}
+          value={settings.rulesFile}
+          onKeyDown={releaseOnEscape}
+          onChange={(event) => onSettings({ ...settings, rulesFile: event.target.value })}
+        />
+      </div>
+      <SwitchRow
+        label="Fix what it finds"
+        detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."
+        checked={settings.fix}
+        onChange={(fix) => onSettings({ ...settings, fix })}
+      />
+    </SettingsGroup>
   );
 }
 
@@ -862,6 +1240,7 @@ const targetOf = optionValue(TARGETS);
 /** Where a run lands, under the repository it works in: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
 function RunsGroup({
   draft,
+  mine,
   savedAgentId,
   workspace,
   problems,
@@ -870,6 +1249,8 @@ function RunsGroup({
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** Whether the reading account made it, whose connections its runs are handed. */
+  mine: boolean;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   workspace: Workspace | undefined;
@@ -925,6 +1306,11 @@ function RunsGroup({
       ) : (
         <>
           <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+          <ServersRow
+            mine={mine}
+            disabled={draft.disabledServers}
+            onSwitch={(disabledServers) => onDraft({ disabledServers })}
+          />
           <SwitchRow
             label="Archive successful runs"
             detail="A run's agent is archived once it finishes without failing. Its transcript and pull request stay reachable."
@@ -960,6 +1346,7 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
+  onStartFromCodeReview,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -974,8 +1361,12 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
+  /** Fills the draft in from the code review preset; offered only while the automation is new. */
+  onStartFromCodeReview: (() => void) | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
+  // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
+  const review = readCodeReviewSettings(draft.prompt);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
     { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
@@ -983,6 +1374,35 @@ function EditorForm({
   ] as const;
   return (
     <div className="automation-form">
+      {offersOwner ? (
+        <SettingsGroup title="Sharing">
+          <OwnerRow
+            owner={draft.owner}
+            owners={owners}
+            mine={automation === undefined || automation.mine === true}
+            workspace={workspace}
+            onOwner={(owner) => onDraft({ owner })}
+          />
+        </SettingsGroup>
+      ) : null}
+      {onStartFromCodeReview === undefined ? null : (
+        <SettingsGroup title="Start from">
+          <div className="settings-row">
+            <span className="settings-copy">
+              <strong>Code review</strong>
+              <small>{CODE_REVIEW_DESCRIPTION}</small>
+            </span>
+            <button
+              type="button"
+              className="toolbar-button bordered-button"
+              onClick={onStartFromCodeReview}
+            >
+              <GitPullRequestIcon />
+              Start from Code review
+            </button>
+          </div>
+        </SettingsGroup>
+      )}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -999,14 +1419,21 @@ function EditorForm({
             onTimezone={(timezone) => onDraft({ timezone })}
           />
         ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
-          <SelectRow
-            label="Event"
-            detail="Heard through the workspace's GitHub App, in the repositories below. Events Luke's own agents cause, and draft pull requests, start nothing."
-            value={draft.githubEvent}
-            options={GITHUB_EVENTS}
-            parse={githubEventOf}
-            onChange={(event) => onDraft(withGithubEvent(draft, event))}
-          />
+          <>
+            <SelectRow
+              label="Event"
+              detail="Heard through the workspace's GitHub App, in the repositories below."
+              value={draft.githubEvent}
+              options={GITHUB_EVENTS}
+              parse={githubEventOf}
+              onChange={(event) => onDraft(withGithubEvent(draft, event))}
+            />
+            <GitHubSettingsRows
+              event={draft.githubEvent}
+              settings={draft.githubSettings}
+              onSettings={(githubSettings) => onDraft({ githubSettings })}
+            />
+          </>
         ) : (
           <WebhookRows
             automation={automation}
@@ -1017,6 +1444,12 @@ function EditorForm({
         )}
         <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
       </SettingsGroup>
+      {review === undefined ? null : (
+        <CodeReviewGroup
+          settings={review}
+          onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
+        />
+      )}
       <SettingsGroup title="Prompt">
         <textarea
           className="automation-prompt"
@@ -1030,6 +1463,7 @@ function EditorForm({
       </SettingsGroup>
       <RunsGroup
         draft={draft}
+        mine={automation === undefined || automation.mine === true}
         savedAgentId={savedAgentId}
         workspace={workspace}
         problems={problems}
@@ -1037,22 +1471,6 @@ function EditorForm({
         repositories={repositories}
         onDraft={onDraft}
       />
-      {offersOwner ? (
-        <SettingsGroup title="Sharing">
-          <SelectRow
-            label="Owner"
-            detail={
-              draft.owner === AUTOMATION_SCOPE.WORKSPACE
-                ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-                : "Only you see and change it. Owners and admins can see it and turn it off."
-            }
-            value={draft.owner}
-            options={owners}
-            parse={optionValue(owners)}
-            onChange={(owner) => onDraft({ owner })}
-          />
-        </SettingsGroup>
-      ) : null}
     </div>
   );
 }
@@ -1071,6 +1489,8 @@ export function AutomationEditor({
   onBack,
   onCreated,
   onOpenAgent,
+  linked,
+  leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
@@ -1082,8 +1502,18 @@ export function AutomationEditor({
   onCreated: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
+  /**
+   * The page as the window was last sent to it, by a link or a press: the
+   * run a link named, which its runs mark and bring into view, none where
+   * no link named one. Each sending is a new value, so a link opened again
+   * shows the runs again.
+   */
+  linked?: { readonly runId?: string | undefined } | undefined;
+  /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
+  leaveGuard: LeaveGuard;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
+  const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: windowZone(),
@@ -1112,9 +1542,22 @@ export function AutomationEditor({
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
-  // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, written ? keepEscape : onBack);
+  // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  const runsPanel = useRunsPanel();
+  // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
+  // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
+  const showRuns = useRef(runsPanel.onShow);
+  showRuns.current = runsPanel.onShow;
+  useEffect(() => {
+    if (linked?.runId !== undefined) showRuns.current();
+  }, [linked]);
   const problems = draftProblems(draft, planBacked, new Date());
+  const startFromCodeReview = () => {
+    setDraft((was) => presetDraft(was, codeReviewPreset()));
+    setRefusal(undefined);
+  };
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -1130,7 +1573,8 @@ export function AutomationEditor({
     // A save that leaves it no webhook lets go of any secret shown, since that secret no longer admits anything.
     if (answer.automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) setShownSecret(undefined);
     else if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
-    if (automation === undefined) onCreated(answer.automation.id);
+    // Note that the page it now stands as is this one, saved, so the move there passes the ask.
+    if (automation === undefined) leaveGuard.pass(() => onCreated(answer.automation.id));
   };
   const save = () => {
     if (Object.keys(problems).length > 0) {
@@ -1156,20 +1600,22 @@ export function AutomationEditor({
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };
-  // Note that opening a run's agent leaves the page and its draft with it, so unsaved changes ask first.
-  const [leavingFor, setLeavingFor] = useState<string | undefined>(undefined);
-  const leaving = useConfirmDialog({ subject: leavingFor !== undefined, surfaceOpen: true }, () => {
-    if (leavingFor !== undefined) onOpenAgent(leavingFor);
+  // Note that any way out of the page, a crumb, Escape, a run's agent, the sidebar, ⌘K, history,
+  // or Settings, asks first while something written would be lost, and goes once Leave is pressed.
+  const [leavingBy, setLeavingBy] = useState<{ readonly leave: () => void } | undefined>(undefined);
+  const leaving = useConfirmDialog({ subject: leavingBy !== undefined, surfaceOpen: true }, () => {
+    leavingBy?.leave();
     return Promise.resolve(ACCEPTED);
   });
-  const openRun = (agentId: string) => {
-    if (!dirty) {
-      onOpenAgent(agentId);
-      return;
-    }
-    setLeavingFor(agentId);
+  const askLeave = useRef<LeaveAsk>(() => undefined);
+  askLeave.current = (leave) => {
+    setLeavingBy({ leave });
     leaving.ask();
   };
+  useEffect(
+    () => (written ? leaveGuard.stand((leave) => askLeave.current(leave)) : undefined),
+    [written, leaveGuard],
+  );
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
@@ -1187,7 +1633,7 @@ export function AutomationEditor({
             reason: SAVE_REFUSAL_WORDS[answer.failure],
           };
         }
-        onBack();
+        leaveGuard.pass(onBack);
         return ACCEPTED;
       });
     },
@@ -1195,9 +1641,7 @@ export function AutomationEditor({
   return (
     <section className="automations-view" aria-label="Automation">
       <EditorToolbar
-        draft={draft}
         automation={automation}
-        workspace={workspace}
         dirty={dirty}
         saving={saving}
         onBack={onBack}
@@ -1206,9 +1650,10 @@ export function AutomationEditor({
         onDelete={deletion.ask}
         running={running}
         onRunNow={runNow}
+        runsPanel={runsPanel}
       />
       <div className="automation-editor-layout">
-        <div className="automations-scroll">
+        <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
             <input
               className="automation-editor-name"
@@ -1223,10 +1668,6 @@ export function AutomationEditor({
                 {problems[DRAFT_FIELD.NAME]}
               </p>
             ) : null}
-            <p className="automation-owner-line">
-              <OwnerMark owner={draft.owner} workspace={workspace} />
-              {ownerLine(draft.owner, workspace, offersOwner)}
-            </p>
             {refusal === undefined ? null : (
               <p className="error-message automation-save-refusal" role="alert">
                 {refusal}
@@ -1244,22 +1685,30 @@ export function AutomationEditor({
               shownSecret={shownSecret}
               onSecret={setShownSecret}
               savedAgentId={savedAgentId}
+              onStartFromCodeReview={automation === undefined ? startFromCodeReview : undefined}
               onDraft={editDraft}
             />
           </div>
         </div>
         <AutomationRunsPanel
+          panel={runsPanel}
+          mine={automation === undefined || automation.mine === true}
           created={automation !== undefined}
+          automationId={automation?.id}
+          linkedRun={linkedRun}
           runs={runs.read}
           onRetry={runs.reload}
-          onOpenAgent={openRun}
+          onOpenAgent={onOpenAgent}
         />
       </div>
       <ConfirmDialog
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
-          body: "Opening the run's agent leaves this page, and what you changed here is lost.",
+          body:
+            automation === undefined
+              ? "This automation isn't created yet, and what you wrote here is lost."
+              : "What you changed here is lost.",
           verb: "Leave",
           running: "Leaving",
         }}

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
-  appLinkOf,
   decodeMention,
   encodeMention,
   isMentionableTool,
@@ -332,7 +331,10 @@ test("a path that climbs out of the repository names nothing", () => {
 test("every @ link outside code is one a writer keeps, whatever its target names", () => {
   const words = [
     "See [@Rollout](https://tryluke.dev/acme/plan/x#rollout), [@Linear](https://linear.app/a)",
-    "and `[@code](luke://file/a.ts)`, but not [plain](https://example.com).",
+    "and `[@code](luke://file/a.ts)`, but not [plain](https://example.com)",
+    "or the picture ![@Rollout mock](https://tryluke.dev/acme/plan/x/files/y), even after a",
+    "written backslash \\\\![@Flow](https://tryluke.dev/acme/plan/x/files/z), while an escaped",
+    "\\![@Escaped](https://linear.app/b) is a link.",
   ].join("\n");
 
   assert.deepEqual(
@@ -340,6 +342,7 @@ test("every @ link outside code is one a writer keeps, whatever its target names
     [
       { label: "@Rollout", target: "https://tryluke.dev/acme/plan/x#rollout" },
       { label: "@Linear", target: "https://linear.app/a" },
+      { label: "@Escaped", target: "https://linear.app/b" },
     ],
   );
 });
@@ -487,26 +490,6 @@ test("a nested quote is one depth however far apart its markers stand, so a span
     mentionsIn(words, null).map(({ mention }) => mention),
     [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
   );
-});
-
-test("a plan's address, by either scheme and on any page that reads it, is spelled in the desktop's own scheme, written again from what it names", () => {
-  assert.equal(
-    appLinkOf(`https://tryluke.dev/acme/plan/${PLAN_ID}?from=slack#Rollout`),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
-  );
-  assert.equal(
-    appLinkOf(`tryluke://tryluke.dev/personal-u_1/plan/${PLAN_ID}`),
-    `tryluke://tryluke.dev/personal-u_1/plan/${PLAN_ID}`,
-  );
-  for (const target of [
-    `https://tryluke.dev//plan/${PLAN_ID}`,
-    `https://example.com/acme/plan/${PLAN_ID}`,
-    `luke://plan/${PLAN_ID}`,
-    "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
-    `https://tryluke.dev/acme/plan/${PLAN_ID}#a%20b`,
-  ]) {
-    assert.equal(appLinkOf(target), undefined, target);
-  }
 });
 
 test("an MCP server and one of its tools read back as the mention they were written from", () => {
@@ -698,4 +681,55 @@ test("a plain place reads a link as markdown does: balanced parentheses and a ti
   );
   assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)})`), "Report");
   assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)} "Notes")`), "Report");
+});
+
+test("a server or tool of an account past a provider's first names it by its connection, and the provider's own name still names the first", () => {
+  const personal = {
+    kind: MENTION_KIND.TOOL,
+    provider: INTEGRATION_PROVIDER.NOTION,
+    connection: "notion-2",
+    tool: "notion-search",
+  } as const;
+  assert.equal(encodeMention(personal, PLACE), "luke://mcp/notion-2/notion-search");
+  assert.deepEqual(decodeMention("luke://mcp/notion-2/notion-search", REPOSITORY), personal);
+  assert.deepEqual(decodeMention("luke://mcp/notion-2", REPOSITORY), {
+    kind: MENTION_KIND.SERVER,
+    provider: INTEGRATION_PROVIDER.NOTION,
+    connection: "notion-2",
+  });
+  assert.deepEqual(decodeMention("luke://mcp/notion", REPOSITORY), {
+    kind: MENTION_KIND.SERVER,
+    provider: INTEGRATION_PROVIDER.NOTION,
+  });
+  for (const target of ["luke://mcp/notion-1", "luke://mcp/jira-2", "luke://mcp/notion-02"]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a page or an agent of a plan is its Luke link, read back by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
+  const page: Mention = { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: "page-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, planId: PLAN_ID, agentId: "agent-1" };
+  const plan = `https://tryluke.dev/acme/plan/${PLAN_ID}`;
+
+  assert.equal(encodeMention(page, PLACE), `${plan}/page/page-1`);
+  assert.equal(encodeMention(agent, PLACE), `${plan}/agent/agent-1`);
+  assert.deepEqual(
+    decodeMention(`tryluke://tryluke.dev/acme/plan/${PLAN_ID}/agent/agent-1`, null),
+    agent,
+  );
+  assert.deepEqual(linkMention(`${plan}/page/page-1`, `${plan}/page/page-1`, null), {
+    mention: page,
+    name: "Page",
+  });
+  assert.deepEqual(linkMention("", `${plan}/agent/agent-1`, null)?.name, "Agent");
+  for (const target of [
+    `${plan}/page/page-1/version/2`,
+    `${plan}/agent/agent-1/changes`,
+    `${plan}/page/page-1#top`,
+    `${plan}/page/`,
+    `${plan}/version/2`,
+    `${plan}/agent/agent%2F1`,
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
 });

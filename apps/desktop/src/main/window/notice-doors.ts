@@ -1,9 +1,27 @@
 import type {
   AgentEndToast,
   AgentNoticeDoorsSurface,
+  FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
+import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
 import { app, Notification } from "electron";
+
+/** What the notification Settings' test posts says. */
+const TEST_NOTICE = {
+  title: "Luke notifications are on",
+  body: "This is how Luke tells you a coding agent finished or needs you.",
+} as const;
+
+/**
+ * The doors Luke's notices leave through, and the one notification posted on
+ * the developer's own ask: through the same door, so its answer from macOS is
+ * read as every other one is.
+ */
+export interface ElectronNoticeDoors extends AgentNoticeDoorsSurface {
+  /** Posts the test notification right away, whatever window is in front; a click on it calls `onClick`. */
+  postTest: (onClick: () => void) => void;
+}
 
 /**
  * notice-doors.ts -- the doors an agent's announcement leaves this process through: Electron's `Notification`, shown once with its click handed back, the panel's own toast, or the Dock's badge.
@@ -16,7 +34,8 @@ import { app, Notification } from "electron";
  * the object is all that ties the banner to its click: one the collector
  * took has no click left to hand back. Whether macOS refused it or showed
  * it is handed on, since that is the only word Electron gives of whether
- * notifications are on for Luke.
+ * notifications are on for Luke; the test Settings posts is how a
+ * developer asks for that word before any agent has ended.
  *
  * The Dock's badge is Electron's own count, which macOS draws only where
  * notifications are allowed for Luke and its badges are not turned off in
@@ -25,33 +44,37 @@ import { app, Notification } from "electron";
 export function electronNoticeDoors(dependencies: {
   toPanels: (end: AgentEndToast) => void;
   inboxToPanels: (item: InboxItemToast) => void;
-  /** macOS refused a notification, or showed one: whether notifications are off for Luke. */
-  onRefused: (refused: boolean) => void;
+  failedRunToPanels: (run: FailedRunToast) => void;
+  /** macOS showed a notification, or refused one: whether notifications are on for Luke. */
+  onAnswered: (status: NotificationsStatus) => void;
   report: (line: string) => void;
-}): AgentNoticeDoorsSurface {
-  const { toPanels, inboxToPanels, onRefused, report } = dependencies;
+}): ElectronNoticeDoors {
+  const { toPanels, inboxToPanels, failedRunToPanels, onAnswered, report } = dependencies;
   const standing = new Set<Notification>();
+  const post: AgentNoticeDoorsSurface["post"] = (notice) => {
+    if (!Notification.isSupported()) return;
+    const posted = new Notification({ title: notice.title, body: notice.body });
+    const release = () => standing.delete(posted);
+    standing.add(posted);
+    posted.on("click", () => {
+      release();
+      notice.onClick();
+    });
+    posted.on("close", release);
+    posted.on("show", () => onAnswered(NOTIFICATIONS_STATUS.ON));
+    posted.on("failed", (_event, error) => {
+      release();
+      report(`macOS did not show Luke's notification: ${error}`);
+      onAnswered(NOTIFICATIONS_STATUS.OFF);
+    });
+    posted.show();
+  };
   return {
-    post: (notice) => {
-      if (!Notification.isSupported()) return;
-      const posted = new Notification({ title: notice.title, body: notice.body });
-      const release = () => standing.delete(posted);
-      standing.add(posted);
-      posted.on("click", () => {
-        release();
-        notice.onClick();
-      });
-      posted.on("close", release);
-      posted.on("show", () => onRefused(false));
-      posted.on("failed", (_event, error) => {
-        release();
-        report(`macOS did not show the agent's notification: ${error}`);
-        onRefused(true);
-      });
-      posted.show();
-    },
+    post,
+    postTest: (onClick) => post({ ...TEST_NOTICE, onClick }),
     toast: toPanels,
     toastInbox: inboxToPanels,
+    toastFailedRun: failedRunToPanels,
     badge: (count) => {
       app.setBadgeCount(count);
     },

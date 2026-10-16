@@ -31,6 +31,14 @@ lists the first workspace. acme's members are Dean (owner), Dana Moreno
 (admin), Jordan Lee, Priya Raman (`priya@acme.dev`), and Theo Walsh
 (`theo@acme.dev`), with sam@acme.dev invited.
 
+Since 0.14.0 the service lists an account's own workspace first, named by
+its owner ("Dean Stratakos", his photo, "Personal workspace"), then the
+rest by name: acme (its mark as its photo, 5 members) and **Harbor Labs**, a
+team Dean is a member of (4 members, drawn as its letter on its hue). A shot
+that needs acme listed chooses it with a step. Teammates without a photo are
+drawn by generated one-letter pictures on the pastels below, Theo on
+`#a9d3f5`.
+
 ## Repositories
 
 | Repository | What it is | Plans in it |
@@ -82,6 +90,16 @@ and Luke's own "Invite link expiry". The next pull request in this world is
 Dana Moreno (admin, `dana@acme.dev`), Jordan Lee (member,
 `jordan@acme.dev`), and sam@acme.dev, the teammate being invited. Avatars
 are initials on soft pastels (`#f2b880`, `#9fd8b4`, `#c7b4f5`).
+
+## Automations
+
+From 0.14.0 (behind its experiment): **Morning Sentry triage**, acme's
+workspace automation made by Dean, weekdays at 9:00 in the Mac's time zone,
+on acme/relay and acme/web, a new agent each run on Claude Sonnet 5.5 high.
+Its runs: "Fix invite accept crash on an expired token" (working, a Run now
+seconds before the capture), then "Retry Postmark sends on a 429", "Guard an
+empty workspace in the members query", "Fix the usage chart crash on a new
+workspace", and "Stop double-sending webhook test events", finished.
 
 ## Integrations
 

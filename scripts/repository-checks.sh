@@ -127,9 +127,9 @@ fi
 # without declaring resolves in a developer's hoisted tree, typechecks, and
 # fails the deploy's bundle step, or, for the Vite client, ships a bundle that
 # happened to resolve through another package's link. Declare what is named.
-# The two eve services under apps/web are workspaces of their own, each a
-# Vercel service root installed from its own manifest, so each is held to what
-# it declares on the same terms.
+# The two eve services (apps/luke and apps/dev) are workspaces of their own,
+# each a Vercel service root installed from its own manifest, so each is held
+# to what it declares on the same terms.
 undeclared_packages() {
     local manifest=$1
     shift
@@ -149,11 +149,11 @@ undeclared_packages() {
 }
 undeclared_web_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/package.json" \
     "$LUKE_REPO_ROOT/apps/web/server" "$LUKE_REPO_ROOT/apps/web/src" "$LUKE_REPO_ROOT/apps/web/scripts")
-for service in eve coder; do
-    undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/$service/package.json" \
-        "$LUKE_REPO_ROOT/apps/web/$service")
+for service in apps/luke apps/dev; do
+    undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/$service/package.json" \
+        "$LUKE_REPO_ROOT/$service")
     if [[ -n "$undeclared_service_packages" ]]; then
-        undeclared_web_packages+="apps/web/$service: $undeclared_service_packages"
+        undeclared_web_packages+="$service: $undeclared_service_packages"
     fi
 done
 if [[ -n "$undeclared_web_packages" ]]; then
@@ -368,6 +368,8 @@ node --input-type=module -e '
 # platform, so it is logic and belongs in a package. Shell is stated by role
 # rather than by list: an app's entries in `knip.json`, its runtime edges in
 # `effect-edges.json`, and the deployment and test-support files named here.
+# The agents' eve apps are scanned on the same terms: eve's file conventions
+# import `eve`, a platform, and their build and dependency trees are skipped.
 # The source is parsed with the root's `typescript`, so a comment or a string
 # that says "window" is not a reach into the DOM. `react` is deliberately not
 # a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
@@ -380,7 +382,7 @@ node --input-type=module -e '
   import path from "node:path";
   const root = process.argv[1];
   const ts = createRequire(path.join(root, "package.json"))("typescript");
-  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server"];
+  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server", "apps/luke", "apps/dev"];
   const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
   const PLATFORM =
     /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
@@ -412,7 +414,7 @@ node --input-type=module -e '
   const knip = JSON.parse(await readFile(path.join(root, "knip.json"), "utf8"));
   const edges = JSON.parse(await readFile(path.join(root, "tools/anti-slop/effect-edges.json"), "utf8"));
   const shellGlobs = [
-    ...["apps/desktop", "apps/web"].flatMap((app) =>
+    ...["apps/desktop", "apps/web", "apps/luke", "apps/dev"].flatMap((app) =>
       (knip.workspaces[app]?.entry ?? []).map((entry) => `${app}/${entry}`),
     ),
     "apps/web/server/function-*.ts",
@@ -428,6 +430,7 @@ node --input-type=module -e '
   for await (const found of glob(SCANNED.map((dir) => `${dir}/**/*.ts`), { cwd: root })) {
     const file = found.split(path.sep).join("/");
     if (/\.test\.ts$/.test(file) || /\/(?:__tests__|tests)\//.test(file) || shell.has(file)) continue;
+    if (/\/(?:node_modules|\.eve|\.vercel|\.output)\//.test(file)) continue;
     candidates.push(file);
   }
   // One program over every candidate, resolving no import, so the checker
@@ -522,6 +525,34 @@ node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
 if [[ -n "$node_reaching_effect" ]]; then
     printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
+    exit 1
+fi
+
+# This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
+# a test fixture shaped like a provider's live credential is what GitHub's
+# secret scanning raises an alert on, which history keeps open once pushed. So
+# a tracked file may hold no literal in the shape of a live provider key, a
+# GitHub token, a Slack token, an AWS access key id, or a private key block:
+# a test that needs one builds it at run time or uses a low-entropy fake.
+# Note that git grep answers 1 for no match and more for a scan that failed,
+# which must fail the check rather than pass it, and that a hit is named by its
+# file and line alone, so the literal never reaches a CI log.
+provider_shaped_status=0
+provider_shaped_literals=$(git -C "$LUKE_REPO_ROOT" grep -nIE \
+    -e 'sk_live_[0-9A-Za-z]{24,}' \
+    -e 'gh[pousr]_[A-Za-z0-9]{36}' \
+    -e 'github_pat_[A-Za-z0-9_]{22,}' \
+    -e 'xox[baprs]-[0-9]+-' \
+    -e 'AKIA[0-9A-Z]{16}' \
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' | cut -d: -f1,2) || provider_shaped_status=$?
+if ((provider_shaped_status > 1)); then
+    printf 'error: the scan for provider-shaped literals could not run (git grep exited %s)\n' \
+        "$provider_shaped_status" >&2
+    exit 1
+fi
+if [[ -n "$provider_shaped_literals" ]]; then
+    printf 'error: a tracked file holds a literal shaped like a provider credential; use a low-entropy fake or build the value at run time:\n%s\n' \
+        "$provider_shaped_literals" >&2
     exit 1
 fi
 

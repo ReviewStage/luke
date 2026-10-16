@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "executor",
+        "github",
+        "granola",
+        "linear",
+        "mercury",
+        "neon",
+        "notion",
+        "posthog",
+        "sentry",
+        "slack",
+        "supabase",
+        "vercel",
+        "ycombinator"
+      ]
+    },
+    "connection": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 64
+    }
+  },
+  "required": [
+    "provider",
+    "connection",
+    "label"
+  ],
+  "additionalProperties": false
+}

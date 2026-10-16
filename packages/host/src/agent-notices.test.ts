@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry, AccountPlanlessEntry } from "@luke/features/account-inbox-wire";
+import type {
+  AccountFailedRun,
+  AccountInboxEntry,
+  AccountPlanlessEntry,
+} from "@luke/features/account-inbox-wire";
+import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type PlanlessAgent,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
@@ -21,6 +28,7 @@ import {
   AgentNoticeDoors,
   type AgentPlace,
   createAgentNotices,
+  type FailedRunToast,
   type InboxItemToast,
 } from "./agent-notices.js";
 import type { AppInboxPlan, AppInboxPlanHolding, AppInboxSlice } from "./app-state.js";
@@ -75,17 +83,22 @@ function fixture() {
   const posted: AgentNotice[] = [];
   const toasted: AgentEndToast[] = [];
   const inboxToasted: InboxItemToast[] = [];
+  const runsToasted: FailedRunToast[] = [];
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
+    toastFailedRun: (run) => runsToasted.push(run),
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxPlan[])[] = [];
   const holding: (readonly AppInboxPlanHolding[])[] = [];
   const planless: AppInboxSlice["planless"][] = [];
+  const failedRuns: AppInboxSlice["failedRuns"][] = [];
+  const openedAutomations: string[] = [];
+  let automationsOn = true;
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -97,6 +110,8 @@ function fixture() {
   }[] = [];
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
+  const pages = new Map<string, CodingAgentPageAnswerView[]>();
+  const readAgents: string[] = [];
   let focus: ((focused: boolean) => void) | undefined;
   let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
   let signedInAs: string | undefined = ACCOUNT;
@@ -112,6 +127,13 @@ function fixture() {
         Effect.sync(() => {
           listed.push(planId);
           const queue = answers.get(planId) ?? [];
+          const answer = queue.length > 1 ? queue.shift() : queue[0];
+          return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        }),
+      readAgent: (agentId) =>
+        Effect.sync(() => {
+          readAgents.push(agentId);
+          const queue = pages.get(agentId) ?? [];
           const answer = queue.length > 1 ? queue.shift() : queue[0];
           return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
         }),
@@ -152,7 +174,10 @@ function fixture() {
         waiting.push(next.waiting);
         holding.push(next.plans);
         planless.push(next.planless);
+        failedRuns.push(next.failedRuns);
       },
+      openFailedRun: (place) => openedAutomations.push(place.automationId),
+      automationsOn: () => automationsOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openPlanlessItem: (item) => openedPlanless.push(item),
       watchInterval: WATCH,
@@ -173,6 +198,11 @@ function fixture() {
     unseen,
     /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
     answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
+    /** The page answers an agent's own reads hear, in order; the last stands for every read after it. */
+    answerPage: (agentId: string, ...queue: CodingAgentPageAnswerView[]) =>
+      pages.set(agentId, queue),
+    /** Every agent read by itself, in order. */
+    readAgents,
     focus: (focused: boolean) => {
       assert.ok(focus, "the notices subscribe to the window's focus");
       focus(focused);
@@ -197,6 +227,13 @@ function fixture() {
     badges,
     inboxToasted,
     openedInboxes,
+    runsToasted,
+    failedRuns,
+    openedAutomations,
+    /** The account's Automations experiment. */
+    turnAutomations: (on: boolean) => {
+      automationsOn = on;
+    },
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
       accountId = next;
@@ -356,19 +393,176 @@ it.effect(
       ]);
     }),
 );
+/** The automation the planless agents below were started by. */
+const AUTOMATION_NAME = "Morning Sentry triage";
+
+/** An agent an automation started with no plan, as the plan list carries it, started by the signed-in account unless a test says. */
+function planlessAgent(
+  status: CodingAgentStatus,
+  patch: Partial<PlanlessAgent> = {},
+): PlanlessAgent {
+  return {
+    ...agent(status, { title: "Triage overnight issues" }),
+    planId: null,
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: AUTOMATION_NAME,
+    workspaceId: "workspace-acme",
+    repository: "acme/relay",
+    startedBy: { userId: ACCOUNT_ID, name: "Dean" },
+    activityAt: 1_800_000_000_000,
+    ...patch,
+  };
+}
+
+/** The agent's own page as its read answers it. */
+function pageOf(held: PlanlessAgent): CodingAgentPageAnswerView {
+  const { automationName: _name, activityAt: _at, ...page } = held;
+  return { agent: page };
+}
+
 it.effect(
-  "an agent with no plan, named by a message's answer, is passed over: no plan's list is read for it and nothing is announced of it",
+  "an automation's agent with no plan, held from the plan list, is read by itself while it works and announces its end under the automation's name, its click opening its own page",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const running = planlessAgent(CODING_AGENT_STATUS.RUNNING);
+      f.answerPage(AGENT_ID, pageOf(planlessAgent(CODING_AGENT_STATUS.COMPLETED)));
+
+      notices.observePlanless([running]);
+      yield* TestClock.adjust(WATCH);
+
+      assert.deepEqual(f.readAgents, [AGENT_ID]);
+      assert.deepEqual(f.listed, []);
+      assert.deepEqual(f.said(), [
+        { title: AUTOMATION_NAME, body: "Triage overnight issues finished" },
+      ]);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+      f.posted[0]?.onClick();
+      assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+    }),
+);
+it.effect(
+  "an automation's agent with no plan that fails while the window is focused elsewhere is toasted in the failed tone under the automation's name, its View going to its own page",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.FAILED)]);
+      yield* Effect.yieldNow;
+
+      assert.deepEqual(f.toasted, [
+        {
+          place: { planId: null, agentId: AGENT_ID },
+          words: "Triage overnight issues failed",
+          detail: AUTOMATION_NAME,
+          failed: true,
+        },
+      ]);
+      assert.deepEqual(f.posted, []);
+    }),
+);
+it.effect(
+  "an agent with no plan named only by an act's answer is announced under the automation that answer names",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const mine = {
+        ...agent(CODING_AGENT_STATUS.RUNNING, { title: "Triage overnight issues" }),
+        planId: null,
+        startedBy: { userId: ACCOUNT_ID, name: "Dana" },
+        automationName: AUTOMATION_NAME,
+      };
+
+      notices.observeAgents([mine]);
+      notices.observeAgents([{ ...mine, status: CODING_AGENT_STATUS.COMPLETED }]);
+      yield* Effect.yieldNow;
+
+      assert.deepEqual(f.said(), [
+        { title: AUTOMATION_NAME, body: "Triage overnight issues finished" },
+      ]);
+    }),
+);
+it.effect(
+  "an untitled automation's agent is named by its automation, as its tab names it, not by its model",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeMessaged({ ...agent(CODING_AGENT_STATUS.RUNNING), planId: null });
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
+      yield* Effect.yieldNow;
+
+      assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: `${AUTOMATION_NAME} failed` }]);
+    }),
+);
+it.effect(
+  "a teammate's agent with no plan on the plan list is not held, so its end is announced to its starter alone",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const theirs = { startedBy: { userId: "user-sam", name: "Sam" } };
+
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
+      yield* TestClock.adjust(WATCH);
+      notices.observePlanless([planlessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
+      yield* Effect.yieldNow;
+
+      assert.deepEqual(f.readAgents, []);
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.unseen, []);
+    }),
+);
+it.effect(
+  "a teammate's agent with no plan named by an act's answer, a rename or a message on its page, is not held",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const theirs = {
+        ...agent(CODING_AGENT_STATUS.RUNNING),
+        planId: null,
+        startedBy: { userId: "user-sam", name: "Sam" },
+      };
+
+      notices.observeAgents([theirs]);
+      notices.observeMessaged(theirs);
       yield* TestClock.adjust(WATCH);
 
+      assert.deepEqual(f.readAgents, []);
       assert.equal(f.listReads(), 0);
+    }),
+);
+it.effect(
+  "an agent with no plan named by a message's answer is watched by itself, not by a plan's list, and one deleted meanwhile is let go",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      f.answerPage(AGENT_ID, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+
+      notices.observeMessaged({
+        ...agent(CODING_AGENT_STATUS.RUNNING),
+        planId: null,
+        startedBy: { userId: ACCOUNT_ID, name: "Dana" },
+      });
+      yield* TestClock.adjust(WATCH);
+      yield* TestClock.adjust(WATCH);
+
       assert.deepEqual(f.listed, []);
+      assert.deepEqual(f.readAgents, [AGENT_ID]);
       assert.deepEqual(f.posted, []);
     }),
 );
@@ -636,5 +830,96 @@ it.effect(
 
       assert.equal(f.badges.at(-1), 1);
       assert.equal(f.said().length, 1);
+    }),
+);
+
+const RUN_ID = "4b5c6d7e-8f90-4a1b-8c2d-3e4f5a6b7c8d";
+const AUTOMATION_ID = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
+
+/** A run of one of the account's own automations that failed to start, as the account's inbox read carries it. */
+function failedRun(patch: Partial<AccountFailedRun> = {}): AccountFailedRun {
+  return {
+    id: RUN_ID,
+    automationId: AUTOMATION_ID,
+    automationName: "Flaky test sweep",
+    workspaceId: "workspace-acme",
+    reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+    failedAt: READ_AT + 1,
+    ...patch,
+  };
+}
+
+it.effect(
+  "a run of the account's own automation that failed to start since the last answer is announced under the automation's name, its click opening the automation, and is written for the window without counting on the badge",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
+      yield* settled;
+
+      assert.deepEqual(f.said(), [
+        {
+          title: "Flaky test sweep",
+          body: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+        },
+      ]);
+      f.posted[0]?.onClick();
+      assert.deepEqual(f.openedAutomations, [AUTOMATION_ID]);
+      assert.deepEqual(f.failedRuns.at(-1), [failedRun()]);
+      assert.equal(f.badges.at(-1), 0);
+    }),
+);
+it.effect(
+  "a run that failed to start while the window is focused is toasted under the automation's name, and is announced once however often it is carried",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(true);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
+      yield* settled;
+      f.answerInbox({
+        items: [waitingItem(ITEM_A, { updatedAt: READ_AT })],
+        failedRuns: [failedRun()],
+        cursor: "3",
+        readAt: READ_AT + 3,
+      });
+      yield* settled;
+
+      assert.deepEqual(f.runsToasted, [
+        {
+          place: { automationId: AUTOMATION_ID, runId: RUN_ID, workspaceId: "workspace-acme" },
+          words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          detail: "Flaky test sweep",
+        },
+      ]);
+      assert.deepEqual(f.posted, []);
+    }),
+);
+it.effect(
+  "a failed run the first answer carries is where the account stands and is announced nowhere, nor is one while the account has Automations off, though both are written for the window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "1", readAt: READ_AT + 2 });
+      yield* settled;
+      f.turnAutomations(false);
+      const later = failedRun({ id: ITEM_B, failedAt: READ_AT + 3 });
+
+      f.answerInbox({ items: [], failedRuns: [later], cursor: "2", readAt: READ_AT + 4 });
+      yield* settled;
+
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.failedRuns.at(-1), [later]);
     }),
 );

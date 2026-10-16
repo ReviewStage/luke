@@ -3,7 +3,9 @@ import {
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
-import { linkMention, mayNameMention } from "@luke/features/mention-link";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { readLink } from "@luke/features/luke-link";
+import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   CALL_KIND,
@@ -15,14 +17,14 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn } from "@luke/ui";
+import { cn, ProviderMark } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
-  CircleDotIcon,
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
@@ -31,6 +33,7 @@ import {
   FileTextIcon,
   GlobeIcon,
   HourglassIcon,
+  ImageIcon,
   InboxIcon,
   LaptopIcon,
   LayoutListIcon,
@@ -44,6 +47,7 @@ import {
   SearchIcon,
   SendIcon,
   TerminalIcon,
+  TimerIcon,
   WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -69,10 +73,11 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
+import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { MentionChip } from "./mention-chip";
+import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
@@ -143,8 +148,19 @@ const MENTION_ELEMENT = {
   TARGET: "to",
 } as const;
 
-/** The mention's element, let through the drawing's sanitizer with its target. */
-const MENTION_TAGS = { [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET] };
+/** The element a picture's Markdown is drawn as, and the attributes that carry its address and its words. */
+const PICTURE_ELEMENT = {
+  TAG: "luke-picture",
+  ADDRESS: "to",
+  WORDS: "words",
+} as const;
+
+/** The mention's element and the picture's, let through the drawing's sanitizer with what each carries. */
+const MENTION_TAGS = {
+  [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
+  [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS],
+  [LINK_GLUE.TAG]: [],
+};
 
 /** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
 interface WordsNode {
@@ -156,8 +172,9 @@ interface WordsNode {
 /** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
+  readonly alt?: string | null;
   readonly identifier?: string;
-  readonly children?: readonly MarkdownNode[];
+  children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
 
@@ -168,9 +185,10 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention to be
- * drawn as its own element, which reads what it names against the plan
- * its page is of (`linkMention`): the same rule for a developer's `@`
+ * Marks every link in the words whose target may name a mention, or is a
+ * Luke link to any place (`readLink`), to be drawn as its own element,
+ * which reads what it names against the plan its page is of (`linkChip`):
+ * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
  * is read here before the page's repository is known (`mayNameMention`),
  * so every page of GitHub's is marked, and every other link is drawn as
@@ -186,7 +204,7 @@ function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, strin
       : node.type === "linkReference" && node.identifier !== undefined
         ? definitions.get(node.identifier)
         : undefined;
-  if (target !== undefined && mayNameMention(target)) {
+  if (target !== undefined && (mayNameMention(target) || readLink(target) !== undefined)) {
     node.data = {
       hName: MENTION_ELEMENT.TAG,
       hProperties: { [MENTION_ELEMENT.TARGET]: target },
@@ -208,9 +226,69 @@ function definitionsIn(
   return found;
 }
 
-/** The step that marks a transcript's links, a reference link's read through its definition. */
+/**
+ * Marks every picture in the words to be drawn as its own element, which
+ * names it as a link to where it points and never draws it, because a
+ * picture an agent writes is a request to wherever its address points the
+ * moment the tab opens, and a model's words must make none; the pictures an
+ * agent shows are its `show_image` calls'. Note that the mark is made on
+ * the markdown, before the drawing's hardening reads a picture at all,
+ * which draws a relative one as a placeholder of its own and an absolute
+ * one as nothing.
+ */
+function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+  const address =
+    node.type === "image"
+      ? node.url
+      : node.type === "imageReference" && node.identifier !== undefined
+        ? definitions.get(node.identifier)
+        : undefined;
+  if (node.type === "image" || node.type === "imageReference") {
+    node.data = {
+      hName: PICTURE_ELEMENT.TAG,
+      hProperties: {
+        [PICTURE_ELEMENT.ADDRESS]: address ?? "",
+        [PICTURE_ELEMENT.WORDS]: node.alt ?? "",
+      },
+    };
+    return;
+  }
+  for (const child of node.children ?? []) markPictures(child, definitions);
+}
+
+/** Holds each link marked as a mention with the punctuation written against it (`link-glue.ts`), under a node and every node below it. */
+function glueMentions(node: MarkdownNode): void {
+  if (node.children === undefined) return;
+  for (const child of node.children) glueMentions(child);
+  node.children = gluedRun<MarkdownNode>(node.children, {
+    held: (child) => child.data?.hName === MENTION_ELEMENT.TAG,
+    text: (value) => ({ type: "text", value }),
+    box: (inside) => ({ type: LINK_GLUE.TAG, data: { hName: LINK_GLUE.TAG }, children: inside }),
+  });
+}
+
+/** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */
 function markLinks(tree: MarkdownNode): void {
-  markMentions(tree, definitionsIn(tree));
+  const definitions = definitionsIn(tree);
+  markMentions(tree, definitions);
+  markPictures(tree, definitions);
+  glueMentions(tree);
+}
+
+/** What a picture with no words of its own is called where it is named. */
+const UNNAMED_PICTURE = "Picture";
+
+/** A picture in a transcript's words: a link to where it points, with the picture's glyph, never drawn. */
+function PictureElement({ node }: ExtraProps): ReactNode {
+  const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
+  const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
+  const words = said === "" ? UNNAMED_PICTURE : said;
+  return (
+    <TranscriptLink href={address === "" ? undefined : address} words={words}>
+      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      {words}
+    </TranscriptLink>
+  );
 }
 
 /** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
@@ -225,22 +303,27 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const found =
-    node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
-  if (found === undefined) {
-    return (
-      <TranscriptLink href={target} words={node === undefined ? "" : wordsOf(node)}>
+  const words = node === undefined ? "" : wordsOf(node);
+  const chip = node === undefined ? undefined : linkChip(target, words, doors);
+  return (
+    chip ?? (
+      <TranscriptLink href={target} words={words}>
         {children}
       </TranscriptLink>
-    );
-  }
-  return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+    )
+  );
+}
+
+/** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
+function LinkGlueElement({ children }: ExtraProps & { children?: ReactNode }): ReactNode {
+  return <span className={LINK_GLUE.CLASS}>{children}</span>;
 }
 
 /**
  * How a transcript's markdown is drawn: at the panel's scale, its code and
  * tables as `transcript-markdown.tsx` draws them, its links as
- * {@link TranscriptLink}, but never as an image, because an image is a
+ * {@link TranscriptLink}, and its pictures as links to where they point
+ * ({@link PictureElement}), never as an image, because an image is a
  * request to wherever its address points the moment the tab opens, and
  * nothing said on a call or written by a model should make one.
  */
@@ -253,6 +336,8 @@ const TRANSCRIPT_COMPONENTS: Components = {
     </TranscriptLink>
   ),
   [MENTION_ELEMENT.TAG]: MentionElement,
+  [PICTURE_ELEMENT.TAG]: PictureElement,
+  [LINK_GLUE.TAG]: LinkGlueElement,
   img: () => null,
 };
 
@@ -361,6 +446,7 @@ const CALL_ICON = {
   [CALL_KIND.SHOW_CODE]: CodeXmlIcon,
   [CALL_KIND.DRAW_ON_BOARD]: PencilLineIcon,
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,
+  [CALL_KIND.LOOK_AT_PICTURE]: ImageIcon,
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
   [CALL_KIND.WITHDRAW_QUESTION]: MessageCircleXIcon,
   [CALL_KIND.EDIT_PLAN]: FilePenIcon,
@@ -377,6 +463,8 @@ const CALL_ICON = {
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
+  [CALL_KIND.SHOW_IMAGE]: ImageIcon,
+  [CALL_KIND.SLEEP]: TimerIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
@@ -389,6 +477,8 @@ export const MacOwnerProvider = MacOwnerContext.Provider;
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
+    /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
+    provider?: IntegrationProvider | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     input: ToolBlock;
@@ -407,6 +497,7 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 export function TranscriptTool({
   state,
   kind,
+  provider,
   subject,
   description,
   input,
@@ -422,7 +513,13 @@ export function TranscriptTool({
     <Tool {...props}>
       <ToolHeader
         state={state}
-        icon={<Icon aria-hidden="true" />}
+        icon={
+          provider === undefined ? (
+            <Icon aria-hidden="true" />
+          ) : (
+            <ProviderMark provider={provider} />
+          )
+        }
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}
@@ -497,7 +594,16 @@ export function TranscriptOpeningCall({
   );
 }
 
-/** How a to-do of each status is drawn: its mark, the mark's colour, how its words are set, and what the mark says aloud. */
+/**
+ * How a to-do of each status is drawn: its glyph and the glyph's ink, how
+ * its words are set, and what the glyph says aloud. Pending is an empty
+ * circle, done a check in the muted ink with its words muted beside it, as
+ * Linear and Things mark a finished item, and in progress wears the
+ * working mark an agent at work wears (`state-glyph.tsx`), in the full ink,
+ * so the one item the list is at is the one that stands out. Note that a
+ * done item is not struck through, because a rule through two or three
+ * wrapped lines reads as noise over words the muted ink already quiets.
+ */
 const TODO_LOOK = {
   [CODING_AGENT_TODO_STATUS.PENDING]: {
     Icon: CircleIcon,
@@ -506,20 +612,20 @@ const TODO_LOOK = {
     label: "Pending",
   },
   [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
-    Icon: CircleDotIcon,
-    mark: "text-luke",
+    Icon: undefined,
+    mark: "text-foreground",
     words: "",
     label: "In progress",
   },
   [CODING_AGENT_TODO_STATUS.DONE]: {
     Icon: CircleCheckIcon,
     mark: "text-muted-foreground",
-    words: "text-muted-foreground line-through",
+    words: "text-muted-foreground",
     label: "Done",
   },
 } as const satisfies Record<
   CodingAgentTodoStatus,
-  { Icon: LucideIcon; mark: string; words: string; label: string }
+  { Icon: LucideIcon | undefined; mark: string; words: string; label: string }
 >;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
@@ -528,16 +634,42 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
     errorText: string | undefined;
   };
 
-/** A to-do list's items, each behind the mark of where it stands, a done item struck through. */
-function TodoItems({ todos }: { todos: CodingAgentTodos["todos"] }): ReactNode {
+/**
+ * A to-do list's items, each behind the glyph of where it stands. The
+ * glyph sits in a 16px column, as a call's icon does, with the call's 8px
+ * gap after it, so a list set at a row's text column, or at its card's
+ * icon, keeps its words on that row's words. The glyph is centred on its
+ * item's first line, which at a 20px line centres it on the capitals, and
+ * a wrapped line hangs under the words rather than the glyph.
+ */
+function TodoItems({
+  todos,
+  className,
+}: {
+  todos: CodingAgentTodos["todos"];
+  className?: string;
+}): ReactNode {
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2">
+    <ul
+      className={cn(
+        "m-0 flex list-none flex-col gap-1 p-0 leading-5 [--state-glyph-size:14px]",
+        className,
+      )}
+    >
       {todos.map((todo, index) => {
         const look = TODO_LOOK[todo.status];
         return (
           <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
-            <span className="flex h-[1lh] shrink-0 items-center" role="img" aria-label={look.label}>
-              <look.Icon className={cn("size-3.5", look.mark)} aria-hidden="true" />
+            <span
+              className={cn("flex h-[1lh] w-4 shrink-0 items-center justify-center", look.mark)}
+              role="img"
+              aria-label={look.label}
+            >
+              {look.Icon === undefined ? (
+                <StateGlyph state={GLYPH_STATE.WORKING} />
+              ) : (
+                <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
+              )}
             </span>
             <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
               {todo.content}
@@ -551,8 +683,13 @@ function TodoItems({ todos }: { todos: CodingAgentTodos["todos"] }): ReactNode {
 
 /**
  * One write of an agent's to-do list: a call's row saying how far the list
- * has got, which opens onto the list itself. Whether it starts open is the
- * caller's, since only the newest list is worth reading unasked.
+ * has got, which opens onto the list itself, set bare at the row's text
+ * column as Claude Code and Codex hang theirs under the call, since it is
+ * words rather than the code a call's card holds, and selectable as a
+ * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
+ * the newest list is worth reading unasked. Its working mark holds still
+ * (planning.css), since a row's list is a record of one write, and the
+ * list the agent is at is docked above the composer while it works.
  */
 export function TranscriptTodos({
   state,
@@ -571,10 +708,17 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <ToolContent>
+      <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
         <TodoItems todos={todos} />
-        <ToolOutput block={undefined} errorText={errorText} />
-      </ToolContent>
+        {errorText === undefined ? null : (
+          <p
+            className="m-0 mt-1 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+            role="alert"
+          >
+            {errorText}
+          </p>
+        )}
+      </FoldBody>
     </Tool>
   );
 }
@@ -602,18 +746,18 @@ export function TranscriptTodosDock({
 }): ReactNode {
   return (
     <Fold
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
+      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]"
       data-todos-dock=""
       aria-label="To-dos"
     >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]">
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none">
         <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 text-muted-foreground">{summary}</span>
         {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}
         <FoldChevron className="ml-auto" />
       </FoldSummary>
       <FoldBody className="border-t border-border">
-        <TodoItems todos={todos} />
+        <TodoItems todos={todos} className="px-3 py-2" />
       </FoldBody>
     </Fold>
   );
@@ -731,29 +875,44 @@ export function TranscriptSubagent({
   );
 }
 
+/** What the label of a fold's line adds where a call it holds failed. */
+const CALL_FAILED_WORDS = "a call failed";
+
 /**
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
- * did, and the rows it opens onto are what a reader scans. It wears no
- * icon, because its count already says what it holds and the rows it
- * opens onto wear their own.
+ * did, and the rows it opens onto are what a reader scans. It wears the
+ * fold's chevron in a row's icon column, as the plan's card does at its
+ * head, because its count already says what it holds, so what is left to
+ * say is whether it is open, and an icon of its own would read as one more
+ * of the calls it opens onto. Where a call it holds failed, the line wears
+ * that call's failed mark after its count, open or closed, as an editor's
+ * tree marks a folder holding a file with problems either way, so a
+ * failure is never folded out of sight, and its label says a call failed.
  */
 function TurnFold({
   summary,
   running,
+  failed,
   open = false,
   children,
 }: {
   summary: string;
   running: boolean;
+  failed: boolean;
   open?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+      <FoldSummary
+        className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
+      >
+        <FoldChevron />
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
+        {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
     </Fold>
@@ -780,7 +939,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.GROUP:
       return (
-        <TurnFold summary={row.summary} running={row.running} open={row.open}>
+        <TurnFold summary={row.summary} running={row.running} failed={row.failed} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
@@ -789,7 +948,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.FOLDED:
       return (
-        <TurnFold summary={row.summary} running={false}>
+        <TurnFold summary={row.summary} running={false} failed={row.failed}>
           <TranscriptRows rows={row.rows} trailer={trailer}>
             {children}
           </TranscriptRows>

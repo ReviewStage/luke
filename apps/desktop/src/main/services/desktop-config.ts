@@ -53,6 +53,6 @@ export interface DesktopConfig {
    * a gated feature's items stand. Called with nothing, it draws what it holds.
    */
   readonly showMenuBar: (change?: MenuBarChange) => void;
-  /** The Luke links the system hands the app, heard from before the launch (`../window/app-links.ts`). */
+  /** The Luke links the system hands the app, heard from before the launch (`@luke/features/app-links`). */
   readonly appLinks: AppLinkInbox;
 }

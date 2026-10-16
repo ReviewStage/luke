@@ -34,7 +34,7 @@ import { AgentTab } from "./agent-tab";
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
  * agent carries their face and name over its bubble, as a teammate's line
  * on the Call tab does, and the reader's own carries none; Luke's carries
- * his tile, an automation's its own, and a member's who has left the quiet
+ * his tile, an automation's its own, GitHub's the login it names, and a member's who has left the quiet
  * outline, and a message from before senders were kept names nobody.
  * Synthetic throughout.
  */
@@ -93,6 +93,14 @@ const MESSAGES: readonly CodingAgentMessage[] = [
     kind: CODING_AGENT_SENDER.AUTOMATION,
   }),
   line("gone", "Drop the banner.", { name: "Former member", kind: CODING_AGENT_SENDER.FORMER }),
+  line("reviewer", "@octocat requested changes on your pull request #12.", {
+    name: "octocat",
+    kind: CODING_AGENT_SENDER.GITHUB,
+  }),
+  line("review-bot", "@devin-ai-integration[bot] reviewed your pull request #12.", {
+    name: "devin-ai-integration[bot]",
+    kind: CODING_AGENT_SENDER.GITHUB,
+  }),
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   // A service older than the sender's kind names Luke by name alone.
   line("older", "Rebase again.", { name: "Luke" }),
@@ -186,6 +194,14 @@ test("each member sees a teammate's face and name over the teammate's messages a
     ["luke", ACTOR_KIND.LUKE, "Luke"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
+    // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.
+    [
+      "reviewer",
+      ACTOR_KIND.GITHUB,
+      "octocat",
+      "https://avatars.githubusercontent.com/octocat?v=4&s=32",
+    ],
+    ["review-bot", ACTOR_KIND.GITHUB, "devin-ai-integration"],
     // A member the workspace no longer lists has left it, and keeps their name.
     ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],
     ["older", ACTOR_KIND.SOMEONE, "Luke"],

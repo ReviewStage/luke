@@ -5,13 +5,21 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { createAutomation } from "@luke/database/models/automation-store";
+import {
+  createAutomation,
+  recordAutomationRun,
+  settleAutomationRun,
+} from "@luke/database/models/automation-store";
 import {
   readCodingAgent,
+  readCodingAgentByKey,
   takeCodingAgentMentionedServers,
+  updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
+import { writePage } from "@luke/database/models/plan-pages";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -20,7 +28,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -33,8 +41,13 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
+  type AutomationFiring,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BOUNDS,
@@ -48,6 +61,7 @@ import {
   codingAgentPageAnswerSchema,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ANSWER_LEAD,
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -60,7 +74,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { planListAnswerSchema } from "@luke/features/plan-wire";
+import { PLAN_LIST_ARCHIVED, planListAnswerSchema } from "@luke/features/plan-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -82,6 +96,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
+  AssistantMessageBuilder,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -108,6 +123,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -328,6 +344,7 @@ const standing = (
       }),
       github.layer,
       modelCatalogOf(CATALOG),
+      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const seams = {
       resolveUserId: (incoming: Request) =>
@@ -380,6 +397,7 @@ function request(
     call?: string;
     archived?: string | undefined;
     attachment?: string;
+    picture?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -388,6 +406,7 @@ function request(
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
+  if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -480,6 +499,33 @@ const openPlan = (
   });
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
+  it.effect(
+    "a Start whose prompt mentions a page the store cannot read is refused before any agent is made, so a retry under its key starts afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const shown = yield* writePage(owner, plan.id, { title: "Chart", html: "<h1>Chart</h1>" });
+        assert.ok(Option.isSome(shown));
+        const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: plan.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: plan.repository })}.`;
+        const idempotencyKey = randomUUID();
+        const sql = yield* SqlClient.SqlClient;
+        // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
+        const answered = yield* Effect.ensuring(
+          Effect.andThen(
+            sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
+            ask(startAs(owner, plan.id, { idempotencyKey, task: prompt })),
+          ),
+          Effect.orDie(
+            sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
+          ),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, idempotencyKey)));
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
   it.effect(
     "a member deleting a plan a teammate planned on retires the teammate's eve session before the plan goes",
     () =>
@@ -993,6 +1039,56 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     });
 
   it.effect(
+    "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
+    () =>
+      Effect.gen(function* () {
+        const { agent, ask, owner, target, writer, turnId, sent } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        /** The turn's step begun, as the relay tells the step's start. */
+        const stepBegun = (step: number) =>
+          writer.consume(target, {
+            ...turn,
+            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            sequence: step + 2,
+            step,
+          });
+        yield* stepBegun(1);
+        yield* stepBegun(2);
+        yield* sent("Rename the subject line too.");
+        yield* writer.takeAwaitingLine(target, { text: "Rename the subject line too.", turnId });
+        yield* stepBegun(3);
+        const answer = new AssistantMessageBuilder();
+        for (const _step of [1, 2, 3]) answer.stepStart();
+        answer.text("Renamed it.");
+        yield* writer.consume(target, {
+          ...turn,
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          sequence: 6,
+          message: answer.finish(randomUUID()),
+        });
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        const journal = page.messages.find((each) => each.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal);
+        // The closed journal stands behind the line it took, so the order alone would draw the line ahead of the turn.
+        assert.deepEqual(
+          page.messages.map((each) => [each.role, each.arrivedIn]),
+          [
+            [MESSAGE_ROLE.USER, undefined],
+            [MESSAGE_ROLE.USER, { journalId: journal.id, afterStep: 2 }],
+            [MESSAGE_ROLE.ASSISTANT, undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a member of the plan's workspace lists, reads, and messages an agent a teammate started, named as its starter, the line landing in the starter's conversation",
     () =>
       Effect.gen(function* () {
@@ -1184,6 +1280,145 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           outside,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "an automation's agent reads as its page with the run that started it: the automation's name, the prompt alone, the pull request its event named, and who asked for a run now",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const ranAs = (firing: AutomationFiring) =>
+          Effect.gen(function* () {
+            yield* Database.use((db) =>
+              db
+                .update(codingAgent)
+                .set({
+                  planId: null,
+                  organizationId: plan.workspaceId,
+                  automationOrigin: { name: "Code review", firing, prompt: "Review it." },
+                })
+                .where(eq(codingAgent.id, agent.id)),
+            );
+            return readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            ).agent;
+          });
+
+        const reviewed = yield* ranAs({
+          kind: AUTOMATION_FIRING.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+          repository: RELAY_FULL_NAME,
+          number: 2905,
+          title: "View commands",
+          url: "https://github.com/acme/relay/pull/2905",
+        });
+        const ranNow = yield* ranAs({ kind: AUTOMATION_FIRING.MANUAL, userId: owner });
+
+        assert.equal(reviewed.automationName, "Code review");
+        assert.deepEqual(reviewed.origin, {
+          prompt: "Review it.",
+          subject: {
+            number: 2905,
+            title: "View commands",
+            url: "https://github.com/acme/relay/pull/2905",
+          },
+        });
+        assert.equal(ranNow.origin?.runBy?.userId, owner);
+        assert.equal(ranNow.origin?.subject, undefined);
+      }),
+  );
+
+  it.effect(
+    "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const listed = (bearer: string, archived?: string) =>
+          Effect.map(ask(request(PLANS, bearer, { archived })), (answered) =>
+            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const page = readAnswer(
+          codingAgentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT, owner, { id: agent.id })),
+        ).agent;
+
+        const standing = yield* listed(owner);
+        const outside = yield* listed(other);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ archivedAt: new Date() })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const archived = yield* listed(owner);
+        const included = yield* listed(owner, PLAN_LIST_ARCHIVED.INCLUDE);
+
+        const [only, ...rest] = standing.planlessAgents ?? [];
+        assert.ok(only !== undefined);
+        const { activityAt, ...read } = only;
+        assert.deepEqual([read, rest], [page, []]);
+        assert.ok(activityAt >= page.createdAt);
+        assert.equal(standing.plans.find((each) => each.id === plan.id)?.agents, undefined);
+        assert.deepEqual(outside.planlessAgents, []);
+        assert.deepEqual(archived.planlessAgents, []);
+        assert.deepEqual(
+          included.planlessAgents?.map((each) => each.id),
+          [agent.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a member's PATCH pins an agent with no plan in their own plan list and unpins it again, and pins nothing for an account outside its workspace",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const pin = (bearer: string, pinned: boolean) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body: { pinned } }));
+        const pinnedAt = (bearer: string) =>
+          Effect.map(
+            ask(request(PLANS, bearer)),
+            (answered) =>
+              readAnswer(
+                planListAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).planlessAgents?.find((each) => each.id === agent.id)?.pinnedAt,
+          );
+        const at = yield* Clock.currentTimeMillis;
+
+        const pinned = yield* pin(owner, true);
+        const refused = yield* pin(other, true);
+        const held = yield* pinnedAt(owner);
+        yield* pin(owner, false);
+        const unpinned = yield* pinnedAt(owner);
+
+        assert.equal(
+          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, pinned).agent.id,
+          agent.id,
+        );
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(held, at);
+        assert.equal(unpinned, undefined);
       }),
   );
 
@@ -1402,6 +1637,48 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message mentioning a page and another agent of the plan hands eve the page by its id with its HTML and the agent by its id and branch, never its conversation",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, ask, sent } = yield* startedAgent(eve, { running: true });
+        const other = yield* startedAgentOf(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
+        const shown = yield* writePage(owner, plan.id, {
+          title: "Invites by week",
+          html: "<h1>Invites by week</h1>",
+        });
+        assert.ok(Option.isSome(shown));
+        const place = { workspace: "acme", repository: plan.repository };
+        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: plan.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, planId: plan.id, agentId: other.agent.id }, "Store", place)}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const [said, part] = message;
+        assert.deepEqual(said, { type: "text", text: words });
+        assert.ok(part?.type === "text");
+        assert.ok(part.text.startsWith(MENTIONED_HEADING), part.text);
+        assert.match(
+          part.text,
+          new RegExp(
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*<h1>Invites by week</h1>`,
+            "u",
+          ),
+        );
+        assert.match(
+          part.text,
+          new RegExp(
+            `\\(id \`${other.agent.id}\`\\) working in \`${RELAY_FULL_NAME}\` on the branch \`luke/store-invitations\``,
+            "u",
+          ),
+        );
+        assert.match(part.text, /git fetch origin luke\/store-invitations/u);
+      }),
+  );
+
+  it.effect(
     "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
     () =>
       Effect.gen(function* () {
@@ -1552,6 +1829,9 @@ const startedAgent = (
     return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
   });
 
+/** The same, under a name a suite with a `startedAgent` of its own still reaches. */
+const startedAgentOf = startedAgent;
+
 function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
   return request(PLAN_AGENTS, bearer, { method: "POST", id: planId, body });
 }
@@ -1654,6 +1934,102 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "an answer to an item that asks nothing back reaches the agent as the developer's message where it carries a typed note, and a bare press is kept for the agent to read",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, answer } = yield* openInbox(eve);
+        const todo = (key: string) =>
+          post({
+            key,
+            title: "Turn on the agent-mail flag in staging",
+            response: { type: INBOX_RESPONSE.TODO },
+            needsReply: false,
+          });
+        const noted = yield* todo("flag-noted");
+        const bare = yield* todo("flag-bare");
+        assert.ok(Result.isSuccess(noted) && Result.isSuccess(bare));
+        const before = eve.sent.length;
+
+        const pressed = yield* answer(bare.success.id, {
+          revision: bare.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+        });
+        assert.equal(pressed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before, "a bare Done messages nobody");
+
+        const written = yield* answer(noted.success.id, {
+          revision: noted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          note: "Done, and on preview too.",
+        });
+        assert.equal(written.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before + 1, "a typed note reaches the agent");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
+      }),
+  );
+
+  it.effect(
+    "a run of the account's own automation that failed to start rides the account's inbox read and moves its cursor, as no item, and another account's read carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, waiting } = yield* openInbox();
+        const automation = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            planId: plan.id,
+            name: "Nightly flaky-test sweep",
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+            guards: AUTOMATION_DEFAULT_GUARDS,
+            nextRunAt: null,
+            webhookSecretHash: null,
+          }),
+        );
+        const before = yield* waiting();
+
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.MANUAL },
+            firedAt: yield* DateTime.nowAsDate,
+          }),
+        );
+        yield* settleAutomationRun(run.id, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+        });
+        const after = yield* waiting(before.cursor);
+
+        assert.deepEqual(before.failedRuns, []);
+        assert.notEqual(after.cursor, before.cursor);
+        assert.deepEqual(after.items, before.items);
+        assert.deepEqual(
+          after.failedRuns?.map((each) => [
+            each.id,
+            each.automationId,
+            each.automationName,
+            each.workspaceId,
+            each.reason,
+          ]),
+          [
+            [
+              run.id,
+              automation.id,
+              "Nightly flaky-test sweep",
+              plan.workspaceId,
+              AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+            ],
+          ],
+        );
+        assert.deepEqual((yield* waiting(undefined, other)).failedRuns, []);
+      }),
+  );
+
+  it.effect(
     "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
     () =>
       Effect.gen(function* () {
@@ -1710,6 +2086,87 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+});
+
+const AGENT_PICTURE = "/api/agents/picture";
+
+/** A picture a tool answered: its bytes, the type they were sniffed to be, and its size; synthetic, as the store keeps what it is handed. */
+const picture = (mark: number) => ({
+  bytes: Uint8Array.from([...PNG, mark]),
+  contentType: INBOX_IMAGE_TYPE.PNG,
+  width: 1200,
+  height: 720,
+});
+
+it.layer(getTestDB())("an agent's pictures", (it) => {
+  it.effect(
+    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed and not to be cached, to whoever may read the agent, and through its own transcript alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask, fetch } = yield* openPlan();
+        const { agent, target } = yield* startedAgent(owner, plan.id, ask);
+        const callId = "call-worker";
+        const workerConversation = childConversationId(target.conversationId, callId);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: workerConversation,
+          userId: owner,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: target.conversationId,
+        });
+        const agentPicture = Option.getOrThrow(yield* keepConversationPicture(target, picture(1)));
+        const workerPicture = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: owner, conversationId: workerConversation },
+            picture(2),
+          ),
+        );
+        const at = (bearer: string | undefined, pictureId: string, call?: string) =>
+          request(AGENT_PICTURE, bearer, {
+            id: agent.id,
+            picture: pictureId,
+            ...(call === undefined ? undefined : { call }),
+          });
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        const served = yield* fetch(at(owner, agentPicture.id));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          picture(1).bytes,
+        );
+        const workerServed = yield* fetch(at(owner, workerPicture.id, callId));
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => workerServed.arrayBuffer())),
+          picture(2).bytes,
+        );
+
+        assert.deepEqual(yield* ask(at(other, agentPicture.id)), notFound, "not a member");
+        assert.deepEqual(
+          yield* ask(at(owner, workerPicture.id)),
+          notFound,
+          "a worker's picture is not the agent's",
+        );
+        assert.deepEqual(
+          yield* ask(at(owner, agentPicture.id, callId)),
+          notFound,
+          "the agent's picture is not its worker's",
+        );
+        assert.deepEqual(yield* ask(at(owner, randomUUID())), notFound);
+        assert.deepEqual(yield* ask(at(owner, "members.png")), notFound);
+        assert.deepEqual(
+          yield* ask(at(undefined, agentPicture.id)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+
+        yield* joinWorkspace(plan.workspaceId, other);
+        const teammate = yield* fetch(at(other, agentPicture.id));
+        assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
       }),
   );
 });

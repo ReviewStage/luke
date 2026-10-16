@@ -18,6 +18,12 @@
         "vercel",
         "ycombinator"
       ]
+    },
+    "connection": {
+      "type": "string"
+    },
+    "add": {
+      "type": "boolean"
     }
   },
   "required": [

@@ -25,6 +25,8 @@ import {
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
   codingAgentPageParamsSchema,
+  codingAgentPictureParamsSchema,
+  codingAgentPinParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -86,6 +88,7 @@ export type CodingAgentClient = Pick<
   | "rename"
   | "switchServers"
   | "archive"
+  | "pin"
   | "stop"
   | "agent"
   | "agentInbox"
@@ -104,6 +107,7 @@ export type CodingAgentClient = Pick<
   | "answerInbox"
   | "accountInbox"
   | "inboxAttachment"
+  | "agentPicture"
 >;
 
 export interface CodingAgentsDependencies {
@@ -329,6 +333,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.archive(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentPinParamsSchema,
+          params,
+          "pinning an agent names the agent and whether it is pinned",
+        );
+        const answer = yield* asked(client.pin(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
@@ -397,6 +411,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "reading an inbox item's image names the item and the attachment",
         );
         const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
+        return carried<CodingAgentInboxAttachmentView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PICTURE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, pictureId, callId } = yield* read(
+          codingAgentPictureParamsSchema,
+          params,
+          "reading an agent's picture names the agent and the picture",
+        );
+        const answer = yield* asked(client.agentPicture(agentId, pictureId, callId));
         return carried<CodingAgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>

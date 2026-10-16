@@ -1,9 +1,11 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape holds Command, the way a Mac app's own chords
- * do, so none can be the talk or stop key: those take the machine, and
- * Command chords belong to whichever app is frontmost. Each is a command the window runs and
+ * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
+ * Mac app's own chords do, so none can be the talk or stop key: those take
+ * the machine, and Command chords belong to whichever app is frontmost. J
+ * and K are a letter alone, as Linear's and Superhuman's are, answered only
+ * where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
  * a chord that reaches it; the menu bar shows the chord beside the command's
  * name, and a click there sends the command to the window, which runs it
  * exactly as the key does. The key itself is the renderer's to read: Chromium
@@ -15,10 +17,11 @@
 import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
-/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
+/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_PLAN: "new-plan",
   COPY_PLAN: "copy-plan",
+  COPY_LINK: "copy-link",
   ARCHIVE_PLAN: "archive-plan",
   DELETE_PLAN: "delete-plan",
   PREVIOUS_PLAN: "previous-plan",
@@ -53,7 +56,10 @@ export const APP_COMMAND = {
   HOME: "home",
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
+  PREVIOUS_INBOX_ITEM: "previous-inbox-item",
+  NEXT_INBOX_ITEM: "next-inbox-item",
   EXIT_AGENT_PAGE: "exit-agent-page",
+  EXIT_PERSON_PAGE: "exit-person-page",
   FACTORY: "factory",
   EXIT_FACTORY: "exit-factory",
   AUTOMATIONS: "automations",
@@ -66,6 +72,17 @@ export const APP_COMMAND = {
   SHOW_TERMINAL: "show-terminal",
   NEW_TERMINAL: "new-terminal",
   MENTION_LINES: "mention-lines",
+  GROUP_TASKS_BY_REPOSITORY: "group-tasks-by-repository",
+  GROUP_TASKS_BY_CREATOR: "group-tasks-by-creator",
+  LIST_TASKS_UNGROUPED: "list-tasks-ungrouped",
+  ORDER_TASKS_BY_UPDATED: "order-tasks-by-updated",
+  ORDER_TASKS_BY_CREATED: "order-tasks-by-created",
+  ORDER_TASKS_BY_NAME: "order-tasks-by-name",
+  SHOW_MY_TASKS: "show-my-tasks",
+  SHOW_EVERYONES_TASKS: "show-everyones-tasks",
+  SHOW_ARCHIVED_TASKS: "show-archived-tasks",
+  HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
+  INSERT_PICTURE: "insert-picture",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -83,8 +100,37 @@ export const MENU_COMMAND_LABELS = {
 
 export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
-/** A command a chord reaches: every command the menu bar does not keep to itself. */
-export type KeyedCommand = Exclude<AppCommand, MenuCommand>;
+/**
+ * The commands ⌘K alone offers, by the name it gives them: the sidebar's
+ * view of its tasks, which its View options menu sets too, and Factory,
+ * which the sidebar's row opens, so no chord or menu bar item spends a key
+ * on them. Factory keeps no chord while it is an experiment, so ⇧⌘F stays
+ * free for a find across everything; ⌘K offers it only while the account
+ * has it on, since its command is offered nothing otherwise.
+ */
+const PALETTE_COMMAND_LABELS = {
+  [APP_COMMAND.FACTORY]: "Factory",
+  [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
+  [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
+  [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
+  [APP_COMMAND.ORDER_TASKS_BY_UPDATED]: "Order tasks by last updated",
+  [APP_COMMAND.ORDER_TASKS_BY_CREATED]: "Order tasks by created",
+  [APP_COMMAND.ORDER_TASKS_BY_NAME]: "Order tasks by name",
+  [APP_COMMAND.SHOW_MY_TASKS]: "Show my tasks",
+  [APP_COMMAND.SHOW_EVERYONES_TASKS]: "Show everyone's tasks",
+  [APP_COMMAND.SHOW_ARCHIVED_TASKS]: "Show archived tasks",
+  [APP_COMMAND.HIDE_ARCHIVED_TASKS]: "Hide archived tasks",
+} as const;
+
+export type PaletteCommand = keyof typeof PALETTE_COMMAND_LABELS;
+
+/** Every command ⌘K alone offers, in the order the table declares them. */
+export const PALETTE_COMMANDS = Object.keys(PALETTE_COMMAND_LABELS).filter(
+  (command): command is PaletteCommand => Object.hasOwn(PALETTE_COMMAND_LABELS, command),
+);
+
+/** A command a chord reaches: every command neither the menu bar nor ⌘K keeps to itself. */
+export type KeyedCommand = Exclude<AppCommand, MenuCommand | PaletteCommand>;
 
 /**
  * A key a chord ends in, spelt each way it is needed: Electron's accelerator,
@@ -187,7 +233,10 @@ function modifierGlyph(name: string): string {
  * A chord: Command, the modifiers named here, and the key. A `bare` chord is
  * the key alone, which only Escape is: the window's Escape steps back one
  * layer at a time in `app.tsx`, so the keymap leaves it there, and the table
- * names it so the menu bar and the shortcuts page can say what it does.
+ * names it so the menu bar and the shortcuts page can say what it does. A
+ * `plain` chord is a letter alone too, which the keymap answers itself, but
+ * only where the press is not typing into a field, and which no menu item
+ * carries, since a menu's bare key would take the letter from every field.
  * Control joins only the system's own ⌃⌘F, since a Control chord is
  * otherwise a text field's caret move.
  */
@@ -197,6 +246,12 @@ export interface ShortcutChord {
   option?: true;
   shift?: true;
   bare?: true;
+  plain?: true;
+}
+
+/** Whether a chord is pressed without Command: the window's layered Escape, or a letter alone. */
+function commandless(chord: ShortcutChord): boolean {
+  return chord.bare === true || chord.plain === true;
 }
 
 /** One command as the menu, the hover, and the shortcuts page name it, and the chord that runs it. */
@@ -239,6 +294,8 @@ export interface AppShortcut {
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
+  // Note that ⇧⌘C, Linear's chord for a link, was Copy plan's first, so a link takes ⌥⌘C, where macOS copies a thing's address (Finder's Copy as Pathname).
+  [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, option: true } },
   [APP_COMMAND.ARCHIVE_PLAN]: {
     label: "Archive task",
     chord: { key: SHORTCUT_KEY.A, shift: true },
@@ -330,14 +387,21 @@ export const APP_SHORTCUTS = {
     label: "Exit inbox",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.PREVIOUS_INBOX_ITEM]: {
+    label: "Previous inbox item",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+  },
+  [APP_COMMAND.NEXT_INBOX_ITEM]: {
+    label: "Next inbox item",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.FACTORY]: {
-    label: "Factory",
-    chord: { key: SHORTCUT_KEY.F, shift: true },
-    experiment: EXPERIMENT.FACTORY,
+  [APP_COMMAND.EXIT_PERSON_PAGE]: {
+    label: "Exit profile",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.EXIT_FACTORY]: {
     label: "Exit factory",
@@ -361,6 +425,10 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.MENTION_LINES]: {
     label: "Mention lines in agent",
     chord: { key: SHORTCUT_KEY.K, option: true },
+  },
+  [APP_COMMAND.INSERT_PICTURE]: {
+    label: "Insert image",
+    chord: { key: SHORTCUT_KEY.I, option: true },
   },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
@@ -390,14 +458,17 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.NEW_PLAN,
       APP_COMMAND.COPY_PLAN,
+      APP_COMMAND.COPY_LINK,
       APP_COMMAND.ARCHIVE_PLAN,
       APP_COMMAND.DELETE_PLAN,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
+      APP_COMMAND.PREVIOUS_INBOX_ITEM,
+      APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.EXIT_AGENT_PAGE,
-      APP_COMMAND.FACTORY,
+      APP_COMMAND.EXIT_PERSON_PAGE,
       APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,
       APP_COMMAND.EXIT_AUTOMATIONS,
@@ -417,6 +488,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MOVE_TAB_RIGHT,
       APP_COMMAND.SHOW_TERMINAL,
       APP_COMMAND.MENTION_LINES,
+      APP_COMMAND.INSERT_PICTURE,
     ],
   },
   {
@@ -448,9 +520,14 @@ export const APP_SHORTCUT_GROUPS = [
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
 
-/** Whether a chord reaches the command, rather than the menu bar alone. */
+/** Whether the menu bar alone offers the command. */
+function isMenuCommand(command: AppCommand): command is MenuCommand {
+  return Object.hasOwn(MENU_COMMAND_LABELS, command);
+}
+
+/** Whether a chord reaches the command, rather than the menu bar or ⌘K alone. */
 export function isKeyedCommand(command: AppCommand): command is KeyedCommand {
-  return !Object.hasOwn(MENU_COMMAND_LABELS, command);
+  return !isMenuCommand(command) && !Object.hasOwn(PALETTE_COMMAND_LABELS, command);
 }
 
 /** Every command a chord reaches, in the order the table declares them. */
@@ -476,9 +553,10 @@ export function shownShortcutGroups(
   })).filter((group) => group.commands.length > 0);
 }
 
-/** A command's name as the window says it, keyed or the menu bar's own. */
+/** A command's name as the window says it, keyed, the menu bar's own, or ⌘K's own. */
 export function appCommandLabel(command: AppCommand): string {
-  return isKeyedCommand(command) ? APP_SHORTCUTS[command].label : MENU_COMMAND_LABELS[command];
+  if (isKeyedCommand(command)) return APP_SHORTCUTS[command].label;
+  return isMenuCommand(command) ? MENU_COMMAND_LABELS[command] : PALETTE_COMMAND_LABELS[command];
 }
 
 /** Whether a value that crossed a process boundary names a command this build knows. */
@@ -492,7 +570,7 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
-    chord.bare ? undefined : "Command",
+    commandless(chord) ? undefined : "Command",
     chord.key.accelerator,
   ]
     .filter((part) => part !== undefined)
@@ -525,7 +603,7 @@ export function shortcutLabel(accelerator: string): string {
 /** The chord as `aria-keyshortcuts` spells it. */
 export function shortcutAria(chord: ShortcutChord): string {
   return [
-    chord.bare ? undefined : "Meta",
+    commandless(chord) ? undefined : "Meta",
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
@@ -536,7 +614,7 @@ export function shortcutAria(chord: ShortcutChord): string {
 }
 
 /**
- * Whether a key press is the chord: Command and exactly the chord's other
+ * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
  * has changed the character. A key with an unshifted character answers
@@ -544,7 +622,7 @@ export function shortcutAria(chord: ShortcutChord): string {
  * is the keyboard layout's to say.
  */
 function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
-  if (event.metaKey === (chord.bare === true)) return false;
+  if (event.metaKey === commandless(chord)) return false;
   if (event.ctrlKey !== (chord.control === true)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
@@ -567,7 +645,7 @@ export function shortcutLayered(chord: ShortcutChord): boolean {
   return chord.bare === true;
 }
 
-/** Whether a field taking typing already answers the chord, so it is left to the field. */
+/** Whether a field taking typing already answers the chord, so it is left to the field: a key it edits with, or a letter alone. */
 export function shortcutEditsText(chord: ShortcutChord): boolean {
-  return chord.key.editsText === true;
+  return chord.key.editsText === true || chord.plain === true;
 }

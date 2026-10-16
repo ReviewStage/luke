@@ -1,4 +1,10 @@
 import {
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarStartedFrame,
+  type AvatarStopReason,
+  type AvatarUnavailableFrame,
+  type AvatarUnavailableReason,
   type LiveSessionCreated,
   type PlanActivityFrame,
   type PlanCallEndingFrame,
@@ -7,6 +13,7 @@ import {
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -24,7 +31,18 @@ import {
   liveErrorFields,
 } from "@luke/live";
 import { causeKind, type SerialQueue, serialQueue } from "@luke/runtime/effect";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from "effect";
+import {
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  PubSub,
+  Scope,
+  Stream,
+} from "effect";
 import {
   createdOf,
   type LiveSessionOpened,
@@ -63,11 +81,70 @@ import {
  * what a report or the stop key begins that nobody waits on runs as a fiber
  * of the holder's own set. `stop` is a drain step the composition runs
  * inside its own deadline, never the scope's finalizer.
+ *
+ * Luke's avatar on the call is asked for and taken down through the source's
+ * doors, and what the service answers is told in process alone: where the
+ * avatar stands as `avatarStates`, and the grant that joins it as
+ * `avatarGrants`. The grant carries a credential, so it is never emitted,
+ * never logged, and never kept: it reaches the subscribers standing when it
+ * arrives and nothing after, so a start always draws a grant of its own.
+ * Each start is asked under a request id of its own, and only the answer
+ * echoing the latest is heard, so an answer to an earlier ask, late or
+ * lost, is never mistaken for the current one, and a start nobody answers
+ * is given up on after `AVATAR_START_BOUND`. A call opens with the avatar
+ * where `videoOnCall` says so, and a close the call window reports that this
+ * side did not start asks for it once more on that call (`closed`).
  */
+
+/** Where Luke's avatar stands on the call, as the host knows it; whether the call window drew it is the desktop's to say. */
+export const LIVE_AVATAR_STATUS = {
+  /** No avatar was asked for on the call. */
+  OFF: "off",
+  /** The service was asked for the avatar and has not answered. */
+  STARTING: "starting",
+  /** The service answered with the grant, which went to the grant's subscribers. */
+  GRANTED: "granted",
+  ENDED: "ended",
+} as const;
+
+/** Which hand ended the avatar: a stop the desktop sent, the service's refusal, or the call's own end. */
+export const LIVE_AVATAR_END = {
+  STOPPED: "stopped",
+  UNAVAILABLE: "unavailable",
+  CALL_ENDED: "call_ended",
+} as const;
+
+export type LiveAvatarEnd =
+  | { readonly by: typeof LIVE_AVATAR_END.STOPPED; readonly reason: AvatarStopReason }
+  | { readonly by: typeof LIVE_AVATAR_END.UNAVAILABLE; readonly reason: AvatarUnavailableReason }
+  | { readonly by: typeof LIVE_AVATAR_END.CALL_ENDED };
+
+export type LiveAvatarState =
+  | {
+      readonly status:
+        | typeof LIVE_AVATAR_STATUS.OFF
+        | typeof LIVE_AVATAR_STATUS.STARTING
+        | typeof LIVE_AVATAR_STATUS.GRANTED;
+    }
+  | { readonly status: typeof LIVE_AVATAR_STATUS.ENDED; readonly end: LiveAvatarEnd };
+
+/**
+ * How long a start waits on the service's answer before it is given up as
+ * unavailable: an answer lost with a connection would otherwise leave the
+ * tile saying "Connecting" for the rest of the call.
+ */
+export const AVATAR_START_BOUND = Duration.seconds(20);
+
+/** How many times a call's avatar is asked for again after a close this side did not start. */
+const AVATAR_RESTARTS_PER_CALL = 1;
 
 export interface LiveSessionHolderOptions {
   /** Where a session comes from now, or nothing while voice is unavailable. */
   source: () => LiveSessionSource | undefined;
+  /** A fresh id for each avatar start, which the service echoes on its answer. */
+  createId: () => string;
+  /** Whether a call is to open with Luke's avatar, read as each session comes to stand. */
+  videoOnCall?: Effect.Effect<boolean>;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
@@ -186,6 +263,15 @@ export class LiveSessionHolder {
   #creating: Creating | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
   #releasing: Deferred.Deferred<void> | undefined;
+  /** Where the avatar stands now, which `#avatarStates` replays to a subscriber as it joins. */
+  #avatar: LiveAvatarState = { status: LIVE_AVATAR_STATUS.OFF };
+  /** The request id of the latest start, while the avatar it asked for is starting or up. */
+  #avatarRequest: string | undefined;
+  /** How many times the standing call's avatar was asked for again after a close this side did not start. */
+  #avatarRestarts = 0;
+  readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
+  /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
+  readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
   /** The fibers the tasks run as, one each, all ended by the holder's scope. */
   readonly #fibers: FiberSet.FiberSet<void, unknown>;
   /** The door a synchronous edge starts a task through: the queue forks it into the set. */
@@ -196,14 +282,21 @@ export class LiveSessionHolder {
   private constructor(
     options: LiveSessionHolderOptions,
     running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
+    avatar: {
+      readonly states: PubSub.PubSub<LiveAvatarState>;
+      readonly grants: PubSub.PubSub<AvatarGrant | undefined>;
+    },
     clock: Clock.Clock,
     sessions: Scope.Scope,
   ) {
     this.#options = options;
     this.#fibers = running.fibers;
     this.#tasks = running.tasks;
+    this.#avatarStates = avatar.states;
+    this.#avatarGrants = avatar.grants;
     this.#clock = clock;
     this.#sessions = sessions;
+    PubSub.publishUnsafe(this.#avatarStates, this.#avatar);
   }
 
   /** The holder for one composition, standing for the scope it is built in. */
@@ -216,10 +309,19 @@ export class LiveSessionHolder {
         onDefect: (cause) =>
           Effect.logError(`a live session task could not be started: ${causeKind(cause)}`),
       });
+      const states = yield* Effect.acquireRelease(
+        PubSub.unbounded<LiveAvatarState>({ replay: 1 }),
+        PubSub.shutdown,
+      );
+      const grants = yield* Effect.acquireRelease(
+        PubSub.unbounded<AvatarGrant | undefined>(),
+        PubSub.shutdown,
+      );
       const scope = yield* Effect.scope;
       return new LiveSessionHolder(
         options,
         { fibers, tasks },
+        { states, grants },
         yield* Clock.Clock,
         yield* Scope.fork(scope, "sequential"),
       );
@@ -229,6 +331,21 @@ export class LiveSessionHolder {
   /** Begins what nothing waits for, on the holder's own fiber. */
   #start(effect: Effect.Effect<void>): void {
     this.#tasks.offerUnsafe(Effect.asVoid(FiberSet.run(this.#fibers, effect)));
+  }
+
+  /** Where the avatar stands now, and then each time it moves, until the holder's scope closes. */
+  get avatarStates(): Stream.Stream<LiveAvatarState> {
+    return Stream.fromPubSub(this.#avatarStates);
+  }
+
+  /**
+   * Each grant the service answers a start with, and nothing each time the
+   * avatar it joined goes down, told to the subscribers standing at that
+   * moment and kept for no one after: the token is single-use and a
+   * credential, so it is handed on in process and nowhere else.
+   */
+  get avatarGrants(): Stream.Stream<AvatarGrant | undefined> {
+    return Stream.fromPubSub(this.#avatarGrants);
   }
 
   /** Whether a session stands that the stop and the reports can reach. */
@@ -343,9 +460,18 @@ export class LiveSessionHolder {
       opened.onPlanCode?.((code) => this.#code(session, code));
       opened.onPlanWork?.((work) => this.#work(session, work));
       opened.onPlanCallEnding?.((ending) => this.#ending(session, ending));
+      opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
+      opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
+      // Note that a new call starts with no avatar and no restart spent,
+      // because the last call's end is not this one's.
+      this.#avatarRestarts = 0;
+      if (this.#avatar.status !== LIVE_AVATAR_STATUS.OFF) {
+        this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
+      }
       this.#options.onSessionCreated?.();
+      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) this.startAvatar();
       return createdOf(opened);
     });
   }
@@ -542,6 +668,84 @@ export class LiveSessionHolder {
     return true;
   }
 
+  /**
+   * Asks the service for Luke's avatar on the standing call, under a request
+   * id of its own. Answers whether it was asked: a session with no door for
+   * it, or an avatar already up, asks nothing, because each start mints a
+   * session the plan's concurrency pays for. A start still unanswered is
+   * superseded, since its answer may have been lost with a connection, and
+   * the service closes whatever the earlier ask put up. An avatar that ended
+   * may be asked for again, and draws a grant of its own.
+   */
+  startAvatar(): boolean {
+    const session = this.#held;
+    if (!session || session.ended) return false;
+    const start = session.opened.startAvatar;
+    if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
+    const requestId = this.#options.createId();
+    this.#avatarRequest = requestId;
+    start(requestId);
+    if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
+      this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
+    }
+    this.#start(this.#startBound(session, requestId));
+    return true;
+  }
+
+  /**
+   * The bound on one start: where the service has not answered it by then,
+   * it is told to close whatever the ask put up and the start ends as
+   * unavailable, which the tile offers to restart. A start answered, stopped,
+   * or superseded meanwhile is left alone.
+   */
+  #startBound(session: HeldSession, requestId: string): Effect.Effect<void> {
+    return Effect.andThen(
+      Effect.sleep(AVATAR_START_BOUND),
+      Effect.sync(() => {
+        if (!this.#answersLatestStart(session, requestId)) return;
+        session.opened.stopAvatar?.(requestId, AVATAR_STOP_REASON.ERROR);
+        this.#avatarEnded({
+          by: LIVE_AVATAR_END.UNAVAILABLE,
+          reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+        });
+      }),
+    );
+  }
+
+  /**
+   * Takes the avatar down on the standing call, telling the service why:
+   * the developer turned it off, or the call window's session closed or
+   * failed. The grant's subscribers are told it no longer stands. Answers
+   * whether there was an avatar asked for or up to take down.
+   */
+  stopAvatar(reason: AvatarStopReason): boolean {
+    const session = this.#held;
+    if (!session || session.ended) return false;
+    const stop = session.opened.stopAvatar;
+    const requestId = this.#avatarRequest;
+    if (stop === undefined || requestId === undefined) return false;
+    stop(requestId, reason);
+    this.#avatarEnded({ by: LIVE_AVATAR_END.STOPPED, reason });
+    return true;
+  }
+
+  /**
+   * The call window's session closed while the avatar was up, and this side
+   * did not close it: Keyframe closed the room, or the session failed. The
+   * service is told so, which closes its row and lets a start be asked
+   * again, and the avatar is asked for once more on each call before it is
+   * left ended, where the tile offers to restart it. Answers whether it was
+   * asked for again.
+   */
+  closed(reason: AvatarStopReason): boolean {
+    if (this.#avatar.status !== LIVE_AVATAR_STATUS.GRANTED || !this.stopAvatar(reason)) {
+      return false;
+    }
+    if (this.#avatarRestarts >= AVATAR_RESTARTS_PER_CALL) return false;
+    this.#avatarRestarts += 1;
+    return this.startAvatar();
+  }
+
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
     return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
@@ -581,6 +785,50 @@ export class LiveSessionHolder {
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.ENDING });
   }
 
+  /**
+   * The service's grant, handed on while the session stands and the start it
+   * answers is the latest and still wanted. A grant for an earlier start, or
+   * one that lands after the avatar was stopped or the call ended, is
+   * dropped here rather than kept for a later start.
+   */
+  #avatarStarted(session: HeldSession, started: AvatarStartedFrame): void {
+    if (!this.#answersLatestStart(session, started.requestId)) return;
+    this.#avatarMoved({ status: LIVE_AVATAR_STATUS.GRANTED });
+    PubSub.publishUnsafe(this.#avatarGrants, {
+      serverUrl: started.serverUrl,
+      participantToken: started.participantToken,
+      agentIdentity: started.agentIdentity,
+    });
+  }
+
+  /** The service's refusal of the latest start still wanted; the call goes on as voice. */
+  #avatarUnavailable(session: HeldSession, unavailable: AvatarUnavailableFrame): void {
+    if (!this.#answersLatestStart(session, unavailable.requestId)) return;
+    this.#avatarEnded({ by: LIVE_AVATAR_END.UNAVAILABLE, reason: unavailable.reason });
+  }
+
+  #answersLatestStart(session: HeldSession, requestId: string): boolean {
+    return (
+      !session.ended &&
+      this.#avatar.status === LIVE_AVATAR_STATUS.STARTING &&
+      requestId === this.#avatarRequest
+    );
+  }
+
+  /** The avatar asked for or up has ended, and a grant handed on is withdrawn from its subscribers. */
+  #avatarEnded(end: LiveAvatarEnd): void {
+    const { status } = this.#avatar;
+    if (status !== LIVE_AVATAR_STATUS.STARTING && status !== LIVE_AVATAR_STATUS.GRANTED) return;
+    this.#avatarRequest = undefined;
+    this.#avatarMoved({ status: LIVE_AVATAR_STATUS.ENDED, end });
+    if (status === LIVE_AVATAR_STATUS.GRANTED) PubSub.publishUnsafe(this.#avatarGrants, undefined);
+  }
+
+  #avatarMoved(state: LiveAvatarState): void {
+    this.#avatar = state;
+    PubSub.publishUnsafe(this.#avatarStates, state);
+  }
+
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
     session.usageSeconds = closed.usage.seconds;
@@ -611,6 +859,8 @@ export class LiveSessionHolder {
       notes: false,
     });
     this.#options.onPlanCallEnded?.(session.planId);
+    // The service closes the avatar with the call, so nothing is sent for it.
+    this.#avatarEnded({ by: LIVE_AVATAR_END.CALL_ENDED });
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });

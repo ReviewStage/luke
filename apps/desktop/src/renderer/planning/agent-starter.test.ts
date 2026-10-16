@@ -5,6 +5,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
@@ -14,6 +15,7 @@ import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,6 +28,7 @@ import {
   agentActor,
   endLine,
   endLineReason,
+  lineSender,
   macOwnerOf,
   teammateStarter,
 } from "./coding-agent-model";
@@ -42,7 +45,7 @@ import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks";
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/7";
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 
 /** The workspace's members as the service's read lists them. */
 const MEMBERS: readonly WorkspaceMember[] = [
@@ -293,7 +296,7 @@ test("the pointer going from a starter's card back onto the agent's own name kee
   }
 });
 
-test("an agent's card wears its tile beside its name, its pull request at the corner where the plan holds one, and Open agent under a rule, which opens its tab and takes the card down", async () => {
+test("an agent's card wears its tile beside its name and its pull request at the corner where the plan holds one, and offers no Open agent, since the name it hangs from opens the tab", async () => {
   const { card, opened } = await agentNamed(DEAN.userId, new Map([[AGENT.id, PULL_REQUEST]]));
   const tile = card.querySelector<HTMLElement>(".actor-card-head > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
@@ -302,12 +305,19 @@ test("an agent's card wears its tile beside its name, its pull request at the co
   assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
   assert.match(corner.textContent ?? "", /^#42 · Failed/u);
 
-  const door = card.querySelector<HTMLButtonElement>("[data-card-choice]");
-  assert.equal(door?.textContent, "Open agent");
-  assert.ok(door?.previousElementSibling?.matches(".card-rule"), "it stands under a rule");
-  act(() => door?.click());
+  const offers = [...card.querySelectorAll("button")].map((button) => button.textContent ?? "");
+  assert.deepEqual(
+    offers.filter((words) => words.startsWith("Open")),
+    [],
+    "the card offers no way to the tab",
+  );
+  assert.equal(
+    card.querySelector(".card-rule")?.outerHTML,
+    undefined,
+    "nor a rule to stand one under",
+  );
+  act(() => document.querySelector<HTMLElement>("[data-agent-ref]")?.click());
   assert.deepEqual(opened, [AGENT.id]);
-  assert.equal(cards().length, 0, "choosing it takes the card down");
 });
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
@@ -375,4 +385,28 @@ test("a command an agent ran on a Mac says whose, by their disc and name: a team
   const untold = await macPlace(CHARLES, undefined);
   assert.equal(untold.textContent?.trim(), "On your Mac");
   assert.equal(untold.querySelector(".actor-mark"), null);
+});
+
+test("a starter or sender who left keeps their picture and their account's name now, from the read of who left", () => {
+  const lee = { userId: "user-lee", name: "Lee Park" };
+  const former = [
+    {
+      userId: "user-lee",
+      name: "Lee Chen",
+      pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
+    },
+  ];
+  const left = {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Chen",
+    userId: "user-lee",
+    pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
+  };
+
+  assert.deepEqual(macOwnerOf(lee, MEMBERS, "user-dean", former), left);
+  assert.deepEqual(
+    lineSender({ ...lee, kind: CODING_AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
+    left,
+  );
 });

@@ -50,12 +50,18 @@ export const GATEWAY_METHOD = {
   PLANNING_TREE: "planning.tree",
   /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   PLANNING_SKILLS: "planning.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  PLANNING_PULL_REQUEST: "planning.pullRequest",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISIONS: "planning.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISION: "planning.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   PLANNING_PAGE: "planning.page",
+  /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  PLANNING_PICTURE: "planning.picture",
+  /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
+  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
   /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
@@ -72,6 +78,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
+  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
+  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
+  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
+  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
+  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
@@ -120,6 +132,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
+  CODING_AGENTS_PIN: "codingAgents.pin",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
   AUTOMATIONS_LIST: "automations.list",
@@ -158,18 +172,22 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
-  /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */
+  /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
-  /** The tools one provider's server offers the account's agents, read from the service now. */
+  /** The tools one account's server offers the account's agents, read from the service now. */
   INTEGRATIONS_TOOLS: "integrations.tools",
-  /** The account's sign-in to one provider under way ended on the service, revoking nothing; where it then stands. */
+  /** The account's sign-in to one account at a provider under way ended on the service, revoking nothing; where it then stands. */
   INTEGRATIONS_CANCEL: "integrations.cancel",
-  /** The account's connection to one provider ended on the service; where it then stands. */
+  /** The account's connection to one account at a provider ended on the service; where it then stands. */
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
+  INTEGRATIONS_RENAME: "integrations.rename",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
+  CODING_AGENTS_PICTURE: "codingAgents.picture",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -228,6 +246,8 @@ export const GATEWAY_METHOD = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Luke's avatar on the standing call asked for or taken down; whether the service was asked. The grant it draws never crosses here. */
+  VOICE_SET_VIDEO: "voice.setVideo",
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
@@ -401,6 +421,17 @@ export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.
  * and the mute carries none of its meaning.
  */
 export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
+
+/** `voice.setVideo`: the developer turning Luke's avatar on or off on the standing call. */
+export const voiceSetVideoParamsSchema = Schema.Struct({ on: Schema.Boolean });
+
+/**
+ * What `voice.setVideo` answers: whether the service was asked. The avatar's
+ * grant answers the ask on the voice socket and goes from the host to the
+ * call window in process alone, so this answer never carries it, and nor
+ * does any Gateway event.
+ */
+export const voiceSetVideoResultSchema = Schema.Struct({ requested: Schema.Boolean });
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
 export const voiceLiveSessionChangedSchema = Schema.Struct({

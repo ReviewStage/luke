@@ -79,11 +79,11 @@ Every brief must contain:
    `git rebase --continue` (or `--abort`), and only after the rebase
    succeeds push every branch with `--force-with-lease`.
 3. **Babysit and merge**: watch CI and review comments on every PR in the
-   stack, fix what fails, and either merge on green or hold for an explicit
-   go from the orchestrator, as the user chose at kickoff; say which. A PR
-   merges only after the PR below it has merged, and a stack based on another
-   worker's PR merges only once that PR has merged and the stack's bottom PR
-   has been retargeted to `main` (`gh pr edit --base main`) and restacked.
+   stack, fix what fails, and merge as root `AGENTS.md`'s "Merging" says,
+   taking merge-on-green at kickoff as the go or holding for an explicit go
+   from the orchestrator, as the user chose; say which. A stack based on
+   another worker's PR merges only once that PR has merged and the stack's
+   bottom PR has been retargeted to `main` (`gh pr edit --base main`).
 4. **Report back, do not wait to be asked**: on each milestone of each PR
    (opened, restacked, CI green, blocked, merged) send a message to the
    orchestrator:
@@ -115,7 +115,7 @@ turn. You restack nothing; each owner restacks its own stack. On each report:
 - **Shared PR restacked**: when an owner reports it pushed a restacked PR
   that a branch-off chain is based on, tell each of those chains' workers to
   fetch and restack onto the new head.
-- **CI green**: under hold, relay the user's go to the worker when it comes.
+- **PR opened**: under hold, relay the user's go to the worker when it comes.
 - **Question or blocked**: answer from the plan and the other PRs' state by
   replying to that worker's session with
   `conductor message create --session <workerSessionId>`. Escalate to the

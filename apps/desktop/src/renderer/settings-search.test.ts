@@ -64,10 +64,11 @@ test("Members finds the members for every workspace", () => {
   }
 });
 
-test("Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
+test("Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
   const queries = [
     "Integrations",
+    "Linear",
     "manage",
     "GitHub repositories",
     "GitHub",
@@ -83,7 +84,7 @@ test("Integrations, and every word GitHub repositories was found by, find the Wo
   }
 });
 
-test("the Workspace page's group reads GitHub, found by Integrations too, under its Workspace page apart from the Integrations page's rows", () => {
+test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
   const groups =
     searchSettings(
       settingsSearchEntries({
@@ -98,7 +99,7 @@ test("the Workspace page's group reads GitHub, found by Integrations too, under 
 
   assert.deepEqual(
     workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
-    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "GitHub"]],
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
   );
   assert.equal(
     groups
@@ -142,16 +143,38 @@ function experimentalFound(query: string, accountDrawn: boolean): readonly strin
 }
 
 test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
-  for (const query of ["Factory", "Plan to Build to Ship"]) {
+  for (const query of ["Factory", "Talk to Build to Ship"]) {
     assert.deepEqual(experimentalFound(query, true), ["Factory"], query);
   }
   for (const query of ["Automations", "on a schedule"]) {
     assert.deepEqual(experimentalFound(query, true), ["Automations"], query);
   }
+  for (const query of ["Video calls", "Keyframe"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
+  }
   for (const query of ["Experimental", "beta", "labs"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Automations", "Factory"], query);
+    assert.deepEqual(
+      experimentalFound(query, true),
+      ["Video calls", "Automations", "Factory"],
+      query,
+    );
   }
   assert.deepEqual(experimentalFound("Factory", false), []);
+});
+
+test("Video calls is one switch, on the Experimental page, and not among the Voice page's controls", () => {
+  const found = searchSettings(
+    settingsSearchEntries({
+      settings: settingsView(),
+      voiceControlsDrawn: true,
+      accountDrawn: true,
+    }),
+    "Video calls",
+  );
+  assert.deepEqual(
+    (found?.groups ?? []).map((group) => group.page),
+    [SETTINGS_VIEW.EXPERIMENTAL],
+  );
 });
 
 test("no two rows the search can land on wear the same id", () => {

@@ -33,6 +33,10 @@ export type Failure =
       readonly reason: typeof FAILURE_REASON.RECONNECT_INTEGRATION;
       readonly text: string;
       readonly provider: IntegrationProvider;
+      /** The account to sign in again, by its connection name, where it is not the provider's first. */
+      readonly connection?: string;
+      /** What the account is called among its provider's others, where it has others. */
+      readonly name?: string;
     }
   | { readonly reason: PlanRemedyReason; readonly text: string; readonly planId: string }
   | {
@@ -59,7 +63,7 @@ export type Failure =
 export function remedyLabel(failure: Failure): string | undefined {
   switch (failure.reason) {
     case FAILURE_REASON.RECONNECT_INTEGRATION:
-      return `Reconnect ${INTEGRATION_NAME[failure.provider]}`;
+      return `Reconnect ${failure.name ?? INTEGRATION_NAME[failure.provider]}`;
     case FAILURE_REASON.API_KEY:
       return "Open API keys";
     case FAILURE_REASON.CONNECT_GITHUB:

@@ -18,13 +18,33 @@ export interface MicrophoneControl {
 }
 
 /**
- * Whether macOS refused Luke's last notification, and the one place that
- * grant can be changed.
+ * What macOS last answered a notification of Luke's: nothing yet, showed it,
+ * or refused it, which is the only word Electron gives of whether
+ * notifications are on for Luke.
+ */
+export const NOTIFICATIONS_STATUS = {
+  UNKNOWN: "unknown",
+  ON: "on",
+  OFF: "off",
+} as const;
+
+export type NotificationsStatus = (typeof NOTIFICATIONS_STATUS)[keyof typeof NOTIFICATIONS_STATUS];
+
+/**
+ * Whether macOS shows Luke's notifications, the one place that grant can be
+ * changed, and a notification posted now to find out.
  */
 export interface NotificationsControl {
-  refused: boolean;
+  status: NotificationsStatus;
+  /**
+   * Whether this is the packaged app: a development build runs inside
+   * Electron's own app, which is the name macOS lists its notifications under.
+   */
+  packaged: boolean;
   /** Opens System Settings on its notifications. */
   onOpenSettings: () => void;
+  /** Posts a notification right away, even while Luke's window is in front. */
+  onTest: () => void;
 }
 
 /**

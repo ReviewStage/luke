@@ -4,7 +4,9 @@
  * Every read runs on an installation token the App minted for the agent's
  * one repository on its workspace's installation (`github-app.ts`'s
  * `repositoryPullRequestToken`), the same reach that admits the agent's
- * checkout: the installation's own permissions bound it. The requests
+ * checkout: the installation's own permissions bound it. A link to a pull
+ * request reads it by number on the same mint, for a repository its
+ * workspace's installation reaches (`github-repositories-app.ts`). The requests
  * compose over the App module's own kit (`githubRead`, `send`, `readBody`)
  * so a token leaves this module no more than it leaves that one. The checks are read as one word for a dot: GitHub's
  * check runs and its older commit statuses together, since a workflow
@@ -20,7 +22,7 @@
  * reviews that said something, each the first page GitHub answers.
  */
 
-import { githubAvatarUrl } from "@luke/features/account-picture";
+import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -165,7 +167,23 @@ const ReviewsSchema = Schema.Array(
 );
 
 /** A pull request's commits, as GitHub lists them: the GitHub account each is by, where GitHub links its address to one. */
-const CommitsSchema = Schema.Array(Schema.Struct({ author: Schema.NullOr(GitHubAccountSchema) }));
+/** A pull request's commits, as much of each as names who made it: its author's account, and its message for the co-authors it names. */
+const CommitsSchema = Schema.Array(
+  Schema.Struct({
+    author: Schema.NullOr(GitHubAccountSchema),
+    commit: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
+  }),
+);
+
+/**
+ * A `Co-authored-by` trailer naming an account by the noreply address
+ * GitHub links to it, `<id>+<login>@users.noreply.github.com`, which is how
+ * a coding agent that writes as its developer names the Luke GitHub App's
+ * bot beside them; a trailer at any other address names no account GitHub
+ * would show, and is left unread.
+ */
+const CO_AUTHOR_TRAILER =
+  /^co-authored-by:[^<\n]*<(\d+)\+([^@>\s]+)@users\.noreply\.github\.com>\s*$/gimu;
 
 /** GitHub's own words for a review's standing; a pending review is its author's draft, which nobody else sees. */
 const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
@@ -185,13 +203,14 @@ const BOT_LOGIN_SUFFIX = "[bot]";
 const PEOPLE_PER_PAGE = 100;
 
 /**
- * The most pages of reviews or of commits a read takes. GitHub lists at
- * most 250 commits of a pull request, so three pages hold every one; a
- * pull request reviewed past this many pages is read as far as the bound,
- * its newer reviews left unread, rather than holding the changes on a
- * history that does not end.
+ * The most pages each listing is read to. GitHub lists a pull request's
+ * reviews oldest first, and a reviewer stands by their newest, so its
+ * reviews are read to their end, bounded only where no pull request goes,
+ * three thousand reviews, rather than holding the changes on a history that
+ * does not end; GitHub lists at most 250 commits of a pull request, so three
+ * pages hold every one.
  */
-const PEOPLE_MAX_PAGES = 5;
+const PEOPLE_MAX_PAGES = { REVIEWS: 30, COMMITS: 3 } as const;
 
 /** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
@@ -459,7 +478,7 @@ export interface GitHubReviewComment {
   readonly at: number;
 }
 
-/** Who a pull request names: who opened it, its reviewers, who authored its commits, and its reviews that said something, each up to the bound. */
+/** Who a pull request names: who opened it, its reviewers, who authored its commits or is named their co-author, and its reviews that said something, each up to the bound. */
 export interface PullRequestPeople {
   readonly author: GitHubAccount | undefined;
   readonly reviewers: readonly GitHubReviewer[];
@@ -475,6 +494,27 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
     bot: record.type === GITHUB_BOT_TYPE || record.login.endsWith(BOT_LOGIN_SUFFIX),
     avatarUrl: githubAvatarUrl(record.avatar_url),
   };
+}
+
+/**
+ * The accounts a commit's message names as co-authors by their noreply
+ * addresses, in the order it names them. Note that only the message's last
+ * paragraph is read, because that is where git reads trailers from, so a
+ * trailer-shaped line quoted in the body names nobody.
+ */
+function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
+  if (message === undefined) return [];
+  const trailers =
+    message
+      .trimEnd()
+      .split(/\n[ \t]*\n/u)
+      .at(-1) ?? "";
+  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
+    const bot = login.endsWith(BOT_LOGIN_SUFFIX);
+    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author keeps its robot.
+    const avatarUrl = bot ? undefined : githubUserAvatarUrl({ id: Number(id) });
+    return { id: Number(id), login, bot, avatarUrl };
+  });
 }
 
 /** Each account once, the first time it stands, up to the bound. */
@@ -546,9 +586,10 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   token: Redacted.Redacted,
   path: string,
   schema: Schema.Codec<readonly A[], unknown>,
+  maxPages: number,
 ) {
   const listed: A[] = [];
-  for (let page = 1; page <= PEOPLE_MAX_PAGES; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const request = githubRead(path, token).pipe(
       HttpClientRequest.setUrlParams({ per_page: String(PEOPLE_PER_PAGE), page: String(page) }),
     );
@@ -564,7 +605,8 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
  * pull request itself, for who opened it and who it still asks for a
  * review; every page of its reviews, since a reviewer stands by their
  * newest; and every page of its commits, since a later commit may be by
- * someone new. Each list is cut at the bound only once read whole. Nobody
+ * someone new, each commit naming its author and the co-authors its
+ * message's trailers name by their noreply addresses. Each list is cut at the bound only once read whole. Nobody
  * where the repository holds no such pull request.
  */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
@@ -576,8 +618,8 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   const [pull, reviews, commits] = yield* Effect.all(
     [
       readOptional(githubRead(path, token), PullRequestPeopleSchema),
-      everyPage(token, `${path}/reviews`, ReviewsSchema),
-      everyPage(token, `${path}/commits`, CommitsSchema),
+      everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS),
+      everyPage(token, `${path}/commits`, CommitsSchema, PEOPLE_MAX_PAGES.COMMITS),
     ],
     { concurrency: "unbounded" },
   );
@@ -587,7 +629,10 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
     author: pull.value.user === null ? undefined : accountOf(pull.value.user),
     reviewers: reviewersOf(reviews, requested),
     commitAuthors: distinctAccounts(
-      commits.flatMap((commit) => (commit.author === null ? [] : [accountOf(commit.author)])),
+      commits.flatMap((commit) => [
+        ...(commit.author === null ? [] : [accountOf(commit.author)]),
+        ...coAuthorsOf(commit.commit?.message),
+      ]),
     ),
     comments: commentsOf(reviews),
   };

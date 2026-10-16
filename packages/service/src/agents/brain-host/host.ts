@@ -30,6 +30,7 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
+import { AGENT_CALLER } from "../coding-agent-tools.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { turnKindOf } from "./auth.js";
@@ -424,7 +425,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   }),
                 },
                 agents: {
-                  plan: { userId: caller, planId: plan.plan.id },
+                  caller: {
+                    kind: AGENT_CALLER.LUKE,
+                    plan: { userId: caller, planId: plan.plan.id },
+                  },
                   eve: coder,
                   writer: seams.writer(),
                   clientKey: context.callId,

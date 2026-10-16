@@ -17,9 +17,10 @@
      deepened until its white exclamation holds on it, in the dark as in the
      light, where the orange is deep already. */
   --attention-mark-ground: #c4620c;
-  /* An actor's square (`actor-ref.tsx`): Luke's face in his own blue, an
-     agent's harness, or an automation's clock, each on one solid neutral, so
-     a tile reads as one object on any ground beneath it. */
+  /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
+     count, and, in a facepile alone, Luke's face in his own blue, an agent's
+     harness, or an automation's clock, so the face a square overlaps never
+     shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
   --desktop-ground: #0c0c0e;
@@ -265,8 +266,10 @@ body,
    than `hidden`, because `hidden` makes it a scroll container: a panel sliding
    in from past the right edge, or the column's bars drawn on past both sides,
    are room that focus or scrollIntoView would scroll the whole window
-   sideways into and leave it there. */
-.desktop-shell[data-sidebar-collapsed] {
+   sideways into and leave it there. Every shell clips, Settings' and a
+   version history's too, whose toolbars draw their hairline past both
+   sides as the plans' column's do. */
+.desktop-shell {
   overflow: clip;
 }
 
@@ -343,15 +346,10 @@ body,
   display: flex;
 }
 
-/* The Inbox's list stands on the sidebar's ground, so the folded sidebar's
-   buttons over its head do too, as they do over the floating sidebar. */
+/* The buttons over the open sidebar, or the floating one, stand on its ground. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(
-    .desktop-main > .inbox-view:not([data-columns="item"])
-  )
-  .title-bar-controls:not([data-edge]) {
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
@@ -501,6 +499,27 @@ body,
 
 .sidebar-inbox:hover > .sidebar-inbox-waiting ~ .row-shortcut,
 :root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting ~ .row-shortcut {
+  display: inline-flex;
+}
+
+/* The Automations row's failed mark stands where the Inbox's count does on
+   its row, and gives way to the chord as that count does. */
+.sidebar-automations-failed {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.sidebar-automations-failed ~ .row-shortcut,
+.sidebar-automations:hover > .sidebar-automations-failed,
+:root[data-keyboard="true"] .sidebar-automations:focus-visible > .sidebar-automations-failed {
+  display: none;
+}
+
+.sidebar-automations:hover > .sidebar-automations-failed ~ .row-shortcut,
+:root[data-keyboard="true"]
+  .sidebar-automations:focus-visible
+  > .sidebar-automations-failed
+  ~ .row-shortcut {
   display: inline-flex;
 }
 
@@ -732,6 +751,118 @@ body,
   margin-top: var(--section-gap);
 }
 
+/* A section's head, Pinned's and Tasks', in the headings' voice a level
+   above the groups under it: its name, a press that folds the section where
+   it folds, and its buttons at its end, View options on Tasks'. */
+.sidebar-section-head {
+  display: flex;
+  height: var(--control-height);
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) 0 var(--row-inset);
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-section-head-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--space-6);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+button.sidebar-section-head-name:hover {
+  color: var(--text-primary);
+}
+
+.sidebar-section-head-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* View options wears a dot while the view leaves tasks out, so a filtered
+   list never passes for the whole of it. */
+.sidebar-view-options[data-filtered="true"] {
+  position: relative;
+}
+
+.sidebar-view-options[data-filtered="true"]::after {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 5px; /* off-scale: a status dot */
+  height: 5px; /* off-scale: a status dot */
+  border-radius: 50%;
+  background: var(--focus-ring);
+  content: "";
+}
+
+/* What the view filters by, under the Tasks head, each chip drawn as the
+   palette's chosen filter is, with the × that lifts it. */
+.sidebar-view-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+.sidebar-view-chip {
+  display: inline-flex;
+  min-width: 0;
+  height: 22px; /* off-scale: a chip a row's half-step shorter than the palette's */
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-2) 0 var(--space-6);
+  border: 1px solid var(--selected-edge);
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-view-chip-words {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-view-chip > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.sidebar-view-chip button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.sidebar-view-chip button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.sidebar-view-chip button svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* A section's name over its rows, in the headings' voice: the sidebar's
    settings search and the plan's summary alike. */
 .section-heading {
@@ -828,8 +959,9 @@ body,
 }
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
-   picture or their letter on a hue; Luke, an agent, or an automation on a
-   solid rounded square; someone the window cannot name on a quiet outline.
+   picture or their letter on a hue; Luke, an agent, or an automation by its
+   glyph alone in a rounded square's box, on a solid tile where a facepile
+   overlaps it; someone the window cannot name on a quiet outline.
    One size per place, so a byline, a facepile, and a row read level whoever
    is in them. A square's corner is rounder than a workspace tile's of its
    size, and it never holds a letter, so the two never read as one. */
@@ -849,6 +981,10 @@ body,
   vertical-align: middle;
 }
 
+.actor-mark[data-size="mark"] {
+  --actor-size: 14px;
+}
+
 .actor-mark[data-size="stack"] {
   --actor-size: 18px;
 }
@@ -865,7 +1001,11 @@ body,
   --actor-size: 32px;
 }
 
-/* An App's bot on GitHub stands on the same square, its avatar on the neutral tile. */
+.actor-mark[data-size="page"] {
+  --actor-size: 48px;
+}
+
+/* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
 .actor-mark:is(
   [data-kind="luke"],
   [data-kind="agent"],
@@ -875,15 +1015,34 @@ body,
   border-radius: calc(var(--actor-size) * 0.36);
 }
 
-/* Luke wears his blue on his face, not his tile, the colour his voice and
-   the Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1
-   on the light one. */
+/* Note that a square outside a facepile stands bare, its glyph alone on the
+   ground beneath it as a tab's is, in the same box, so the rows and lines it
+   stands in keep their alignment; a facepile whose faces overlap tiles its
+   squares instead (`ActorStack`), so a face never shows through the one
+   overlapping it. */
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+):not([data-tiled="true"]) {
+  background: none;
+}
+
+/* Luke wears his blue on his face, the colour his voice and the
+   Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1 on
+   the light one, and at least 8.9:1 and 4.2:1 bare on the window's grounds,
+   a hovered or chosen row's included. */
 .actor-mark[data-kind="luke"] {
   color: var(--voice-luke);
 }
 
 /* A person's picture keeps its edge on a ground of its own colour, a GitHub user's too. */
-.actor-mark:is([data-kind="person"], [data-kind="github"]:not([data-bot="true"]))::after {
+.actor-mark:is(
+  [data-kind="person"],
+  [data-kind="github"]:not([data-bot="true"]),
+  [data-left="true"]
+)::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -896,6 +1055,22 @@ body,
   background: none;
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
   color: var(--text-tertiary);
+}
+
+/* A member who left keeps their own face, their picture or their letter on
+   its hue, drawn in grayscale and muted, rather than the outline that
+   stands for someone the service names nobody for; their name says they
+   left, so the gray is never the only sign. Muted to 0.8, the letter holds
+   3.8:1 on its gray in light and 4.2:1 in dark, and the gray 3.2:1 on the
+   ground, past the 3:1 a graphic needs. */
+.actor-mark[data-left="true"] {
+  background: var(--actor-tile);
+  box-shadow: none;
+}
+
+.actor-mark[data-left="true"] .actor-face {
+  filter: grayscale(1);
+  opacity: 0.8;
 }
 
 .actor-face {
@@ -1019,7 +1194,14 @@ body,
   align-items: center;
 }
 
-.actor-stack > :is(.actor-mark, .actor-stack-more) {
+/* A pile of faces that hang their cards is a list, drawn as the pile. */
+ul.actor-stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actor-stack > :is(.actor-mark, .actor-stack-more, .actor-stack-face) {
   margin-left: -5px;
   box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
 }
@@ -1033,6 +1215,94 @@ body,
   box-shadow:
     inset 0 0 0 1px var(--hairline-strong),
     0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+/* A face that hangs its card holds its mark and, at its corner, its badge,
+   cut from the ground as the face is. The ring is the mark's own, so the face
+   itself draws none. */
+.actor-stack > .actor-stack-face {
+  position: relative;
+  display: inline-flex;
+  box-shadow: none;
+}
+
+/* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
+.actor-stack:has(.actor-stack-badge) > .actor-stack-face {
+  margin-left: var(--space-4);
+}
+
+.actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
+  margin-left: 0;
+}
+
+.actor-stack-face > .actor-mark {
+  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+/* Note that a square no face overlaps stands bare in the pile as in a line,
+   without the ring too, because a ring of a ground it does not stand on
+   would frame it. */
+.actor-stack
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+):not([data-tiled="true"]) {
+  box-shadow: none;
+}
+
+/* Note that the badge stands over the next face, which overlaps this one's corner. */
+.actor-stack-badge {
+  position: absolute;
+  z-index: 1;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  width: 10px;
+  height: 10px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--actor-stack-ground, var(--desktop-ground));
+}
+
+.actor-stack-badge svg {
+  width: 8px;
+  height: 8px;
+  stroke-width: 3;
+}
+
+/* The rest a pile's count stands for, each by their mark and what their face would say. */
+/* However many it counts, the list stays inside the window and scrolls within the card. */
+.actor-more-list {
+  display: flex;
+  max-height: min(240px, 40vh);
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.actor-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* A row's words wrap within the card, a long login anywhere, and a bot's
+   badge rides the line its name ends on. Note that the badge is an inline
+   box, not an inline-block, because a line may break before an
+   inline-block whatever no-break space precedes it. */
+.actor-more-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actor-more-words .actor-bot {
+  display: inline;
+  white-space: nowrap;
 }
 
 .actor-stack-more {
@@ -1079,7 +1349,12 @@ body,
   white-space: pre;
 }
 
-.actor-you {
+/* The reader's own badge, and an App's bot's after its name, as GitHub's
+   own pages mark one: quiet and neutral, never cut, so a long name gives
+   way before the badge does. */
+.actor-you,
+.actor-bot {
+  flex-shrink: 0;
   padding: 0 5px; /* off-scale */
   border-radius: 4px;
   background: var(--raised-strong);
@@ -1162,6 +1437,16 @@ body,
   flex: 1;
 }
 
+/* A one-off agent's row leads with its harness mark, as its tab does, so it
+   reads apart from a task; the line's baseline holds it level with the name. */
+.sidebar-agent-glyph {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  --state-glyph-size: 14px;
+  color: var(--text-secondary);
+}
+
 .sidebar-plan-time {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
@@ -1182,6 +1467,34 @@ body,
   vertical-align: -1.5px; /* off-scale */
 }
 
+/* Where its group does not say it, a row names its repository, muted,
+   before its mark and time, and steps it out with them while hovered. A
+   long name is cut short, so the task's own name keeps its room at the
+   sidebar's least width; the row's card names it whole. */
+.sidebar-plan-repository {
+  display: inline-block;
+  max-width: 7em;
+  overflow: hidden;
+  margin-right: var(--space-6);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+/* A teammate's task wears its creator's face before its mark and time, in
+   the same slot, so it takes the room a short time leaves there before any
+   of the name's, and steps out with the time while the row is hovered. */
+.sidebar-plan-time > .actor-mark {
+  top: -1px; /* off-scale: centres the face on the time's figures */
+  margin-right: var(--space-4);
+}
+
+/* Home's time sets its parts apart by its own gap. */
+.home-row .sidebar-plan-time > .actor-mark {
+  margin-right: 0;
+}
+
 .plan-mark-glyph {
   display: inline-block;
   width: 12px;
@@ -1193,6 +1506,15 @@ body,
 
 .sidebar-plan-time .plan-mark-glyph {
   margin-right: var(--space-4);
+}
+
+/* A row holding a draft wears its pencil at the glyph's size, before the mark
+   of its work (`draft-mark.tsx`). */
+.sidebar-plan-time .draft-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-4);
+  vertical-align: -1.5px; /* off-scale */
 }
 
 /* A plan whose repository belongs to another workspace wears the attention
@@ -1279,8 +1601,9 @@ body,
   z-index: 1;
 }
 
-.sidebar-plan-item:hover .sidebar-plan-time,
-.sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+/* Note that a one-off agent's row keeps its time, because it has no marks to make room for. */
+.sidebar-plan-item:hover .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time,
+.sidebar-plan-item:has(:focus-visible) .sidebar-plan:not(.sidebar-agent) .sidebar-plan-time {
   visibility: hidden;
 }
 
@@ -1291,12 +1614,6 @@ body,
    is hovered, holds focus, or has its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-plans + .sidebar-repository {
-  margin-top: var(--space-8);
-}
-
-/* Archived stands at the foot of the list as one more group, its header a
-   repository's (`ArchivedPlans`). */
-.sidebar-archived {
   margin-top: var(--space-8);
 }
 
@@ -1582,6 +1899,7 @@ body,
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  container: sidebar-foot / inline-size;
 }
 
 /* The account: photo and name, one press target the height of a plan row so
@@ -1646,6 +1964,21 @@ body,
 .sidebar-update svg {
   width: 13px;
   height: 13px;
+}
+
+/* A sidebar too narrow for the pill's word beside a name that reads draws
+   the pill as its glyph alone in a round as tall as the pill, so the name
+   keeps the room. The button's label and its hint still say what it does. */
+@container sidebar-foot (width < 220px) {
+  .sidebar-update {
+    aspect-ratio: 1;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-update-word {
+    display: none;
+  }
 }
 
 /* Work column ------------------------------------------------------------- */
@@ -1728,6 +2061,37 @@ body,
 .desktop-toolbar:has(.tab-skeleton),
 .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
+}
+
+/* The plan's toolbar answers its own width, so its controls give way before
+   its tabs do: Start draws its glyph alone, named still, and where the
+   column is narrowest it leaves its model menu to the new agent's own
+   composer, which chooses a model as well, and the agents' Retry draws its
+   glyph alone. */
+.desktop-plan-main .desktop-toolbar {
+  container: plan-toolbar / inline-size;
+}
+
+@container plan-toolbar (max-width: 480px) {
+  .start-agent .start-agent-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    width: var(--control-height);
+    padding: 0;
+  }
+}
+
+@container plan-toolbar (max-width: 320px) {
+  .start-agent .start-agent-chevron,
+  .main-tabs .retry-word {
+    display: none;
+  }
+
+  .start-agent .start-agent-main {
+    border-radius: calc(var(--control-radius) - 1px);
+  }
 }
 
 .desktop-toolbar-actions {
@@ -1912,6 +2276,12 @@ body,
   text-align: center;
 }
 
+/* Factory's scroller runs to the toolbar's edge, so its failure stands off it
+   as Automations' does by its scroller's padding. */
+.factory-scroll > .read-failure-centred {
+  margin-top: var(--space-16);
+}
+
 /* Among the rows, Retry is drawn back by its own inset, so its glyph stands
    a gap after the words, or under their first letter where it wraps. */
 .read-failure:not(.read-failure-centred) > .quiet-button {
@@ -2040,7 +2410,7 @@ body,
 
 /* base.css draws the ring; it stands inside the target, close round the disc. */
 .corner-dismiss:focus-visible {
-  outline-offset: calc(-1 * var(--focus-ring-width));
+  outline-offset: var(--focus-ring-inset);
 }
 
 .corner-dismiss svg {
@@ -2341,7 +2711,7 @@ body,
 .plan-menu-note {
   margin: 0;
   overflow: clip;
-  overflow-clip-margin: 3px;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 .account-menu-name,
@@ -2419,7 +2789,9 @@ body,
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. Settings' column holds its page's name over the
    page, which keep their measure. */
-:is(.automations-scroll, .inbox-plans-scroll, .settings-page-scroll):has(.empty-state) {
+:is(.automations-scroll, .factory-scroll, .inbox-plans-scroll, .settings-page-scroll):has(
+  .empty-state
+) {
   display: flex;
   flex-direction: column;
 }
@@ -2462,17 +2834,73 @@ body,
   height: 12px;
 }
 
+/* A notice about a plan (`banner.tsx`): a glyph, its words, and the presses
+   that answer it on one row, in any of its three looks. Each strip is a
+   container of its own, so it answers its own width rather than the
+   window's: the same strip stands in a 280px column beside a wide side panel
+   and across a whole window. */
+.banner {
+  --banner-gap: var(--space-8);
+  container: banner / inline-size;
+}
+
+.banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--banner-gap);
+}
+
+.banner-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.banner-words p {
+  margin: 0;
+}
+
+.banner-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* Narrow, the presses leave the words' line for one of their own beneath
+   it, each as wide as the line allows, and the words wrap at their own
+   width rather than being squeezed past it or cut short. */
+@container banner (max-width: 479px) {
+  .banner-row {
+    flex-wrap: wrap;
+  }
+
+  .banner-actions {
+    flex: 1 0 100%;
+  }
+
+  .banner .banner-actions > * {
+    max-width: none;
+    flex: 1 1 0%;
+  }
+
+  .banner .plan-banner-words {
+    white-space: normal;
+  }
+}
+
 /* A notice about the whole plan (`plan-banner.tsx`): one slim line across
    the plan's column under its toolbar, or under the side panel's bar while
    the panel fills the window, on a faint attention tint with a hairline of
-   it beneath. Its words are cut short rather than wrapped, so the line keeps
-   its height at any width, and its one press stands at its end, a quiet
-   bordered button as a devtool's notice draws one. */
+   it beneath. Its words are cut short rather than wrapped while the line is
+   wide enough to read them, so the line keeps its height, and its one press
+   stands at its end, a quiet bordered button as a devtool's notice draws
+   one. */
 .plan-banner {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-8);
   min-height: 32px; /* off-scale: a 22px press and its inset */
   padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
   border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
@@ -2481,10 +2909,11 @@ body,
   font-size: 12.5px;
 }
 
+.plan-banner .banner-row {
+  min-height: 24px; /* off-scale: the line's height less its inset */
+}
+
 .plan-banner-words {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2496,12 +2925,12 @@ body,
   font-weight: 560;
 }
 
-/* The press gives way too, its words cut short at the end rather than the
-   press pushed out of a narrow column, and never takes more than half the
-   line; the whole of them stays its text, which a reader hears. */
+/* The press gives way too while it shares the line, its words cut short at
+   the end rather than the press pushed out of the column, and never takes
+   more than half the line, which its presses' box holds it to; the whole of
+   them stays its text, which a reader hears. */
 .plan-banner-action {
   min-width: 0;
-  max-width: 50%;
   flex: 0 1 auto;
   height: 22px;
   overflow: hidden;
@@ -2517,8 +2946,18 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
+.plan-banner .banner-actions {
+  max-width: 50%;
+}
+
 .plan-banner-action:hover {
   background: var(--raised);
+}
+
+@container banner (max-width: 479px) {
+  .plan-banner .banner-actions {
+    max-width: none;
+  }
 }
 
 /* The document ------------------------------------------------------------- */
@@ -2526,13 +2965,11 @@ body,
 /* A banner over a document: a card on the document's own reading width, so
    what it says is the first thing read. An archived plan's says so with the
    one action the plan takes, the way Notion marks a page in the trash, and
-   the plan template's says what the template is for, with its reset. */
+   the plan template's says what the template is for. */
 .document-banner {
-  display: flex;
+  --banner-gap: var(--space-12);
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
-  align-items: center;
-  gap: var(--space-12);
   margin: var(--space-16) auto 0;
   padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
   border: 1px solid var(--hairline-strong);
@@ -2556,18 +2993,6 @@ body,
   height: 16px;
 }
 
-.document-banner-words {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.document-banner-words p {
-  margin: 0;
-}
-
 .document-banner-title {
   color: var(--text-primary);
   font-size: 13px;
@@ -2579,7 +3004,10 @@ body,
   font-size: 12.5px;
 }
 
+/* The document's column answers its own width (`@container plan-document`
+   below), the room the summary's rail leaves it included. */
 .desktop-document {
+  container: plan-document / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -2611,7 +3039,8 @@ body,
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
-.desktop-inbox .agent-composer {
+.desktop-inbox .agent-composer,
+.desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
@@ -2624,6 +3053,51 @@ body,
   padding-inline: var(--space-4);
   color: var(--text-secondary);
   font-size: 11.5px;
+}
+
+/* What a transcript opens on, the plan, an automation's prompt, or a
+   worker's task, stands as a sent message does, at the right under the line
+   naming who sent it, its card across the message's whole measure, so it
+   lines up with a long sent message's left edge rather than a width of its
+   own: the measure is the sent message's (`Message`'s `is-user`), and a card
+   folded or open spans all of it. */
+.agent-origin > .agent-origin-card {
+  width: 100%;
+}
+
+.agent-origin > .message-sender {
+  max-width: 100%;
+}
+
+/* Who sent it can name an automation, an issue, and a runner: too narrow
+   for all three on one line, it breaks between them rather than cutting
+   each name to its first letters. */
+.agent-origin > .message-sender > .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+/* A task named as the sender of its plan: its document glyph standing in a
+   16px mark's place, in the line's own quiet ink. */
+.agent-origin-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+}
+
+.agent-origin-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* The issue or pull request a run's event named, cut to the line. */
+.agent-origin-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A teammate's call at its divider: their mark and name, then when it
@@ -2657,6 +3131,14 @@ body,
   color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+/* The "Edited by" line, over the document and in the plan's menu, wraps
+   between its words and names rather than cutting a name short, so no name
+   is ever cut to nothing beside the words around it. */
+.plan-edit-note,
+.plan-menu-note {
+  flex-wrap: wrap;
 }
 
 /* A line over a version: what it is compared with, or why it is not drawn. */
@@ -2738,9 +3220,29 @@ body,
   font-size: 1.05em;
 }
 
+/* In a column under 480px the crumb wraps rather than cutting its names to a
+   letter: the workspace, then the repository with its separator, then who
+   can edit, each on a line of its own where they do not fit together. */
+@container plan-document (width < 480px) {
+  .plan-crumb {
+    flex-wrap: wrap;
+  }
+}
+
+/* In a column under 400px the title steps down to a section's size and a
+   half, so it no longer fills the first screen a few words a line. */
+@container plan-document (width < 400px) {
+  .desktop-document .plan-title .markdown-heading[data-level="1"] {
+    font-size: 1.5em;
+  }
+}
+
 /* The call bar ------------------------------------------------------------- */
 
+/* It answers the column's width, so a narrow column gives the call bar and
+   the captions above it the room the summary's rail reserves. */
 .desktop-call-bar {
+  container: plan-call-bar / inline-size;
   position: relative;
   flex: 0 0 auto;
   padding: var(--space-12) calc(var(--page-inset) + var(--summary-room)) var(--space-12)
@@ -2765,6 +3267,25 @@ body,
   width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
 }
 
+/* Too narrow a column to keep the rail's room: the bar, which stands under
+   the rail rather than beside it, runs to the page's inset at its right,
+   and the captions span the column to its insets, centred on it, their
+   volume hint wrapping rather than cut. */
+@container plan-call-bar (max-width: 359px) {
+  .desktop-call-bar > .call-bar {
+    margin-right: calc(-1 * var(--summary-room));
+  }
+
+  .desktop-call-bar .voice-caption {
+    left: 50%;
+    width: calc(100% - 2 * var(--column-inset));
+  }
+
+  .desktop-call-bar .volume-hint-text {
+    white-space: normal;
+  }
+}
+
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
@@ -2776,14 +3297,19 @@ body,
 /* The call bar's own row, laid out as a voice composer's controls are: at
    rest one start pill in its middle; in a call the call's two lines at its
    left and its controls at its right. Its height holds whichever it draws,
-   so the document above never moves when a call begins or ends. */
+   so the document above never moves when a call begins or ends, but where
+   it is too narrow for the call on one row (below). It answers its own
+   width, as the plan's page, the sidebar's card, the floating card, and the
+   floating window draw it, each at a width of its own. */
 .call-bar {
+  container: call-bar / inline-size;
   display: flex;
   max-width: var(--reading-width);
   min-height: var(--call-row-height);
+  flex-wrap: wrap;
   align-items: center;
   margin: 0 auto;
-  gap: var(--space-12);
+  gap: var(--space-8) var(--space-12);
 }
 
 .call-bar[data-call="false"] {
@@ -2836,6 +3362,12 @@ body,
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Luke's part is the one that gives way to a long command; the notetaker's
+   says the same few words whole, or goes (below). */
+.call-backend-part[data-part="notes"] {
+  flex: none;
 }
 
 .call-backend-action {
@@ -2896,6 +3428,42 @@ body,
   opacity: 0.7;
 }
 
+/* Too narrow for both of the backend's parts: the notetaker's goes while
+   Luke's stands, so what Luke is doing keeps the line. */
+@container call-bar (max-width: 479px) {
+  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+    display: none;
+  }
+}
+
+/* Narrower, the controls close up, their discs touching edge to edge, and
+   the working dots go, the line's own words saying Luke works, so Luke's
+   command keeps their room. */
+@container call-bar (max-width: 279px) {
+  .call-backend > .thinking-dots {
+    display: none;
+  }
+
+  .call-controls {
+    gap: 0;
+  }
+
+  .call-end {
+    margin-left: 0;
+  }
+}
+
+/* Too narrow for the status beside the controls (the sidebar's card at its
+   narrowest, the plan's bar in a 280px column): the status takes a row of
+   its own, the voice's word whole, and the controls stand under it at the
+   right. The floating window's bar is wider than this and must stay so,
+   since its window's height is fixed (call.css). */
+@container call-bar (max-width: 209px) {
+  .call-status {
+    flex-basis: 100%;
+  }
+}
+
 /* The repository chip ------------------------------------------------------ */
 
 .repository-chip {
@@ -2917,10 +3485,28 @@ body,
 }
 
 /* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
-   menu hangs from the chip's trailing edge, where the column is. */
+   menu hangs from the chip's trailing edge, where the column is, or from its
+   leading edge where the chip leads its line. */
 .repository-chip[data-place="field"] .searchable-menu {
   right: 0;
   left: auto;
+}
+
+.repository-chip[data-place="field"][data-align="start"] .searchable-menu {
+  right: auto;
+  left: 0;
+}
+
+/* Wherever it stands, the menu is placed as a Settings picker's is
+   (`usePickerPlacement`): above the chip where the window leaves more room
+   there, its list capped to the room on the side it took. */
+.repository-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--space-4));
+}
+
+.repository-chip .plan-compose-menu-list {
+  max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
 /* A harness's or a provider's mark keeps its box in a row however tight the
@@ -3589,7 +4175,8 @@ body:has(.app-stage[data-capture="true"])
 /* Inbox ---------------------------------------------------------------------- */
 
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
-   own Inbox tab: the items in a column on the sidebar's ground, under a bar
+   own Inbox tab: the items in a column on the Inbox's own ground, so the
+   list and the item read as one surface parted by a hairline, under a bar
    the work column's height, and the chosen item beside it, at the Inbox's
    own measure (`.desktop-inbox`). The column is as wide as it was last
    dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
@@ -3625,7 +4212,6 @@ body:has(.app-stage[data-capture="true"])
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--hairline);
-  background: var(--desktop-sidebar);
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -3634,14 +4220,18 @@ body:has(.app-stage[data-capture="true"])
   padding-right: var(--column-inset);
 }
 
-/* While the sidebar is folded the list is the window's first column, so its
+/* While the sidebar is folded the window's Inbox's list is its first column, so its
    name stands centred over the list, as a sidebar's title does, rather than
    pushed past the title bar's buttons. Each side of the name holds at least
    what stands there, the title bar's buttons at the left and the list's own
    at the right, so the name moves aside only once it would meet them, and is
    cut short only once it no longer fits between them. The bar is inset alike
    on both sides, so centred in the bar is centred in the list. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .inbox-plans-bar {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .inbox-view
+  .inbox-plans-bar {
   display: grid;
   grid-template-columns:
     minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
@@ -3650,20 +4240,39 @@ body:has(.app-stage[data-capture="true"])
   padding-left: var(--column-inset);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-heading {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-heading {
   grid-column: 2;
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
+}
+
+/* A task's own Inbox stands under its column's tab strip, clear of the title
+   bar's buttons at either end, so its list's head and its item's bar keep the
+   column's own inset whether the sidebar is folded or the panel's toggle is
+   drawn. */
+.desktop-shell[data-sidebar-collapsed] .desktop-plan-main .inbox-view .desktop-toolbar {
+  padding-inline: var(--column-inset);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
-  .inbox-view[data-columns="list"]
+  > .page-find
+  > .inbox-view[data-columns="list"]
   .inbox-plans-bar {
   display: flex;
   padding-left: var(--sidebar-toggle-clearance);
@@ -3723,27 +4332,90 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The pane's words under the agent's byline start where its name does, past
-   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). */
+   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). They clip
+   what runs past them, as a message does, though not the keyboard's ring on
+   an option laid edge to edge in them. */
 .inbox-indent {
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
   padding-left: 21px;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron. The path clips what runs
-   past it, though not the keyboard's ring on a crumb, and a crumb under the
+   by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs {
-  overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
-}
-
 .inbox-crumbs ol {
   gap: var(--list-gap);
+}
+
+/* Note that the agent's crumb gives way as the task's does, because the
+   breadcrumbs keep their last crumb whole, and the path's clip would cut it. */
+.inbox-crumbs li.inbox-crumb {
+  flex-shrink: 1;
 }
 
 .inbox-crumb:active {
   background: var(--raised-strong);
   color: var(--text-primary);
+}
+
+/* A settled item's foot, where its box stood: the next item that needs the
+   developer as one wide press in the options' fill (`inbox-pager.tsx`), led
+   by Next in the meta voice, then its agent's tile and its title in the
+   unread weight, cut short at the row's end, and J where J reaches it. */
+.inbox-next-dock {
+  padding-bottom: var(--space-12);
+}
+
+.inbox-next {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-next:hover {
+  background: var(--raised-strong);
+}
+
+.inbox-next-lead {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.inbox-next-title {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An item standing alone ends its bar in the pager (`inbox-pager.tsx`):
+   where it stands in the list, in the meta voice's figures, and the arrows
+   up and down it, as far in from the Inbox's edge as its crumbs start. An
+   arrow with nowhere to go steps back. */
+.inbox-pager {
+  align-items: center;
+  margin-left: auto;
+  padding-right: var(--column-inset);
+}
+
+.inbox-pager-count {
+  margin-right: var(--space-6);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* One agent's page stands in the plan's place as the Inbox does: its toolbar
@@ -3765,6 +4437,70 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  container: inbox-item / inline-size;
+}
+
+/* An item standing alone narrower than its bar's crumbs, the way back, and
+   the pager, drops the task's crumb, and the agent's keeps enough of its
+   name to read; its hover card names it whole. Narrower still the way back
+   draws its glyph alone, named still, beside the pager, and the crumbs take
+   a line of their own under them, where both fit again, sharing it. */
+@container inbox-item (width < 560px) {
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: none;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      8ch +
+      var(--tab-end)
+    );
+  }
+}
+
+@container inbox-item (width < 360px) {
+  .inbox-view-items > .desktop-toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-4);
+  }
+
+  .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .inbox-back {
+    width: var(--control-height);
+    padding: 0;
+  }
+
+  .inbox-back-word {
+    display: none;
+  }
+
+  .inbox-crumb:first-child,
+  .inbox-crumb:first-child + .file-breadcrumb-separator {
+    display: flex;
+  }
+
+  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
+  .inbox-crumbs li.inbox-crumb:first-child {
+    flex-shrink: 4;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      3.5ch +
+      var(--tab-end)
+    );
+  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -3777,42 +4513,52 @@ body:has(.app-stage[data-capture="true"])
    bar, led by the way back, leaves the title bar's buttons their room. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items
   .desktop-toolbar {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-/* Factory -------------------------------------------------------------------- */
+/* Experiments ---------------------------------------------------------------- */
 
-/* Factory stands in the plan's place as the Inbox does: the toolbar, the
-   summary line, then the line of steps, each a card on the sidebar's ground
-   holding sidebar rows. The steps share one grid row each for their work and
-   their wait, so what waits on the developer lines up as one band across the
-   line, under the step it holds up. */
-/* An experiment's toolbar: a quiet badge after its title, as a tool's
-   annotation is drawn, and Send feedback as a quiet text button. */
-.desktop-toolbar-heading:has(.experiment-badge) {
+/* An experiment's toolbar (`experiment-marks.tsx`): the tag after its
+   title, on the title's baseline, as a devtool's Beta label sits; Send
+   feedback is a toolbar button like any other. The tag is a hairlined
+   capsule in the muted voice, unfilled, so it names the page's state
+   without asking for a look. Note that the heading aligns on the last
+   baseline, because an automation's title is the last of its crumbs, and
+   the crumbs' first baseline is the smaller words of the way back. */
+.desktop-toolbar-heading:has(.experiment-tag) {
   display: flex;
-  align-items: center;
+  align-items: last baseline;
   gap: var(--space-8);
 }
 
-.experiment-feedback {
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
+.experiment-tag {
+  flex: none;
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
   color: var(--text-secondary);
-  font-size: 12px;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.01em;
 }
 
-.experiment-feedback:hover {
-  background: var(--raised);
-  color: var(--text-primary);
-}
+/* Factory -------------------------------------------------------------------- */
 
+/* Factory stands in the plan's place as the Inbox does: the toolbar, the
+   summary line, then the line of stations, each Settings' card holding
+   Home's rows, what waits on the developer first and set off from the rest
+   by a hairline. The stations stretch to one height and fill the room, so
+   the line reads as one piece, and the arrows between them carry the flow
+   in the tertiary ink, past 3:1 against the ground in both appearances.
+   A station with nothing in it keeps to its words, so the busy ones share
+   the room. Where three busy cards could not each hold a readable row,
+   about 300px apiece, the stations stack, the arrows turn down, and an idle
+   station is one line. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -3826,6 +4572,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--content-inset) var(--space-32);
+  container: factory / inline-size;
 }
 
 .factory-summary {
@@ -3838,21 +4585,13 @@ body:has(.app-stage[data-capture="true"])
   font-size: 13px;
 }
 
+/* What waits on the developer leads the line in full ink, its dot before it. */
 .factory-needs {
   display: inline-flex;
   align-items: center;
   gap: var(--space-6);
-  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-6));
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
   color: var(--text-primary);
   font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.factory-needs:hover {
-  background: var(--raised);
 }
 
 .factory-sep {
@@ -3860,45 +4599,35 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .factory-line-up {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: start;
-  column-gap: var(--space-8);
-  max-width: 1080px; /* off-scale */
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-8);
 }
 
 .factory-step {
-  display: grid;
-  grid-row: span 2;
-  grid-template-rows: subgrid;
-  min-width: 0;
-  padding: var(--space-8) var(--space-4) var(--space-4);
-  border: 1px solid var(--hairline);
-  border-radius: var(--menu-radius);
-  background: var(--desktop-sidebar);
-}
-
-.factory-work,
-.factory-wait {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
+  padding: var(--space-8) var(--space-4) var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
 }
 
-.factory-wait {
-  margin: var(--space-12) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-8) var(--space-4) var(--space-4);
-  border-top: 1px solid var(--hairline);
-  border-radius: 0 0 var(--menu-radius) var(--menu-radius);
-  background: var(--desktop-ground);
+/* An arrow stands level with the stations' heads, where the eye reads the
+   line, rather than halfway down the longest list, which may stand below the
+   window's foot. */
+.factory-step[data-idle] {
+  flex: none;
 }
 
 .factory-arrow {
   display: flex;
+  flex: none;
   align-self: start;
-  margin-top: var(--space-6);
-  color: var(--selected-edge);
+  margin-top: var(--space-12);
+  color: var(--text-tertiary);
 }
 
 .factory-arrow svg {
@@ -3947,80 +4676,66 @@ body:has(.app-stage[data-capture="true"])
   transform: none;
 }
 
-.factory-over {
-  margin: 0 0 var(--space-4);
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.factory-line {
+/* A station with nothing in it says so in one muted line. */
+.factory-idle {
   margin: 0;
   padding: var(--space-2) var(--row-inset) var(--space-6);
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-/* A step's rows read whole on two lines, and a question on up to five,
-   rather than cut short; the time and the dot stand at the first line. */
 .factory-rows {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.factory-row .sidebar-plan-line {
-  align-items: flex-start;
+/* What waits on the developer stands apart from the work after it. */
+.factory-rows[data-needs] + .factory-rows {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hairline);
 }
 
-.factory-row .sidebar-plan-name {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-height: 1.35;
-  white-space: normal;
+/* A row offers no Pin or Archive to give way to, so its time stays put
+   while the row is hovered or holds the keyboard, as Home's does. */
+.factory-row:hover .sidebar-plan-time,
+.factory-row:has(:focus-visible) .sidebar-plan-time {
+  visibility: visible;
 }
 
-.factory-rows[data-wait] .sidebar-plan-name {
-  -webkit-line-clamp: 5;
-}
-
-/* The dot stands centred on the first line, beside the time. */
-.factory-row .inbox-row-dot {
-  top: 0.675em; /* off-scale: half the line's height */
-}
-
-.factory-more {
-  padding: var(--space-4) var(--row-inset) var(--space-6);
+/* A row that opens GitHub says so with a plain link's ↗ after its words. */
+.factory-external {
+  display: inline-flex;
+  flex: none;
+  margin-left: calc(-1 * var(--space-6));
   color: var(--text-tertiary);
-  font-size: 12px;
 }
 
-/* An agent stopped on a question wears the question, in full ink, not the
-   working mark; what just shipped wears the finished mark, its name muted. */
-.factory-asking {
-  color: var(--text-primary);
-}
+@container factory (width < 960px) {
+  .factory-line-up {
+    flex-direction: column;
+    gap: var(--space-6);
+  }
 
-.factory-shipped {
-  color: var(--state-complete);
-}
+  .factory-step {
+    flex: none;
+  }
 
-.factory-row:has(.factory-shipped) .sidebar-plan-name {
-  color: var(--text-secondary);
-}
+  .factory-step[data-idle] {
+    flex-direction: row;
+    align-items: center;
+  }
 
-.factory-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-12);
-  max-width: 1080px; /* off-scale */
-  margin-top: var(--space-48);
-  color: var(--text-secondary);
-  font-size: 13px;
+  .factory-step[data-idle] .factory-idle {
+    padding: 0 var(--row-inset);
+  }
+
+  .factory-arrow {
+    align-self: center;
+    margin-top: 0;
+    transform: rotate(90deg);
+  }
 }
 
 /* Automations ---------------------------------------------------------------- */
@@ -4056,11 +4771,12 @@ body:has(.app-stage[data-capture="true"])
    over what fires it, its owner, when it runs next in the tertiary ink, a
    failure's mark, and its switch, divided by the card's hairlines. */
 .automation-row {
+  position: relative;
   display: flex;
   min-height: 52px; /* off-scale */
   align-items: center;
   gap: var(--space-12);
-  padding: var(--space-8) var(--space-16);
+  padding-right: var(--space-16);
 }
 
 .automation-row-copy {
@@ -4115,12 +4831,6 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-.automation-owner svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-
 .automation-owner-name {
   min-width: 0;
   overflow: hidden;
@@ -4131,37 +4841,72 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
-/* A row's name and schedule are its press, which opens its page; the owner,
-   the next run, and the switch beside them are not, so the switch stays a
+/* A row is its press, which opens its page, from its edge to its switch, as
+   a sidebar task's row is: the owner, the next run, and the failure's mark
+   stand in it, and the switch stands beside it, so the switch stays a
    switch. */
 .automation-row-open {
   display: flex;
   min-width: 0;
   flex: 1;
+  align-self: stretch;
   align-items: center;
   gap: var(--space-12);
-  margin: calc(-1 * var(--space-8)) 0;
-  padding: var(--space-8) 0;
+  padding: var(--space-8) 0 var(--space-8) var(--space-16);
+  border-radius: inherit;
   background: none;
   color: inherit;
   text-align: left;
+}
+
+/* Note that the press reaches past its own box to the row's, because the
+   gap before the switch and the inset after it would otherwise be filled
+   by the hover yet answer no press. */
+.automation-row-open::after {
+  position: absolute;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+}
+
+/* The row's cells and its switch stand above that reach, so the owner's and
+   the next run's titles still answer the pointer; a press on a cell still
+   reaches the button it stands in. */
+.automation-row-open > *,
+.automation-row > .switch {
+  position: relative;
+  z-index: 1;
 }
 
 .automation-row-open > .state-glyph {
   color: var(--text-secondary);
 }
 
-.automation-row:has(.automation-row-open:hover) {
+/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
+.automation-row:hover {
   background: var(--raised);
 }
 
+.automation-row-open:focus-visible {
+  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
+}
+
+:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
 /* An automation's page: crumbs back to the list naming its owner, then its
-   name, the line saying who sees it, and its form at a Settings measure. */
+   name, the line saying who sees it, and its form at a Settings measure.
+   The crumbs clip what runs past them, though not the keyboard's ring on a
+   crumb, so the way back never draws over the tag after them. */
 .automation-crumbs {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--space-4);
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-reach);
   color: var(--text-secondary);
 }
 
@@ -4189,6 +4934,34 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-secondary);
 }
 
+/* The editor's toolbar holds its crumbs and its acts in a box of their own,
+   whose width a container query reads: the toolbar's own padding leaves the
+   traffic lights their room or not as the sidebar folds, so the window's
+   width says nothing of the room the crumbs have. Too narrow for every
+   act's words beside a readable name, the acts fold to their glyphs, each
+   named by its pill (`folding-button.tsx`), and the draft's state goes,
+   since Save, pressable or not, says it already; the crumb back folds to
+   its glyph alike, so the name it leads to keeps the room. */
+.automation-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--control-gap);
+  container: automation-toolbar / inline-size;
+}
+
+@container automation-toolbar (max-width: 879px) {
+  .automation-toolbar :is(.toolbar-button-words, .automation-editor-status) {
+    display: none;
+  }
+
+  .automation-toolbar .toolbar-button:has(> .toolbar-button-words) {
+    width: var(--control-height);
+    padding: 0;
+  }
+}
+
 .automation-editor {
   display: flex;
   max-width: var(--reading-width);
@@ -4214,26 +4987,6 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-tertiary);
 }
 
-/* The line under the name, in a Settings row's detail type: who owns it, by
-   glyph and name, then who sees it. */
-.automation-owner-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.automation-owner-line .automation-owner {
-  width: auto;
-  font-size: 12px;
-}
-
-.automation-crumbs .automation-owner {
-  width: auto;
-}
-
 /* The form, drawn as a Settings page: each group's name over a card of
    Settings rows, the groups a section apart. */
 .automation-form {
@@ -4255,10 +5008,23 @@ body:has(.app-stage[data-capture="true"])
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
 .automation-row-controls > .settings-input,
-.settings-row > .automation-cron {
+.settings-row > .automation-cron,
+.settings-row > .automation-rules-file {
   height: var(--control-height);
   padding-block: 0;
   border-radius: var(--control-radius);
+}
+
+/* The servers left on, by their marks, inside the servers row's field chip. */
+.automation-servers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.automation-servers > .provider-mark {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
 /* Note that the time's own clock is hidden, because what it opens is the
@@ -4300,7 +5066,8 @@ body:has(.app-stage[data-capture="true"])
   max-width: 100%;
 }
 
-.automation-cron {
+.automation-cron,
+.automation-rules-file {
   width: 200px;
   font-family: var(--font-mono, ui-monospace, monospace);
 }
@@ -4339,10 +5106,22 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
 }
 
+/* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
+   edge the side panel's own resize edge. Note that a window narrower than the
+   kept width leaves the form its reserve, as the side panel leaves the
+   document its own, and the kept width comes back as the window grows. */
+.automation-runs-pane {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  max-width: max(280px, calc(100% - 480px)); /* off-scale: the form's reserve, FORM_RESERVE */
+  flex: none;
+}
+
 .automation-runs {
   display: flex;
-  width: 340px; /* off-scale */
-  flex: none;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-8);
   overflow-y: auto;
@@ -4494,9 +5273,61 @@ button.automation-run:hover {
 /* Find in a tab --------------------------------------------------------- */
 
 /* The tab a find searches holds its bar at its top right, over what it
-   shows, as a browser's find bar stands over the page. */
+   shows, as a browser's find bar stands over the page. It answers its own
+   width, so a column too narrow for the bar's own width spans the bar
+   across it, inset alike at both sides, and the field takes what the
+   buttons leave it. A scope that names a container of its own lists
+   `find-scope` among its names, as `.side-panel-content` does. */
 .find-scope {
   position: relative;
+  container: find-scope / inline-size;
+}
+
+@container find-scope (max-width: 400px) {
+  .find-scope > .find-bar {
+    left: var(--column-inset);
+  }
+
+  .find-scope > .find-bar > .find-bar-well {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+/* Narrower still, the tally gives the field its room and is said rather
+   than drawn, as `.visually-hidden` says words; the matches stay marked in
+   the tab. */
+@container find-scope (max-width: 300px) {
+  .find-scope > .find-bar .find-bar-tally {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    clip-path: inset(50%);
+  }
+}
+
+/* A page standing in the plan's place finds as one scope (`PageFind`): it
+   fills the place as the page did, and its bar stands under the page's
+   toolbar, clear of the toolbar's own buttons. */
+.page-find {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.page-find > .find-bar {
+  top: calc(var(--desktop-bar-height) + var(--space-8));
+}
+
+/* Home has no toolbar, so its bar stands at the page's top, clear of the
+   greeting and its New task. */
+.page-find:has(> .home) > .find-bar {
+  top: var(--space-8);
 }
 
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,
@@ -4610,13 +5441,9 @@ button.automation-run:hover {
 
 /* The plan template laid out as every Settings page is (`PlanBody`'s
    `page`): at their measure, its name at a page title's place and size, the
-   Edited line and the note under it. Its words dissolve at the scroller's
-   top edge, through the shared top fade, once the page has left its top. */
+   Edited line and the note under it. */
 .template-document .plan-document-scroll {
   padding-top: 0;
-  animation: scroll-top-fade linear both;
-  animation-timeline: scroll(self block);
-  animation-range: 0 var(--scroll-fade);
 }
 
 .template-document :is(.plan-body, .plan-edit-note) {
@@ -4627,7 +5454,11 @@ button.automation-run:hover {
   padding-top: var(--space-32);
 }
 
+/* A column too narrow for the name and the page's actions on one line
+   drops the actions under the name, as a Settings page's head drops its
+   Reset, rather than breaking the name inside a word. */
 .plan-page-head .plan-title-line {
+  flex-wrap: wrap;
   align-items: center;
 }
 
@@ -4660,18 +5491,16 @@ button.automation-run:hover {
 
 /* A Settings page has no top bar: the page names itself at the head of its
    column, so the title-bar row above it is only the window's drag strip, and
-   the column scrolls beneath it. The page's top margin is wider than the
-   fade, so nothing at rest is faded; a row scrolled up dissolves into the
-   strip rather than being sliced off at its edge. */
+   the column scrolls beneath it, its top edge fading (`scroll-fade-top`) so
+   a row scrolled up dissolves into the strip rather than being sliced off. */
 .settings-page-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--page-inset) var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
-     column's own top margin above it. */
+     column's own top margin above it, which is wider than the fade. */
   scroll-padding-top: var(--page-inset);
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
   /* A bar that takes room takes it on every page, so the column never slides. */
   scrollbar-gutter: stable;
 }
@@ -4707,7 +5536,6 @@ button.automation-run:hover {
   gap: var(--space-32);
   margin: 0 auto;
   overflow: visible;
-  animation: none;
 }
 
 /* Version history ------------------------------------------------------------ */
@@ -4787,12 +5615,16 @@ button.automation-run:hover {
   text-align: right;
 }
 
+/* What a version did runs to two lines before it is cut short, so a
+   restore's row says which version it brought back in a column the folded
+   sidebar's width. */
 .version-row-summary {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A row's ⋯ stands in its time's place, which is always as wide as it, while
@@ -5038,8 +5870,10 @@ button.automation-run:hover {
 }
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
-   beneath the panel, and is hidden only once the panel has grown over it. */
-.desktop-plan-main[hidden] {
+   beneath the panel, and is hidden only once the panel has grown over it. An
+   agent's page beside its panel is hidden alike. */
+.desktop-plan-main[hidden],
+.desktop-plan > .agent-page[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--duration-pane);
 }
@@ -5136,7 +5970,8 @@ button.automation-run:hover {
 }
 
 /* Expanded where it cannot be pinned, the whole summary stands in a card
-   over the rail's own footprint, its top and right edges the rail's, drawn
+   over the rail's own footprint, its top and right edges the rail's, or the
+   column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
    as a menu is, and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
@@ -5201,6 +6036,20 @@ button.automation-run:hover {
   position: absolute;
   top: calc(var(--column-inset) - var(--card-edge));
   right: calc(var(--column-inset) - var(--card-edge));
+}
+
+/* While the chevron is drawn, the summary's fade keeps the chevron's own
+   spot whole, a second mask layer over the fade's, because a mask fades
+   every box inside the scroller and the chevron stands at its faded top. */
+.plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) {
+  mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
+  mask-position:
+    0 0,
+    right var(--column-inset) top var(--focus-ring-reach);
+  mask-size:
+    100% 100%,
+    var(--control-height) var(--control-height);
+  mask-repeat: no-repeat;
 }
 
 .plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .plan-summary-chevron,
@@ -5501,14 +6350,15 @@ button.automation-run:hover {
 }
 
 /* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens; either fades where it
-   is cut. A row with no folder gives its name the whole width. */
-.tab-add-menu .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
+   a deep path never hides which file the row opens, and a repository's row
+   its name rather than its owner (`repository-chip.tsx`); either fades where
+   it is cut. A row with no folder gives its name the whole width. */
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
 }
 
-.tab-add-menu .plan-compose-menu-detail {
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
@@ -5539,6 +6389,10 @@ button.automation-run:hover {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
+  /* The container every tab answers its width from (`@container
+     side-panel`, planning.css), so one width lays out every tab narrow; it
+     is the tab's find scope too, so it keeps that name (`.find-scope`). */
+  container: side-panel find-scope / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -5612,15 +6466,13 @@ button.automation-run:hover {
    editor draws its tabs: each a glyph and a label in a pill a toolbar
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
-   it. Every tab stands whole at its own width, up to a most past which its
-   label fades out at its end; past holding them all, the strip scrolls along
-   with no bar drawn, as a browser's does, and the end it has hidden tabs
-   beyond dissolves over `--scroll-fade`. The strip measures which edges
-   those are (tab-strip.tsx) as it scrolls and resizes, rather than riding a
-   scroll timeline, because a timeline is active over any overflow at all and
-   left a fade on a strip that holds every tab. The tab the strip brings into
-   view stops clear of the fade, at its scroll padding, and glides there
-   unless motion is held still. */
+   it. Every tab stands at its own width, up to a most past which its label
+   fades out at its end, and narrows to a floor where the strip is short of
+   room. Past holding them all, the strip scrolls along with no bar drawn, as
+   a browser's does; a tab it does not show whole is not drawn at all rather
+   than as a sliver at its edge, and the chevron after the strip lists those
+   (tab-strip.tsx), which the strip measures as it scrolls and resizes. The
+   tab the strip brings into view glides there unless motion is held still. */
 .tab-strip {
   display: flex;
   min-width: 0;
@@ -5629,45 +6481,12 @@ button.automation-run:hover {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: var(--scroll-glide);
-  scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
   margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
   padding: var(--space-8) var(--focus-ring-reach);
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--tab-strip-fade-start),
-    #000 calc(100% - var(--tab-strip-fade-end)),
-    transparent
-  );
-  transition:
-    --tab-strip-fade-start var(--duration-hover) ease,
-    --tab-strip-fade-end var(--duration-hover) ease;
-}
-
-.tab-strip[data-overflow-start="true"] {
-  --tab-strip-fade-start: var(--scroll-fade);
-}
-
-.tab-strip[data-overflow-end="true"] {
-  --tab-strip-fade-end: var(--scroll-fade);
-}
-
-/* Registered so a fade comes and goes as a length eased, and stands at none
-   on an edge that hides nothing. */
-@property --tab-strip-fade-start {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --tab-strip-fade-end {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
 }
 
 .tab {
@@ -5692,8 +6511,45 @@ button.automation-run:hover {
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease,
     transform var(--duration-fast) var(--spring-fast);
   -webkit-app-region: no-drag;
+}
+
+/* A strip short of room narrows every tab, as Chrome's does, down to a
+   floor that keeps its glyph, its label's first letters clear of their fade,
+   and the room the chosen tab keeps for its ×, before it scrolls any; the
+   chosen tab is never wider than the strip, so it is never shown without
+   its start or its ×. What a tab narrowed cuts short its hint says whole
+   (tab-strip.tsx). */
+.tab-strip .tab {
+  --tab-floor: calc(
+    var(--tab-start) +
+    var(--control-glyph) +
+    var(--tab-gap) +
+    var(--label-fade) +
+    1.5ch +
+    var(--tab-end)
+  );
+  min-width: var(--tab-floor);
+  max-width: min(200px, 100%);
+  flex: 0 1 auto;
+}
+
+/* The chosen tab gives way last, and below its floor too where the strip is
+   narrower still, its label first, so its glyph and its × always show. */
+.tab-strip .tab[data-selected="true"] {
+  min-width: min(var(--tab-floor), 100%);
+  flex-shrink: 0;
+}
+
+/* A tab the strip does not show whole is not drawn as a sliver at its edge:
+   the chevron after the strip lists it, and it is drawn again once the strip
+   scrolls it into view. It stays focusable, so the keyboard reaches it and
+   brings it in. */
+.tab-strip .tab[data-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tab:hover {
@@ -5953,28 +6809,23 @@ button.automation-run:hover {
   background: var(--hairline);
 }
 
-/* A card's way to the page of what it is about, under its rule, set as a
-   menu's row: its fill washes off the card's edge on hover. */
-.card-door {
-  display: flex;
-  width: calc(100% + 2 * var(--row-inset));
-  height: var(--menu-row-height);
-  align-items: center;
-  margin-inline: calc(-1 * var(--row-inset));
-  padding: 0 var(--row-inset);
+/* A card's name that opens its subject, where the control hanging the card
+   opens nothing of its own: the name as drawn, washed on hover as a named
+   actor is. */
+.card-name-link {
+  padding: 0;
   border: 0;
-  border-radius: var(--menu-row-radius);
+  border-radius: 4px;
   background: none;
-  color: var(--text-primary);
+  color: inherit;
   font: inherit;
-  font-size: 13px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
-.card-door:is(:hover, :focus-visible) {
-  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
-  background: var(--raised-strong);
+.card-name-link:hover {
+  background: var(--raised);
+  box-shadow: 0 0 0 3px var(--raised);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
@@ -6094,11 +6945,9 @@ button.automation-run:hover {
 }
 
 /* The plan's tab alone in its column takes the room the heading has rather
-   than a most of its own, and gives way to the toolbar's buttons by
-   truncating its label, down to a few of its characters, rather than by
-   scrolling. Beside an agent's it is a tab like any other. The Inbox pane's
-   crumbs give way alike, within a tab's most. */
-.desktop-toolbar-heading .tab[data-quiet="true"],
+   than a most of its own, giving way to the toolbar's buttons as any tab
+   gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
+   other. The Inbox pane's crumbs give way alike, within a tab's most. */
 .inbox-crumbs .tab {
   min-width: calc(
     var(--tab-start) +
@@ -6111,7 +6960,7 @@ button.automation-run:hover {
 }
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
-  max-width: none;
+  max-width: 100%;
 }
 
 /* While the plan is read, one block in its tab's place: a tab's height and
@@ -6130,7 +6979,11 @@ button.automation-run:hover {
 /* An irreversible act asks the way every desktop app asks: the window dims
    behind a centred card. Over the menu and the window's drag strip alike, so
    it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. */
+   tokens, which reduced motion and a capture run already hold still. The
+   card is never taller than the window less its margins: its body (the
+   question, a list of choices, a note being written) is the part that gives
+   way and scrolls, so its title and its answers stay on screen however short
+   the window is. */
 .confirm-dialog-backdrop {
   position: fixed;
   z-index: var(--z-dialog);
@@ -6146,6 +6999,7 @@ button.automation-run:hover {
 .confirm-dialog {
   display: flex;
   width: min(400px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-20);
@@ -6171,7 +7025,9 @@ button.automation-run:hover {
 }
 
 .confirm-dialog-body {
+  min-height: 0;
   margin: 0;
+  overflow-y: auto;
   color: var(--text-secondary);
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -6342,6 +7198,14 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
+/* A name with a detail after it keeps its whole width, up to most of the
+   row, and the detail is what gives way: an action's name is short and says
+   what the row does, where its detail (the task it acts on) can run long. */
+.command-palette-name:has(+ .command-palette-detail) {
+  max-width: 70%;
+  flex: none;
+}
+
 /* A plan's repository follows its name, as the sidebar's row says it. */
 .command-palette-detail {
   min-width: 0;
@@ -6466,12 +7330,14 @@ button.automation-run:hover {
 }
 
 /* The note grows with its words, up to where scrolling it is kinder than a
-   card the height of the window. No resize handle: the box is already sized
-   by what it holds. */
+   card the height of the window, and is the card's body: in a window too
+   short for the card it gives way, down to its least height, so the
+   screenshots, the signature, and the answers stay on screen. No resize
+   handle: the box is already sized by what it holds. */
 .feedback-dialog-message {
   width: 100%;
   min-height: 112px;
-  max-height: min(320px, 50vh);
+  max-height: 320px;
   padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
@@ -6646,9 +7512,12 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
+/* What the row is about keeps a floor beside a long title, so the title is
+   what gives way and the context is never cut to a letter or a sliver. Past
+   the floor it takes what the title leaves. */
 .home-row-context {
   overflow: hidden;
-  min-width: 0;
+  min-width: min(16ch, 35%);
   flex: 1;
   color: var(--text-tertiary);
   font-size: 12.5px;
@@ -6663,11 +7532,14 @@ button.automation-run:hover {
   visibility: visible;
 }
 
+/* The time ends the row whether a context fills up to it or not, so the
+   times stand in one column down a station or a section. */
 .home-row .sidebar-plan-time {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-6);
+  margin-left: auto;
 }
 
 .home-row-picture {
@@ -6691,28 +7563,56 @@ button.automation-run:hover {
   border-radius: 4px;
 }
 
-.home-more {
-  display: inline-flex;
-  align-self: flex-start;
+/* A person's page (`person-page.tsx`): Home's column, headed by their face
+   at the page's size beside their name and who they are here. */
+.person-column {
+  margin-top: 0;
+  gap: var(--space-24);
+}
+
+.person-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 0 var(--row-inset);
+}
+
+.person-head-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.person-head-name {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-8);
-  margin-top: var(--space-2);
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
-  background: none;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.person-head-line {
+  margin: 0;
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 12.5px;
-  transition: background-color var(--duration-hover) ease;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.home-more svg {
-  width: 14px;
-  height: 14px;
+.person-empty {
+  padding: 0 var(--row-inset);
 }
 
-.home-more:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+/* The way to the rest of their tasks, standing under the section's rows. */
+.person-section-foot {
+  margin: calc(-1 * var(--space-20)) 0 0;
 }
 
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
@@ -6762,9 +7662,29 @@ button.automation-run:hover {
   gap: var(--space-6);
 }
 
-.new-plan-workspace {
-  position: relative;
+/* A picker's menu here is as wide as its widest value, within a bound,
+   since the chip it hangs from grew to name its whole value: an owner's
+   long workspace name reads whole in the menu, not faded at its check.
+   The bound is also the room the scroller leaves from the chip's edge the
+   menu hangs from (`picker-row.tsx`), so a menu beside the runs never runs
+   past the form's edge and loses the start of its rows. */
+.automation-form .settings-picker .settings-picker-menu {
+  width: max-content;
+  min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
+  max-width: min(400px, var(--settings-picker-width-max, 400px));
+}
+
+/* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing
+   alone at the head of their lines, not in a column, so each is as wide as
+   its value and gives way, ellipsized, to a long one. */
+.new-plan-dialog .settings-picker {
   min-width: 0;
+  flex-shrink: 1;
+}
+
+.new-plan-dialog .settings-picker-chip {
+  width: auto;
+  max-width: 100%;
 }
 
 .dialog-name-field {
@@ -6790,7 +7710,9 @@ button.automation-run:hover {
 
 /* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
    a tile and two lines each, the chosen one ringed and one that cannot take
-   the plan dimmed, then what the move does in a well under them. */
+   the plan dimmed, then what the move does in a well under them. The rows
+   are the card's body, which scrolls where the window is too short for all
+   of them, padded by the ring's reach so a row's ring is never cut off. */
 .move-dialog {
   width: min(440px, 100%);
   gap: var(--space-12);
@@ -6798,7 +7720,13 @@ button.automation-run:hover {
 
 .move-list {
   display: grid;
+  min-height: 0;
   gap: var(--space-2);
+  margin: calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .move-row {
@@ -6847,18 +7775,20 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom, in the corner itself
-   whatever stands at the window's foot: a call bar, the side panel, or the
-   summary. The folded sidebar's call card keeps the other corner, and the
-   window is never narrow enough for the two to meet. Each rises in on the
-   spring and fades first on its way out; the stack itself takes no pointer,
-   so only a card with something to press stands in the way of what is under
-   it, and that card is always one the developer can dismiss. */
+   its bottom-right corner, newest at the bottom. Over a dock at the
+   window's foot under it (a plan's call bar, an agent's composer) the stack
+   stands just above that dock, the window's step clear of it, as the folded
+   sidebar's call card does in the other corner; the toasts measure the dock
+   (`--toast-dock`). The window is never narrow enough for the two to meet.
+   Each rises in on the spring and fades first on its way out; the stack
+   itself takes no pointer, so only a card with something to press stands in
+   the way of what is under it, and that card is always one the developer
+   can dismiss. */
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: var(--space-16);
+  bottom: max(var(--space-16), calc(var(--toast-dock, 0px) + var(--space-8)));
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
 }
@@ -7170,4 +8100,35 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .run-card-figure dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/* New plan's Linear issue picker (`linear-issue-picker.tsx`) stands beside
+   the sidebar, level with the button it came from, and a notch on its
+   leading edge points back at that button, so the picker reads as New
+   plan's own rather than a menu of the page it floats over. */
+.sidebar-new-plan-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchable-menu.linear-issue-picker {
+  z-index: 20;
+  top: calc(var(--space-8) * -1);
+  left: calc(100% + var(--space-12));
+  width: 380px;
+  overflow: visible;
+}
+
+.searchable-menu.linear-issue-picker::before {
+  position: absolute;
+  top: calc(var(--space-8) + var(--control-height) / 2 - 6px);
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 1px solid var(--hairline);
+  background: inherit;
+  content: "";
+  transform: rotate(45deg);
 }

@@ -35,15 +35,27 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { CallTabVideo } from "../call/panel-avatar";
+import { useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentChangesTab, ChangesCard } from "../planning/agent-changes-tab";
-import { AgentCard, agentSubject } from "../planning/agent-ref";
-import { AgentSubagentTab, type TranscriptCards } from "../planning/agent-tab";
+import { drawnVisibly, focusSeek } from "../focus-seek";
+import { panelTabPlace } from "../links-at-hand";
+import { AgentChangesTab, ChangesCard, peopleOf } from "../planning/agent-changes-tab";
+import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
+import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../planning/agent-tab";
 import {
   AgentTabCard,
   type CardReading,
@@ -52,7 +64,7 @@ import {
   heldLatest,
   lastFinished,
 } from "../planning/agent-tab-card";
-import { CodePane } from "../planning/code-pane";
+import { CodePane, centreWithin } from "../planning/code-pane";
 import {
   agentGlyphState,
   agentStateWords,
@@ -205,6 +217,70 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
 
 /** A plan with no page, the same array every render. */
 const NO_PAGES: readonly PageLine[] = [];
+
+/**
+ * What the panel stands beside: a plan's page, whose panel holds every kind
+ * of tab, or the page of an agent no plan holds, whose panel holds that
+ * agent's workers, its Changes, and its Terminal, and no plan's Board,
+ * Code, Call, files, or pages. A tab of an agent's page is no plan's to
+ * pin, so none is offered.
+ */
+export const SIDE_PANEL_HOLDER = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
+
+type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
+
+/** No fixed kind, the same array every render. */
+const NO_KINDS: readonly FixedSidePanelTab[] = [];
+
+/** The fixed kinds each holder's panel offers. */
+const HOLDER_KINDS = {
+  [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
+  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+} as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
+
+/** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
+export const COLUMN = {
+  MAIN: "main",
+  SIDE: "side",
+} as const;
+
+type Column = (typeof COLUMN)[keyof typeof COLUMN];
+
+/** The column holding the keys, the door its page's area is handed through, and the door a press that hands the keys over goes through. */
+export interface ColumnFocus {
+  readonly onArea: (area: HTMLDivElement | null) => void;
+  readonly focus: Column;
+  readonly setFocus: (column: Column) => void;
+}
+
+/**
+ * The column of a page with a side panel that holds the keys: the one the
+ * pointer or the focus last went into, and the door a press that hands the
+ * keys over goes through. Note that it is heard on the page's area, handed
+ * through `onArea`, as it bubbles, because the columns are no controls of
+ * their own to hear it.
+ */
+export function useColumnFocus(): ColumnFocus {
+  const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
+  const [area, onArea] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (area === null) return;
+    const hear = (event: Event) => {
+      const side = event.target instanceof Element && event.target.closest(".side-panel") !== null;
+      setFocus(side ? COLUMN.SIDE : COLUMN.MAIN);
+    };
+    area.addEventListener("pointerdown", hear);
+    area.addEventListener("focusin", hear);
+    return () => {
+      area.removeEventListener("pointerdown", hear);
+      area.removeEventListener("focusin", hear);
+    };
+  }, [area]);
+  return { onArea, focus, setFocus };
+}
 
 /** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
 export const ADD_SECTION = {
@@ -564,6 +640,7 @@ function stripTabs(input: {
           subject={subject}
           models={agents.models}
           pullRequest={pullRequest}
+          people={peopleOf(agents.changesPeople.get(tab.changes), pullRequest)}
           onOpenAgent={() => onOpenAgent(tab.changes)}
         />
       );
@@ -647,6 +724,7 @@ function stripTabs(input: {
  */
 function PanelTabs({
   panel,
+  holder,
   planId,
   keys,
   unread,
@@ -669,6 +747,7 @@ function PanelTabs({
   shownAgent,
 }: {
   panel: SidePanelControl;
+  holder: SidePanelHolder;
   /** The open plan, which a tab's pin is of. */
   planId: string;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
@@ -732,12 +811,13 @@ function PanelTabs({
     onClosePrRun: (tab) => tell(ACT_KIND.PR_RUN_CLOSE, tab.pullRequest),
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
+  const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (!isPinnable(tab)) return undefined;
+    if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => pin.plan === planId && sameTab(pin.tab, tab));
     return {
       pinned,
@@ -746,6 +826,8 @@ function PanelTabs({
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
+    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
+    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(planId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -758,6 +840,7 @@ function PanelTabs({
             },
       pin: pinOf(entry),
       onCopy: entry.copy,
+      copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
   return (
@@ -784,7 +867,7 @@ function PanelTabs({
         noMatch="No tabs match"
         entries={panelEntries({
           panel,
-          kinds: SIDE_PANEL_TABS,
+          kinds: HOLDER_KINDS[holder],
           workers,
           files: shownFiles,
           changes: changesOffers(agents, changes),
@@ -804,11 +887,17 @@ function PanelTabs({
 }
 
 /** The panel with every tab closed: what it holds, offered as the "+" menu offers it. */
-function NoTabs({ onChoose }: { onChoose: (tab: FixedSidePanelTab) => void }): React.JSX.Element {
+function NoTabs({
+  kinds,
+  onChoose,
+}: {
+  kinds: readonly FixedSidePanelTab[];
+  onChoose: (tab: FixedSidePanelTab) => void;
+}): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
       <p className="side-panel-no-tabs-line">No tabs open</p>
-      {SIDE_PANEL_TABS.map((kind) => {
+      {kinds.map((kind) => {
         const action = kindAction(kind, onChoose);
         return <MenuItem key={kind} action={action} inMenu={false} onChoose={action.onSelect} />;
       })}
@@ -1021,6 +1110,25 @@ function subagentCardReading(
   };
 }
 
+/**
+ * Brings a call's row to the middle of the plan column's transcript once the
+ * column draws it, as a worker's sender line opens its agent at the call
+ * that started the worker; a row folded away, or never drawn, is left be.
+ */
+function seekCall(callId: string): void {
+  focusSeek({
+    find: () =>
+      document.querySelector<HTMLElement>(
+        `.desktop-plan-column [role="log"] [data-call-id="${CSS.escape(callId)}"]`,
+      ),
+    ready: drawnVisibly,
+    act: (row) => {
+      const log = row.closest<HTMLElement>('[role="log"]');
+      if (log !== null) centreWithin(log, row);
+    },
+  });
+}
+
 /** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the plan's own, and an agent's transcript's, whose workers are its delegations. */
 export interface PlanCards {
   readonly call: TranscriptCards;
@@ -1033,7 +1141,8 @@ export interface PlanCards {
  * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
  * subagent's row its worker's, read as its tab reads its own, `chosen`
  * telling whether that tab is the one shown, whose transcript follows the
- * run. A worker the plan's work no longer holds hangs none.
+ * run. A worker the plan's work no longer holds hangs none. An agent's
+ * transcript also names the task whose plan it was handed, by `task`.
  */
 export function planCards(input: {
   agents: CodingAgentsControl;
@@ -1042,8 +1151,10 @@ export function planCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the plan, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly PlanCodeShowing[];
+  /** The plan's task, which an agent's plan card names as its sender. */
+  task?: BriefTask | undefined;
 }): PlanCards {
-  const { agents, workRows, held, chosen, shownCode } = input;
+  const { agents, workRows, held, chosen, shownCode, task } = input;
   const target = (opened: ToolTarget) => {
     if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
       const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
@@ -1071,6 +1182,7 @@ export function planCards(input: {
     },
     agent: (agentId) => ({
       target,
+      task,
       worker: ({ callId, task, status }) =>
         card(
           drawnSubagent(
@@ -1257,9 +1369,21 @@ function TabContent({
     // A planning worker's tab is an agent's worker's own, reading its session under the plan.
     const planningWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
+      const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
+      const { subagent } = tab;
       return (
         <AgentSubagentTab
           key={tab.subagent}
+          sender={
+            <AgentActorRef
+              subject={agentSubject(agents, parent.agent, NOTHING_HELD, false)}
+              models={agents.models}
+              onOpen={() => {
+                onOpenTarget(parent);
+                seekCall(subagent);
+              }}
+            />
+          }
           agentId={tab.delegation.agent}
           callId={tab.subagent}
           task={tab.delegation.task}
@@ -1325,6 +1449,7 @@ function TabContent({
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
+          video={<CallTabVideo planId={planId} />}
         />
       );
   }
@@ -1533,6 +1658,7 @@ export function SidePanel({
   onLeft,
   edge,
   unread,
+  holder,
   planId,
   repository,
   board,
@@ -1553,6 +1679,8 @@ export function SidePanel({
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
   unread: readonly StripTab[];
+  holder: SidePanelHolder;
+  /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   planId: string;
   /** The plan's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
@@ -1690,6 +1818,7 @@ export function SidePanel({
         <div className="side-panel-bar">
           <PanelTabs
             panel={panel}
+            holder={holder}
             planId={planId}
             keys={keys && focused}
             unread={unread}
@@ -1723,7 +1852,9 @@ export function SidePanel({
             any; one whose tabs were closed offers them again in place. */}
         {tab === undefined ? (
           <div className="side-panel-content">
-            {panel.closedTabs.length === 0 ? null : <NoTabs onChoose={panel.onChoose} />}
+            {panel.closedTabs.length === 0 ? null : (
+              <NoTabs kinds={HOLDER_KINDS[holder]} onChoose={panel.onChoose} />
+            )}
           </div>
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and

@@ -35,6 +35,73 @@ export interface PlanEditorProps {
   readonly onLeaveUp: () => void;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
   readonly mentions?: PlanEditorMentions | undefined;
+  /**
+   * Draws a Mermaid code block's diagram into the element the editor stands
+   * under the block, as the panel draws it in the read view, so the panel's
+   * one copy of the diagram bundle serves both; answers what takes the
+   * drawing down. None where the text draws no diagrams.
+   */
+  readonly drawDiagram?: ((element: HTMLElement, diagram: EditorDiagram) => () => void) | undefined;
+  /** What the text's pictures are drawn and taken in with; none where the text takes no pictures, as a template does not. */
+  readonly pictures?: PlanEditorPictures | undefined;
+}
+
+/**
+ * A picture the plan's text holds, as the editor's node keeps it: its
+ * address, its alt text, and its caption, the Markdown title; and, while
+ * the picture is still being kept, the upload it waits on, which the panel
+ * names and the address stays empty for. A picture with an upload writes
+ * nothing to the text, so no draft or save ever carries one half-kept.
+ */
+export interface PictureNode {
+  readonly src: string;
+  readonly alt: string;
+  readonly title: string;
+  readonly upload: string;
+}
+
+/** What the panel may do to the picture it draws: describe it anew, or take it out of the text. */
+export interface PictureNodeDoors {
+  readonly describe: (change: { readonly alt?: string; readonly title?: string }) => void;
+  readonly remove: () => void;
+}
+
+/** A picture as the panel draws it into its node's element: drawn again as the node changes or is selected, and taken down. */
+interface PictureDrawing {
+  readonly redraw: (picture: PictureNode, selected: boolean) => void;
+  readonly undraw: () => void;
+}
+
+/** A picture laid into the text that is still to be kept: a file pasted, dropped, or chosen, or a picture of another plan pasted from its address. */
+export type PictureTaken =
+  | { readonly upload: string; readonly file: File }
+  | { readonly upload: string; readonly from: string };
+
+/**
+ * The plan editor's pictures, as the panel draws and keeps them: each
+ * picture the text holds drawn into its node's own element (`draw`), the
+ * pictures laid in that are still to be kept handed over under the upload
+ * each node waits on (`take`), and whether a pasted picture's address is
+ * another plan's, which is kept again on this one (`copies`).
+ */
+export interface PlanEditorPictures {
+  readonly draw: (
+    element: HTMLElement,
+    picture: PictureNode,
+    doors: PictureNodeDoors,
+  ) => PictureDrawing;
+  readonly take: (taken: readonly PictureTaken[]) => void;
+  readonly copies: (src: string) => boolean;
+}
+
+/**
+ * A Mermaid code block as the editor asks its diagram drawn: its code, and
+ * the code the block held before the change that asked again, whose picture
+ * may stand while the new one is drawn; nothing for a block just opened.
+ */
+export interface EditorDiagram {
+  readonly code: string;
+  readonly previous: string | undefined;
 }
 
 /** The composer's mentions, as the box picks and draws them. */
@@ -95,6 +162,12 @@ export interface PlanEditorHandle {
   readonly chooseMention: (mention: MentionNode) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
+  /** Image files laid in as pictures after the block the caret stands in, each handed to the panel to keep. */
+  readonly insertPictures: (files: readonly File[]) => void;
+  /** The picture waiting on `upload` given its address, kept at last, which the text now names. */
+  readonly settlePicture: (upload: string, src: string) => void;
+  /** The picture waiting on `upload` taken out of the text, as its Remove does. */
+  readonly removePicture: (upload: string) => void;
   readonly destroy: () => void;
 }
 

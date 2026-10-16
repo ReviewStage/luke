@@ -12,19 +12,26 @@ import {
 import type { AccountToken } from "./account-token.js";
 import {
   INTEGRATION_CALL_FAILURE,
+  type IntegrationAccountView,
   type IntegrationCallFailure,
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
 } from "./integration-view.js";
 import {
+  INTEGRATION_ADD_ACCOUNT,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_QUERY,
   INTEGRATION_STATUS,
+  type IntegrationAccount,
   type IntegrationConnectAnswer,
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
+  integrationAccountAnswerSchema,
+  integrationAccountSchema,
   integrationConnectAnswerSchema,
+  integrationProviderSchema,
   integrationSignInFailureSchema,
   integrationStatusAnswerSchema,
   integrationToolsAnswerSchema,
@@ -34,6 +41,7 @@ import {
   integrationCancelPath,
   integrationConnectPath,
   integrationDisconnectPath,
+  integrationRenamePath,
   integrationToolsPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
@@ -65,6 +73,8 @@ const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
  */
 const integrationStatusesReadSchema = Schema.Struct({
   integrations: Schema.Record(Schema.String, Schema.String),
+  accounts: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+  addable: Schema.optionalKey(Schema.Array(Schema.Unknown)),
   signInFailures: Schema.optionalKey(Schema.Array(Schema.Unknown)),
 });
 
@@ -101,15 +111,52 @@ function signInFailuresFromRead(
   );
 }
 
-/** Where every provider stands, as the window hears it, with the sign-in failures the read found where it found any. */
+/** The accounts this build reads, each alone, so one naming a provider or a status this build does not know hides none of the others. */
+function accountsFromRead(
+  read: typeof integrationStatusesReadSchema.Type,
+): readonly IntegrationAccount[] {
+  return (read.accounts ?? []).flatMap((account) =>
+    Option.toArray(Schema.decodeUnknownOption(integrationAccountSchema)(account)),
+  );
+}
+
+/** The providers this build knows among those the read says the account may add another account at. */
+function addableFromRead(
+  read: typeof integrationStatusesReadSchema.Type,
+): readonly IntegrationProvider[] {
+  return (read.addable ?? []).flatMap((provider) =>
+    Option.toArray(Schema.decodeUnknownOption(integrationProviderSchema)(provider)),
+  );
+}
+
+/** Where every provider stands, as the window hears it, with its accounts, where it may add one, and the sign-in failures the read found where it found any. */
 function integrationStatusesViewOf(
   read: typeof integrationStatusesReadSchema.Type,
 ): IntegrationStatusesView {
+  const accounts = accountsFromRead(read);
+  const addable = addableFromRead(read);
   const signInFailures = signInFailuresFromRead(read);
   return {
     integrations: integrationStatusesFromRead(read),
+    ...(accounts.length > 0 ? { accounts } : undefined),
+    ...(addable.length > 0 ? { addable } : undefined),
     ...(signInFailures.length > 0 ? { signInFailures } : undefined),
   };
+}
+
+/** Which account a call is about, and on a Connect whether it signs in a new one: none named is the provider's first. */
+export interface IntegrationAccountTarget {
+  readonly connection?: string | undefined;
+  readonly add?: boolean | undefined;
+}
+
+/** A provider's route with the account it is about in its query; the path alone for the provider's first account. */
+function accountPath(path: string, target: IntegrationAccountTarget = {}): string {
+  const query = new URLSearchParams();
+  if (target.connection !== undefined) query.set(INTEGRATION_QUERY.CONNECTION, target.connection);
+  if (target.add === true) query.set(INTEGRATION_QUERY.ADD, INTEGRATION_ADD_ACCOUNT);
+  const spelled = query.toString();
+  return spelled === "" ? path : `${path}?${spelled}`;
 }
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
@@ -159,43 +206,75 @@ export class HostedIntegrationsClient {
     );
   }
 
-  /** A browser sign-in to one provider begun: the address the browser opens, which the caller opens and never shows. */
+  /** A browser sign-in to one account at a provider begun, or to a new one: the address the browser opens, which the caller opens and never shows, and the account it signs in. */
   connect(
     provider: IntegrationProvider,
+    target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationConnectAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: integrationConnectPath(provider) }),
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: accountPath(integrationConnectPath(provider), target),
+      }),
       (answer) => readAnswer(answer, integrationConnectAnswerSchema),
     );
   }
 
-  /** The tools one provider's server offers the account's agents. */
+  /** The tools one account's server offers the account's agents. */
   tools(
     provider: IntegrationProvider,
+    target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationToolsView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: integrationToolsPath(provider) }),
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: accountPath(integrationToolsPath(provider), target),
+      }),
       (answer) => readAnswer(answer, integrationToolsAnswerSchema),
     );
   }
 
-  /** One provider's sign-in under way ended, answering where it then stands. */
+  /** One account's sign-in under way ended, answering where it then stands. */
   cancel(
     provider: IntegrationProvider,
+    target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: integrationCancelPath(provider) }),
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: accountPath(integrationCancelPath(provider), target),
+      }),
       (answer) => readAnswer(answer, integrationStatusAnswerSchema),
     );
   }
 
-  /** One provider's connection ended, answering where it then stands. */
+  /** One account's connection ended, answering where it then stands. */
   disconnect(
     provider: IntegrationProvider,
+    target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: integrationDisconnectPath(provider) }),
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: accountPath(integrationDisconnectPath(provider), target),
+      }),
       (answer) => readAnswer(answer, integrationStatusAnswerSchema),
+    );
+  }
+
+  /** One account named as the developer calls it, answering the account as it then stands. */
+  rename(
+    provider: IntegrationProvider,
+    connection: string,
+    label: string,
+  ): Effect.Effect<IntegrationAccountView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: accountPath(integrationRenamePath(provider), { connection }),
+        body: JSON.stringify({ label }),
+      }),
+      (answer) => readAnswer(answer, integrationAccountAnswerSchema),
     );
   }
 }

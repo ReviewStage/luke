@@ -9,7 +9,8 @@
  * member of the agent's own workspace, so the answer never says which Luke
  * account stands behind someone outside it. The App's bot is told apart by
  * GitHub's id for it, read on the same token (`appBot`), since it is the
- * account an agent's commits and pull requests are by.
+ * account an agent's commits and pull requests are by, or, where the agent
+ * writes as its developer, the co-author its commits name.
  *
  * Who a pull request names rides beside its files and is never what the
  * files wait on: a read of the people that fails is said once in the log and
@@ -18,7 +19,7 @@
 
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { account, member } from "@luke/database/schemas/auth";
-import type { CodingAgentChanges, GitHubPerson } from "@luke/features/coding-agent-wire";
+import type { CodingAgentChangesPeople, GitHubPerson } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -27,10 +28,7 @@ import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
 import { type GitHubAccount, type PullRequestPeople, pullRequestPeople } from "./pull-requests.js";
 
 /** What an agent's changes say of who their pull request names; every key absent where the people could not be read. */
-export type ChangesPeople = Pick<
-  CodingAgentChanges,
-  "author" | "reviewers" | "commitAuthors" | "comments"
->;
+type ChangesPeople = CodingAgentChangesPeople;
 
 const findLinkedMembers = SqlSchema.findAll({
   Request: Schema.Struct({

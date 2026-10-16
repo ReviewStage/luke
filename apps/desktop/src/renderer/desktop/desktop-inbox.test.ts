@@ -37,12 +37,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
-import { runAppCommand } from "../app-commands";
-import type { InboxChoice } from "../planning/use-plans-tab";
+import { runAppCommand, useAppKeymap } from "../app-commands";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -152,6 +155,8 @@ let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
+/** Whether a read of a plan's agents is held open, never answering. */
+let agentListHeld = false;
 /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
 let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
@@ -171,6 +176,10 @@ let agentReads: string[] = [];
 /** The workspace the Inbox lists, and its automations as a read of them answers. */
 let listedWorkspace: Workspace | undefined;
 let automations: readonly AutomationSummary[] = [];
+/** What the window copied, in order. */
+let copied: string[] = [];
+/** Each agent with no plan as a read of its own page answers it. */
+let pageAgents = new Map<string, CodingAgentSummary>();
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -184,9 +193,12 @@ beforeEach(() => {
   agentInboxes = new Map();
   agentReads = [];
   agentReadFails = false;
+  agentListHeld = false;
   holdAgentRead = undefined;
   listedWorkspace = undefined;
   automations = [];
+  copied = [];
+  pageAgents = new Map();
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -195,7 +207,37 @@ beforeEach(() => {
       act: (request: Act) => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+          const agent = pageAgents.get(request.payload.agentId);
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value:
+              agent === undefined
+                ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+                : {
+                    agent: {
+                      id: agent.id,
+                      planId: null,
+                      model: agent.model,
+                      effort: agent.effort,
+                      title: agent.title,
+                      createdAt: agent.createdAt,
+                      status: agent.status,
+                      turnId: null,
+                      automationId: null,
+                      workspaceId: "workspace-acme",
+                      repository: "acme/relay",
+                    },
+                  },
+          });
+        }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
         }
@@ -238,13 +280,15 @@ afterEach(() => {
 interface Asked {
   readonly shownPlans: string[];
   readonly shownAgents: [string, string][];
+  /** The automations whose pages it was asked to open. */
+  readonly shownAutomations: string[];
   /** How many times it was asked to close. */
   closed: number;
 }
 
 /** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
 function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
-  const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
+  const asked: Asked = { shownPlans: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
@@ -276,6 +320,15 @@ function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
         },
         onShowPlan: (planId) => asked.shownPlans.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+        automationsView: {
+          open: false,
+          place: { kind: AUTOMATIONS_PAGE.LIST },
+          onOpen: (place) => {
+            if (place?.kind === AUTOMATIONS_PAGE.EDIT)
+              asked.shownAutomations.push(place.automationId);
+          },
+          onClose: () => undefined,
+        },
       }),
     });
   }
@@ -334,6 +387,20 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   assert.ok(row, `no row for ${title}`);
   return row;
 }
+
+test("the Inbox's list fades under its bar, and the chosen item's thread under its crumbs and over its box, rather than being sliced at either", async () => {
+  const { page } = mount();
+  await settle();
+  const sheets = layFades();
+  try {
+    const list = page.querySelector(".inbox-plans-scroll") ?? assert.fail("the items are listed");
+    const thread = page.querySelector(".inbox-board") ?? assert.fail("the chosen item stands");
+    assert.deepEqual(fadedEdges(list), { top: true, bottom: false });
+    assert.deepEqual(fadedEdges(thread), { top: true, bottom: true });
+  } finally {
+    sheets.remove();
+  }
+});
 
 test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
@@ -397,6 +464,62 @@ test("a settled choice keeps every option its agent offered with the developer's
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
   assert.match(wordsOf(reply) ?? "", /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u);
   assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
+});
+
+/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
+    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    return [
+      each.querySelector(".font-medium")?.textContent,
+      badge?.textContent ?? null,
+      badge?.dataset.settled ?? null,
+    ];
+  });
+}
+
+test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(optionHeads(page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "false"],
+    ["Retry once", null, null],
+  ]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  const response = {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Retry 3 times over an hour" }, { label: "Retry once" }],
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
+  const again = mount();
+  await settle();
+  assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", null, null],
+    ["Retry once", null, null],
+  ]);
+});
+
+test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge, gone quiet", async () => {
+  inboxes.set(BILLING.id, [
+    THRESHOLD,
+    { ...RETRY, answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] } },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  assert.deepEqual(optionHeads(page, "li.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "true"],
+    ["Retry once", null, null],
+  ]);
+  const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
+  assert.equal(picked?.querySelector(".font-medium")?.textContent, "Retry once");
+  assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
 });
 
 test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
@@ -487,7 +610,40 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
+test("the keyboard's ring on a crumb of the pane's path and on an option of the choice is drawn whole, past the boxes that clip what runs long", async () => {
+  const styles = await layWindowStyles();
+  const { page } = mount();
+  await settle();
+  const crumbs = [
+    ...page.querySelectorAll<HTMLButtonElement>('.inbox-view-items nav[aria-label="Path"] button'),
+  ];
+  const options = [...page.querySelectorAll<HTMLButtonElement>("button.inbox-option")];
+  assert.ok(
+    crumbs.length > 0 && options.length > 0,
+    "the pane draws its crumbs and the choice's options",
+  );
+  for (const control of [...crumbs, ...options]) {
+    focusByKeyboard(control);
+    assert.ok(ringOf(control), `${control.textContent} rings`);
+    assert.equal(
+      ringClippedBy(control)?.className,
+      undefined,
+      `nothing cuts ${control.textContent}'s ring off`,
+    );
+  }
+  styles.remove();
+});
+
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
+function openings(card: string): string[] {
+  const standing = document.querySelector(`.tooltip-card ${card}`);
+  assert.ok(standing, "a card is hung");
+  return [...standing.querySelectorAll("button")]
+    .map((button) => button.textContent ?? "")
+    .filter((words) => words.startsWith("Open"));
+}
+
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
@@ -515,7 +671,7 @@ function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card and opens its tab, leaving the Inbox", async () => {
+test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   const [byline] = threadRefs(page);
@@ -524,6 +680,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   assert.ok(wearsAgentTile(byline), "the byline wears the agent's tile");
   reach(byline);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(openings("[data-tab-card]"), [], "the byline is the way to the tab");
   act(() => byline.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 
@@ -537,6 +694,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
     [BILLING.id, AGENT.id],
@@ -833,27 +991,26 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   assert.equal(emptyStateIn(page, ".inbox-plans"), "Nothing needs you");
 });
 
-test("an Inbox too narrow for the list and the item side by side shows its list alone, the whole Inbox wide; a press opens the item alone under a way back, which, Back's chord, and Escape each take, the keyboard landing on the item's row, before Escape leaves the Inbox", async () => {
+test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape leaves the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
-
-  act(() => rowNamed(page, "Alert at 80%?").click());
   assert.deepEqual(columnsShown(page), ["item"]);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
   assert.equal(backToList(page).textContent, "Inbox");
-  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
 
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
   assert.ok(
     document.activeElement === rowNamed(page, "Alert at 80%?"),
     "the keyboard is on its row",
   );
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Expire after 7 days?");
+  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
   act(() => runAppCommand(APP_COMMAND.BACK));
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.ok(
@@ -868,35 +1025,537 @@ test("an Inbox too narrow for the list and the item side by side shows its list 
   assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
 });
 
-test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list, the keyboard on the chosen row where the item held it", async () => {
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   layOut(page, 860);
   assert.deepEqual(columnsShown(page), ["list", "item"], "within the band it stays split");
-  const option = page.querySelector<HTMLElement>(".inbox-view-items button");
-  assert.ok(option, "the item offers a press");
-  option.focus();
+  rowNamed(page, "Alert at 80%?").focus();
   layOut(page, 850);
-  assert.deepEqual(columnsShown(page), ["list"], "the item it chose for itself is not opened");
+  assert.deepEqual(columnsShown(page), ["item"], "narrowed, the item it shows stays");
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
   assert.ok(
-    document.activeElement === rowNamed(page, "Alert at 80%?"),
-    "the keyboard leaves the hidden item for its row",
+    document.activeElement === backToList(page),
+    "the keyboard leaves the hidden row for the item's way back",
   );
 
-  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => backToList(page).click());
   layOut(page, 880);
-  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
+  assert.deepEqual(columnsShown(page), ["list"], "within the band it stays one column");
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
+  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+});
+
+/** The window's keymap, standing beside the Inbox as the shell stands it; the root it is drawn in, to unmount. */
+function standKeymap(): Root {
+  function Keymap() {
+    useAppKeymap(true);
+    return null;
+  }
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => keys.render(createElement(Keymap)));
+  return keys;
+}
+
+/** A key pressed alone where the keyboard stands, or into the target given. */
+function pressKey(key: string, target: EventTarget = document.body): void {
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+/** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
+function pagerOf(page: HTMLElement): string | null {
+  return (
+    page.querySelector(".inbox-view-items:not([hidden]) .inbox-pager-count")?.textContent ?? null
+  );
+}
+
+/** One of the pager's arrows, by its name. */
+function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
+  const arrow = page.querySelector<HTMLButtonElement>(`.inbox-pager button[aria-label="${name}"]`);
+  assert.ok(arrow, `the pager offers ${name}`);
+  return arrow;
+}
+
+/** The title of the item the pane reads. */
+function readTitle(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
+}
+
+/** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
+  const empty = page.querySelector(".inbox-plans:not([hidden]) .empty-state");
+  if (empty === null) return null;
+  return [
+    empty.querySelector("h3")?.textContent,
+    empty.querySelector("p")?.textContent,
+    empty.querySelector("button")?.textContent,
+  ];
+}
+
+test("with only settled items, Needs you pressed on lists no row, the item read still shown beside the list, which says nothing needs you and offers Show all; Show all turns the filter off", async () => {
+  const answered = { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] };
+  inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.ANSWERED, answer: answered }]);
+  inboxes.set(BILLING.id, [RETRY]);
+  const { page } = mount();
+  await settle();
+  const button = () => {
+    const found = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+    assert.ok(found, "the head offers Needs you");
+    return found;
+  };
+  const everything = [
+    "# Billing usage alerts",
+    "▸ How is a failed email retried?",
+    "# Invites",
+    "Expire after 7 days?",
+  ];
+  assert.deepEqual(listed(page), everything);
+
+  act(() => button().click());
+  assert.equal(button().getAttribute("aria-pressed"), "true");
+  assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
+  assert.deepEqual(needsYouEmpty(page), [
+    "Nothing needs you",
+    "You've answered everything",
+    "Show all",
+  ]);
+  assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+
+  // One column wide, the item read stands alone with nothing to page to, and its way back reaches the empty list.
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(pagerOf(page), null);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
+
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-plans .empty-state button");
+  assert.ok(showAll, "the empty state offers Show all");
+  act(() => showAll.click());
+  assert.equal(button().getAttribute("aria-pressed"), "false");
+  assert.deepEqual(
+    columnsShown(page),
+    ["list"],
+    "Show all leaves the rows it brings back standing",
+  );
+  assert.ok(
+    document.activeElement === rowNamed(page, "How is a failed email retried?"),
+    "the keyboard lands on the row of the item read, not on the button Show all took away",
+  );
+  assert.deepEqual(listed(page), everything);
+  assert.equal(needsYouEmpty(page), null);
+});
+
+test("one column wide, an answered item that Needs you draws no row for shows no count in its pager, though its arrows still step to the rows either side, which count only the rows drawn", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  assert.deepEqual(listed(page), [
+    "# Invites",
+    "*Expire after 7 days?",
+    "# Billing usage alerts",
+    "*Alert at 80%?",
+  ]);
+  layOut(page, 800);
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(pagerOf(page), null, "no row, so no count");
+  assert.equal(arrowNamed(page, "Previous item").disabled, true);
+  act(() => arrowNamed(page, "Next item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 2"]);
+});
+
+test("with Needs you on, a focused row whose item is answered on another Mac leaves the keyboard on Needs you rather than nowhere", async () => {
+  const { page } = mount();
+  await settle();
+  const needsYou = page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+  assert.ok(needsYou, "the head offers Needs you");
+  act(() => needsYou.click());
+  rowNamed(page, "Expire after 7 days?").focus();
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.ok(document.activeElement === needsYou, "the keyboard is on Needs you");
+});
+
+test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  layOut(page, 800);
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+
+  act(() => arrowNamed(page, "Previous item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["How is a failed email retried?", "1 of 3"]);
+  assert.equal(arrowNamed(page, "Previous item").disabled, true, "nothing above the first");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+
+  pressKey("j");
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+  act(() => arrowNamed(page, "Next item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "3 of 3"]);
+  assert.equal(arrowNamed(page, "Next item").disabled, true, "nothing below the last");
+  pressKey("j");
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  act(() => keys.unmount());
+});
+
+test("split, K and J move the chosen row and the item beside it, which draws no pager, and a J typed into the item's box is the box's", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  assert.equal(pagerOf(page), null, "the list beside the item says where it stands");
+
+  pressKey("j");
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
     ["▸ *Expire after 7 days?"],
   );
-  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  pressKey("k");
+  assert.equal(readTitle(page), "Alert at 80%?");
+
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box, "the item waits on an answer in its box");
+  box.focus();
+  pressKey("j", box);
+  assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
+  act(() => keys.unmount());
+});
+
+test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => headerNamed(page, "Invites").click());
+  pressKey("j");
+  assert.equal(readTitle(page), "Alert at 80%?", "nothing below the last row");
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["item"], "an item a press opened stays open");
+  assert.equal(pagerOf(page), "2 of 2");
+  act(() => keys.unmount());
+});
+
+test("the chosen item keeps its place when its own plan folds, so J still reaches the rows below, and once left the folded rows are passed over", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => headerNamed(page, "Billing usage alerts").click());
+  pressKey("j");
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  pressKey("k");
+  assert.equal(readTitle(page), "Expire after 7 days?", "the folded plan holds no row above");
+  act(() => keys.unmount());
+});
+
+test("a settled item offers, where its box stood, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+  const { page } = mount();
+  await settle();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  assert.equal(offered(), null, "the item chosen waits on its box");
+
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "NextAlert at 80%?J");
+  assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(offered(), null);
+});
+
+test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
+  const { page } = mount();
+  await settle();
+  const next = () => page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board");
+  assert.ok(board, "the item's thread");
+  board.scrollTop = 600;
+  next()?.focus();
+  act(() => next()?.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "split, the keyboard is on its row",
+  );
+  assert.equal(board.scrollTop, 0, "the next item opens at its top");
+
+  layOut(page, 800);
+  act(() => backToList(page).click());
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  next()?.focus();
+  act(() => next()?.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.ok(
+    document.activeElement === backToList(page),
+    "one column wide, the keyboard is on its way back",
+  );
+});
+
+test("a press on the row already chosen hands the keyboard nowhere, so a later narrowing leaves it where the developer put it", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  const elsewhere = document.body.appendChild(document.createElement("button"));
+  elsewhere.focus();
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.ok(document.activeElement === elsewhere, "the keyboard stays outside the Inbox");
+  elsewhere.remove();
+});
+
+test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  };
+  inboxes = new Map([
+    [BILLING.id, [todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const quiet = () => page.querySelector(".inbox-view-items [data-inbox-quiet]")?.textContent;
+  assert.equal(quiet(), "Without a note, this won't message the agent.");
+
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box, "the item takes a note in its box");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "Done on preview too.");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(quiet(), "Your note will be sent to the agent.");
+});
+
+test("an item's box on a card a 220px column wide leaves out its quiet line and keeps both its presses, which a card a 720px column wide draws beside the line", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  };
+  inboxes = new Map([
+    [BILLING.id, [todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("the box");
+  const drawn = () =>
+    [...foot.querySelectorAll("[data-inbox-quiet], button")]
+      .filter(shown)
+      .map((each) => each.textContent);
+
+  const narrow = layContainersAt({ composer: 178 });
+  try {
+    assert.deepEqual(drawn(), ["Can't do this", "Done"]);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ composer: 678 });
+  try {
+    assert.deepEqual(drawn(), [
+      "Without a note, this won't message the agent.",
+      "Can't do this",
+      "Done",
+    ]);
+  } finally {
+    wide.remove();
+  }
+});
+
+test("a box answered in words holds its Send at the field's end on a card a 220px column wide, so the field keeps to one line; a box answered by presses keeps them under its field", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  /** Where the open item's Send stands on a card this wide: at its field's end, or under it. */
+  const sendAt = (width: number) => {
+    const style = layContainersAt({ composer: width });
+    const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("a box");
+    const place = getComputedStyle(foot).position === "absolute" ? "field's end" : "under";
+    style.remove();
+    return place;
+  };
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  assert.deepEqual([sendAt(178), sendAt(678)], ["field's end", "under"]);
+  act(() => rowNamed(page, "Turn on the flag").click());
+  assert.deepEqual([sendAt(178), sendAt(678)], ["under", "under"]);
+});
+
+test("one column wide, an item's bar too narrow for both crumbs beside the way back and the pager keeps the agent's; narrower still, the way back draws its glyph alone, named still, and both crumbs share a line under it", async () => {
+  const { page } = mount();
+  await settle();
+  layOut(page, 800);
+  const bar =
+    page.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) > .desktop-toolbar") ??
+    assert.fail("the item's bar stands");
+  /** The bar as drawn on an item this wide: its crumbs drawn, the way back's word, and whether the crumbs wrap under the rest. */
+  const barAt = (width: number) => {
+    const style = layContainersAt({ "inbox-item": width });
+    const crumbs = [...bar.querySelectorAll<HTMLElement>(".inbox-crumb")]
+      .filter(shown)
+      .map((crumb) => crumb.textContent);
+    const back = backToList(bar);
+    const word = back.querySelector(".inbox-back-word") ?? assert.fail("the way back has a word");
+    const drawn = {
+      crumbs,
+      back: `${back.getAttribute("aria-label")}${shown(word) ? " (word)" : " (glyph)"}`,
+      wraps: getComputedStyle(bar).flexWrap === "wrap",
+    };
+    style.remove();
+    return drawn;
+  };
+
+  assert.deepEqual(barAt(700), {
+    crumbs: ["Billing usage alerts", "Alerts"],
+    back: "Inbox (word)",
+    wraps: false,
+  });
+  assert.deepEqual(barAt(420), { crumbs: ["Alerts"], back: "Inbox (word)", wraps: false });
+  assert.deepEqual(barAt(220), {
+    crumbs: ["Billing usage alerts", "Alerts"],
+    back: "Inbox (glyph)",
+    wraps: true,
+  });
+});
+
+test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
+  const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
+    ...item(id, title, at),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.DONE, ...(note === undefined ? undefined : { note }) },
+  });
+  inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        quietDone(
+          "a1b2c3d4-0000-4000-8000-000000000010",
+          "Turn on the flag",
+          6_000,
+          "On preview too.",
+        ),
+        quietDone("a1b2c3d4-0000-4000-8000-000000000011", "Add the secret", 5_500),
+      ],
+    ],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const where = (title: string) => {
+    act(() => rowNamed(page, title).click());
+    const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
+    return wordsOf(lines[lines.length - 1]);
+  };
+  assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
+  assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
+});
+
+test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {
+  const { answer: _dropped, ...bare } = RETRY;
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
+  assert.match(wordsOf(lines[lines.length - 1]) ?? "", /· Sent to /u);
+});
+
+test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
+  const todo = (id: string, title: string): InboxItem => ({
+    ...item(id, title, 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  });
+  const noted = todo("a1b2c3d4-0000-4000-8000-000000000012", "Turn on the flag");
+  const bare = todo("a1b2c3d4-0000-4000-8000-000000000013", "Add the secret");
+  inboxes = new Map([
+    [BILLING.id, [noted, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const listReads: Act[] = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+          const asked = request.payload.itemId === noted.id ? noted : bare;
+          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { item: answered, taken: true },
+          });
+        }
+        return bridge.act(request);
+      },
+    },
+  });
+  const press = (name: string) =>
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items button")].find(
+      (button) => button.textContent === name,
+    );
+
+  act(() => rowNamed(page, "Add the secret").click());
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
+
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "On preview too.");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
@@ -1065,7 +1724,7 @@ function hoveredCard(control: Element, card: string): string | null {
   return wordsOf(document.querySelector(`.tooltip-card ${card}`));
 }
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   listedWorkspace = {
     id: "workspace-acme",
@@ -1078,7 +1737,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
   ]);
-  const { page } = mount([
+  const { page, asked } = mount([
     { ...waitingPlanless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingPlanless(BUMP), automationId: null, automationName: null },
   ]);
@@ -1089,10 +1748,15 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
     "the automation's group wears its clock tile",
   );
-  assert.match(
-    hoveredCard(sweep, '[data-actor-card="automation"]') ?? "",
-    /Nightly flake sweep.*Open automation/u,
+  assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+  assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
+  const name = document.querySelector<HTMLButtonElement>(
+    '.tooltip-card [data-actor-card="automation"] .card-name button',
   );
+  assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
+  act(() => name?.click());
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
+  assert.equal(sweep.getAttribute("aria-expanded"), "true", "the header itself still only folds");
 
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
@@ -1111,6 +1775,13 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(crumb, "the automation's crumb is drawn");
   assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+  assert.equal(
+    document.querySelector('.tooltip-card [data-actor-card="automation"] button')?.textContent,
+    undefined,
+    "the crumb's card offers nothing to press, since the crumb opens the automation",
+  );
+  act(() => crumb.click());
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id, SWEEP.id]);
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();
@@ -1213,12 +1884,13 @@ test("an agent whose waiting items come back to what it was read for lets go of 
   assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
 });
 
-test("an item chosen by a notification's click, in an Inbox showing one column, is shown itself rather than the list", async () => {
+test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
   const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
   await settle();
   layOut(page, 700);
   await settle();
+  act(() => backToList(page).click());
   assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
 
   act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: SECOND_ASK.id, opened: true }));
@@ -1227,11 +1899,270 @@ test("an item chosen by a notification's click, in an Inbox showing one column, 
   assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "item");
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Skip the slow suite?");
 
-  act(() => page.querySelector<HTMLButtonElement>(".inbox-back")?.click());
+  act(() => backToList(page).click());
   await settle();
   assert.equal(
     page.querySelector(".inbox-view")?.getAttribute("data-columns"),
     "list",
     "Back stands on the list, the notification's ask taken once",
   );
+});
+
+test("an untitled agent an automation started goes by its automation's name in the Inbox, as on its own page", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount([waitingPlanless(QUARANTINE)]);
+  await settle();
+
+  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
+  assert.ok(mark, "the planless agent's row hangs its card");
+  assert.match(hoveredCard(mark, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+});
+
+test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const { page } = mount();
+  await settle();
+  act(() => {
+    rowNamed(page, "Alert at 80%?").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(item, "the row's menu offers Copy link");
+  await act(async () => item.click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`]);
+});
+
+test("an item a link names that no read holds, of a task the reader cannot read, is not found in its pane, and no other item is chosen in its place", async () => {
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Not foundThis Inbox item doesn't exist, or you don't have access to it\./u,
+  );
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("a link to a settled item of an agent with no plan, none of whose items waits any more, lists the agent by its own read and shows the item", async () => {
+  const settled = { ...BUMP, status: INBOX_STATUS.ANSWERED };
+  agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const { page } = mount();
+  await settle();
+  act(() => chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Bump the Node image?",
+  );
+});
+
+test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
+  startRead = (planId) =>
+    planId === BILLING.id
+      ? Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        })
+      : undefined;
+  const { page } = mount();
+  await settle();
+  layOut(page, 600);
+  act(() =>
+    chooseFromOutside({
+      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+
+  assert.match(pane?.textContent ?? "", /Not found/u);
+  assert.equal(pane?.hidden, false);
+  const back = [...(pane?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Back to Inbox",
+  );
+  assert.ok(back, "the notice leads back to the list");
+  act(() => back.click());
+  assert.equal(page.querySelector<HTMLElement>(".inbox-view-items")?.hidden, true);
+  assert.ok(
+    document.activeElement instanceof HTMLElement &&
+      document.activeElement.closest(".inbox-plans") !== null,
+    "the keyboard lands on the list, not the hidden notice",
+  );
+});
+
+test("an item a link names under an agent that is not there, deleted or another's, is not found once its page's read says so, and no other item is chosen", async () => {
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      agentId: "0f0e0d0c-0000-4000-8000-0000000a9e47",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11e", name: "Quiet task" };
+  listedAgents = [];
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names that its task's Inbox read does not hold is not found, though the task's agents are still being read", async () => {
+  agentListHeld = true;
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      planId: BILLING.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("a link to an item newer than its task's last read waits for the read of it, saying no Not found, and then shows it", async () => {
+  const { page } = mount();
+  await settle();
+  const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
+  let land: () => void = () => undefined;
+  startRead = (planId) =>
+    planId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { items: [EXPIRY, posted], cursor: "2" },
+            });
+        })
+      : undefined;
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { planId: INVITES.id, items: 2, updatedAt: 7_000 },
+    ]),
+  );
+  act(() => chooseFromOutside({ planId: INVITES.id, itemId: posted.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Page on-call too?",
+  );
+});
+
+test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
+  startRead = (planId) =>
+    planId === quiet.id
+      ? Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        })
+      : undefined;
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("a link to an agent's item newer than the agent's last read waits for the read of it, saying no Not found, and then shows it", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
+  pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  await settle();
+  const held: (() => void)[] = [];
+  holdAgentRead = (respond) => {
+    held.push(respond);
+  };
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  act(() => setPlanless([SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: THIRD_ASK.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  holdAgentRead = undefined;
+  for (const respond of held) respond();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Retry the flaky job?",
+  );
+});
+
+test("an item a link names under an agent nothing waits on any more, read before, is not found by that read though the agent's own read fails", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
+  pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  await settle();
+  agentReadFails = true;
+  act(() => setPlanless([]));
+  act(() =>
+    chooseFromOutside({
+      agentId: SECOND_AGENT,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
 });

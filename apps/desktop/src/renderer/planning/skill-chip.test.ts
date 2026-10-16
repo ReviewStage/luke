@@ -122,7 +122,7 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
   assert.equal(words.textContent, "Cut it with /release now", "the words are left as they were");
 });
 
-test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which opens it", async () => {
+test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {
   const { container, opened } = await mounted(
     createElement(SentWords, { text: "Cut it with /release now." }),
   );
@@ -136,9 +136,13 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   assert.ok(card.querySelector(".card-head .card-glyph svg"), "the head wears the skill's mark");
   assert.equal(card.querySelector(".card-name")?.textContent, "/release");
   assert.equal(card.querySelector(".card-note")?.textContent, RELEASE.description);
-  const line = card.querySelector<HTMLButtonElement>("button.plan-card-detail");
-  assert.equal(line?.textContent, RELEASE.path);
-  act(() => line?.click());
+  assert.equal(card.querySelector(".plan-card-detail")?.textContent, RELEASE.path);
+  assert.equal(
+    card.querySelector("button")?.textContent,
+    undefined,
+    "the card offers nothing to press",
+  );
+  act(() => chip.click());
   assert.deepEqual(opened, [RELEASE.path]);
 });
 

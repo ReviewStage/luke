@@ -1,4 +1,3 @@
-import type { FaceMotion } from "@luke/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Plan } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -11,11 +10,16 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
+import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NewPlanDialog } from "../planning/new-plan-dialog";
 import { usePlanLooks } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type PlansControl,
+} from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
@@ -29,6 +33,7 @@ import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { PaneGlide } from "./pane-motion";
+import { PersonPage } from "./person-page";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
@@ -87,8 +92,6 @@ export interface DesktopGates {
   lastSignIn?: AccountProvider | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;
   onCancelSignIn: () => void;
-  /** The signed-out Luke's introduction cycle, walked over the sign-in. */
-  signInFace: { play: number; motion?: FaceMotion };
 }
 
 /**
@@ -285,6 +288,9 @@ function titleSubject(
   if (plans.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: plans.workspace };
   }
+  if (plans.personView.userId !== undefined) {
+    return { signedIn, subject: "Profile", workspace: plans.workspace };
+  }
   if (plans.factoryView.open) return { signedIn, subject: "Factory", workspace: plans.workspace };
   if (plans.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: plans.workspace };
@@ -293,6 +299,11 @@ function titleSubject(
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
   return { signedIn, subject: shownPlan.name, workspace };
+}
+
+/** Where on the Automations page a find stands: its list, a new automation, or one automation's editor, each a place of its own. */
+function automationsPlaceKey(place: AutomationsPlace): string {
+  return place.kind === AUTOMATIONS_PAGE.EDIT ? place.automationId : place.kind;
 }
 
 /**
@@ -367,13 +378,14 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.personView.userId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's page, Factory, or the Automations page standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, Factory, or the Automations page standing in its place is not the plan.
   const standingIn =
     plans.inboxView.open ||
     plans.agentView.agentId !== undefined ||
+    plans.personView.userId !== undefined ||
     plans.factoryView.open ||
     plans.automationsView.open;
   const shownPlan =
@@ -381,7 +393,7 @@ export function DesktopShell({
       ? region.plan
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
-  // The plan is looked at only while it is on screen.
+  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = usePlanLooks(shownPlan, plans.me);
   if (gated) {
     return (
@@ -389,7 +401,6 @@ export function DesktopShell({
         <div className="desktop-drag-strip" />
         <SignInGate
           account={account}
-          face={gates.signInFace}
           {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
@@ -439,14 +450,17 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // an agent's page, Factory, and the Automations page stand in the plan's place, so they draw no panel to toggle.
+  // toolbar beneath it leaves the toggle room then and only then. The Inbox,
+  // Factory, and the Automations page stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
+  const pagePerson = plans.personView.userId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
-  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
-  const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
+  const planToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
+  const panelToggle = planToggle || pageAgent !== undefined;
+  const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
   const captionsInColumn = planDrawn && !plans.sidePanel.fullScreen;
@@ -475,16 +489,36 @@ export function DesktopShell({
       />
       <main className="desktop-main">
         {inboxOpen ? (
-          <DesktopInbox plans={plans} />
+          <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
+            <DesktopInbox plans={plans} />
+          </PageFind>
         ) : pageAgent !== undefined ? (
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
+        ) : pagePerson !== undefined ? (
+          // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+          <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
+            <PersonPage
+              plans={plans}
+              userId={pagePerson}
+              name={plans.personView.name}
+              staged={sidebar.staged}
+            />
+          </PageFind>
         ) : factoryOpen ? (
-          <DesktopFactory plans={plans} />
+          <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
+            <DesktopFactory plans={plans} />
+          </PageFind>
         ) : automationsOpen ? (
-          <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
-            <AutomationsPage plans={plans} />
-          </Suspense>
+          <PageFind
+            page={FIND_PAGE.AUTOMATIONS}
+            at={automationsPlaceKey(plans.automationsView.place)}
+            active={plans.shown}
+          >
+            <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
+              <AutomationsPage plans={plans} />
+            </Suspense>
+          </PageFind>
         ) : (
           <DesktopPlans
             plans={plans}
@@ -518,7 +552,7 @@ export function DesktopShell({
         <div className="title-bar-controls" data-edge="end">
           <SidePanelToggle
             panel={plans.sidePanel}
-            disabled={plans.region.kind !== DOCUMENT_REGION.READY}
+            disabled={planToggle && plans.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}

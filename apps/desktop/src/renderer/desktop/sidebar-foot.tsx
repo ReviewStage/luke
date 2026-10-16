@@ -14,11 +14,13 @@ import {
   MailIcon,
   MessageSquareIcon,
   NewspaperIcon,
+  UserRoundIcon,
 } from "lucide-react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
+import { useOpenPerson } from "../person-door";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
@@ -56,8 +58,9 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
  * release is downloaded; or, once installing it failed, the download from
  * the releases page that Settings offers in its place, in the failure's red,
  * its hint saying what went wrong. One word each, so the account's name
- * keeps its room. It draws nothing in any other state, so the row carries no
- * control with nothing to do.
+ * keeps its room, and a narrow sidebar draws the glyph alone, named still
+ * and its hint saying the rest. It draws nothing in any other state, so the
+ * row carries no control with nothing to do.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
@@ -65,9 +68,14 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
   if (update.status === UPDATE_STATUS.READY) {
     return (
       <Tooltip label={`Restart to update to ${update.latestVersion}`}>
-        <button type="button" className="sidebar-update" onClick={updates.onInstall}>
+        <button
+          type="button"
+          className="sidebar-update"
+          aria-label="Restart"
+          onClick={updates.onInstall}
+        >
           <UpdateIcon />
-          Restart
+          <span className="sidebar-update-word">Restart</span>
         </button>
       </Tooltip>
     );
@@ -80,9 +88,10 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
         type="button"
         className="sidebar-update"
         data-failed="true"
+        aria-label="Download"
         onClick={updates.onOpenLatest}
       >
-        Download
+        <span className="sidebar-update-word">Download</span>
         <ExternalIcon />
       </button>
     </Tooltip>
@@ -106,13 +115,16 @@ function AccountHeading({
 }
 
 /**
- * The account's menu, in Cursor's order: Settings; what the Help menu
+ * The account's menu, in Cursor's order: the reader's own page where the
+ * window offers one, then Settings; what the Help menu
  * offers, the changelog before it, and the ways to write to the people who
  * make Luke after it; then Log out, while anyone is signed in to leave.
  */
 function accountMenuGroups(
   signedIn: boolean,
   acts: {
+    /** Opens the reader's own page; none outside the window, or before the account's id is known. */
+    onProfile: (() => void) | undefined;
     onSettings: () => void;
     onOpenChangelog: () => void;
     onOpenIssues: () => void;
@@ -120,8 +132,13 @@ function accountMenuGroups(
     onLogOut: () => void;
   },
 ): MenuEntry[][] {
+  const profile =
+    acts.onProfile === undefined
+      ? []
+      : [{ label: "Your profile", icon: <UserRoundIcon />, onSelect: acts.onProfile }];
   const groups: MenuEntry[][] = [
     [
+      ...profile,
       {
         label: "Settings",
         icon: <GearIcon />,
@@ -200,7 +217,11 @@ function AccountMenu({
       }
     },
   );
+  const openPerson = useOpenPerson();
+  const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
   const groups = accountMenuGroups(signedIn, {
+    onProfile:
+      openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,
     onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => tell(ACT_KIND.GITHUB_OPEN, { url: ISSUES_URL }),

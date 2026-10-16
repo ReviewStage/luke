@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "taken_after_step" integer;

@@ -20,7 +20,8 @@ import { FileTypeIcon } from "./file-type-icon";
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
  * far along the message's files it is, beside Copy for a text file,
- * Download, and the way out. It opens in the window's one modal frame
+ * whatever the place opening it offers for a picture (Add to plan, in an
+ * agent's transcript), Download, and the way out. It opens in the window's one modal frame
  * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window or on the image, and the way out all
  * close it and hand focus back to the chip that opened it. The
@@ -41,6 +42,13 @@ const VIEWER_LABEL = {
   DOWNLOAD: "Download",
   CLOSE: "Close",
 } as const;
+
+/** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
+export interface ViewerAction {
+  readonly label: string;
+  readonly icon: React.ReactNode;
+  readonly onPress: (file: FileChip) => void;
+}
 
 /** A text file's lines; a final line break ends the last line rather than starting another. */
 function linesOf(text: string): string[] {
@@ -149,12 +157,15 @@ export function AttachmentViewer({
   at,
   onAt,
   onClose,
+  action,
 }: {
   files: readonly FileChip[];
   at: number;
   /** Shows the message's file at this place. */
   onAt: (at: number) => void;
   onClose: () => void;
+  /** One more thing a picture shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
+  action?: ViewerAction | undefined;
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
@@ -206,6 +217,12 @@ export function AttachmentViewer({
           </div>
         ) : null}
         {text === undefined ? null : <CopyTextButton text={text} />}
+        {action === undefined || attachmentView(file) !== ATTACHMENT_VIEW.IMAGE ? null : (
+          <button type="button" className="toolbar-button" onClick={() => action.onPress(file)}>
+            {action.icon}
+            {action.label}
+          </button>
+        )}
         <HeaderButton label={VIEWER_LABEL.DOWNLOAD} onClick={() => download(file)}>
           <DownloadIcon aria-hidden="true" />
         </HeaderButton>

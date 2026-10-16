@@ -13,7 +13,6 @@ import {
   ActorRef,
   AutomationCard,
   automationActor,
-  CardDoor,
 } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
@@ -56,8 +55,8 @@ import { WorkingTime } from "./working-time";
  * "Started by" and who did: the automation whose run started it, by its
  * clock and name, where the window knows it, or else, for a teammate's
  * agent, the teammate's disc and name; either hangs its own card over this
- * one. Hung from a place other than its tab,
- * it ends on "Open agent" under a rule, which opens the tab.
+ * one. The card has no way to the tab of its own: wherever it hangs, the
+ * name it hangs from is what a press opens, so the card only says.
  *
  * The step is read from what a tab already holds, never fetched on hover:
  * the transcript the agent's tab last drew (`HeldTranscript`), while it is
@@ -89,9 +88,6 @@ const ENDED_SEPARATOR = " · ";
 
 /** What the corner says before the count while the agent works, as its transcript's last line does. */
 const WORKING_WORD = "Working…";
-
-/** What a card's way to the agent's tab says. */
-const OPEN_AGENT = "Open agent";
 
 /** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
 export interface HeldTranscript {
@@ -184,7 +180,9 @@ function StartedBy({
         ) : (
           <ActorRef
             actor={automationActor(known.automation)}
-            card={<AutomationCard {...known} />}
+            card={
+              <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+            }
             onOpen={known.onOpen}
           />
         )}
@@ -277,8 +275,7 @@ export function heldLatest(
  * The card: the agent's tile, the name, its model under it, and its
  * corner, then who started it, the latest step where the tab holds one
  * current, and under a rule what a tab of the agent's other than its own
- * adds, as its Terminal tab says whose sandbox it is in, and the way to its
- * tab where the card hangs elsewhere.
+ * adds, as its Terminal tab says whose sandbox it is in.
  */
 export function AgentTabCard({
   name,
@@ -286,7 +283,6 @@ export function AgentTabCard({
   models,
   read,
   foot,
-  onOpen,
 }: {
   name: string;
   /** Whether the name is a subagent's task standing in until it has a title. */
@@ -297,8 +293,6 @@ export function AgentTabCard({
   read: () => CardReading;
   /** One line under a rule, said by a tab of the agent's other than its own. */
   foot?: React.ReactNode;
-  /** Opens the agent's tab, offered under a rule where the card hangs from a place other than the tab. */
-  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const { corner, choice, transcript, startedBy, automationId, tile, pullRequest } = read();
   const head = (
@@ -321,9 +315,12 @@ export function AgentTabCard({
       )}
       <StartedBy by={startedBy} automationId={automationId} />
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
-      {foot === undefined && onOpen === undefined ? null : <CardRule />}
-      {foot === undefined ? null : <CardNote>{foot}</CardNote>}
-      {onOpen === undefined ? null : <CardDoor label={OPEN_AGENT} onOpen={onOpen} />}
+      {foot === undefined ? null : (
+        <>
+          <CardRule />
+          <CardNote>{foot}</CardNote>
+        </>
+      )}
     </HoverCard>
   );
 }

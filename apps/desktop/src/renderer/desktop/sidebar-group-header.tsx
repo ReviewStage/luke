@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip";
 
 /**
- * sidebar-group-header.tsx -- the header a group of rows folds under: the sidebar's repositories, Pinned, and Archived, the Inbox's plans, and the summary's archived agents alike.
+ * sidebar-group-header.tsx -- the header a group of rows folds under: the sidebar's repositories and creators, the Inbox's plans, and the summary's archived agents alike.
  *
  * It is a row with the plan rows' own hover, in the headings' voice: the
  * group's glyph, which gives way to the fold's chevron while the header is
@@ -88,7 +88,7 @@ export function SidebarGroupHeader({
   card?: React.ReactNode;
   /** Whether a menu the header opened stands, which keeps it ringed and its actions shown. */
   menuOpen?: boolean;
-  onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  onContextMenu?: ((event: React.MouseEvent<HTMLDivElement>) => void) | undefined;
   onToggle: () => void;
 }): React.JSX.Element {
   // Note that a steady count says nothing at none, because "0 need you" is no news.

@@ -47,7 +47,6 @@ test("the sign-in buttons and the account's line each draw the provider's one ma
   const gate = drawn(
     createElement(SignInGate, {
       account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-      face: { play: 0 },
       onBegin: () => undefined,
       onCancel: () => undefined,
     }),

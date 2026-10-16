@@ -113,6 +113,7 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         assert.equal(registered, rows[0]?.id);
         assert.equal(taken, undefined);
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
+          voiceSessionId: registered,
           planId,
         });
         assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), undefined);

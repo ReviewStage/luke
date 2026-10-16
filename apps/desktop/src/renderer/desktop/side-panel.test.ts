@@ -120,6 +120,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
           subject: agentSubject(control, THIRD.id, NOTHING_HELD, false),
           models: [],
           pullRequest: pullRequest(42, "Expire invitations"),
+          people: undefined,
           onOpenAgent: () => opened.push(THIRD.id),
         }),
       ),

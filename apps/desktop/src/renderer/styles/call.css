@@ -110,12 +110,26 @@ html.call-window #root {
 
 /* Alone in its window, which shows and hides it whole, so it neither rises
    nor leaves, and its shadow keeps within the room the window leaves it. The
-   whole card is what the window is dragged by, wherever it is held. */
+   whole card is what the window is dragged by, wherever it is held. Note
+   that the bar inside it must stay wider than the bar's stacking query
+   (desktop.css's `@container call-bar`), because the window's height is
+   fixed and a stacked bar would not fit it. */
 .call-card[data-surface="window"] {
   width: 248px;
   box-shadow: 0 2px 6px var(--shadow);
   animation: none;
   -webkit-app-region: drag;
+}
+
+/* The avatar's tile in the floating window, picture-in-picture over the
+   card, at a height of its own rather than its aspect's: main grows the
+   window by exactly this and the card's gap under it (`CALL_WINDOW_BOUNDS`
+   in `call-window-presence.ts`), so the two must move together. 125px is
+   16:9 at the card's 222px inside. The tile is held by too, as the rest of
+   the card is, and its Video off answers its own press. */
+.call-card[data-surface="window"] .call-video-tile {
+  height: 125px;
+  aspect-ratio: auto;
 }
 
 /* The plan's name, and the way back to it beside the name. */
@@ -145,6 +159,30 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   -webkit-app-region: no-drag;
 }
 
+/* The Call tab's tile on the card, over the plan's name: the card's own
+   width at 16:9, so it grows the card by a picture and no more, on a
+   smaller corner inside the card's, with no margin of its own beside the
+   card's gap. The picture and the controls under it are one card, so it
+   reads as the call card grown into a picture rather than a second one. */
+.call-card .call-video-tile {
+  width: 100%;
+  margin: 0;
+  border-radius: 8px;
+}
+
+/* At this size the still face makes room for what the tile says, and
+   Video off keeps closer to the corner on less of a ground. */
+.call-card .call-video-face {
+  width: 40px;
+  height: 40px;
+}
+
+.call-card .call-video-controls {
+  right: var(--space-4);
+  bottom: var(--space-4);
+  padding: 0;
+}
+
 .call-card-plan {
   display: block;
   overflow: hidden;
@@ -153,4 +191,102 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 
 .call-card-plan[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+/* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
+   the top of the call's Call tab, at the 16:9 the avatar is rendered in, on
+   the card's ground, border, and corner, so the tile reads as the call card
+   grown into a picture. It keeps its height as the transcript under it
+   scrolls. However wide the tab is, the tile keeps to the transcript's
+   column, centred over it, and no taller than about two fifths of the
+   window (70vh wide at 16:9), so a wide, short tab still leaves the
+   transcript room; 240px is as narrow as its still frame stays readable.
+   The strip shares the width, so the toggle stays put when video goes off. */
+.call-video-tile,
+.call-video-strip {
+  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 70vh));
+  margin: var(--space-4) auto var(--space-8);
+}
+
+.call-video-tile {
+  position: relative;
+  flex: none;
+  overflow: clip;
+  box-sizing: border-box;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-popover);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.call-video-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Luke's face where there is no video to draw: the still frame a fixture
+   run captures, and the ground under what the tile says while it connects
+   or once it has ended. */
+.call-video-still {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+}
+
+.call-video-face {
+  display: block;
+  width: 56px;
+  height: 56px;
+}
+
+.call-video-face .luke-face {
+  width: 100%;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.call-video-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Video off, in the tile's bottom-right corner over whatever it draws, on
+   the card's ground so it reads over any frame of video. */
+.call-video-controls {
+  position: absolute;
+  right: var(--space-8);
+  bottom: var(--space-8);
+  display: flex;
+  align-items: center;
+  padding: var(--space-4);
+  border-radius: 999px;
+  background: var(--surface-popover);
+}
+
+/* The strip the tile collapses to once the developer turns video off: one
+   line on the tile's ground, border, and margins, saying so beside the
+   button that turns it on again, so the call keeps its video's place
+   without a picture's height. */
+.call-video-strip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-popover);
+  color: var(--text-primary);
 }

@@ -66,26 +66,15 @@ function listWorkspaces(args, env) {
   return JSON.parse(listed.stdout).packages.items;
 }
 
-// The `--filter`s that select every affected workspace, or none when nothing
-// changed. Note that we do not hand turbo `--affected` itself, because it
-// misses a change inside a nested workspace: apps/web/eve and apps/web/coder
-// are workspaces of their own, so turbo counts an edit there as changing them
-// alone, yet @luke/web compiles and tests their files and hashes them as its
-// own. The scope is turbo's affected list plus every workspace that holds an
-// affected one, each with its dependents; turbo intersects `--affected` with
-// a `--filter` rather than adding to it, so the whole scope is filters.
+// The `--filter`s that select every affected workspace with its dependents,
+// or none when nothing changed. Note that we do not hand turbo `--affected`
+// itself: turbo intersects `--affected` with a `--filter` rather than adding
+// to it, so the whole scope is filters.
 function affectedFilters() {
   const base = affectedBase(process.env);
   const env = base ? { ...process.env, TURBO_SCM_BASE: base } : process.env;
-  const all = listWorkspaces([], env);
   const affected = listWorkspaces([AFFECTED_FLAG], env);
-  const names = new Set(affected.map((workspace) => workspace.name));
-  for (const nested of affected) {
-    for (const holder of all) {
-      if (nested.path.startsWith(`${holder.path}/`)) names.add(holder.name);
-    }
-  }
-  return [...names].sort().map((name) => `--filter=...${name}`);
+  return affected.map((workspace) => `--filter=...${workspace.name}`).sort();
 }
 
 function runTurbo(label, args, { held }) {

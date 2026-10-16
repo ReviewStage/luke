@@ -45,10 +45,13 @@ import { PLAN_SAVE_STATUS, saveNotes } from "./plan-notes.js";
  * and the brain's reply sentences as Luke's research notes, and once the
  * call has been quiet for a beat, whoever spoke last, it makes one model call
  * over what was said since its cursor, which answers with notes: a point
- * added under a heading, a phrase corrected, or a
- * line struck. They are saved through `saveNotes`, the plan's one write,
- * under the call, so the plan's history keeps the call's saves as one
- * revision.
+ * added under a heading, a phrase corrected, a line struck, or a section
+ * struck or moved, anywhere in the plan, its headings among it. They are
+ * saved through `saveNotes`, the plan's one write, under the call, so the
+ * plan's history keeps the call's saves as one revision, and taken whole or
+ * not at all: an answer holding a note that does not read or names what the
+ * plan does not hold exactly once saves nothing, and its lines are handed to
+ * the next run with the plan as it then stands.
  * While the model writes, the notes so far go to the device as a draft of the
  * plan (`textNotesInProgress`), each draft differing from the last only where the
  * newest note lands, so the Plans tab types each note in as it is taken. It is the plan's only writer and its
@@ -125,7 +128,7 @@ export interface PlanDraft {
  * How one run reads the plan and what its notes make of it: the plan as the
  * model is handed it, under its marker, the document a draft of notes so far
  * draws, nothing past the plan's bound, and whether whole notes change it,
- * with the ones that could not be taken.
+ * or the first that could not be taken, which refuses them all.
  */
 interface NotedPlan {
   readonly marker: string;
@@ -133,7 +136,7 @@ interface NotedPlan {
   readonly drafted: (partial: UnparsedWireValue) => PlanDocument | undefined;
   readonly taken: (notes: readonly PlanNote[]) => {
     readonly changed: boolean;
-    readonly missed: readonly PlanNote[];
+    readonly missed?: PlanNote;
   };
 }
 
@@ -152,7 +155,9 @@ function notedText(text: string, started: string): NotedPlan {
     },
     taken: (notes) => {
       const noted = applyNotesToText(text, notes, started);
-      return { changed: noted.text !== text, missed: noted.missed };
+      return noted.missed === undefined
+        ? { changed: noted.text !== text }
+        : { changed: false, missed: noted.missed };
     },
   };
 }
@@ -297,13 +302,16 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         written,
         Effect.sync(() => options.onWriting?.(false)),
       );
+      // An answer is one edit: a note that does not read, or names what the plan does not hold, refuses it whole.
       if (output.unread > 0) {
         options.report(`The plan's notetaker took ${output.unread} notes outside the template`);
+        return;
       }
       const taken = noted.taken(output.notes);
-      if (taken.missed.length > 0) {
-        const missed = taken.missed.map(missedNote).join(", ");
+      if (taken.missed !== undefined) {
+        const missed = missedNote(taken.missed);
         options.report(`The plan's notetaker named what the plan does not hold: ${missed}`);
+        return;
       }
       // Notes that change nothing are the model saying nothing new was said, and need no save.
       if (taken.changed) {
@@ -312,6 +320,11 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
           output.notes,
           { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: options.liveSessionId },
         );
+        if (saved.status === PLAN_SAVE_STATUS.CONFLICT) {
+          const missed = missedNote(saved.missed);
+          options.report(`The plan's notetaker named what the plan no longer holds: ${missed}`);
+          return;
+        }
         if (saved.status !== PLAN_SAVE_STATUS.SAVED) {
           options.report(`The plan's notetaker could not save: ${saved.reason}`);
           return;

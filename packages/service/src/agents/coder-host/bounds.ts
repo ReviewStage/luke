@@ -25,11 +25,20 @@ export const CODER = {
   SANDBOX_VCPUS: 4,
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
+  /**
+   * The longest one pause (`sleep.ts`) may be. The credential at the
+   * firewall is renewed only as a step starts, so a step may start on one
+   * nearly fifty minutes old; a pause past the ten minutes it has left would
+   * leave a background command reaching GitHub, such as a watch of the
+   * checks, signed out before the next step renews it. Eight leaves room for
+   * the step's own model call ahead of the pause; a longer wait is two.
+   */
+  SLEEP_MAX: Duration.minutes(8),
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
    * The share of the context window past which eve compacts the session,
-   * told to eve as the agent's own setting (`coder/agent.ts`) and read by
+   * told to eve as the agent's own setting (`apps/dev/agent.ts`) and read by
    * the agent's tab as the line its context ring turns red at. It is eve's
    * own default, written down so the two cannot drift apart.
    */

@@ -1,4 +1,5 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
+import type { PlanLinearIssue } from "@luke/features/linear-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -10,7 +11,7 @@ import { conversations } from "./storage.js";
  * plan.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it, in the workspace it was started in: its name, whether it is pinned or archived, its
+ * account that started it, in the workspace it was started in: its name, whether it is archived (a pin is each member's own, `plan-pin.ts`), its
  * one document, a free Markdown text, and the journal of the saves coding
  * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
@@ -50,7 +51,19 @@ export const plan = pgTable(
      * plan from before repositories stands and is no error.
      */
     repository: text("repository"),
-    /** When the plan was pinned, which the sidebar lists first, newest pin first; null while it is not. */
+    /**
+     * The Linear issue the plan was started from, as the service read it
+     * through the workspace's Linear connection when it started: what every
+     * planning turn is told to research. Kept whatever becomes of the
+     * connection; null for a plan started from no issue.
+     */
+    linearIssue: jsonb("linear_issue").$type<PlanLinearIssue>(),
+    /**
+     * @deprecated A pin is its reader's own now, in `plan_pin`
+     * (`plan-pin.ts`), and nothing writes or reads this. It was the
+     * workspace's, so a pin one member made stood for every member. It stands
+     * until no running build reads it, then a later migration drops it.
+     */
     pinnedAt: timestamptz("pinned_at"),
     /** When the plan was archived, which the list leaves out unless asked for it; null while it is not. */
     archivedAt: timestamptz("archived_at"),

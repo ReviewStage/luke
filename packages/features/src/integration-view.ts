@@ -1,5 +1,8 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  INTEGRATION_LABEL_MAX,
+  integrationAccountAnswerSchema,
+  integrationConnectionNameSchema,
   integrationProviderSchema,
   integrationStatusAnswerSchema,
   integrationStatusesAnswerSchema,
@@ -32,12 +35,28 @@ const failed = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(INTEGRATION_CALL_FAILURE)),
 });
 
-/** The one provider a Connect or a Disconnect is about, as the window names it to the host. */
+/**
+ * The one account a Connect, a Cancel, a Disconnect, or a tools read is
+ * about, as the window names it to the host: the provider, the account by
+ * its connection name (the provider's first where none is named), and on a
+ * Connect whether it signs in a new account.
+ */
 export const integrationProviderParamsSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
+  connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
+  add: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type IntegrationProviderParams = typeof integrationProviderParamsSchema.Type;
+
+/** One account a rename names, and the label it is to carry, as the window names it to the host. */
+export const integrationRenameParamsSchema = EffectSchema.Struct({
+  provider: integrationProviderSchema,
+  connection: integrationConnectionNameSchema,
+  label: EffectSchema.String.check(EffectSchema.isMaxLength(INTEGRATION_LABEL_MAX)),
+});
+
+export type IntegrationRenameParams = typeof integrationRenameParamsSchema.Type;
 
 /** Where every provider's connection stands, as the window hears it. */
 export const integrationStatusesViewSchema = EffectSchema.Union([
@@ -63,10 +82,21 @@ export const integrationToolsViewSchema = EffectSchema.Union([
 
 export type IntegrationToolsView = typeof integrationToolsViewSchema.Type;
 
-/** A Connect as the window hears it: the browser sent to sign in, or why not. */
+/** A Connect as the window hears it: the browser sent to sign in, and the account it signs in where the service named one, or why not. */
 export const integrationConnectViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ opened: EffectSchema.Literal(true) }),
+  EffectSchema.Struct({
+    opened: EffectSchema.Literal(true),
+    connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
+  }),
   failed,
 ]);
 
 export type IntegrationConnectView = typeof integrationConnectViewSchema.Type;
+
+/** One account as a rename left it, as the window hears it, or why there is no answer. */
+export const integrationAccountViewSchema = EffectSchema.Union([
+  integrationAccountAnswerSchema,
+  failed,
+]);
+
+export type IntegrationAccountView = typeof integrationAccountViewSchema.Type;

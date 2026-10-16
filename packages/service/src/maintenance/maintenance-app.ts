@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
+import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
@@ -27,6 +28,9 @@ import {
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
+
+/** How long a picture pasted into a plan waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
+const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's
@@ -82,6 +86,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
+    purgeUnsavedPictures: (now) =>
+      purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)

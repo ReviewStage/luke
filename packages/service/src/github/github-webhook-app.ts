@@ -7,15 +7,18 @@ import {
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Redacted, Result, Schema } from "effect";
+import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,
   HttpRouter,
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
+import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
+import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
 import { agentPublished } from "../agents/coder-host/published.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
+import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
@@ -28,7 +31,8 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { clearRevokedAuthorization, type GitHubApp } from "./github-app.js";
+import { agentWakeOf, wakeAgents } from "./agent-wakes.js";
+import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
 /**
@@ -72,7 +76,12 @@ import { setInstallationStatus } from "./github-installations.js";
  * (`packages/service/src/automations/automation-github.ts`): a pull request or issue opened or
  * labelled, a check suite that failed, or a push queues a run, under the
  * delivery's own id, for each automation on a plan of the repository that
- * listens for it, and the minute sweep starts each one's agent.
+ * listens for it, and the minute sweep starts each one's agent. And a
+ * review, a comment on a pull request, or a check that failed on an
+ * agent's branch is told to the agents on that pull request as a message
+ * from GitHub (`agent-wakes.ts`), through eve as the deployment acting for
+ * each agent's owner, under the cron secret an automation's run reaches eve
+ * by; a deployment without it tells nobody.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -308,6 +317,20 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
   return landed.filter(Boolean).length;
 });
 
+/**
+ * eve's coding-agent service as the deployment acting for an account, as an
+ * automation's run reaches it (`maintenance-app.ts`): under the deployment's
+ * own cron secret, which the coder channel admits a deployment's message
+ * by; a deployment without it, or without an origin for eve, tells nobody.
+ */
+function eveForAccount(secret: Redacted.Redacted | undefined): EveForAccount {
+  const origin = deploymentEveOrigin();
+  return (account) =>
+    secret === undefined || origin === undefined
+      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
+      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+}
+
 /** POST: one delivery, its signature confirmed before anything of it is read. */
 const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
   function* (): Effect.fn.Return<
@@ -323,7 +346,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     if (request.method !== HTTP_METHOD.POST) {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
-    const { githubWebhookSecret } = yield* HostedEnvironment;
+    const { githubWebhookSecret, cronSecret } = yield* HostedEnvironment;
     if (githubWebhookSecret === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     const body = yield* readBodyBytesEffect(MAXIMUM_DELIVERY_BYTES);
     const signature = request.headers[DELIVERY_HEADER.SIGNATURE] ?? null;
@@ -347,12 +370,24 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       }
       return hostedJsonResponse(200, { read: 0 });
     }
+    // A deployment with no App configured knows no bot of its own, so every bot is another's.
+    const agentLogin = yield* Effect.orElseSucceed((yield* GitHubApp).botLogin, () => undefined);
     const queued = yield* hostedStoreOrUnavailable(
-      queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload),
+      queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload, agentLogin),
     );
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
-    return hostedJsonResponse(200, { read, queued });
+    const wake = agentWakeOf(event, payload, yield* Clock.currentTimeMillis);
+    const told =
+      wake === undefined
+        ? 0
+        : yield* wakeAgents(
+            eveForAccount(cronSecret),
+            wake,
+            request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
+            agentLogin,
+          );
+    return hostedJsonResponse(200, { read, queued, told });
   },
 );
 

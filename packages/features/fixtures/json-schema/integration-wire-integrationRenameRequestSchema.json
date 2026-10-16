@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    }
+  },
+  "required": [
+    "label"
+  ],
+  "additionalProperties": false
+}

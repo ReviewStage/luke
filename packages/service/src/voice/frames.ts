@@ -28,6 +28,8 @@ export const FRAME_DECISION = {
   DROP_AUDIO: "drop-audio",
   /** A report in the service's own vocabulary: read by the service, forwarded nowhere. */
   REPORT: "report",
+  /** An ask about the call's avatar: answered by the service on Luke's Keyframe key, forwarded nowhere. */
+  AVATAR: "avatar",
   /** A frame the service does not admit from the device: the socket is closed on it. */
   REFUSE: "refuse",
   /** The device's hang-up, read as an ask for the close the service sends itself and forwarded nowhere. */
@@ -61,6 +63,12 @@ export const SESSIONS_REPORT_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_STOP,
 ];
 
+/** The avatar asks the Mac sends after the handshake, which the service answers itself and never forwards. */
+const SESSIONS_AVATAR_FRAMES: readonly string[] = [
+  VOICE_SERVICE_FRAME.AVATAR_START,
+  VOICE_SERVICE_FRAME.AVATAR_STOP,
+];
+
 /** The `type` of one frame, or nothing when the frame is not a JSON record naming one. */
 export function frameType(text: UnparsedWireValue): string | undefined {
   const payload = decodeLivePayload(text);
@@ -79,8 +87,8 @@ export function upstreamFrameDecision(type: string | undefined): FrameDecision {
 /**
  * What to do with a frame the device sent toward OpenAI: the hang-up, the
  * service's own frame or the Live close an older Mac still sends, read alike
- * as an ask for the close the exchange sends itself; the reports read in the
- * service's own vocabulary; and anything else, an unreadable frame included,
+ * as an ask for the close the exchange sends itself; the reports and the
+ * avatar asks read in the service's own vocabulary; and anything else, an unreadable frame included,
  * refused with the close, so an older build is refused where it can be seen
  * and never doubles the exchange standing here.
  */
@@ -88,5 +96,6 @@ export function deviceFrameDecision(type: string | undefined): FrameDecision {
   if (type === undefined) return FRAME_DECISION.REFUSE;
   if (SESSIONS_HANG_UP_FRAMES.includes(type)) return FRAME_DECISION.HANG_UP;
   if (SESSIONS_REPORT_FRAMES.includes(type)) return FRAME_DECISION.REPORT;
+  if (SESSIONS_AVATAR_FRAMES.includes(type)) return FRAME_DECISION.AVATAR;
   return FRAME_DECISION.REFUSE;
 }

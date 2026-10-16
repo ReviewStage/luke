@@ -1,5 +1,8 @@
+import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_AUTHOR,
   CONTEXT_WINDOW,
+  type CodingAgentAuthor,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
   type ContextWindow,
@@ -7,9 +10,8 @@ import {
   contextWindowSchema,
 } from "@luke/features/coding-agent-wire";
 import {
-  INTEGRATION_PROVIDER_LIST,
-  type IntegrationProvider,
-  integrationProviderFromWire,
+  integrationConnectionNameSchema,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TURN_STATUS } from "@luke/wire";
@@ -26,14 +28,17 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
 import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
+  type StoredAutomationOrigin,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
@@ -107,6 +112,14 @@ import type { ConversationTarget } from "./writer.js";
  * the developer archived is a stamp on its row: every list leaves it out
  * but the plan's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
+ * A pin of an agent with no plan is the reading member's own
+ * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
+ * them alone, and is kept apart from the archive, so an agent archived and
+ * brought back is pinned again.
+ * Who the agent writes as on GitHub is settled once, by its first session,
+ * and a later session's word is answered with the one standing rather than
+ * written over it; it is written over only where the developer's token was
+ * refused as the service opened the agent's pull request, with why.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
  */
@@ -127,6 +140,8 @@ export interface CodingAgent {
   readonly organizationId: string;
   /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
   readonly automationId: string | null;
+  /** The run of an automation that started the agent, as it stood then, kept once that automation is deleted; null for one started by hand. */
+  readonly automationOrigin: StoredAutomationOrigin | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -143,8 +158,15 @@ export interface CodingAgent {
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
-  readonly disabledServers: readonly IntegrationProvider[];
+  readonly disabledServers: readonly string[];
+  /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
+  readonly author: CodingAgentAuthor | null;
   readonly createdAt: Date;
+}
+
+/** One agent with no plan as the sidebar lists it for its reader: the agent, and when the reader pinned it; null where they hold no pin of it. */
+export interface PlanlessCodingAgent extends CodingAgent {
+  readonly pinnedAt: Date | null;
 }
 
 /** What a Start answered: the agent, and whether this Start made it or a retry found it. */
@@ -188,6 +210,10 @@ export type CodingAgentPlace =
 export type NewCodingAgent = CodingAgentPlace & {
   /** The automation whose run starts the agent; none for one started by hand. */
   readonly automationId?: string | undefined;
+  /** That automation's run as it starts the agent; none for one started by hand. */
+  readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent's title from the start, a run's fixed name; none where it is named later. */
+  readonly title?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -195,9 +221,9 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
-  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
-  readonly mentionedServers?: readonly IntegrationProvider[] | undefined;
+  readonly mentionedServers?: readonly string[] | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -207,6 +233,7 @@ const CODING_AGENT_COLUMNS = {
   planId: codingAgent.planId,
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
+  automationOrigin: codingAgent.automationOrigin,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -218,31 +245,45 @@ const CODING_AGENT_COLUMNS = {
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
   disabledServers: codingAgent.disabledServers,
+  author: codingAgent.author,
   createdAt: codingAgent.createdAt,
 };
 
 /**
- * The `disabled_servers` column as an agent reads it: null is none, and a
- * provider no longer offered is left out rather than failing the row, so a
- * provider retired from the list never takes an agent's reads down with it.
+ * The `disabled_servers` column as an agent reads it: connection names
+ * (`notion`, `notion-2`), null for none, and a name of a provider no longer
+ * offered is left out rather than failing the row, so a provider retired
+ * from the list never takes an agent's reads down with it. A name stored
+ * before a second account was possible is the provider's own, which is its
+ * first account's.
  */
 const DisabledServersColumnSchema = Schema.NullOr(Schema.Array(Schema.String)).pipe(
   Schema.decodeTo(
-    Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST)),
+    Schema.Array(integrationConnectionNameSchema),
     SchemaTransformation.transform({
-      decode: (stored): readonly IntegrationProvider[] =>
-        (stored ?? []).flatMap((id) => integrationProviderFromWire(id) ?? []),
+      decode: (stored): readonly string[] =>
+        (stored ?? []).filter((name) => integrationConnectionOf(name) !== undefined),
       encode: (servers): readonly string[] | null => servers,
     }),
   ),
 );
 
-/** The column as a write stores it: each provider once, and null for none, which is what a row from before the column reads as. */
-function storedServers(
-  servers: readonly IntegrationProvider[],
-): readonly IntegrationProvider[] | null {
+/** The column as a write stores it: each connection once, and null for none, which is what a row from before the column reads as. */
+function storedServers(servers: readonly string[]): readonly string[] | null {
   return servers.length === 0 ? null : [...new Set(servers)];
 }
+
+/** The `automation_origin` column as a row holds it. */
+const AutomationOriginColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    name: Schema.String,
+    firing: automationFiringSchema,
+    prompt: Schema.String,
+    body: Schema.optionalKey(Schema.String),
+  }),
+);
+/** An author as the agent's row holds it. */
+const AuthorColumnSchema = Schema.Literals(Object.values(CODING_AGENT_AUTHOR));
 
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
@@ -250,6 +291,7 @@ const CodingAgentRowSchema = Schema.Struct({
   planId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
+  automationOrigin: AutomationOriginColumnSchema,
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -261,7 +303,14 @@ const CodingAgentRowSchema = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   disabledServers: DisabledServersColumnSchema,
+  author: Schema.NullOr(AuthorColumnSchema),
   createdAt: InstantColumnSchema,
+});
+
+/** An agent's row with the reader's own pin beside it; null where they hold none. */
+const PlanlessAgentRowSchema = Schema.Struct({
+  ...CodingAgentRowSchema.fields,
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
 });
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -358,6 +407,8 @@ const insertAgent = SqlSchema.findOne({
     planId: Schema.NullOr(Schema.String),
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
+    automationOrigin: AutomationOriginColumnSchema,
+    title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -365,8 +416,8 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
-    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
-    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
+    mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -379,6 +430,8 @@ const insertAgent = SqlSchema.findOne({
           planId: write.planId,
           organizationId: write.organizationId,
           automationId: write.automationId,
+          automationOrigin: write.automationOrigin,
+          title: write.title,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -419,7 +472,7 @@ const updateAgentServers = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
-    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, disabledServers }) =>
@@ -464,7 +517,7 @@ const lockReachableMentionedServers = SqlSchema.findOneOption({
 const setAgentMentionedServers = SqlSchema.void({
   Request: Schema.Struct({
     agentId: Schema.String,
-    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
   execute: ({ agentId, mentionedServers }) =>
     Database.use((db) =>
@@ -581,6 +634,36 @@ const fillAgentTitle = SqlSchema.findAll({
     ),
 });
 
+const settleAgentAuthor = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    author: AuthorColumnSchema,
+  }),
+  Result: Schema.Struct({ author: AuthorColumnSchema }),
+  execute: ({ userId, agentId, author }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        // Note that the author standing is kept, so the first session's word is the agent's for good.
+        .set({ author: sql`coalesce(${codingAgent.author}, ${author})` })
+        .where(reachableAgent(userId, agentId))
+        .returning({ author: codingAgent.author }),
+    ),
+});
+
+const updateAgentAuthor = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    author: AuthorColumnSchema,
+  }),
+  execute: ({ userId, agentId, author }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ author }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
 /** The `last_step` column as the coder host writes it (`StoredAgentStep`). */
 const AgentStepColumnSchema = Schema.Struct({
   inputTokens: Schema.Number,
@@ -664,10 +747,12 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     userId: Schema.String,
     organizationId: Schema.String,
     repository: Schema.NullOr(Schema.String),
+    planId: Schema.NullOr(Schema.String),
+    includeArchived: Schema.Boolean,
     limit: Schema.Number,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, organizationId, repository, limit }) =>
+  execute: ({ userId, organizationId, repository, planId, includeArchived, limit }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
@@ -676,7 +761,8 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
           and(
             agentReachableBy(userId),
             eq(AGENT_WORKSPACE, organizationId),
-            isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+            planId === null ? undefined : eq(codingAgent.planId, planId),
             // Note that a repository is matched as GitHub matches one, its case aside.
             repository === null
               ? undefined
@@ -685,6 +771,30 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
         )
         .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
         .limit(limit),
+    ),
+});
+
+/** Every agent with no plan in the account's workspaces, newest started first, each with the account's own pin of it. */
+const findPlanlessAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
+  Result: PlanlessAgentRowSchema,
+  execute: ({ userId, includeArchived }) =>
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, pinnedAt: agentPin.pinnedAt })
+        .from(codingAgent)
+        .leftJoin(
+          agentPin,
+          and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),
+        )
+        .where(
+          and(
+            isNull(codingAgent.planId),
+            agentReachableBy(userId),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id)),
     ),
 });
 
@@ -701,12 +811,16 @@ const updateAgentPublished = SqlSchema.void({
 });
 
 const findAgentsOfPlans = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planIds: Schema.Array(Schema.String),
+    includeArchived: Schema.Boolean,
+  }),
   Result: Schema.Struct({
     ...CodingAgentRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
-  execute: ({ userId, planIds }) =>
+  execute: ({ userId, planIds, includeArchived }) =>
     Database.use((db) =>
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
@@ -716,7 +830,7 @@ const findAgentsOfPlans = SqlSchema.findAll({
           and(
             inArray(plan.id, [...planIds]),
             planReachableBy(userId),
-            isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
@@ -743,6 +857,29 @@ const findAgentsOnBranches = SqlSchema.findAll({
     ),
 });
 
+const findAgentsOnPullRequest = SqlSchema.findAll({
+  Request: Schema.Struct({
+    repository: Schema.String,
+    number: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ repository, number, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+            eq(sql`(${codingAgent.published}->>'number')::int`, number),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -753,6 +890,29 @@ const findAgent = SqlSchema.findOneOption({
         .from(codingAgent)
         .where(reachableAgent(userId, agentId))
         .limit(1),
+    ),
+});
+
+/** The account's pin of the agent, from now; one already standing keeps its instant. */
+const insertAgentPin = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  execute: ({ userId, agentId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(agentPin)
+        .values({ userId, codingAgentId: agentId, pinnedAt: now })
+        .onConflictDoNothing(),
+    ),
+});
+
+/** The account's pin of the agent taken away; every other member's stands. */
+const deleteAgentPin = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .delete(agentPin)
+        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId))),
     ),
 });
 
@@ -793,7 +953,7 @@ const deleteConversationRow = SqlSchema.void({
  * of the account's with no plan: a `coding_agent` conversation of the
  * account's and the row that binds it to the plan or the workspace, with
  * the plan text or the prompt, the repository, and the automation whose run
- * started it, as handed. A Start whose key the account has already used answers the agent
+ * started it with that run, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account reaches no such plan or is no member of the
  * workspace. An archived plan starts no
@@ -832,6 +992,8 @@ export function createCodingAgent(
           planId: started.planId,
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
+          automationOrigin: started.automationOrigin ?? null,
+          title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
@@ -881,21 +1043,77 @@ export function listCodingAgents(
 
 /**
  * The workspace's agents, on a plan or with none, by any member, newest
- * started first, an archived one left out, only those on the repository
- * named where one is, and at most `limit`; a workspace the account is not
- * in has none.
+ * started first, an archived one left out unless `includeArchived` asks,
+ * only those on the repository named where one is and on the plan named
+ * where one is, and at most `limit`; a workspace the account is not in has
+ * none.
  */
 export function listWorkspaceCodingAgents(
   userId: string,
   organizationId: string,
-  options: { readonly repository?: string; readonly limit: number },
+  options: {
+    readonly repository?: string;
+    readonly planId?: string;
+    readonly includeArchived?: boolean;
+    readonly limit: number;
+  },
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfWorkspace({
     userId,
     organizationId,
     repository: options.repository ?? null,
+    planId: options.planId ?? null,
+    includeArchived: options.includeArchived ?? false,
     limit: options.limit,
   });
+}
+
+/**
+ * Every agent with no plan in the account's workspaces, by any member,
+ * newest started first, the archived ones only where `includeArchived` asks,
+ * each with the account's own pin of it: what the plan list carries beside
+ * the plans, read by the same gate.
+ */
+export function listPlanlessCodingAgents(
+  userId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): CodingAgentStoreEffect<readonly PlanlessCodingAgent[]> {
+  return findPlanlessAgents({ userId, includeArchived: options.includeArchived ?? false });
+}
+
+/** The plan an agent stands on, as a list of agents names it: its name, and whether it is archived. */
+export interface AgentPlanName {
+  readonly name: string;
+  readonly archived: boolean;
+}
+
+const findPlanNames = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
+  execute: ({ userId, planIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: plan.id,
+          name: plan.name,
+          archived: sql<boolean>`${plan.archivedAt} is not null`,
+        })
+        .from(plan)
+        .where(and(inArray(plan.id, [...planIds]), planReachableBy(userId))),
+    ),
+});
+
+/** The plans named, by id, each with its name and whether it is archived; a plan of a workspace the account is not in names nothing. None asked, none read. */
+export function planNamesOf(
+  userId: string,
+  planIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, AgentPlanName>> {
+  const ids = [...new Set(planIds)];
+  if (ids.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findPlanNames({ userId, planIds: ids }),
+    (rows) => new Map(rows.map((row) => [row.id, { name: row.name, archived: row.archived }])),
+  );
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
@@ -904,13 +1122,15 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out; a plan of a workspace the account is not in names none. */
+/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
   planIds: readonly string[],
+  options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
   if (planIds.length === 0) return Effect.succeed([]);
-  return Effect.map(findAgentsOfPlans({ userId, planIds }), (rows) =>
+  const includeArchived = options.includeArchived === true;
+  return Effect.map(findAgentsOfPlans({ userId, planIds, includeArchived }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }
@@ -944,6 +1164,23 @@ export function listCodingAgentsOnBranches(
 ): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
   if (branches.length === 0) return Effect.succeed([]);
   return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
+    rows.map((agent) => ({ userId: agent.userId, agent })),
+  );
+}
+
+/**
+ * The agents of any account whose pull request, as GitHub last answered it,
+ * is the repository's one numbered, newest started first and at most
+ * `limit` of them: what a delivery about a pull request finds them by where
+ * it names no branch, as a comment's does. Like the read by branches, it
+ * names no account.
+ */
+export function listCodingAgentsOnPullRequest(
+  repository: string,
+  number: number,
+  limit: number,
+): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+  return Effect.map(findAgentsOnPullRequest({ repository, number, limit }), (rows) =>
     rows.map((agent) => ({ userId: agent.userId, agent })),
   );
 }
@@ -983,7 +1220,7 @@ export function updateCodingAgentChoice(
 export function updateCodingAgentServers(
   userId: string,
   agentId: string,
-  disabledServers: readonly IntegrationProvider[],
+  disabledServers: readonly string[],
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
 }
@@ -1004,7 +1241,7 @@ export function updateCodingAgentServers(
 export function dispatchMentioningServers<E, R>(
   userId: string,
   agentId: string,
-  mentioned: readonly IntegrationProvider[],
+  mentioned: readonly string[],
   dispatch: Effect.Effect<boolean, E, R>,
 ): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
   if (mentioned.length === 0) return dispatch;
@@ -1033,7 +1270,7 @@ export function dispatchMentioningServers<E, R>(
 export function takeCodingAgentMentionedServers(
   userId: string,
   conversationId: string,
-): CodingAgentStoreEffect<readonly IntegrationProvider[]> {
+): CodingAgentStoreEffect<readonly string[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1081,6 +1318,28 @@ export function archiveCodingAgent(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
   );
+}
+
+/**
+ * The account's own pin of the agent set as asked: from now, or from the
+ * instant already standing, so pinning twice moves nothing; or taken away.
+ * Every other member's pin stands as it was. Nothing for an agent of a
+ * workspace the account is not in, which is neither pinned nor unpinned,
+ * nor for an agent on a plan, which stands under its plan rather than in
+ * the sidebar, so a pin of it would be read nowhere.
+ */
+export function pinCodingAgent(
+  userId: string,
+  agentId: string,
+  pinned: boolean,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.gen(function* () {
+    const found = yield* findAgent({ userId, agentId });
+    if (Option.isNone(found) || found.value.planId !== null) return Option.none();
+    if (pinned) yield* insertAgentPin({ userId, agentId, now: yield* DateTime.nowAsDate });
+    else yield* deleteAgentPin({ userId, agentId });
+    return found;
+  });
 }
 
 const findAgentConversation = SqlSchema.findOneOption({
@@ -1133,6 +1392,36 @@ export function fillCodingAgentTitle(
   title: string,
 ): CodingAgentStoreEffect<boolean> {
   return Effect.map(fillAgentTitle({ userId, agentId, title }), (rows) => rows.length > 0);
+}
+
+/**
+ * The agent's author settled: the one given where none stands, and the one
+ * standing otherwise, which is answered either way so a second session's
+ * word never moves what the first one's instructions and checkout used;
+ * nothing for an agent of a workspace the account is not in.
+ */
+export function settleCodingAgentAuthor(
+  userId: string,
+  agentId: string,
+  author: CodingAgentAuthor,
+): CodingAgentStoreEffect<Option.Option<CodingAgentAuthor>> {
+  return Effect.map(settleAgentAuthor({ userId, agentId, author }), (row) =>
+    Option.map(row, (settled) => settled.author),
+  );
+}
+
+/**
+ * The agent's author recorded over whatever stood, which is how an agent
+ * that wrote as its developer records why the App opened its pull request
+ * once their token was refused; nothing for an agent of a workspace the
+ * account is not in.
+ */
+export function recordCodingAgentAuthor(
+  userId: string,
+  agentId: string,
+  author: CodingAgentAuthor,
+): CodingAgentStoreEffect<void> {
+  return updateAgentAuthor({ userId, agentId, author });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
@@ -1302,7 +1591,9 @@ export function delegationStartsOf(
 /**
  * What sent one of the developer's lines to an agent, as a reader names it:
  * a member by their account's id and the name it holds now, or nobody where
- * their account is gone; Luke; or an automation by the name its run kept.
+ * their account is gone; Luke; an automation by the name its run kept; or
+ * GitHub by the login the line kept; or another coding agent by the name
+ * its send kept.
  */
 export type LineSent =
   | {
@@ -1310,7 +1601,9 @@ export type LineSent =
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
+  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1351,7 +1644,7 @@ const findLineSenders = SqlSchema.findAll({
     ),
 });
 
-/** A sender's row as a reader names it; an automation's that kept no name names nothing. */
+/** A sender's row as a reader names it; an automation's, GitHub's, or an agent's that kept no name names nothing. */
 function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined {
   switch (row.sender) {
     case MESSAGE_SENDER.MEMBER:
@@ -1368,6 +1661,14 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
       return row.senderName === null
         ? undefined
         : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+    case MESSAGE_SENDER.GITHUB:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.GITHUB, login: row.senderName };
+    case MESSAGE_SENDER.AGENT:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.AGENT, name: row.senderName };
   }
 }
 
@@ -1391,6 +1692,67 @@ export function lineSendersOf(
           return sent === undefined ? [] : [[row.id, sent] as const];
         }),
       ),
+  );
+}
+
+/** Where in a turn under way one of the developer's lines arrived: the turn's journal, by its row, and the steps it had begun before the line. */
+export interface LinePlace {
+  readonly journalId: string;
+  readonly afterStep: number;
+}
+
+/** The journal of the turn that took a line in, which shares the turn's id as its client id. */
+const takingJournal = alias(messages, "taking_journal");
+
+const findLinePlaces = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    messageIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({ id: Schema.String, journalId: Schema.String, afterStep: Schema.Int }),
+  execute: ({ userId, conversationId, messageIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          journalId: takingJournal.id,
+          afterStep: sql<number>`${messages.takenAfterStep}`.mapWith(Number),
+        })
+        .from(messages)
+        .innerJoin(
+          takingJournal,
+          and(
+            eq(takingJournal.conversationId, messages.conversationId),
+            eq(takingJournal.clientId, sql`${messages.turnId}::text`),
+          ),
+        )
+        .where(
+          and(
+            inArray(messages.id, [...messageIds]),
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            isNotNull(messages.takenAfterStep),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where each of these rows of the account's conversation arrived in the
+ * turn that took it in, by row, for the developer's lines a turn under way
+ * took after its first step: every other row, a line that opened its turn,
+ * and one taken before places were kept, names none. None asked, none read.
+ */
+export function linePlacesOf(
+  target: ConversationTarget,
+  messageIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, LinePlace>> {
+  if (messageIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
+    (rows) =>
+      new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
   );
 }
 

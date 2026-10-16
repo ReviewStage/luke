@@ -3,6 +3,7 @@ import {
   type CodingAgentLatestTurn,
   type CodingAgentStoreEffect,
   latestTurnsOfReached,
+  listPlanlessCodingAgents,
   listPublishedCodingAgents,
   type PublishedCodingAgent,
 } from "@luke/database/models/coding-agent-store";
@@ -10,6 +11,7 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
+  type PlanlessAgent,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -20,10 +22,15 @@ import {
   type PlanSummary,
 } from "@luke/features/plan-wire";
 import { Clock, Effect } from "effect";
-import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
+import {
+  codingAgentActivityAt,
+  codingAgentPage,
+  codingAgentRunStartedAt,
+  codingAgentStatusOf,
+} from "./coder-host/status.js";
 
 /**
- * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
+ * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
  * Four statements answer the whole list however many plans it holds: the
  * agents of every plan named with the pull request each last published,
@@ -42,10 +49,12 @@ const WORKING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** One agent read for the list: its line, and when it was started, which orders the lines. */
+/** One agent read for the list: its line, when it was started, which orders the lines, when it last did something settled, and whether it was archived, which leaves it out of all but the activity. */
 interface ReadAgent {
   readonly line: PlanAgentLine;
   readonly createdAt: number;
+  readonly activityAt: number;
+  readonly archived: boolean;
   readonly published: PublishedCodingAgent["published"];
 }
 
@@ -77,6 +86,8 @@ function agentLine(
       ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     },
     createdAt: agent.createdAt.getTime(),
+    activityAt: codingAgentActivityAt(turn, agent),
+    archived: agent.archivedAt !== null,
     published: held.published,
   };
 }
@@ -95,9 +106,13 @@ const PULL_REQUEST_RANK = {
  * their page, since two agents on one branch share theirs and a plan whose
  * repository changed may hold two of one number, those still open first, then
  * merged, then closed, newest agent's first within each, so the few a row
- * names always hold the one its mark is drawn for.
+ * names always hold the one its mark is drawn for; and the latest settled
+ * activity of every agent, named or not and archived or not, which the
+ * plan's last update is read beside. A plan whose every agent is archived
+ * carries its activity alone, with no agent and no pull request counted.
  */
-function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
+function summaryOf(read: readonly ReadAgent[]): PlanAgentsSummary {
+  const agents = read.filter((agent) => !agent.archived);
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
   const resting = newest.filter((agent) => !WORKING_STATUSES.has(agent.line.status));
@@ -110,6 +125,9 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
+    ...(read.length === 0
+      ? undefined
+      : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, PLAN_AGENTS_BOUNDS.MAX_AGENTS)
       .map((agent) => agent.line),
@@ -126,9 +144,12 @@ export function withPlanAgents(
   plans: readonly PlanSummary[],
 ): CodingAgentStoreEffect<readonly PlanSummary[]> {
   return Effect.gen(function* () {
+    // Note that the archived agents are read too, because the work one did
+    // is still the task's activity, though the row names it no more.
     const held = yield* listPublishedCodingAgents(
       userId,
       plans.map((plan) => plan.id),
+      { includeArchived: true },
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
     // The agents were read through the plans' gate, and each conversation is its starter's, a teammate's as often as the account's.
@@ -153,6 +174,38 @@ export function withPlanAgents(
     return plans.map((plan) => {
       const agents = byPlan.get(plan.id);
       return agents === undefined ? plan : { ...plan, agents: summaryOf(agents) };
+    });
+  });
+}
+
+/**
+ * The agents with no plan in the account's workspaces, whichever member
+ * started each, newest started first, each read as its own page reads it,
+ * with its automation's name, when it last moved, and when the account
+ * pinned it where it did, the archived ones only where `includeArchived`
+ * asks: the sidebar's rows beside the plans.
+ */
+export function listPlanlessAgents(
+  userId: string,
+  options: { readonly includeArchived: boolean },
+): CodingAgentStoreEffect<readonly PlanlessAgent[]> {
+  return Effect.gen(function* () {
+    const agents = yield* listPlanlessCodingAgents(userId, options);
+    const conversationIds = agents.map((agent) => agent.conversationId);
+    // The agents were read through their workspaces' gate, and each conversation is its starter's.
+    const turns = yield* latestTurnsOfReached(conversationIds);
+    const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const names = yield* readAccountNames(agents.map((agent) => agent.userId));
+    const now = yield* Clock.currentTimeMillis;
+    return agents.map((agent) => {
+      const turn = turns.get(agent.conversationId);
+      const lineAwaits = awaiting.has(agent.conversationId);
+      const { origin: _origin, ...page } = codingAgentPage(agent, { turn, lineAwaits }, now, names);
+      return {
+        ...page,
+        activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
+        ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
+      };
     });
   });
 }

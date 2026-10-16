@@ -25,8 +25,6 @@ export function automationNextText(automation: AutomationSummary, now: number): 
   switch (next.kind) {
     case AUTOMATION_NEXT.OFF:
       return "Off";
-    case AUTOMATION_NEXT.PAUSED:
-      return "Paused";
     case AUTOMATION_NEXT.UNSCHEDULED:
       return "Not scheduled";
     case AUTOMATION_NEXT.AT:

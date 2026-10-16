@@ -4,9 +4,14 @@ import { moreText, PLAN_ROW_MARK, planRowMark } from "@luke/features/plan-agents
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { repositoryPageUrl } from "@luke/ui/planning-model";
+import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
+import { useCreator, useMemberDirectory } from "../member-directory";
+import { useActorDoor } from "../person-door";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
@@ -25,7 +30,8 @@ import { WorkspaceRef } from "./workspace-ref";
  * named as an agent's tab draws it (`state-glyph.tsx`), else the pull
  * request's mark (`pull-request-mark.tsx`), else nothing
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
- * how long ago it was updated at its head, then a row for each of a few
+ * how long ago it was updated at its head, in a workspace others share who
+ * created it, then a row for each of a few
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of a few
@@ -157,6 +163,44 @@ export function RepositoryDetail({
   );
 }
 
+/**
+ * Who created the task, under its repository: their face and "Created by
+ * Charles Pan · 3d ago", "Created by you", or a member who left saying so,
+ * read against the members of the directory around the card, a press
+ * opening their page where the window offers one.
+ */
+function CreatorDetail({
+  plan,
+  readerId,
+  now,
+}: {
+  plan: PlanSummary;
+  readerId: string | undefined;
+  now: number;
+}): React.JSX.Element {
+  const creator = useCreator(plan, readerId);
+  const door = useActorDoor(creator);
+  const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
+  const words = (
+    <>
+      <span className="plan-card-glyph">
+        <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+      </span>
+      <span className="plan-card-label">
+        {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
+        <RelativeTime at={plan.createdAt} now={now} hint={false} ago />
+      </span>
+    </>
+  );
+  return door === undefined ? (
+    <span className="plan-card-detail plan-card-creator">{words}</span>
+  ) : (
+    <button type="button" className="plan-card-detail plan-card-creator" onClick={door}>
+      {words}
+    </button>
+  );
+}
+
 /** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
 function AgentLine({
   agent,
@@ -224,7 +268,8 @@ function More({ total, shown }: { total: number; shown: number }): React.JSX.Ele
 /**
  * The card a sidebar plan hangs: its name, wrapped to two lines, and how
  * long ago it was updated at the head's right; its repository under the
- * name; then its agents and its pull requests, a few rows each
+ * name, and, where others share its workspace and the list names its
+ * creator, who created it; then its agents and its pull requests, a few rows each
  * (`CARD_ROWS`), each list counting the rest the plan holds.
  */
 export function PlanCard({
@@ -235,8 +280,18 @@ export function PlanCard({
   onOpenGitHub,
   onShowAgent,
   stranded,
+  shared,
+  readerId,
 }: {
   plan: PlanSummary;
+  /**
+   * Whether others share the plan's workspace, where the card says who
+   * created it; unknown, it is whether the members read around the card
+   * lists anyone else.
+   */
+  shared?: boolean | undefined;
+  /** The reader's account id, which says "you" of their own task outside a member directory. */
+  readerId?: string | undefined;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
   models: readonly CatalogModel[];
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
@@ -251,17 +306,22 @@ export function PlanCard({
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { agents, repository } = plan;
+  const { members } = useMemberDirectory();
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
   return (
     <HoverCard data-plan-card="">
       <CardHead
         name={plan.name}
-        corner={<RelativeTime at={plan.updatedAt} now={now} hint={false} />}
+        corner={<RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} hint={false} />}
       />
       {repository === null ? null : (
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
       )}
+      {(shared ?? (members !== undefined && members.length > 1)) &&
+      (plan.createdBy !== undefined || plan.ownerId !== undefined) ? (
+        <CreatorDetail plan={plan} readerId={readerId} now={now} />
+      ) : null}
       {stranded === undefined ? null : (
         <span className="plan-card-detail">
           <span className="plan-card-glyph">
@@ -307,6 +367,15 @@ export function PlanCard({
   );
 }
 
+/** Whether others share a plan's workspace, as the service counts its members; unknown from a service that counts none. */
+function sharedWorkspace(
+  plans: Pick<PlansControl, "workspaces">,
+  plan: Pick<PlanSummary, "workspaceId">,
+): boolean | undefined {
+  const count = plans.workspaces.find((each) => each.id === plan.workspaceId)?.memberCount;
+  return count === undefined ? undefined : count > 1;
+}
+
 /**
  * The plan's card as every place naming the plan hangs it, read from the
  * window's plans: its sidebar row, its tab in its own column, and the
@@ -321,6 +390,8 @@ export function planCardOf(
     <PlanCard
       plan={plan}
       stranded={strandedHome(plans, plan)}
+      shared={sharedWorkspace(plans, plan)}
+      readerId={plans.me}
       models={plans.agents.models ?? []}
       pictures={plans.repositories.pictures}
       now={now}

@@ -1,4 +1,7 @@
+import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
+import type { AvatarFeed } from "@luke/voice/avatar";
+import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
@@ -10,6 +13,7 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import { PanelAvatarRelay } from "./panel-avatar";
 import {
   placementOf,
   placeWindow,
@@ -115,6 +119,12 @@ export class PanelManager {
    * this initial value is never what a window is created on.
    */
   #dark = true;
+  /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
+  readonly #drawn = new WeakSet<BrowserWindow>();
+  readonly #avatar = new PanelAvatarRelay(() => {
+    const window = this.primaryPanel();
+    return window && this.#drawn.has(window) ? window.webContents : undefined;
+  });
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
@@ -161,6 +171,26 @@ export class PanelManager {
       if (!window.isDestroyed()) return window;
     }
     return undefined;
+  }
+
+  /**
+   * Keyframe's grant for the call's avatar, or nothing once its session is to
+   * close. The panel runs the session wherever it is and whichever tab it
+   * shows, since the avatar's voice is what the developer hears, and draws
+   * its video at the top of the Call tab.
+   */
+  showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatar.showAvatarSession(grant);
+  }
+
+  /** One message of Luke's voice feed, for the avatar to lip-sync. */
+  feedAvatar(feed: AvatarFeed): void {
+    this.#avatar.feedAvatar(feed);
+  }
+
+  /** The call window's offer or close for its view of the avatar's video, for the panel to answer. */
+  signalAvatarView(signal: AvatarViewSignal): void {
+    this.#avatar.signalView(signal);
   }
 
   /** Every living panel window, for what each one applies itself: the zoom. */
@@ -323,8 +353,19 @@ export class PanelManager {
     this.#windows.set(displayId, window);
 
     refuseForeignNavigation(window, this.#rendererUrl);
+    // Each page the window loads, a reload's included, is handed the avatar's
+    // grant standing, since the renderer it replaced ran the session and the
+    // voice window stays muted while the avatar reads as up. Note that the
+    // first page is handed it twice, which the renderer reads as one grant.
+    const drew = () => {
+      if (window.isDestroyed()) return;
+      this.#drawn.add(window);
+      this.#avatar.pageDrew();
+    };
+    window.webContents.on("did-finish-load", drew);
     window.once("ready-to-show", () => {
       if (window.isDestroyed()) return;
+      drew();
       if (placement.zoomed) window.maximize();
       // A capture run is a camera, not a person: it shows the window without
       // taking the keyboard from whatever else is running.

@@ -17,7 +17,7 @@
  * what reads its pull request's CI beside the last two where the
  * installation grants it. So what a member of the workspace reaches through
  * Luke is what the installation reaches, whoever they are on GitHub, and
- * what an agent commits and opens is the App's own.
+ * what an agent pushes is pushed as the App.
  *
  * A connect is confirmed once on the installer's own say: GitHub's guidance
  * for the Setup URL is that its `installation_id` is not to be trusted
@@ -32,9 +32,13 @@
  * nothing of it is stored.
  *
  * Signing in with GitHub is also an authorization of the App, and the token
- * Better Auth leaves on the `account` row is read here for one reader alone,
- * GitHub's MCP server (`integrations/github-integration.ts`): refreshed when it is
- * about to expire and re-sealed in place. No repository read takes it.
+ * Better Auth leaves on the `account` row is read here, refreshed when it is
+ * about to expire and re-sealed in place, for two readers: GitHub's MCP
+ * server (`integrations/github-integration.ts`), and a coding agent that
+ * writes as the developer who started it (`agents/coder-host/checkout.ts`),
+ * which reads on it whether the developer may push to the agent's
+ * repository and opens its pull request on it. No read of what a
+ * workspace reaches takes it.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the rows are read on the ambient `SqlClient`, so a test
@@ -338,6 +342,8 @@ export interface GitHubAuthorizeReturn {
 export interface GitHubAppService {
   /** Where a user installs the App, or changes which repositories it sees; GitHub returns them to the App's Setup URL. */
   readonly installUrl: Effect.Effect<string, GitHubAppNotConfigured>;
+  /** The login the App's own bot acts under on GitHub, `<slug>[bot]`: who Luke's agents are in a delivery. */
+  readonly botLogin: Effect.Effect<string, GitHubAppNotConfigured>;
   /** A JWT the App speaks as itself with, good for a few minutes from now. */
   readonly appJwt: Effect.Effect<Redacted.Redacted, GitHubAppNotConfigured>;
   /** One installation of this App by the id GitHub hands the Setup URL; none for an id that is not this App's. */
@@ -473,6 +479,28 @@ export interface GitHubAppService {
     GitHubUserReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
+  /**
+   * The user's own GitHub account, with their token, where that token may
+   * push to the repository: read on the token (`GET /user`, then `GET
+   * /repos/{owner}/{name}` for its `permissions.push`), which reaches a
+   * repository only where the App is installed and the account can see it.
+   * None where the repository is out of the token's sight or its push is
+   * refused.
+   */
+  readonly userPusher: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubPusher>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+}
+
+/** A user who may push to a repository through the App: their account as a commit names it, and their token. */
+interface GitHubPusher {
+  readonly user: GitHubUser;
+  readonly token: Redacted.Redacted;
 }
 
 export class GitHubApp extends Context.Service<GitHubApp, GitHubAppService>()("GitHubApp") {
@@ -547,6 +575,11 @@ const UserSchema = Schema.Struct({
   name: Schema.optional(Schema.NullOr(Schema.String)),
 });
 type UserRecord = typeof UserSchema.Type;
+
+/** A repository as a user's token reads it, for whether the token may push; absent where GitHub says nothing of it. */
+const RepositoryPermissionsSchema = Schema.Struct({
+  permissions: Schema.optional(Schema.Struct({ push: Schema.Boolean })),
+});
 
 const AccountTokenRowSchema = Schema.Struct({
   id: Schema.String,
@@ -779,6 +812,19 @@ export function githubRead(
   return HttpClientRequest.get(`${GITHUB_API}${path}`).pipe(
     HttpClientRequest.bearerToken(bearer),
     HttpClientRequest.setHeaders(GITHUB_HEADERS),
+  );
+}
+
+/** One write of the API under the bearer given, its JSON body as given, the path rooted at the API's origin. */
+export function githubPost<Body extends object>(
+  path: string,
+  bearer: Redacted.Redacted,
+  body: Body,
+): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.post(`${GITHUB_API}${path}`).pipe(
+    HttpClientRequest.bearerToken(bearer),
+    HttpClientRequest.setHeaders(GITHUB_HEADERS),
+    HttpClientRequest.bodyJsonUnsafe(body),
   );
 }
 
@@ -1220,6 +1266,7 @@ function githubAppService(
 
   return {
     installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
+    botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
     appJwt,
     installation,
     authorizeUrl: (request) =>
@@ -1279,6 +1326,26 @@ function githubAppService(
           ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
           : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
       ),
+    userPusher: (userId, fullName) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const account = yield* Effect.scoped(
+          Effect.flatMap(send(githubRead("/user", token)), (response) =>
+            readBody(response, UserSchema),
+          ),
+        );
+        const [owner = "", name = ""] = fullName.split("/");
+        const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+        const repository = yield* Effect.scoped(
+          Effect.flatMap(send(githubRead(path, token)), (response) =>
+            response.status === GITHUB_HTTP_STATUS.NOT_FOUND
+              ? Effect.succeed(Option.none())
+              : Effect.map(readBody(response, RepositoryPermissionsSchema), Option.some),
+          ),
+        );
+        const pushes = Option.isSome(repository) && repository.value.permissions?.push === true;
+        return pushes ? Option.some({ user: userOf(account), token }) : Option.none();
+      }),
     appBot: (token) =>
       Effect.gen(function* () {
         const app = yield* ready;

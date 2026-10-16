@@ -20,16 +20,17 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * abandoned, a voice session whose device detached and never came back is
  * ended on Luke's key, as a connection would have ended it, the Vercel
  * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
- * sandbox no developer's terminal holds any more is stopped, and the
- * automations whose schedule is due are fired. None of the seven reads a word
- * of any account; each is bounded on its own, and the sweep runs them in
- * turn.
+ * sandbox no developer's terminal holds any more is stopped, the
+ * automations whose schedule is due are fired, and a picture pasted into a
+ * plan a day ago that no save ever named is deleted. None of the eight reads
+ * a word of any account; each is bounded on its own, and the sweep runs them
+ * in turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The seven sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The eight sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -45,6 +46,8 @@ interface MaintenanceSweeps {
   sweepTerminalLeases: (now: number) => SweepRead<TerminalLeaseSweepOutcome>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
+  /** Deletes the plans' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
+  purgeUnsavedPictures: (now: number) => SweepRead<number>;
 }
 
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
@@ -68,6 +71,8 @@ interface MaintenanceSweepAnswer {
   terminals: TerminalLeaseSweepOutcome;
   /** What the sweep over the automations due did. */
   automations: AutomationSweepOutcome;
+  /** Pictures pasted into plans that no save named, deleted. */
+  purgedPictures: number;
 }
 
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
@@ -98,6 +103,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       sandboxes: yield* options.sweepSandboxes(now),
       terminals: yield* options.sweepTerminalLeases(now),
       automations: yield* options.sweepAutomations(now),
+      purgedPictures: yield* options.purgeUnsavedPictures(now),
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import type {
+  AvatarEndReason,
   VOICE_DELEGATION_MODE,
   VoiceCloseReason,
   VoiceSegmentRole,
@@ -119,4 +120,38 @@ export const voiceTranscriptSegments = pgTable(
     endMs: integer("end_ms").notNull(),
   },
   (table) => [primaryKey({ columns: [table.voiceSessionId, table.seq] })],
+);
+
+/**
+ * One Keyframe avatar session shown on a call: the face a voice session
+ * streamed Luke's voice to, on the stock persona named. Keyframe answers no
+ * session id of its own, so the row is addressed by its own id, which the
+ * service holds for as long as the avatar stands. A row is open while
+ * `ended_at` is null; the first close writes when and why it ended and the
+ * seconds it ran, which are an estimate from start to end rather than
+ * Keyframe's own count. A row cascades with its voice session and its
+ * account.
+ */
+export const voiceAvatarSessions = pgTable(
+  "voice_avatar_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    voiceSessionId: uuid("voice_session_id")
+      .notNull()
+      .references(() => voiceSessions.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    personaId: text("persona_id").notNull(),
+    startedAt: timestamptz("started_at").notNull(),
+    endedAt: timestamptz("ended_at"),
+    /** Whole seconds from start to end, rounded up; written once, by the first close. */
+    seconds: integer("seconds"),
+    endReason: text("end_reason").$type<AvatarEndReason>(),
+  },
+  (table) => [
+    index("voice_avatar_sessions_open")
+      .on(table.voiceSessionId)
+      .where(sql`${table.endedAt} is null`),
+  ],
 );

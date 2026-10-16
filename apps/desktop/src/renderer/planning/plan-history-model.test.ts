@@ -3,9 +3,11 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACTOR_KIND, ACTOR_STATE, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { MARKDOWN_MARK } from "../markdown-message";
+import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
 import {
   changedSections,
   opensSections,
@@ -192,6 +194,33 @@ test("a version against the one before it marks the words written in and struck 
   assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), ["Only admins"]);
   assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), ["Any member"]);
   assert.equal(diff.units[0]?.words, "## Goal\n\nOnly adminsAny member can invite.");
+});
+
+test("a picture replaced in a version reads as the old one struck and the new one written in, each whole", () => {
+  const before = documentOf(["## Approach\n\n![Old mock](https://example.com/mock_(v1).png)"]);
+  const after = documentOf([
+    '## Approach\n\n![New mock](https://example.com/mock_(v2).png "Second pass")',
+  ]);
+  const diff = versionDiff(before, after);
+  const unit = diff.units[0];
+  assert.ok(unit);
+
+  const drawn = renderToStaticMarkup(
+    createElement(MarkdownMessage, { words: unit.words, edit: { marks: unit.marks } }),
+  );
+
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), [
+    "![Old mock](https://example.com/mock_(v1).png)",
+  ]);
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [
+    '![New mock](https://example.com/mock_(v2).png "Second pass")',
+  ]);
+  assert.ok(
+    drawn.includes(
+      '<del class="markdown-deleted">Old mock</del><ins class="markdown-inserted">New mock</ins>',
+    ),
+    drawn,
+  );
 });
 
 test("a section struck and another written in its place read as one unit changed, its words marked", () => {
@@ -391,7 +420,24 @@ test("a teammate's revision wears their face as the workspace's members list the
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Charles Pan",
+    userId: CHARLES.userId,
   });
+  // And keeps their picture, and the name their account holds now, from the read of who left.
+  const left = {
+    ...CHARLES,
+    name: "Charles Pan-Ito",
+    pictureUrl: "https://avatars.githubusercontent.com/u/9",
+  };
+  assert.deepEqual(
+    revisionAuthorOf(edit(CHARLES), { ...reader, members: [member(DEAN)], former: [left] }, []),
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "Charles Pan-Ito",
+      userId: CHARLES.userId,
+      pictureUrl: left.pictureUrl,
+    },
+  );
 });
 
 test("a person's revision the service names nobody for, or read with no account id, is never You", () => {

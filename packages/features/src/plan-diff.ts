@@ -23,11 +23,19 @@ const MAX_EDIT_TOKENS = 400;
 const MAX_READ_TOKENS = 4_000;
 
 /**
- * A word, a space, a line break, or a single mark: the units an edit is made
- * of. Note that spaces are one apiece, so the gap a word was erased from
- * still matches the single space around the word typed into it.
+ * A picture, a word, a space, a line break, or a single mark: the units an
+ * edit is made of. Note that spaces are one apiece, so the gap a word was
+ * erased from still matches the single space around the word typed into it,
+ * and that a picture, `![alt](address "title")` with an address holding a
+ * pair of parentheses as CommonMark allows, is one unit, so a picture
+ * replaced is one struck and one written in rather than the letters of two
+ * addresses run together. Its alt text and its address are bounded, because
+ * static analysis reads an unbounded run after `![` as rescanned from every
+ * `![` of a line that never closes one; a longer picture is read as its
+ * words and marks, as every picture was before.
  */
-const TOKEN = /\n|[^\S\n]|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
+const TOKEN =
+  /!\[(?:\\.|[^\]\\\n]){0,1000}\]\((?:\\.|\([^()\s]{0,2000}\)|[^()\\\n]){0,2000}\)|\n|[^\S\n]|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
 
 /** One change to the old words: the span from `from` to `to` replaced by `insert`, offsets in the old words. */
 export interface Hunk {

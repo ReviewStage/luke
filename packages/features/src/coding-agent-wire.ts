@@ -1,11 +1,7 @@
 import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
-import {
-  INTEGRATION_PROVIDER_LIST,
-  type IntegrationProvider,
-  integrationProviderFromWire,
-} from "./integration-wire.js";
+import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -102,6 +98,27 @@ export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW]
 
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
+
+/**
+ * Who a coding agent's commits are by and its pull request is opened as,
+ * settled once for the agent as its first session starts: the developer who
+ * started it, on their own GitHub account with the Luke GitHub App's bot as
+ * co-author, or the App's bot alone, with why it is the bot.
+ */
+export const CODING_AGENT_AUTHOR = {
+  /** The developer who started the agent, through the GitHub account they signed in with. */
+  DEVELOPER: "developer",
+  /** The App: the developer has no GitHub sign-in, or GitHub no longer honours it. */
+  APP_UNLINKED: "app-unlinked",
+  /** The App: the developer's own GitHub account may not push to the repository. */
+  APP_NO_PUSH: "app-no-push",
+  /** The App: an automation started the agent, so no developer's hand did. */
+  APP_AUTOMATION: "app-automation",
+  /** The App: GitHub could not be read as the agent started, so the developer's reach went unknown. */
+  APP_UNREAD: "app-unread",
+} as const;
+
+export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
 
 /** What an agent was handed as its first message: the plan's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
@@ -268,21 +285,23 @@ export function hasWordsOrFiles(
 }
 
 /**
- * The MCP servers switched off for an agent, by integration provider. A
- * provider this build does not know is left out rather than refused, so a
- * service that offers one more provider than a desktop knows still answers
- * that desktop its agents, and a provider retired from the list reads as
- * nothing switched off.
+ * The MCP servers switched off for an agent, by connection name: one
+ * account at an integration (`notion`, `notion-2`), the first account's
+ * name being its provider's, so a list stored before a second account was
+ * possible keeps its meaning. A name of a provider this build does not know
+ * is left out rather than refused, so a service that offers one more
+ * provider than a desktop knows still answers that desktop its agents, and
+ * a provider retired from the list reads as nothing switched off.
  */
 export const disabledServersSchema = EffectSchema.Array(
   EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVER_CHARS)),
 ).pipe(
   EffectSchema.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVERS)),
   EffectSchema.decodeTo(
-    EffectSchema.Array(EffectSchema.Literals(INTEGRATION_PROVIDER_LIST)),
+    EffectSchema.Array(integrationConnectionNameSchema),
     SchemaTransformation.transform({
-      decode: (named): readonly IntegrationProvider[] =>
-        named.flatMap((id) => integrationProviderFromWire(id) ?? []),
+      decode: (named): readonly string[] =>
+        named.filter((name) => integrationConnectionOf(name) !== undefined),
       encode: (servers): readonly string[] => servers,
     }),
   ),
@@ -383,6 +402,18 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
 export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
 
 /**
+ * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
+ * asking member's own and no one else's, as a plan's is; pinning one
+ * already pinned keeps the instant it was first pinned. The answer is the
+ * agent as it then stands.
+ */
+export const codingAgentPinRequestSchema = EffectSchema.Struct({
+  pinned: EffectSchema.Boolean,
+});
+
+export type CodingAgentPinRequest = typeof codingAgentPinRequestSchema.Type;
+
+/**
  * Switching the agent's MCP servers (PATCH): the whole list of those off,
  * which replaces the list standing, so two quick changes land as the later
  * one. Empty switches every server back on.
@@ -470,6 +501,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
   automationId: EffectSchema.optionalKey(wireUuidSchema),
+  /**
+   * The name of the automation whose run started the agent, as it stood when
+   * the run started, kept once that automation is deleted; absent for one
+   * started by hand, and from a service before it.
+   */
+  automationName: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
@@ -478,15 +515,40 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
 /**
+ * The run of an automation that started an agent, as its page opens on it:
+ * the automation's prompt alone, without the lines Luke adds of the firing,
+ * then what fired it, each where the firing has one: the issue or pull
+ * request a GitHub event names, a webhook call's body as its caller sent
+ * it, cut as the agent was handed it, and the member who asked for a run
+ * now, absent once their account is gone.
+ */
+export const codingAgentOriginSchema = EffectSchema.Struct({
+  prompt: EffectSchema.String,
+  subject: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      number: countedNumber,
+      title: EffectSchema.optionalKey(EffectSchema.String),
+      url: EffectSchema.optionalKey(EffectSchema.String),
+    }),
+  ),
+  body: EffectSchema.optionalKey(EffectSchema.String),
+  runBy: EffectSchema.optionalKey(memberRefSchema),
+});
+
+export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
+
+/**
  * One agent as its own page reads it, which is how an agent an automation
  * started with no plan is read, having no plan's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
- * workspace it belongs to, and the repository it works in. An agent on a
- * plan reads so too, by the same id.
+ * run that did where one did, the workspace it belongs to, and the
+ * repository it works in. An agent on a plan reads so too, by the same id.
  */
 export const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
   automationId: EffectSchema.NullOr(wireUuidSchema),
+  /** The run that started the agent; absent for one started by hand, and from a service before it. */
+  origin: EffectSchema.optionalKey(codingAgentOriginSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.String,
 });
@@ -495,6 +557,28 @@ export type CodingAgentPage = typeof codingAgentPageSchema.Type;
 
 /** One agent read by its id (GET), on a plan or with none. */
 export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
+
+/**
+ * One agent with no plan as the plan list carries it beside the plans, so
+ * the sidebar lists it among them: the agent as the tabs draw it, its
+ * automation's name among them, the automation, workspace, and repository
+ * its own page names, and when it last moved, which orders it among the
+ * plans by their last update, and when the reader pinned it, where they did.
+ * The run that started it is its page's alone, so a list of many carries no
+ * prompt.
+ */
+export const planlessAgentSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  automationId: codingAgentPageSchema.fields.automationId,
+  workspaceId: codingAgentPageSchema.fields.workspaceId,
+  repository: codingAgentPageSchema.fields.repository,
+  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  activityAt: countedNumber,
+  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
+});
+
+export type PlanlessAgent = typeof planlessAgentSchema.Type;
 
 /** The plan's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
@@ -615,8 +699,8 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * whether that bot is Luke's own App, whose commits and pull requests are
- * its agents'; and the Luke account whose linked GitHub account it is,
+ * whether that bot is Luke's own App, whose commits and pull requests, or
+ * co-authorship beside a developer, are its agents'; and the Luke account whose linked GitHub account it is,
  * where that account is a member of the agent's workspace.
  */
 const githubPersonSchema = EffectSchema.Struct({
@@ -652,9 +736,11 @@ const reviewCommentSchema = EffectSchema.Struct({
  * GitHub, its files in the order GitHub lists them now, and whether the
  * list was cut short at the bound; or null where it has opened none yet,
  * which is not the same as a pull request that changes nothing. Who opened
- * it, its reviewers and where each stands, who authored its commits, and
- * its reviews that said something ride beside the files, each absent from
- * a service before them.
+ * it, who the agent writes as on GitHub (`CODING_AGENT_AUTHOR`), its
+ * reviewers and where each stands, who authored its commits, and its
+ * reviews that said something ride beside the files, each absent from a
+ * service before them, and who the agent writes as absent too for an agent
+ * whose first session never settled it.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -665,6 +751,9 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
       ),
       truncated: EffectSchema.Boolean,
       author: EffectSchema.optionalKey(githubPersonSchema),
+      writtenAs: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
+      ),
       reviewers: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestReviewerSchema).check(
           EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
@@ -684,8 +773,12 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentChanges = NonNullable<
-  (typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]
+type CodingAgentChanges = NonNullable<(typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]>;
+
+/** Who an agent's pull request names, as its changes carry them; every key absent from a service before them, or where they could not be read. */
+export type CodingAgentChangesPeople = Pick<
+  CodingAgentChanges,
+  "author" | "writtenAs" | "reviewers" | "commitAuthors" | "comments"
 >;
 
 /**
@@ -824,12 +917,13 @@ const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
 
-/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, or an automation's run. */
+/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
   LUKE: "luke",
   AUTOMATION: "automation",
+  GITHUB: "github",
 } as const;
 
 /**
@@ -838,8 +932,8 @@ export const CODING_AGENT_SENDER = {
  * holds now, a member who has left among them, and with no id what sent it
  * in a member's place or a member whose account is gone, each named as the
  * service words it, and what kind of sender it is, so the window draws Luke
- * as Luke and an automation as one; the kind is absent from a service older
- * than it. The window names nobody over the reader's own.
+ * as Luke, an automation as one, and GitHub as the login named; the kind is
+ * absent from a service older than it. The window names nobody over the reader's own.
  */
 const codingAgentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,
@@ -911,6 +1005,18 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /**
+   * Where in a turn under way one of the developer's lines arrived: the
+   * journal of the turn that took it in, by its message id, and how many
+   * of that journal's steps had begun before it, so the tab draws the line
+   * among the turn's work after those steps rather than ahead of the turn.
+   * Absent on a line that opened its turn or still awaits one, on every
+   * other row, on a line taken before places were kept, and from a service
+   * older than it.
+   */
+  arrivedIn: EffectSchema.optionalKey(
+    EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
+  ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */

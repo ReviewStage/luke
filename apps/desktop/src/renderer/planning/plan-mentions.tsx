@@ -11,6 +11,7 @@ import {
 import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
+import type { MentionableAgent, MentionablePage } from "./mention-picker";
 import { useOpenPlan } from "./use-open-link";
 
 /**
@@ -18,11 +19,15 @@ import { useOpenPlan } from "./use-open-link";
  *
  * The plan's own words draw their mentions through the document
  * (`plan-body.tsx`); an agent's message box on the same page picks them with
- * `@` (`agent-composer.tsx`), and its transcript draws the ones a message
+ * `@` (`agent-composer.tsx`), the plan's pages and agents among them, and its transcript draws the ones a message
  * holds as chips (`transcript-blocks.tsx`). Those stand far from the plan's
  * page in the tree, so the page hands them this, as it hands them its skills
  * (`skill-chip.tsx`'s `SkillFiles`). A place off a plan's page reads nothing,
  * picks no mention, and draws a mention's link as words.
+ *
+ * The page of an agent no plan holds, as an automation's run starts one,
+ * hands the same through `planlessMentions`: its repository's files, its
+ * skills, and the servers, with no plan's sections, since there is no plan.
  *
  * The page also carries a mention made elsewhere on it into the agent's
  * message box drawn there: the box drawn now takes it in (`useMentionBox`),
@@ -39,7 +44,13 @@ export interface PlanMentionsValue {
   readonly workspace: string;
   /** The plan's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
+  /** The id of the workspace whose installation the repository is read through, where no plan names it (`NO_PLAN`). */
+  readonly workspaceId?: string | undefined;
   readonly text: () => string;
+  /** The pages agents showed on the plan, which an `@` offers; none off a plan. */
+  readonly pages?: readonly MentionablePage[] | undefined;
+  /** The plan's coding agents, which an `@` offers; none off a plan. */
+  readonly agents?: readonly MentionableAgent[] | undefined;
   readonly doors: MentionDoors;
 }
 
@@ -83,14 +94,50 @@ export function usePlanMentions(): PlanMentionsValue | undefined {
   return useContext(PlanMentionsContext);
 }
 
-/** Where no plan's page stands, its doors' plan: none, so a section of any plan is drawn as found. */
-const NO_PLAN = "";
+/** Where no plan's page stands, or a page stands with no plan, its plan: none, so a section of any plan is drawn as found, and none is offered. */
+export const NO_PLAN = "";
 
 /** The anchors of no plan. */
 const NO_ANCHORS: ReadonlySet<string> = new Set();
 
 /** What a press on a plan's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
+
+/** A place no plan holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository. */
+export interface PlanlessPlace {
+  readonly workspace: string;
+  readonly workspaceId: string;
+  readonly repository: string;
+}
+
+/**
+ * The mentions of a page no plan holds, as the page of an agent an
+ * automation started is: its repository's files and folders, its skills,
+ * and the servers, and no plan's sections; a plan or a section a message
+ * names opens through `onOpenPlan`, and a file is GitHub's, since no File
+ * tab stands there.
+ */
+export function planlessMentions(
+  place: PlanlessPlace,
+  onOpenPlan: MentionDoors["onOpenPlan"],
+): PlanMentionsValue {
+  const { workspace, workspaceId, repository } = place;
+  return {
+    planId: NO_PLAN,
+    planName: "",
+    workspace,
+    workspaceId,
+    repository,
+    text: () => "",
+    doors: {
+      planId: NO_PLAN,
+      place: { workspace, repository },
+      anchors: NO_ANCHORS,
+      onOpenPlan,
+      onOpenFile: undefined,
+    },
+  };
+}
 
 /** A plan a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
 export interface MentionedPlan {

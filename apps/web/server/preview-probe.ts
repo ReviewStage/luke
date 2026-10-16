@@ -155,7 +155,7 @@ export function readProbePaths(input: {
   return Effect.gen(function* () {
     const report = yield* Effect.promise(() => checkApiCallers(input));
     const config = yield* decodeVercelCrons(
-      yield* Effect.promise(() => readFile(join(input.web, VERCEL_CONFIG_FILE), "utf8")),
+      yield* Effect.promise(() => readFile(join(input.repoRoot, VERCEL_CONFIG_FILE), "utf8")),
     );
     return {
       callers: report.resolved.map((entry) =>

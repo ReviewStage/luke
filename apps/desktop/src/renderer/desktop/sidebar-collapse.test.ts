@@ -7,6 +7,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -42,7 +43,12 @@ const SETTINGS: SettingsPanelProps = {
     onRequest: ignore,
     onOpenSettings: ignore,
   },
-  notifications: { refused: false, onOpenSettings: ignore },
+  notifications: {
+    status: NOTIFICATIONS_STATUS.UNKNOWN,
+    packaged: true,
+    onOpenSettings: ignore,
+    onTest: ignore,
+  },
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,
@@ -120,7 +126,6 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         accountRequired: false,
         onBeginSignIn: ignore,
         onCancelSignIn: ignore,
-        signInFace: { play: 0 },
       },
       tab,
       onTabChange: setTab,

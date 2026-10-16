@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { automationRunReasonSchema } from "./automation-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -27,6 +28,13 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * which name a plan: a build that reads only those drops the keys it does
  * not know, as every service answer is read (`readServiceAnswer`), and
  * never meets an item it cannot place.
+ *
+ * A run of one of the account's own automations that failed to start rides
+ * the same read, under `failedRuns`, and moves the same cursor, so its
+ * owner hears of it whichever page is open. It is no item: nothing answers
+ * it, and the Inbox lists none. Only the newest of each automation's in the
+ * last week is carried, which is what its owner is told of and what marks
+ * the automation until it is opened.
  */
 
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
@@ -102,6 +110,19 @@ export const accountInboxAutomationSchema = EffectSchema.Struct({
 
 export type AccountInboxAutomation = typeof accountInboxAutomationSchema.Type;
 
+/** A run of one of the account's own automations that failed to start: the run, its automation by id and name, the workspace it stands in, why, and when. */
+export const accountFailedRunSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  automationId: wireUuidSchema,
+  automationName: EffectSchema.String,
+  workspaceId: EffectSchema.String,
+  reason: EffectSchema.NullOr(automationRunReasonSchema),
+  /** Epoch milliseconds the run failed. */
+  failedAt: countedNumber,
+});
+
+export type AccountFailedRun = typeof accountFailedRunSchema.Type;
+
 /**
  * Every item that waits on the developer across the account's plans, the
  * latest changed first, the cursor to read on from, and when the service
@@ -113,13 +134,15 @@ export type AccountInboxAutomation = typeof accountInboxAutomationSchema.Type;
  * items were all answered holds no open one, so only this names it. The
  * items of agents with no plan wait in `planless`, listed by automation in
  * `automations`, on the same terms; a service that predates them sends
- * neither.
+ * neither. The newest failed run of each of the account's own automations
+ * rides beside them in `failedRuns`; a service before it sends none.
  */
 export const accountInboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(accountInboxEntrySchema),
   plans: EffectSchema.Array(accountInboxPlanSchema),
   planless: EffectSchema.optionalKey(EffectSchema.Array(accountPlanlessEntrySchema)),
   automations: EffectSchema.optionalKey(EffectSchema.Array(accountInboxAutomationSchema)),
+  failedRuns: EffectSchema.optionalKey(EffectSchema.Array(accountFailedRunSchema)),
   cursor: EffectSchema.String,
   readAt: countedNumber,
 });

@@ -1,10 +1,18 @@
-import type { Plan, PlanSummary, RepositoryPin } from "@luke/features/plan-wire";
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import {
+  PLAN_BOUNDS,
+  type Plan,
+  type PlanSummary,
+  type RepositoryPin,
+} from "@luke/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanActivity,
   type PlanningView,
   type RepositoryCallFailure,
+  type StartCallFailure,
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/planning-view";
@@ -115,6 +123,16 @@ export function workspaceReaches(
 }
 
 /**
+ * The name a plan started from a Linear issue takes: the issue's title,
+ * its ends trimmed and cut to a plan name's bound, or the issue's key where
+ * its title is blank.
+ */
+export function planNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
+  const title = issue.title.trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+  return title === "" ? issue.identifier : title;
+}
+
+/**
  * The other workspace a plan's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
  * workspaces' does: the plan stranded there by #2524, which moving it to
@@ -164,6 +182,17 @@ const REPOSITORY_FAILURE_NOTES = {
 /** The sentence the page shows for a start or a repository change the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {
   return REPOSITORY_FAILURE_NOTES[failure];
+}
+
+/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
+const LINEAR_START_FAILED_NOTE =
+  "Linear could not be read for that issue. It may be disconnected from this workspace; an owner or admin can connect it again in Settings › Workspace.";
+
+/** The sentence the page shows for a start the service refused, by its reason. */
+export function startFailureNote(failure: StartCallFailure): string {
+  return failure === PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE
+    ? LINEAR_START_FAILED_NOTE
+    : repositoryFailureNote(failure);
 }
 
 /** What a plan's name says, where it was edited, when the service refused the rename. */
@@ -389,6 +418,52 @@ export function unsettledRepositoryPins(
   return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 
+/** What the toast says when the service refused an agent's pin, by whether it was a pin or an unpin. */
+export const AGENT_PIN_FAILED_NOTES = {
+  PIN: "The agent could not be pinned. Try again.",
+  UNPIN: "The agent could not be unpinned. Try again.",
+} as const;
+
+/** An agent with no plan pinned or unpinned here that main's view has yet to carry: which, and the instant it was asked. */
+interface PendingAgentPin {
+  readonly pinned: boolean;
+  readonly at: number;
+}
+
+/** The agent pins given here that main's view has yet to carry, by agent. */
+export type PendingAgentPins = ReadonlyMap<string, PendingAgentPin>;
+
+/**
+ * The agents with no plan as the sidebar draws them: every pin and unpin
+ * given here and not yet carried drawn over the pin main's view carries, so
+ * a press moves the agent's row at once, as a plan's pin does. A pin
+ * already carried keeps its instant, as the service keeps it.
+ */
+export function agentsPinned(
+  agents: readonly PlanlessAgent[],
+  pending: PendingAgentPins,
+): readonly PlanlessAgent[] {
+  if (pending.size === 0) return agents;
+  return agents.map((agent) => {
+    const pin = pending.get(agent.id);
+    if (pin === undefined) return agent;
+    const { pinnedAt, ...unpinned } = agent;
+    return pin.pinned ? { ...unpinned, pinnedAt: pinnedAt ?? pin.at } : unpinned;
+  });
+}
+
+/** The pending agent pins the view still contradicts; one it now carries has landed, and one of an agent it no longer lists is let go. */
+export function unsettledAgentPins(
+  pending: PendingAgentPins,
+  agents: readonly PlanlessAgent[],
+): PendingAgentPins {
+  const unsettled = [...pending].filter(([agentId, pin]) => {
+    const agent = agents.find((each) => each.id === agentId);
+    return agent !== undefined && (agent.pinnedAt !== undefined) !== pin.pinned;
+  });
+  return unsettled.length === pending.size ? pending : new Map(unsettled);
+}
+
 /** The plans the sidebar lists, each in its place. */
 export interface SidebarPlans {
   /** The pinned plans, newest pinned first. */
@@ -414,58 +489,6 @@ export function sidebarPlans(plans: readonly PlanSummary[]): SidebarPlans {
     .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
   const rest = standing.filter((plan) => plan.pinnedAt === undefined);
   return { pinned, rest, archived };
-}
-
-/** The plans of one repository, as the sidebar groups them under its header; null is the plans with none. */
-export interface RepositoryGroup {
-  readonly repository: string | null;
-  readonly plans: readonly PlanSummary[];
-}
-
-/**
- * The plans grouped by their repository, the group whose plan was updated
- * most recently first and the plans with none last whatever their age.
- * Within a group the plans run newest updated first, the time each row
- * shows, so the order and the label never disagree.
- */
-export function repositoryGroups(plans: readonly PlanSummary[]): readonly RepositoryGroup[] {
-  const grouped = new Map<string | null, PlanSummary[]>();
-  for (const plan of plans.toSorted((a, b) => b.updatedAt - a.updatedAt)) {
-    const group = grouped.get(plan.repository);
-    if (group === undefined) grouped.set(plan.repository, [plan]);
-    else group.push(plan);
-  }
-  const latest = (group: readonly PlanSummary[]) =>
-    Math.max(...group.map((plan) => plan.updatedAt));
-  return [...grouped]
-    .map(([repository, members]) => ({ repository, plans: members }))
-    .sort((a, b) => {
-      if (a.repository === null || b.repository === null) {
-        return Number(a.repository === null) - Number(b.repository === null);
-      }
-      return latest(b.plans) - latest(a.plans);
-    });
-}
-
-/** A repository's name without its owner: `relay` of `acme/relay`. */
-function nameOf(repository: string): string {
-  return repository.slice(repository.indexOf("/") + 1);
-}
-
-/**
- * What a group's header says for its repository: the repository's name
- * alone, its owner left to the hover, unless another group's repository
- * shares the name, where both say `owner/name` so neither is mistaken.
- */
-export function repositoryLabel(repository: string, groups: readonly RepositoryGroup[]): string {
-  const name = nameOf(repository);
-  const shared = groups.some(
-    (group) =>
-      group.repository !== null &&
-      group.repository !== repository &&
-      nameOf(group.repository) === name,
-  );
-  return shared ? repository : name;
 }
 
 /** The status word beside the microphone for a call, or nothing where none stands. */

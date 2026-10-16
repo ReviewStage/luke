@@ -1,5 +1,9 @@
 import { useRef } from "react";
+import type { AvatarFeedActs } from "./live-call";
 import { useVoiceSession } from "./use-voice-session";
+
+/** Luke's voice for his avatar, sent to main, which relays it to the panel while the avatar stands. */
+const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => window.luke.feedAvatar(feed) };
 
 /**
  * What the hidden voice window mounts: the live conversation, and the one
@@ -10,7 +14,7 @@ import { useVoiceSession } from "./use-voice-session";
  */
 export function VoiceHost(): React.JSX.Element {
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
-  useVoiceSession(remoteAudio);
+  useVoiceSession(remoteAudio, AVATAR_FEED);
   return (
     // Luke's own voice. Muted playback would defeat the point, so this is the
     // one element allowed to make sound.

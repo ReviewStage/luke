@@ -3,7 +3,7 @@
  *
  * eve drives a root's authored files through promise-shaped hooks, so each
  * root's `host.ts` is a runtime edge and holds the doors those files call.
- * The planning root (`eve/host.ts`) and the coding root (`coder/host.ts`)
+ * The planning root (`apps/luke/host.ts`) and the coding root (`apps/dev/host.ts`)
  * open the same three: a role's integrations, the skills a session starts
  * with, and a child session's relay. They differ by the role's profile
  * (`role.ts`) and by the two small facts a root hands in (`EdgeRoot`), so
@@ -93,8 +93,8 @@ export function edgeKit(run: WebAgentRun, root: EdgeRoot): EdgeKit {
       const policy = ROLE_PROFILE[role].connections;
       return integrationConnections({
         servers: (auth, sessionId) => run(turnServers(admit(auth, sessionId), policy)),
-        token: (provider) => (auth, sessionId) =>
-          run(integrationAccessToken(provider, admit(auth, sessionId))),
+        token: (account) => (auth, sessionId) =>
+          run(integrationAccessToken(account, admit(auth, sessionId))),
       });
     },
     sessionSkills(role, auth, sessionId) {

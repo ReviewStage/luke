@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import {
   type SessionReplayBootstrap,
@@ -8,6 +9,8 @@ import {
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
+import type { AvatarState } from "@luke/voice/avatar";
+import type { NotificationsStatus } from "@luke/voice/settings-controls";
 import type { VoiceView } from "@luke/voice/voice-view";
 import {
   isRecord,
@@ -96,6 +99,12 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
+  /**
+   * Luke's avatar on the call, as the panel reports it: what puts the video
+   * tile at the top of the Call tab and what the tile draws. Main's rather than
+   * the voice window's, so a replaced voice window leaves it standing.
+   */
+  avatar: AvatarState;
 }
 
 /**
@@ -180,15 +189,17 @@ export interface AppInboxSlice {
   planless: readonly AppInboxPlanlessItem[];
   /** Every automation holding items of its agents with no plan, as `plans` lists the plans. */
   automations: readonly AppInboxAutomationHolding[];
+  /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
+  failedRuns: readonly AccountFailedRun[];
 }
 
 /**
- * Whether macOS refused the last notification Luke posted, which is the only
+ * What macOS answered the last notification Luke posted, which is the only
  * word Electron gives of notifications being off for Luke in System Settings:
- * false until one is refused, and again once one is shown.
+ * unknown until one is shown or refused, and kept for the launch alone.
  */
 interface AppNotificationsSlice {
-  refused: boolean;
+  status: NotificationsStatus;
 }
 
 /**

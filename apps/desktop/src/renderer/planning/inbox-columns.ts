@@ -3,15 +3,19 @@
  *
  * An Inbox wide enough holds its list and the chosen item side by side, as a
  * mail app does. Narrower than {@link INBOX_SPLIT}, it shows one at a time,
- * as Linear's Inbox and GitHub's Primer list-and-detail do: the list, the
- * whole Inbox wide, and once a row is pressed, that item, the whole Inbox
- * wide, under a way back to the list, which Back's chord and Escape take as
- * well. The line is drawn by the Inbox's own width rather than the window's,
- * because the window's Inbox and a plan's own Inbox tab stand in columns of
- * their own, beside a sidebar, a side panel, or neither. An item stays open
- * across a resize only once a press opened it, so a narrowed Inbox lands on
- * its list rather than on the item it chose for itself, and one that
- * leaves the list gives the list back.
+ * and the one it shows is the item: the chosen one, the whole Inbox wide,
+ * under a way back to the list, which Back's chord and Escape take as well,
+ * so an Inbox holding one item is that item rather than a list of one row.
+ * The list stands alone only once the way back was taken or Show all
+ * pressed, or while nothing is chosen, and a row pressed there opens its
+ * item again. An Inbox whose
+ * list holds nothing but the item has no way back, there being no list worth
+ * going back to. The line is drawn by the Inbox's own width rather than the
+ * window's, because the window's Inbox and a plan's own Inbox tab stand in
+ * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
+ * narrowed keeps the item it shows, as Material's list-detail layout does,
+ * and one that splits again forgets that the list was asked for, so it
+ * narrows onto its item again.
  */
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -36,7 +40,7 @@ export const INBOX_COLUMNS = {
   BOTH: "both",
   /** The list alone, the whole Inbox wide. */
   LIST: "list",
-  /** The item alone, the whole Inbox wide, under a way back to the list. */
+  /** The item alone, the whole Inbox wide, under a way back to the list where the list holds more. */
   ITEM: "item",
 } as const;
 
@@ -49,8 +53,10 @@ export interface InboxColumns {
   readonly shown: InboxColumnsShown;
   /** Says a row was pressed, which opens its item while the Inbox shows one column. */
   readonly onOpen: (itemId: string) => void;
-  /** Goes back from the item to the list, while the item stands alone. */
+  /** Goes back from the item to the list, while the item stands alone and the list holds more. */
   readonly onBack: (() => void) | undefined;
+  /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
+  readonly onList: () => void;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -58,18 +64,34 @@ function oneColumn(width: number, was: boolean): boolean {
   return width < (was ? INBOX_SPLIT.LEAVE : INBOX_SPLIT.ENTER);
 }
 
+/** Which columns stand: both where split, else the item unless the list was asked for and is worth going back to, or nothing is chosen. */
+function shownColumns(
+  single: boolean,
+  chosen: string | undefined,
+  listAsked: boolean,
+  backable: boolean,
+): InboxColumnsShown {
+  if (!single) return INBOX_COLUMNS.BOTH;
+  if (chosen === undefined || (listAsked && backable)) return INBOX_COLUMNS.LIST;
+  return INBOX_COLUMNS.ITEM;
+}
+
 /**
- * The Inbox's columns, measured as it resizes. An Inbox that measures
+ * The Inbox's columns, measured as it resizes, for the item chosen and
+ * whether the list holds more than it (`backable`). An Inbox that measures
  * nothing is not laid out, and keeps the two columns it starts with. Going
- * one way or the other by a press hands the keyboard on, to the way back
- * once an item opens and to its row once the list is back; a resize does so
+ * one way or the other by a press hands the keyboard on, to the item's bar
+ * once an item opens and to its row once the list is back, or split, to the
+ * row of the item a press opened from outside the list; a resize does so
  * only where it hid the column holding the keyboard, so the keyboard is
  * never left in what cannot be seen. Note that the keyboard is moved before
  * the window paints, while the hidden control still holds it.
  */
-export function useInboxColumns(chosen: string | undefined): InboxColumns {
+export function useInboxColumns(chosen: string | undefined, backable: boolean): InboxColumns {
   const [single, setSingle] = useState(false);
-  const [opened, setOpened] = useState<string | undefined>(undefined);
+  const [listAsked, setListAsked] = useState(false);
+  // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
+  const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
   const ref = useCallback((element: HTMLElement | null) => {
@@ -84,11 +106,9 @@ export function useInboxColumns(chosen: string | undefined): InboxColumns {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const shown: InboxColumnsShown = !single
-    ? INBOX_COLUMNS.BOTH
-    : opened !== undefined && opened === chosen
-      ? INBOX_COLUMNS.ITEM
-      : INBOX_COLUMNS.LIST;
+  // Note that an Inbox split again forgets the list was asked for, so narrowing it lands on its item.
+  if (!single && listAsked) setListAsked(false);
+  const shown = shownColumns(single, chosen, listAsked, backable);
 
   useLayoutEffect(() => {
     const held = view.current;
@@ -98,19 +118,26 @@ export function useInboxColumns(chosen: string | undefined): InboxColumns {
       focused instanceof HTMLElement &&
       held.contains(focused) &&
       focused.closest("[hidden]") !== null;
-    if (!pressed.current && !stranded) return;
+    if (!pressed.current && !stranded && showAlls === 0) return;
     pressed.current = false;
-    if (shown === INBOX_COLUMNS.ITEM) held.querySelector<HTMLElement>(".inbox-back")?.focus();
-    if (shown !== INBOX_COLUMNS.LIST) return;
-    const rows = held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]");
-    [...rows].find((row) => row.dataset.itemId === chosen)?.focus();
-  }, [shown, chosen]);
+    // The item's bar leads with its way back, or with its crumbs where it has none.
+    if (shown === INBOX_COLUMNS.ITEM) {
+      held.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) header button")?.focus();
+    }
+    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
+    if (shown === INBOX_COLUMNS.ITEM) return;
+    // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
+    const rows = [...held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]")];
+    const row = rows.find((each) => each.dataset.itemId === chosen) ?? rows[0];
+    (row ?? held.querySelector<HTMLElement>(".inbox-plans .inbox-needs-you-only"))?.focus();
+    setShowAlls(0);
+  }, [shown, chosen, showAlls]);
 
   const back =
-    shown === INBOX_COLUMNS.ITEM
+    shown === INBOX_COLUMNS.ITEM && backable
       ? () => {
           pressed.current = true;
-          setOpened(undefined);
+          setListAsked(true);
         }
       : undefined;
   useAppCommand(APP_COMMAND.BACK, back);
@@ -119,9 +146,15 @@ export function useInboxColumns(chosen: string | undefined): InboxColumns {
     ref,
     shown,
     onOpen: (itemId) => {
-      pressed.current = single;
-      setOpened(itemId);
+      // Note that only a press that changes what stands is kept, since one that changes nothing draws nothing to hand the keyboard to, and a later resize would take it.
+      pressed.current = itemId !== chosen || shown === INBOX_COLUMNS.LIST;
+      setListAsked(false);
     },
     onBack: back,
+    onList: () => {
+      pressed.current = true;
+      setListAsked(true);
+      setShowAlls((count) => count + 1);
+    },
   };
 }

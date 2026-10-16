@@ -1,4 +1,3 @@
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -11,15 +10,20 @@ import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
+import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
-import { BookOpenIcon, FolderIcon, HashIcon } from "lucide-react";
+import { AppWindowIcon, BookOpenIcon, FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { useAct } from "../act";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
+import { NO_PLAN } from "./plan-mentions";
+import { AgentMark } from "./tab-look";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the plan's repository's files and folders, the plan's sections, and the plan, grouped by kind, narrowed as the word is typed, the pick written as its mention.
@@ -44,19 +48,35 @@ import { FileTypeIcon } from "./file-type-icon";
  * hands the agent's next turn that server whatever its switch says
  * (`packages/service/src/agents/agent-runtime/servers.ts`).
  *
+ * On a plan's page the list offers what the plan holds beside its words
+ * too: the pages agents showed on it, each by its title and its tab's
+ * glyph, and its coding agents, each by its tab's name and its harness's
+ * mark, the agent whose box it is left out. A mention of either names it
+ * by its id (`@luke/features/mention-link`), which the agent it is sent to
+ * is handed what it needs to read by (`packages/service/src/agents/mentioned-context.ts`).
+ *
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of
  * the word; the name is the file's or folder's own name, the heading, the
- * plan's name, the server's name, or the server's name and the tool's.
+ * plan's name, the page's title, the agent's tab's name, the server's
+ * name, or the server's name and the tool's.
  */
 
 /** What the list's groups are called, in the order they stand. */
 const MENTION_GROUP = {
   FILES: "Files and folders",
   PLAN: "Plan",
+  PAGES: "Pages",
+  AGENTS: "Agents",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
 } as const;
+
+/** What a page's row says beside its title. */
+const PAGE_DETAIL = "Page";
+
+/** What an agent's row says beside its name. */
+const AGENT_DETAIL = "Agent";
 
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
@@ -78,7 +98,7 @@ export interface MentionSkills {
 }
 
 /** The servers of a list that offers none. */
-const NO_SERVERS: readonly IntegrationProvider[] = [];
+const NO_SERVERS: readonly NamedServer[] = [];
 
 /** The most rows one group lists. */
 const PER_GROUP = 4;
@@ -112,6 +132,8 @@ type MentionRow = {
   readonly detail: string | undefined;
   /** The words it is found by. */
   readonly terms: string;
+  /** An agent's tile, which its row wears as its tab does; none for any other row. */
+  readonly actor?: Actor | undefined;
 } & ({ readonly mention: Mention } | { readonly skill: string });
 
 interface MentionGroup {
@@ -145,8 +167,9 @@ function pathRow(entry: RepositoryPath): MentionRow {
   };
 }
 
-/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself. */
+/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself; none where no plan stands. */
 function planRows(planId: string, planName: string, text: string): MentionRow[] {
+  if (planId === NO_PLAN) return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
@@ -171,25 +194,55 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
   ];
 }
 
+/** Each of the plan's pages' rows, by its title; none where no plan stands. */
+function pageRows(planId: string, pages: readonly MentionablePage[]): MentionRow[] {
+  if (planId === NO_PLAN) return [];
+  return pages.map((page) => ({
+    mention: { kind: MENTION_KIND.PAGE, planId, pageId: page.id },
+    name: page.title,
+    detail: PAGE_DETAIL,
+    terms: page.title,
+  }));
+}
+
+/** Each of the plan's agents' rows, by its tab's name, wearing its tile, the agent whose box it is left out; none where no plan stands. */
+function agentRows(
+  planId: string,
+  agents: readonly MentionableAgent[],
+  self: string | undefined,
+): MentionRow[] {
+  if (planId === NO_PLAN) return [];
+  return agents
+    .filter((agent) => agent.id !== self)
+    .map((agent) => ({
+      mention: { kind: MENTION_KIND.AGENT, planId, agentId: agent.id },
+      name: agent.name,
+      detail: AGENT_DETAIL,
+      terms: agent.name,
+      actor: agent.actor,
+    }));
+}
+
 /** Each connected server's row, and once a word is typed each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
 function serverRows(
-  servers: readonly IntegrationProvider[],
+  servers: readonly NamedServer[],
   reads: IntegrationToolsReads,
   query: string,
 ): MentionRow[] {
-  return servers.flatMap((provider) => {
-    const name = INTEGRATION_NAME[provider];
+  return servers.flatMap(({ provider, connection, name }) => {
+    // An account past its provider's first is named by its connection; the first by the provider alone, as it always was.
+    const account = connection === provider ? undefined : { connection };
     const server: MentionRow = {
-      mention: { kind: MENTION_KIND.SERVER, provider },
+      mention: { kind: MENTION_KIND.SERVER, provider, ...account },
       name,
       detail: SERVER_DETAIL,
       terms: name,
     };
-    const read = reads[provider];
+    const read = reads[connection];
     if (query.trim() === "" || read === undefined || !("tools" in read)) return [server];
     // Note that a tool whose name no mention can carry is left out, since its pick would name nothing.
     const tools = read.tools.flatMap((tool): MentionRow[] => {
-      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, tool: tool.name };
+      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, ...account, tool: tool.name };
       if (!isMentionableTool(tool.name)) return [];
       return [
         {
@@ -225,20 +278,29 @@ function best(rows: readonly MentionRow[], query: string): readonly MentionRow[]
     .map((each) => each.row);
 }
 
-/** The groups the list offers for the word: the plan's and the servers' for no query, else each kind's best, files and folders first. */
+/** Every row of each kind but the repository's paths, which are offered only once a word is typed. */
+interface KindRows {
+  readonly plan: readonly MentionRow[];
+  readonly pages: readonly MentionRow[];
+  readonly agents: readonly MentionRow[];
+  readonly skills: readonly MentionRow[];
+  readonly servers: readonly MentionRow[];
+}
+
+/** The groups the list offers for the word: every kind's first few but the files for no query, else each kind's best, files and folders first. */
 function groupsFor(
   query: string,
   paths: readonly RepositoryPath[] | undefined,
-  plan: readonly MentionRow[],
-  skills: readonly MentionRow[],
-  servers: readonly MentionRow[],
+  rows: KindRows,
 ): readonly MentionGroup[] {
   const files = query.trim() === "" || paths === undefined ? [] : best(paths.map(pathRow), query);
   return [
     { label: MENTION_GROUP.FILES, rows: files },
-    { label: MENTION_GROUP.PLAN, rows: best(plan, query) },
-    { label: MENTION_GROUP.SKILLS, rows: best(skills, query) },
-    { label: MENTION_GROUP.SERVERS, rows: best(servers, query) },
+    { label: MENTION_GROUP.PLAN, rows: best(rows.plan, query) },
+    { label: MENTION_GROUP.PAGES, rows: best(rows.pages, query) },
+    { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, query) },
+    { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, query) },
+    { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, query) },
   ].filter((group) => group.rows.length > 0);
 }
 
@@ -259,6 +321,14 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
+    case MENTION_KIND.PAGE:
+      return <AppWindowIcon aria-hidden="true" />;
+    case MENTION_KIND.AGENT:
+      return row.actor === undefined ? (
+        <AgentMark provider={undefined} />
+      ) : (
+        <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
+      );
   }
 }
 
@@ -353,7 +423,24 @@ export const MENTION_MENU_SIDE = {
 
 type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
 
-/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now. */
+/** A page an agent showed on the plan, as the list offers it: its id and its newest version's title. */
+export interface MentionablePage {
+  readonly id: string;
+  readonly title: string;
+}
+
+/** One of the plan's coding agents, as the list offers it: its id, its tab's name, and its tile, which its row wears. */
+export interface MentionableAgent {
+  readonly id: string;
+  readonly name: string;
+  readonly actor: Actor;
+}
+
+/** The pages and agents of a place that offers none. */
+const NO_PAGES: readonly MentionablePage[] = [];
+const NO_AGENTS: readonly MentionableAgent[] = [];
+
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
 export interface MentionSource {
   readonly planId: string;
   readonly planName: string;
@@ -361,7 +448,24 @@ export interface MentionSource {
   readonly workspace: string;
   /** The plan's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
+  /** The id of the workspace whose installation the repository is read through, where no plan names it. */
+  readonly workspaceId?: string | undefined;
   readonly text: () => string;
+  /** The pages agents showed on the plan; none where the place offers none. */
+  readonly pages?: readonly MentionablePage[] | undefined;
+  /** The plan's coding agents; none where the place offers none. */
+  readonly agents?: readonly MentionableAgent[] | undefined;
+}
+
+/** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
+function treeKey(
+  planId: string,
+  workspaceId: string | undefined,
+  repository: string | null,
+): { planId: string } | { workspaceId: string; repository: string } | undefined {
+  if (planId !== NO_PLAN) return { planId };
+  if (workspaceId === undefined || repository === null) return undefined;
+  return { workspaceId, repository };
 }
 
 /**
@@ -372,6 +476,7 @@ export interface MentionSource {
  */
 export function useMentionPicker({
   source,
+  self,
   skills,
   servers = NO_SERVERS,
   room,
@@ -379,10 +484,12 @@ export function useMentionPicker({
   onChoose,
 }: {
   source: MentionSource | undefined;
+  /** The agent whose box the list stands in, which it does not offer; none for the plan's own words. */
+  self?: string | undefined;
   /** The repository's skills, where the words go to an agent; none for the plan's own words. */
   skills?: MentionSkills | undefined;
   /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
-  servers?: readonly IntegrationProvider[];
+  servers?: readonly NamedServer[];
   /** The element the list is placed in, by the word. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
@@ -395,11 +502,13 @@ export function useMentionPicker({
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
   const [paths, setPaths] = useState<{
     planId: string;
+    workspaceId: string | undefined;
     repository: string | null;
     paths: readonly RepositoryPath[];
   }>();
 
-  const planId = source?.planId ?? "";
+  const planId = source?.planId ?? NO_PLAN;
+  const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
   const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
   const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
@@ -411,16 +520,21 @@ export function useMentionPicker({
 
   // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
   const read =
-    paths?.planId === planId && paths.repository === repository ? paths.paths : undefined;
+    paths?.planId === planId && paths.workspaceId === workspaceId && paths.repository === repository
+      ? paths.paths
+      : undefined;
   useEffect(() => {
     if (!open || read !== undefined) return;
+    const key = treeKey(planId, workspaceId, repository);
+    if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true }).then(
+    act(ACT_KIND.PLANNING_TREE, { ...key, path: "", recursive: true }).then(
       (answer) => {
         if (!live) return;
         const entries = "folder" in answer ? answer.folder.entries : [];
         setPaths({
           planId,
+          workspaceId,
           repository,
           paths: entries.map((entry) => ({
             path: entry.name,
@@ -433,7 +547,7 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [open, read, act, planId, repository]);
+  }, [open, read, act, planId, workspaceId, repository]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -444,15 +558,17 @@ export function useMentionPicker({
   }, [askedAt, askSkills]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
-  const tools = useIntegrationTools(open ? servers : NO_SERVERS);
+  const tools = useIntegrationTools(
+    (open ? servers : NO_SERVERS).map((server) => server.connection),
+  );
   const groups = open
-    ? groupsFor(
-        trigger.query,
-        read,
-        planRows(planId, source.planName, source.text()),
-        skillRows(skills?.known ?? []),
-        serverRows(servers, tools, trigger.query),
-      )
+    ? groupsFor(trigger.query, read, {
+        plan: planRows(planId, source.planName, source.text()),
+        pages: pageRows(planId, source.pages ?? NO_PAGES),
+        agents: agentRows(planId, source.agents ?? NO_AGENTS, self),
+        skills: skillRows(skills?.known ?? []),
+        servers: serverRows(servers, tools, trigger.query),
+      })
     : [];
   const rows = groups.flatMap((group) => group.rows);
   const held =

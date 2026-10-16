@@ -37,13 +37,18 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
-import { type AgentTurnStanding, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import {
+  type AgentTurnStanding,
+  codingAgentFailureOf,
+  codingAgentStatusOf,
+} from "../agents/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "../agents/coder-host/stop.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
@@ -186,24 +191,49 @@ const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   return action;
 });
 
+/** A run's agent for the wire: its status read from its standing, and why it failed where it did. */
+function agentOf(
+  id: string,
+  title: string | null,
+  createdAt: Date,
+  ownKey: boolean,
+  standing: AgentTurnStanding,
+  now: number,
+): NonNullable<AutomationRunSummary["agent"]> {
+  const status = codingAgentStatusOf(standing.turn, {
+    createdAt,
+    now,
+    lineAwaits: standing.lineAwaits,
+  });
+  const failureReason =
+    status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+  return {
+    id,
+    title,
+    status,
+    ownKey,
+    ...(failureReason === undefined ? undefined : { failureReason }),
+  };
+}
+
 /** One run for the wire, its agent's status read from the standing given. */
 function runSummaryOf(
   run: AutomationRunInHistory,
   standingOf: (conversationId: string) => AgentTurnStanding,
   now: number,
+  readerId: string,
 ): AutomationRunSummary {
   const agent =
     run.codingAgentId === null || run.agentConversationId === null || run.agentCreatedAt === null
       ? null
-      : {
-          id: run.codingAgentId,
-          title: run.agentTitle,
-          status: codingAgentStatusOf(standingOf(run.agentConversationId).turn, {
-            createdAt: run.agentCreatedAt,
-            now,
-            lineAwaits: standingOf(run.agentConversationId).lineAwaits,
-          }),
-        };
+      : agentOf(
+          run.codingAgentId,
+          run.agentTitle,
+          run.agentCreatedAt,
+          run.agentUserId === readerId,
+          standingOf(run.agentConversationId),
+          now,
+        );
   return {
     id: run.id,
     firing: run.firing,
@@ -217,6 +247,7 @@ function runSummaryOf(
 
 /** The runs given summarized, their agents' standings read in one pass. */
 const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
+  readerId: string,
   runs: readonly AutomationRunInHistory[],
 ): Effect.fn.Return<readonly AutomationRunSummary[], HostedRefusal, DatabaseServices> {
   const conversations = runs.flatMap((run) =>
@@ -224,16 +255,16 @@ const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const standingOf = yield* standingsOf(conversations);
   const now = yield* Clock.currentTimeMillis;
-  return runs.map((run) => runSummaryOf(run, standingOf, now));
+  return runs.map((run) => runSummaryOf(run, standingOf, now, readerId));
 });
 
-/** One automation for the wire as the account reads it, with its newest run and whether the account made it. */
+/** One automation for the wire as the account reads it, with its newest run, whether the account made it, and who did. */
 const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,
 ): Effect.fn.Return<AutomationSummary, HostedRefusal, DatabaseServices> {
   const newest = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, automation.id, 1));
-  const [lastRun] = yield* runSummaries(newest);
+  const [lastRun] = yield* runSummaries(userId, newest);
   return {
     id: automation.id,
     planId: automation.planId,
@@ -243,7 +274,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : { workspaceId: automation.organizationId }),
     name: automation.name,
     enabled: automation.enabled,
-    pausedReason: automation.pausedReason,
+    pausedReason: null,
     trigger: automation.trigger,
     action: automation.action,
     guards: automation.guards,
@@ -258,6 +289,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
         : { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: automation.archiveSuccessful,
     mine: automation.userId === userId,
+    creatorId: automation.userId,
   };
 });
 
@@ -472,8 +504,15 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
-  const action =
-    asked.action === undefined ? undefined : yield* checkedAction(userId, asked.action);
+  // Note that an action sent without its servers keeps the ones saved, because a desktop from before
+  // them sends the whole action back on a prompt's edit, and would otherwise switch every one back on.
+  const kept =
+    asked.action === undefined ||
+    asked.action.disabledServers !== undefined ||
+    standing.action.disabledServers === undefined
+      ? asked.action
+      : { ...asked.action, disabledServers: standing.action.disabledServers };
+  const action = kept === undefined ? undefined : yield* checkedAction(userId, kept);
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
@@ -506,8 +545,6 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const changes: AutomationChanges = {
     ...(asked.name === undefined ? undefined : { name: asked.name }),
     ...(asked.enabled === undefined ? undefined : { enabled: asked.enabled }),
-    // The owner resuming or pausing it is the owner's word, so why the service paused it goes.
-    ...(asked.enabled === undefined ? undefined : { pausedReason: null }),
     ...(newTrigger === undefined ? undefined : { trigger: newTrigger }),
     ...(action === undefined ? undefined : { action }),
     ...(asked.guards === undefined ? undefined : { guards: asked.guards }),
@@ -597,7 +634,7 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
   const recorded = yield* hostedStoreOrUnavailable(
     recordAutomationRun(automation.value, {
       dedupeKey: key,
-      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
       firedAt,
     }),
   );
@@ -606,7 +643,7 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
   }
   const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
   if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const [summary] = yield* runSummaries([run.value]);
+  const [summary] = yield* runSummaries(userId, [run.value]);
   return hostedJsonResponse(
     Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
     { run: summary },
@@ -627,7 +664,7 @@ const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(fun
   const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
   if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(runs) });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(userId, runs) });
 });
 
 /** The group: the four automation paths, and the hosted vocabulary's own refusal for any other. */

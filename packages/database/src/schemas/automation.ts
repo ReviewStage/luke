@@ -1,10 +1,9 @@
 import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
-  type AutomationAction,
+  type AutomationActionJson,
   type AutomationFiring,
   type AutomationGuards,
-  type AutomationPause,
   type AutomationRunReason,
   type AutomationRunStatus,
   type AutomationScope,
@@ -31,8 +30,8 @@ import { plan } from "./plan.js";
  * which the minute sweep claims by (null for every other trigger and while
  * paused). `webhook_secret_hash` is the SHA-256 of the secret a webhook
  * trigger's address carries, never the secret itself, and null for every
- * other trigger. `enabled` false is paused; `paused_reason` says why where
- * the service paused it rather than the developer. The row goes with its
+ * other trigger. `enabled` false is turned off, by the developer alone:
+ * nothing pauses an automation for its failures. The row goes with its
  * account and its plan alike.
  *
  * An automation belongs to a workspace (`organization_id`), as its owner's
@@ -59,11 +58,10 @@ export const automation = pgTable(
     planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     enabled: boolean("enabled").notNull(),
-    /** Why the service paused it; null where it runs or the developer paused it. */
-    pausedReason: text("paused_reason").$type<AutomationPause>(),
     triggerKind: text("trigger_kind").$type<AutomationTriggerKind>().notNull(),
     trigger: jsonb("trigger").$type<AutomationTrigger>().notNull(),
-    action: jsonb("action").$type<AutomationAction>().notNull(),
+    // Note that the column holds the action as JSON writes it, its servers not yet read against the providers known.
+    action: jsonb("action").$type<AutomationActionJson>().notNull(),
     guards: jsonb("guards").$type<AutomationGuards>().notNull(),
     /** When a schedule is next due; null for any other trigger and while paused. */
     nextRunAt: timestamptz("next_run_at"),

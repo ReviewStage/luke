@@ -20,6 +20,8 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPictureParams,
+  type CodingAgentPinParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -85,6 +87,9 @@ export interface CodingAgentActsDependencies {
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
+    /** The plan list read again, which carries every agent with no plan beside the plans. */
+    planningRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
@@ -117,6 +122,9 @@ export interface CodingAgentActsDependencies {
     codingAgentInboxAttachment(
       params: CodingAgentInboxAttachmentParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
+    codingAgentPicture(
+      params: CodingAgentPictureParams,
+    ): Effect.Effect<CodingAgentInboxAttachmentView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -147,6 +155,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_SERVERS
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
+  | typeof ACT_KIND.CODING_AGENTS_PIN
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
   | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
@@ -163,7 +172,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
-  | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT;
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
+  | typeof ACT_KIND.CODING_AGENTS_PICTURE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -182,10 +192,15 @@ export function codingAgentActRows(
   dependencies: CodingAgentActsDependencies,
 ): Pick<ActRows, CodingAgentActKind> {
   const { host, notices } = dependencies;
+  // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
   const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
-    noted(answer, (value) => {
-      if ("agent" in value) notices.observeAgents([value.agent]);
-    });
+    Effect.tap(
+      noted(answer, (value) => {
+        if ("agent" in value) notices.observeAgents([value.agent]);
+      }),
+      (value) =>
+        "agent" in value && value.agent.planId === null ? host.planningRefresh() : Effect.void,
+    );
   return {
     [ACT_KIND.CODING_AGENTS_MODELS]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MODELS, sender);
@@ -254,6 +269,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_ARCHIVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_ARCHIVE, sender);
       return notedAgent(host.codingAgentArchive(params));
+    },
+    [ACT_KIND.CODING_AGENTS_PIN]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
+      return notedAgent(host.codingAgentPin(params));
     },
     [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
@@ -325,6 +344,11 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, sender);
       return host.codingAgentInboxAttachment(params);
+    },
+    // Note that the picture's answer, a failure among them, is the panel's to read, as an inbox image's is.
+    [ACT_KIND.CODING_AGENTS_PICTURE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PICTURE, sender);
+      return host.codingAgentPicture(params);
     },
   };
 }

@@ -10,7 +10,7 @@ import {
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "@luke/host/acts";
-import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -50,6 +50,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 async function settle(): Promise<void> {
@@ -61,9 +62,14 @@ async function settle(): Promise<void> {
 /**
  * Mounts the hook over a service the test scripts act by act: each kind
  * answers from its own queue of answers, and every ask is written down. The
- * window's toast stands beside it, its atoms on `registry` where given.
+ * window's toast stands beside it, its atoms on `registry`, one of its own,
+ * as a window's, where none is given.
  */
-function mount(initial: Standing, registry?: AtomRegistry) {
+function mount(
+  initial: Standing,
+  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
+  keyPrefix = "key",
+) {
   const asked: Asked[] = [];
   const started: string[] = [];
   let unarchives = 0;
@@ -100,7 +106,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       onStarted: (agentId) => started.push(agentId),
       mintKey: () => {
         keys += 1;
-        return `key-${keys}`;
+        return `${keyPrefix}-${keys}`;
       },
     });
     return null;
@@ -120,7 +126,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
     },
     mount: async () => {
       const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
-      act(() => root.render(registry === undefined ? surface : onRegistry(registry, surface)));
+      act(() => root.render(onRegistry(registry, surface)));
       await settle();
     },
     control: () => {
@@ -220,6 +226,95 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
 });
 
+test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
+  const before = mount({ planId: PLAN, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await before.mount();
+  let draft = "";
+  act(() => {
+    draft = before.control().onNewDraft();
+  });
+  const prompt = "Rename the invite email's subject.";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  act(() => before.control().onDraftChange({ prompt }));
+  act(() =>
+    before.control().onDraftChange({ choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } }),
+  );
+  act(() => before.control().onDraftAttachments((held) => [...held, notes]));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ planId: PLAN, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await after.mount();
+  assert.deepEqual(after.control().draft, {
+    id: draft,
+    prompt,
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  });
+  act(() => after.control().onDiscardDraft(draft));
+  assert.equal(after.control().draft, undefined);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const again = mount({ planId: PLAN, repository: "acme/relay" });
+  again.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await again.mount();
+  assert.equal(again.control().draft, undefined);
+});
+
+test("two windows' draft agents on one plan each keep their own words under their own key", async () => {
+  const first = mount({ planId: PLAN, repository: "acme/relay" }, AtomRegistry.make(), "first");
+  const second = mount({ planId: PLAN, repository: "acme/relay" }, AtomRegistry.make(), "second");
+  first.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  second.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await first.mount();
+  await second.mount();
+  act(() => {
+    first.control().onNewDraft();
+  });
+  act(() => {
+    second.control().onNewDraft();
+  });
+  act(() => second.control().onDraftChange({ prompt: "Ship now" }));
+  act(() => first.control().onDraftChange({ prompt: "Wait for review" }));
+
+  assert.equal(first.control().draft?.prompt, "Wait for review");
+  assert.equal(first.control().draft?.id, "first-1");
+  act(() => first.control().onDiscardDraft("first-1"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  // The other window's draft, kept apart and outliving the first's, is the one a relaunch opens on.
+  const relaunched = mount({ planId: PLAN, repository: "acme/relay" });
+  relaunched.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await relaunched.mount();
+  assert.deepEqual(
+    [relaunched.control().draft?.id, relaunched.control().draft?.prompt],
+    ["second-1", "Ship now"],
+  );
+});
+
+test("a draft of files alone waits while another plan is open, but no relaunch brings back a draft with no words", async () => {
+  const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  const before = mount({ planId: PLAN, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [] });
+  await before.mount();
+  act(() => {
+    before.control().onNewDraft();
+  });
+  act(() => before.control().onDraftAttachments((held) => [...held, notes]));
+  await before.stand({ planId: OTHER_PLAN });
+  await before.stand({ planId: PLAN });
+  assert.deepEqual(before.control().draft?.attachments, [notes]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ planId: PLAN, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await after.mount();
+  assert.equal(after.control().draft, undefined);
+});
+
 test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {
   const planless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.RUNNING };
   const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
@@ -244,6 +339,37 @@ test("with no plan open, the agent named is read as its page and held as a list 
   );
   act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
+});
+
+test("with no plan open, a / reads the agent's own repository's skills through the workspace its page names, there being no plan to read them by", async () => {
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...STARTED,
+      planId: null,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const skills = { skills: { repository: "acme/relay", branch: "main", skills: [] } };
+  tab.answer(ACT_KIND.PLANNING_SKILLS, skills);
+  await tab.mount();
+
+  const read = tab.control().readSkills;
+  assert.ok(read, "the agent's box offers its repository's skills");
+  const answered = await read();
+
+  assert.deepEqual(answered, { skills: [] });
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_SKILLS),
+    [
+      {
+        kind: ACT_KIND.PLANNING_SKILLS,
+        payload: { workspaceId: "workspace-1", repository: "acme/relay" },
+      },
+    ],
+  );
 });
 
 test("another agent named with no plan open holds nothing of the last, even where its read does not land", async () => {
@@ -272,4 +398,43 @@ test("another agent named with no plan open holds nothing of the last, even wher
 
   assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
   assert.equal(tab.control().listFailed, true);
+});
+
+test("a read of an agent's changes keeps who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs; only the agent's newest read is kept, and a read naming no pull request drops them", async () => {
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  const url = "https://github.com/acme/relay/pull/42";
+  const answerWith = (state: "requested" | "approved") => ({
+    pullRequest: {
+      url,
+      files: [],
+      truncated: false,
+      author: { login: "luke[bot]", bot: true, luke: true },
+      reviewers: [{ by: { login: "octocat", bot: false }, state }],
+    },
+  });
+  let land: (answer: ReturnType<typeof answerWith>) => void = () => undefined;
+  const older = new Promise<ReturnType<typeof answerWith>>((resolve) => {
+    land = resolve;
+  });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHANGES, older, answerWith("approved"), {
+    pullRequest: null,
+  });
+  await tab.mount();
+  assert.equal(tab.control().changesPeople.get(AGENT), undefined);
+
+  // The first read lands after the second, which was asked later, and is not kept over it.
+  const first = tab.control().readChanges(AGENT);
+  await act(() => tab.control().readChanges(AGENT));
+  land(answerWith("requested"));
+  await act(() => first);
+  assert.deepEqual(tab.control().changesPeople.get(AGENT), {
+    url,
+    people: {
+      author: { login: "luke[bot]", bot: true, luke: true },
+      reviewers: [{ by: { login: "octocat", bot: false }, state: "approved" }],
+    },
+  });
+
+  await act(() => tab.control().readChanges(AGENT));
+  assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
 });

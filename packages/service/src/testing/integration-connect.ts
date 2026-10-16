@@ -25,6 +25,15 @@ import {
   type IntegrationConnectService,
   integrationConnectFromEnvironment,
 } from "../integrations/integration-connect.js";
+import type { IntegrationAccountKey } from "../integrations/integration-store.js";
+
+/** The first account a Luke account holds at a provider, as its first sign-in begins it: named after the provider, under the account's own user id. */
+export function firstIntegrationAccount(
+  userId: string,
+  provider: IntegrationProvider,
+): IntegrationAccountKey {
+  return { provider, connectionName: provider, connectSubject: userId };
+}
 
 /** Every provider's connector, as the suite builds each one. */
 export function integrationConnectOf(
@@ -40,6 +49,7 @@ export function integrationConnectOf(
 /** A connector a suite that asks Connect nothing stands up: every ask is a defect. */
 export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
   configured: true,
+  multipleAccounts: false,
   authorize: () => Effect.die(new Error("this suite asks Connect nothing")),
   signInResult: () => Effect.die(new Error("this suite asks Connect nothing")),
   token: () => Effect.die(new Error("this suite asks Connect nothing")),
@@ -64,15 +74,28 @@ const NOT_AUTHORIZED = new IntegrationConnectFailure({
  * that begins every sign-in, issues every account a token, and revokes
  * anything, or, where it `declines`, holds no grant at all; one unset stays
  * unconfigured. Asked how a sign-in it began stands, it answers `ends` of
- * the handle it began it with, and under way otherwise.
+ * the handle it began it with, and under way otherwise. Each token it
+ * issues carries the account's name at the provider where `names` gives one
+ * for its subject, as a grant's fields carry a workspace's name; where it
+ * `grantsOnce`, every token read after the first refuses, as a grant revoked
+ * at the provider meanwhile would.
  */
 export function integrationConnectOver(
   variables: Readonly<Record<string, string>>,
   {
     declines = false,
     ends = { kind: CONNECT_SIGN_IN_RESULT.PENDING },
-  }: { readonly declines?: boolean; readonly ends?: ConnectSignInResult } = {},
+    names = () => undefined,
+    grantsOnce = false,
+  }: {
+    readonly declines?: boolean;
+    readonly ends?: ConnectSignInResult;
+    readonly names?: (subject: string) => string | undefined;
+    readonly grantsOnce?: boolean;
+  } = {},
 ): Layer.Layer<IntegrationConnect, Config.ConfigError> {
+  // How many tokens the granting Connect below has issued, which `grantsOnce` refuses past the first.
+  let issued = 0;
   const granting = Effect.gen(function* () {
     const deployment = yield* IntegrationConnect;
     // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
@@ -95,10 +118,16 @@ export function integrationConnectOver(
                   ? ends
                   : { kind: CONNECT_SIGN_IN_RESULT.PENDING },
               ),
-            token: (userId) =>
-              declines
-                ? Effect.fail(NOT_AUTHORIZED)
-                : Effect.succeed({ token: Redacted.make(`token_${userId}`), expiresAt: Infinity }),
+            token: (subject) => {
+              if (declines || (grantsOnce && issued > 0)) return Effect.fail(NOT_AUTHORIZED);
+              issued += 1;
+              const accountName = names(subject);
+              return Effect.succeed({
+                token: Redacted.make(`token_${subject}`),
+                expiresAt: Infinity,
+                ...(accountName !== undefined ? { accountName } : undefined),
+              });
+            },
             revoke: () => Effect.void,
           },
         ];

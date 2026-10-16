@@ -85,7 +85,7 @@ export const SETTINGS_SECTION = {
   INVITATIONS: "workspace-invitations",
   /** The way out of a workspace, for anyone but its owner. */
   LEAVE: "workspace-leave",
-  /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: GitHub's connect, Manage, and disconnect, and the repositories chosen on GitHub. */
+  /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: the GitHub accounts connected, Connect or Add connection, and Manage, where repositories are chosen on GitHub. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
   /** A workspace's repositories, each opening its own settings: the command Run on this Mac runs. */
   REPOSITORIES: "workspace-repositories",

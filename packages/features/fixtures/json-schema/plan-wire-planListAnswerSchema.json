@@ -82,6 +82,10 @@
                 "type": "number",
                 "minimum": 0
               },
+              "activityAt": {
+                "type": "number",
+                "minimum": 0
+              },
               "agents": {
                 "type": "array",
                 "items": {
@@ -231,6 +235,163 @@
           "createdAt",
           "updatedAt",
           "repository"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "planlessAgents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          },
+          "contextWindow": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "long"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "turnId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runStartedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "brief": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "task"
+            ]
+          },
+          "archivedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "disabledServers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 32
+          },
+          "startedBy": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "automationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "automationName": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "activityAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "pinnedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "planId",
+          "model",
+          "effort",
+          "title",
+          "createdAt",
+          "status",
+          "turnId",
+          "automationId",
+          "workspaceId",
+          "repository",
+          "activityAt"
         ],
         "additionalProperties": false
       }

@@ -5,11 +5,13 @@ import {
   type CodingAgent,
   listCodingAgents,
   listWorkspaceCodingAgents,
+  pinCodingAgent,
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
@@ -32,6 +34,7 @@ import {
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
+  codingAgentPinRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
@@ -42,6 +45,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReply,
+  inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
   inboxCursorSchema,
@@ -87,7 +91,7 @@ import {
   withPublishedCache,
 } from "./coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentPage, codingAgentSummary } from "./coder-host/status.js";
+import { codingAgentPage, codingAgentSummary, pageAccounts } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
   type EveReach,
@@ -155,7 +159,9 @@ import {
  * can name yet, still starting or with a line awaiting its turn, which the
  * desktop tries again; an archived agent takes no message; the list leaves an archived agent out unless
  * `archived=include` asks for it, while its transcript and what it
- * published still read by its id. A Stop
+ * published still read by its id. The same PATCH carrying `pinned` pins
+ * the agent for the asking member alone, or unpins it, as a plan's pin is
+ * its reader's own (`agent-pin.ts`). A Stop
  * (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
@@ -186,7 +192,7 @@ const AGENTS_PATH = {
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
-  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, or archives it; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, archives it, or pins it for the asking member; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -206,6 +212,8 @@ const AGENTS_PATH = {
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
+  /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
+  PICTURE: "/api/agents/picture",
   /** GET lists a workspace's agents, newest started first, on one repository where the query names one. */
   OF_WORKSPACE: "/api/agents",
 } as const;
@@ -215,7 +223,13 @@ const WORKSPACE_AGENTS_LIMIT = 50;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
-const QUERY = { ID: "id", AFTER: "after", CALL: "call", ATTACHMENT: "attachment" } as const;
+const QUERY = {
+  ID: "id",
+  AFTER: "after",
+  CALL: "call",
+  ATTACHMENT: "attachment",
+  PICTURE: "picture",
+} as const;
 
 /**
  * The headers an attachment's bytes are served under beside their type: the
@@ -246,7 +260,7 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
 
-/** A change names a model, an effort, and a window, a title, or an archive, at most, so a body past this is no change. */
+/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
@@ -272,6 +286,9 @@ const idOf = (request: Request) => uuidOf(request, QUERY.ID);
 
 /** The one attachment the path named under `attachment`. */
 const attachmentIdOf = (request: Request) => uuidOf(request, QUERY.ATTACHMENT);
+
+/** The one picture the path named under `picture`. */
+const pictureIdOf = (request: Request) => uuidOf(request, QUERY.PICTURE);
 
 /** The delegation call the path named under `query`, or not found for one that is no call id. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -578,7 +595,9 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
  * against the catalog as a Start checks its own,
  * written on the row the steps read; the account's default is untouched.
  * A body naming `archived` archives the agent, stopping a turn still
- * running first as a Stop does, or brings it back. A body naming
+ * running first as a Stop does, or brings it back. A body naming `pinned`
+ * pins the agent for the asking member alone, or unpins it, which the plan
+ * list's agents with no plan then carry as that member's. A body naming
  * `disabledServers` replaces the list of MCP servers switched off for the
  * agent, which its next turn reads as it starts.
  */
@@ -617,6 +636,16 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
       agent: yield* summaryOf(changed.value),
     });
   }
+  const pin = readEither(codingAgentPinRequestSchema)(body);
+  if (Result.isSuccess(pin)) {
+    const pinned = yield* hostedStoreOrUnavailable(
+      pinCodingAgent(userId, agent.id, pin.success.pinned),
+    );
+    if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(pinned.value),
+    });
+  }
   const servers = readEither(codingAgentServersRequestSchema)(body);
   if (Result.isSuccess(servers)) {
     const changed = yield* hostedStoreOrUnavailable(
@@ -649,7 +678,7 @@ const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { agent } = yield* reachedAgent(seams, request);
   const standing = yield* standingsOf([agent.conversationId]);
-  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agent: codingAgentPage(agent, standing(agent.conversationId), now, names),
@@ -718,7 +747,8 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
  * GET reads the agent's changes: the files of the pull request its kept
  * published answer names, and who it names (`github-people.ts`), read from
  * GitHub afresh on a token minted for the agent's repository on its plan's
- * workspace installation, or none where it names no pull request yet.
+ * workspace installation, with who its row says it writes as, or none
+ * where it names no pull request yet.
  */
 const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -757,7 +787,11 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
     }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    pullRequest: { url: pullRequest.url, ...listed },
+    pullRequest: {
+      url: pullRequest.url,
+      ...listed,
+      ...(agent.author === null ? undefined : { writtenAs: agent.author }),
+    },
   });
 });
 
@@ -846,6 +880,37 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
   });
 });
 
+/**
+ * GET serves one picture a tool answered an agent, kept beside its
+ * transcript (`brain-host/relay-pictures.ts`), as its bytes under the media
+ * type the service sniffed them to be, to whoever may read the agent; one of
+ * its workers' where the path names the delegation call, read from that
+ * worker's own transcript. A picture of another agent's transcript, or of
+ * another worker's, is not found, as an agent the account cannot reach is.
+ */
+const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const pictureId = yield* pictureIdOf(request);
+  const worker = new URL(request.url).searchParams.has(QUERY.CALL);
+  const callId = worker ? yield* callIdOf(request) : undefined;
+  const { agent } = yield* reachedAgent(seams, request);
+  const conversationId =
+    callId === undefined ? agent.conversationId : childConversationId(agent.conversationId, callId);
+  const found = yield* hostedStoreOrUnavailable(readConversationPicture(conversationId, pictureId));
+  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(found.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: found.value.contentType,
+    headers: ATTACHMENT_HEADERS,
+  });
+});
+
 /** An item as an answer comes back with it, and whether the answer was taken. */
 function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
@@ -862,7 +927,8 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
  * answer is taken first, at the revision it names, and only then, where
- * the item asks to be heard back, handed to the agent as one of the
+ * the item asks to be heard back or the developer typed a note, handed to
+ * the agent as one of the
  * developer's messages under the answer's own key through the one steer
  * path (`coder-host/steer.ts`), so an answer the item no longer takes
  * never reaches the agent. A hand-off that fails, is interrupted, or dies
@@ -898,7 +964,9 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (!taken.needsReply || taken.answer === undefined) return inboxAnswered(taken, true);
+  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer)) {
+    return inboxAnswered(taken, true);
+  }
   const answer = taken.answer;
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
@@ -1000,6 +1068,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.INBOX_ATTACHMENT,
           hostedRefusing(inboxAttachmentEndpoint(seams)),
         ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.PICTURE, hostedRefusing(pictureEndpoint(seams))),
         hostedNotFoundRoute,
       ),
     ),

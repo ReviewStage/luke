@@ -87,6 +87,8 @@ export interface TabDoors {
   onOpenTerminal?: (() => void) | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
+  /** Copies the link of what the tab shows, for a tab whose thing has one (`copy-link-item.tsx`). */
+  copyLink?: MenuAction | undefined;
 }
 
 /** What a tab's menu offers on what the tab shows, each empty where the tab has none. */
@@ -99,11 +101,11 @@ interface ContentActions {
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, its Open terminal, a transcript's two copies,
+ * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
  * and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, onOpenTerminal, archive } = doors;
+  const { onCopy, onRename, onOpenTerminal, archive, copyLink } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
@@ -119,8 +121,9 @@ function contentActions(doors: TabDoors): ContentActions {
               ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
             },
           ],
-    copies:
-      onCopy === undefined
+    copies: [
+      ...(copyLink === undefined ? [] : [copyLink]),
+      ...(onCopy === undefined
         ? []
         : [
             {
@@ -133,7 +136,8 @@ function contentActions(doors: TabDoors): ContentActions {
               icon: <ScrollTextIcon />,
               onSelect: () => onCopy(TRANSCRIPT_COPY.FULL),
             },
-          ],
+          ]),
+    ],
     archive: archive === undefined ? [] : [archive],
   };
 }
@@ -143,8 +147,8 @@ function contentActions(doors: TabDoors): ContentActions {
  * them on a right-click: Close and Close others, the plan's tab offering
  * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
  * takes it out, and a Rename beside it; for an agent's, its Open terminal;
- * for a transcript's tab, its two copies; and last, for an agent's, its
- * Archive. Close others stands dimmed where nothing else would close.
+ * Copy link, for a tab whose thing has a link, and a transcript's two
+ * copies after it; and last, for an agent's, its Archive. Close others stands dimmed where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
   const { onClose } = doors;
@@ -264,7 +268,7 @@ export function DoorsTab({
   look: TabLook;
   doors: TabDoors;
   editor?: React.ReactNode;
-  tabRef?: React.Ref<HTMLButtonElement> | undefined;
+  tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const content = contentActionGroups(doors);

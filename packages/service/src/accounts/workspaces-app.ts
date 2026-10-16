@@ -60,7 +60,7 @@ import {
 import type { StoreFailure } from "../http/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { invitationOffer } from "./invitation-offers.js";
-import { listMembers, memberIdOf } from "./workspace-members.js";
+import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
  * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub account connected, and its members read, removed, given a role, or left.
@@ -83,7 +83,7 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * repositories are its installations' alone, so one with nothing connected
  * has none.
  * `GET /api/workspaces/members` answers a workspace's
- * members to a member of it. `POST /api/workspaces/members/remove` lets the
+ * members to a member of it, and who its work still names but left. `POST /api/workspaces/members/remove` lets the
  * owner remove an admin or a member, and an admin a member alone;
  * `POST /api/workspaces/members/role` lets the owner alone make a member an
  * admin or an admin a member; `POST /api/workspaces/transfer` lets the owner
@@ -408,7 +408,7 @@ const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(fu
   return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
 });
 
-/** GET: a workspace's members, to a member of it. */
+/** GET: a workspace's members, and who its work names but left, to a member of it. */
 const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -425,7 +425,12 @@ const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
   }
   const workspace = yield* answeredWorkspace(userId, asked.success);
   const members = yield* hostedStoreOrUnavailable(listMembers(workspace.id));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+  const former = yield* hostedStoreOrUnavailable(listFormerMembers(workspace.id));
+  // Note that nobody who left says nothing, so an answer is as it was before anyone could leave.
+  return hostedJsonResponse(
+    HOSTED_HTTP_STATUS.OK,
+    former.length === 0 ? { members } : { members, former },
+  );
 });
 
 /**

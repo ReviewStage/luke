@@ -1,4 +1,5 @@
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -25,7 +26,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
@@ -38,21 +39,35 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  ROW_PART,
+  type RowReading,
+  TURN_ROW,
+  type TurnRow,
+  turnRows,
+} from "@luke/features/turn-rows";
+import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  githubLoginActor,
   LUKE_ACTOR,
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  isWireString,
+  MESSAGE_ROLE,
+  type UnparsedWireValue,
+  type WireValue,
+} from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
-import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
+import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -110,22 +125,6 @@ function withCost(line: string, usage: CodingAgentUsage | undefined): string {
   return cost === undefined ? line : `${line}${LINE_SEPARATOR}${cost}`;
 }
 
-/** What a failed turn's end line says after "Failed", by the service's one word for why; nothing for a reason it has no words for. */
-const AGENT_FAILURE_WORDS = {
-  [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
-  [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Coding agents › API keys",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
-    "Fast isn't available on your own API key; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
-    "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.OTHER]: undefined,
-} as const satisfies Record<CodingAgentFailure, string | undefined>;
-
 /**
  * The teammate who started an agent, by name, whose key pays for it and whose
  * Mac its commands run on; none for the reader's own agent, one whose starter
@@ -162,9 +161,10 @@ export function macOwnerOf(
   startedBy: PlanEditor | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor | undefined {
   if (startedBy === undefined || readerId === undefined) return undefined;
-  return personActor(startedBy, members, readerId);
+  return personActor(startedBy, members, readerId, former);
 }
 
 /** Where an actor's work stands, as a tab's glyph state says it. */
@@ -190,7 +190,9 @@ export function agentActor(
 /**
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
- * face, a former member, Luke, or an automation; none for the reader's own,
+ * face, a former member, Luke, an automation, or the GitHub login GitHub
+ * told the agent of, a person's circle by their avatar or an App's bot's
+ * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
  * id, for the reason `teammateStarter` gives. A service older than the
  * sender's kind names Luke, an automation, and a former member alike by a
@@ -201,6 +203,7 @@ export function lineSender(
   sentBy: CodingAgentSender | undefined,
   readerId: string | undefined,
   members: readonly WorkspaceMember[] | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor | undefined {
   if (sentBy === undefined) return undefined;
   if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
@@ -211,25 +214,16 @@ export function lineSender(
       return LUKE_ACTOR;
     case CODING_AGENT_SENDER.AUTOMATION:
       return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+    case CODING_AGENT_SENDER.GITHUB:
+      return githubLoginActor(sentBy.name);
     case CODING_AGENT_SENDER.FORMER:
       return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
     case CODING_AGENT_SENDER.MEMBER:
     case undefined:
       return sentBy.userId === undefined
         ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
-        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId);
+        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId, former);
   }
-}
-
-/** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
-function teammateKeyWords(failure: CodingAgentFailure, starter: string): string | undefined {
-  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
-    return `${starter}'s API key was refused or can't be read`;
-  }
-  if (failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
-    return `Fast isn't available on ${starter}'s own API key; choose the model with Fast off`;
-  }
-  return AGENT_FAILURE_WORDS[failure];
 }
 
 /**
@@ -248,12 +242,7 @@ export function endLine(
     case CODING_AGENT_STATUS.CANCELLED:
       return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
-      const words =
-        failure === undefined
-          ? undefined
-          : starter === undefined
-            ? AGENT_FAILURE_WORDS[failure]
-            : teammateKeyWords(failure, starter);
+      const words = failure === undefined ? undefined : agentFailureWords(failure, starter);
       return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:
@@ -521,18 +510,11 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 }
 
 /**
- * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`@luke/features/model-label`).
+ * A model, and an agent, as a tab or a menu names it, shared with the main
+ * process's notifications so neither is ever named two ways
+ * (`@luke/features/model-label`).
  */
-export { modelLabel };
-
-/** The agent's tab label: its title, or its model's name until it has one. */
-export function agentTabLabel(
-  agent: Pick<CodingAgentSummary, "title" | "model">,
-  models?: readonly CatalogModel[],
-): string {
-  return agent.title ?? modelLabel(agent.model, models);
-}
+export { agentTabLabel, modelLabel };
 
 /**
  * The provider whose harness runs a model, read from its catalog id, whose
@@ -942,6 +924,8 @@ export const AGENT_PART = {
   STEP_START: "step-start",
   /** A part of a kind this build does not draw, which is skipped rather than refused. */
   OTHER: "other",
+  /** One of the developer's lines that reached the turn while it ran, drawn among the turn's parts where it arrived; never a part a message stores. */
+  ARRIVED: "arrived",
 } as const;
 
 /** How the SDK spells a tool part's type: the tool's name behind this prefix. */
@@ -964,7 +948,8 @@ export type AgentPart =
       readonly errorText: string | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
-  | { readonly kind: typeof AGENT_PART.OTHER };
+  | { readonly kind: typeof AGENT_PART.OTHER }
+  | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: CodingAgentMessage };
 
 function toolState(value: WireValue | undefined): ToolState {
   // SAFETY: membership in the set built from TOOL_STATE's values is what the union names.
@@ -1018,6 +1003,16 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
     ).length;
 }
 
+/**
+ * The coding agents an agent's own calls started, by id, in the order its
+ * transcript holds them: each `start_agent` that answered an agent. A tab
+ * that sees one it had not reads its plan's agents again, as the plan does
+ * when Luke starts one, since nothing else tells the list.
+ */
+export function startedAgentIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages.flatMap(agentParts).flatMap((part) => startedAgentOf(part) ?? []);
+}
+
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
@@ -1036,7 +1031,10 @@ export function isDelegation(
  * refused, which answers no agent.
  */
 export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.START_CODING_AGENT) {
+  if (
+    part.kind !== AGENT_PART.TOOL ||
+    (part.tool !== AGENT_TOOL.START_AGENT && part.tool !== RETIRED_TOOL.START_CODING_AGENT)
+  ) {
     return undefined;
   }
   const target = toolTarget(part);
@@ -1088,9 +1086,13 @@ export function dockedTodos(
 
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
-  key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
+  key: (part, index) => {
+    if (part.kind === AGENT_PART.TOOL) return part.callId;
+    return part.kind === AGENT_PART.ARRIVED ? part.line.id : String(index);
+  },
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
+    if (part.kind === AGENT_PART.ARRIVED) return ROW_PART.ARRIVED;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
@@ -1101,24 +1103,139 @@ const AGENT_READING: RowReading<AgentPart> = {
     (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
 };
 
-/** No subagent's session saying it runs. */
-const NO_WORKERS: ReadonlySet<string> = new Set();
+/** No subagent's session saying where it stands. */
+const NO_WORKERS: ReadonlyMap<string, ToolState> = new Map();
 
 /** What a tab knows of a turn beyond its message, which its rows read. */
 interface AgentTurnPlace {
   /** The call whose to-do list stays out of a finished turn's fold. */
   readonly newestTodos?: string | undefined;
-  /** The calls whose subagent its own session says still runs, since a call may settle the moment its worker is under way. */
-  readonly workers?: ReadonlySet<string>;
+  /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
+  readonly workers?: ReadonlyMap<string, ToolState>;
   /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
   readonly said?: boolean;
+  /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
+  readonly arrived?: readonly CodingAgentMessage[];
 }
 
-/** The parts of a message a row is drawn from: every part but a step boundary and a kind this build does not draw. */
-function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return agentParts(message).filter(
-    (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
+/** The `connection_execute` calls among the parts that an integration's own call ran under, by their ids. */
+function runConnectionCalls(parts: readonly AgentPart[]): ReadonlySet<string> {
+  return new Set(
+    parts.flatMap((part) => {
+      const remote =
+        part.kind === AGENT_PART.TOOL ? remoteCallOf(part.tool, part.input) : undefined;
+      return remote === undefined ? [] : [remote.call.parentCallId];
+    }),
   );
+}
+
+type ToolPart = Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+
+/** Whether a part is a `show_image` call that showed its pictures, which a reader reads as their own and never folds away. */
+function isShownSet(part: AgentPart): part is ToolPart {
+  return (
+    part.kind === AGENT_PART.TOOL &&
+    part.tool === AGENT_TOOL.SHOW_IMAGE &&
+    part.state === TOOL_STATE.OUTPUT_AVAILABLE &&
+    isRecord(part.output) &&
+    part.output.status === ACTION_RESULT_STATUS.ACCEPTED
+  );
+}
+
+/**
+ * A `show_image` call its tool refused, as the call that failed it is: the
+ * service answers a refusal as an output carrying why, so the row reads
+ * the reason as its error, its line wears the failed mark, and no picture
+ * waits for bytes that were never kept; nothing for any other part.
+ */
+function refusedSet(part: AgentPart): ToolPart | undefined {
+  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.SHOW_IMAGE) return undefined;
+  if (part.state !== TOOL_STATE.OUTPUT_AVAILABLE || !isRecord(part.output)) return undefined;
+  const reason = part.output.reason;
+  if (part.output.status !== ACTION_RESULT_STATUS.REJECTED || !isWireString(reason))
+    return undefined;
+  return { ...part, state: TOOL_STATE.OUTPUT_ERROR, errorText: reason };
+}
+
+function listOf(value: UnparsedWireValue, key: string): readonly WireValue[] {
+  if (!isRecord(value)) return [];
+  const list = value[key];
+  return Array.isArray(list) ? list : [];
+}
+
+/** Two shown sets as one: the first's call, both sets' pictures in order. */
+function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
+  return {
+    ...first,
+    input: { images: [...listOf(first.input, "images"), ...listOf(second.input, "images")] },
+    output: {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      pictures: [...listOf(first.output, "pictures"), ...listOf(second.output, "pictures")],
+    },
+  };
+}
+
+/**
+ * The parts of a message a row is drawn from: every part but a step
+ * boundary, a kind this build does not draw, and a `connection_execute`
+ * whose integration's own call stands in the message; and every run of
+ * shown sets, one straight after another, joined into one set, as the
+ * parallel calls of one step are meant to be. Note that such a wrapper is
+ * left out, because the call it ran is the same call told twice, and that
+ * one with no such call, or one that failed, keeps its row, because its row
+ * is where it, or its error, is read. Each line that reached the turn
+ * while it ran stands ahead of the first step after the steps it arrived
+ * after, or at the end where that step has not begun.
+ */
+function drawnParts(
+  message: CodingAgentMessage,
+  arrived: readonly CodingAgentMessage[] = [],
+): readonly AgentPart[] {
+  const parts = agentParts(message);
+  const ran = runConnectionCalls(parts);
+  const drawn: AgentPart[] = [];
+  const waiting = arrived.toSorted((a, b) => afterStepOf(a) - afterStepOf(b));
+  let begun = 0;
+  const arrive = (steps: number) => {
+    while (waiting[0] !== undefined && afterStepOf(waiting[0]) <= steps) {
+      const line = waiting.shift();
+      if (line !== undefined) drawn.push({ kind: AGENT_PART.ARRIVED, line });
+    }
+  };
+  for (const part of parts) {
+    if (part.kind === AGENT_PART.STEP_START) {
+      arrive(begun);
+      begun += 1;
+      continue;
+    }
+    if (part.kind === AGENT_PART.OTHER) continue;
+    if (
+      part.kind === AGENT_PART.TOOL &&
+      part.tool === CONNECTION_TOOL.EXECUTE &&
+      part.state !== TOOL_STATE.OUTPUT_ERROR &&
+      ran.has(part.callId)
+    ) {
+      continue;
+    }
+    const last = drawn.at(-1);
+    const refusal = refusedSet(part);
+    if (refusal !== undefined) {
+      drawn.push(refusal);
+      continue;
+    }
+    if (last !== undefined && isShownSet(last) && isShownSet(part)) {
+      drawn[drawn.length - 1] = joinedSets(last, part);
+    } else {
+      drawn.push(part);
+    }
+  }
+  arrive(Number.POSITIVE_INFINITY);
+  return drawn;
+}
+
+/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+function afterStepOf(line: CodingAgentMessage): number {
+  return line.arrivedIn?.afterStep ?? 0;
 }
 
 /**
@@ -1126,32 +1243,91 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
  * the Call tab folds Luke's (`turn-rows.ts`). A step boundary and a part
  * this build does not draw are left out, because the parts keep one rhythm
  * across them. The turn moves while the agent may still write to it, which
- * is its last message; any other has ended. A worker's session is read for
- * its detail, so its calls stand each on a line of its own and its lead
- * never folds, as the Call tab's worker's do. The agent's newest to-do
- * list, named by the call that wrote it (`newestTodos`), stays out of
- * a finished turn's fold, so the list standing is never folded away.
+ * is its last message; any other has ended. A worker's session folds as
+ * its agent's does, since a run of calls reads the same whoever made it.
+ * The agent's newest to-do list, named by the call that wrote it
+ * (`newestTodos`), stays out of a finished turn's fold, so the list
+ * standing is never folded away, and so does every set of pictures the
+ * agent showed, which is its answer as much as its words are. A line that
+ * reached the turn while it ran (`arrived`) stands among its parts where it
+ * arrived, splitting the fold of a finished turn around it.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  grouped = true,
-  { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
-  const parts = drawnParts(message);
+  const parts = drawnParts(message, arrived);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
-      AGENT_READING.running(part) || (part.kind === AGENT_PART.TOOL && workers.has(part.callId)),
-    kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
+      AGENT_READING.running(part) ||
+      (part.kind === AGENT_PART.TOOL && workers.get(part.callId) === TOOL_STATE.INPUT_AVAILABLE),
+    failed: (part) =>
+      part.kind === AGENT_PART.TOOL &&
+      (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
+    kept: (part) =>
+      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) || isShownSet(part),
   };
   return turnRows(parts, reading, {
     key: message.id,
     moving,
-    done: grouped && !moving,
-    grouped,
+    done: !moving,
     said,
   });
+}
+
+/** One of a transcript's rows as the tab draws it, with the developer's lines that reached it while its turn ran. */
+export interface PlacedMessage {
+  readonly message: CodingAgentMessage;
+  /** The lines its turn took in under way (`arrivedIn`), oldest first; none on any row but a turn's journal. */
+  readonly arrived: readonly CodingAgentMessage[];
+}
+
+/**
+ * A transcript's rows with each line that reached a turn under way moved
+ * into that turn's journal, which draws it where it arrived, out of the
+ * order the service keeps, where the journal closed behind it. A line whose
+ * journal is not among the rows, as when its page is still to land, stands
+ * where the order puts it, as every line does from a service older than it.
+ */
+export function placedMessages(messages: readonly CodingAgentMessage[]): readonly PlacedMessage[] {
+  const journals = new Set(
+    messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
+  );
+  const arrived = new Map<string, CodingAgentMessage[]>();
+  for (const message of messages) {
+    const journal = message.arrivedIn?.journalId;
+    if (journal === undefined || !journals.has(journal)) continue;
+    arrived.set(journal, [...(arrived.get(journal) ?? []), message]);
+  }
+  return messages.flatMap((message) => {
+    const journal = message.arrivedIn?.journalId;
+    if (journal !== undefined && journals.has(journal)) return [];
+    return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/** A stretch of a turn's rows as the tab draws it: the turn's own rows, or a line that reached it while it ran, which stands between them as the developer's own message. */
+export type TurnStretch =
+  | { readonly line: CodingAgentMessage; readonly rows?: undefined }
+  | { readonly line?: undefined; readonly rows: readonly TurnRow<AgentPart>[] };
+
+/** A turn's rows cut at every line that reached it while it ran, so the tab draws each line as a message of its own between the turn's work before and after it. */
+export function turnStretches(rows: readonly TurnRow<AgentPart>[]): readonly TurnStretch[] {
+  const stretches: TurnStretch[] = [];
+  let run: TurnRow<AgentPart>[] = [];
+  for (const row of rows) {
+    if (row.kind !== TURN_ROW.BLOCK || row.block.kind !== AGENT_PART.ARRIVED) {
+      run.push(row);
+      continue;
+    }
+    if (run.length > 0) stretches.push({ rows: run });
+    run = [];
+    stretches.push({ line: row.block.line });
+  }
+  if (run.length > 0 || stretches.length === 0) stretches.push({ rows: run });
+  return stretches;
 }
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */
@@ -1238,14 +1414,19 @@ const TASK_ROW_ID = "task";
  * first row, from the words the agent's call carried, and the worker's own
  * turns after it. The service's first row is the same task, so the
  * developer's rows are left out rather than drawn twice; nothing else of
- * the developer's reaches a worker.
+ * the developer's reaches a worker. A worker opened by a link, which
+ * carries no words, takes its task from the service's first row, and is
+ * drawn as any other.
  */
 export function workerLines(
   task: string,
   messages: readonly CodingAgentMessage[],
 ): readonly CodingAgentMessage[] {
+  // A worker opened by its link carries no task's words, so the service's own first row's are the task.
+  const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+  const words = task === "" && first !== undefined ? messageWords(first) : task;
   return [
-    { id: TASK_ROW_ID, role: MESSAGE_ROLE.USER, parts: [{ type: AGENT_PART.TEXT, text: task }] },
+    { id: TASK_ROW_ID, role: MESSAGE_ROLE.USER, parts: [{ type: AGENT_PART.TEXT, text: words }] },
     ...messages.filter((message) => message.role !== MESSAGE_ROLE.USER),
   ];
 }

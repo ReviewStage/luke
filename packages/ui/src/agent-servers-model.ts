@@ -8,8 +8,10 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
+  type IntegrationAccount,
   type IntegrationProvider,
   type IntegrationStatus,
+  integrationAccountNames,
 } from "@luke/features/integration-wire";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
@@ -17,9 +19,12 @@ import { searchTokens } from "./search-tokens.js";
 /**
  * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it; which section it stands under; and what a search of it finds.
  *
- * Every MCP server Luke hands a coding agent is one integration's, so the
- * popover has one row per integration provider the deployment offers the
- * account, in the provider list's order. A connected server carries a
+ * Every MCP server Luke hands a coding agent is one account at an
+ * integration, so the popover has one row per account the Luke account
+ * holds at each provider the deployment offers it, and one for a provider
+ * where it holds none, in the provider list's order. A provider with more
+ * than one account names each row by its label ("Notion · Acme"), and one
+ * with a single account by the provider alone, as it always has. A connected server carries a
  * switch, on unless the agent switched it off, which is all the agent's row
  * keeps: a server connected later is on for every agent. Its row names how
  * many tools the server offers once they have been read, and that count
@@ -77,6 +82,12 @@ export const SERVERS_LABEL = "MCP servers";
 /** One server's row. */
 export interface ServerRow {
   readonly provider: IntegrationProvider;
+  /** The server's name: its account's connection name, or the provider's where it holds none. */
+  readonly connection: string;
+  /** The account the row stands for, where the Luke account holds one at the provider. */
+  readonly account?: IntegrationAccount;
+  /** How many accounts the Luke account holds at the provider. */
+  readonly accounts: number;
   readonly name: string;
   readonly kind: ServerRowKind;
   /** Whether the agent has it on; a row with no switch has it on only by default, which is never drawn. */
@@ -144,30 +155,45 @@ function wordsOf(
  * not been read is drawn until it is.
  */
 export function serverRows(input: {
-  statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
-  healthOf: (provider: IntegrationProvider) => ConnectionHealth;
-  signInOf: (provider: IntegrationProvider) => SignIn | undefined;
+  statusOf: (server: string) => IntegrationStatus | undefined;
+  healthOf: (server: string) => ConnectionHealth;
+  signInOf: (server: string) => SignIn | undefined;
+  /** The accounts held at a provider; a surface that draws none hands none. */
+  accountsOf?: (provider: IntegrationProvider) => readonly IntegrationAccount[];
   readFailed: boolean;
-  disabled: readonly IntegrationProvider[];
+  disabled: readonly string[];
 }): readonly ServerRow[] {
   const offered = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => input.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
   );
-  return offered.map((provider) => {
-    const status = input.statusOf(provider);
-    const health = input.healthOf(provider);
-    const signIn = input.signInOf(provider);
-    const connected = status === INTEGRATION_STATUS.CONNECTED;
-    return {
-      provider,
-      name: INTEGRATION_NAME[provider],
-      kind: kindOf(status, health, signIn, input.readFailed),
-      on: !input.disabled.includes(provider),
-      ...(connected && health.kind === CONNECTION_HEALTH.WORKING
-        ? { tools: health.tools }
-        : undefined),
-      ...wordsOf(provider, status, health, signIn),
-    };
+  return offered.flatMap((provider) => {
+    const accounts = input.accountsOf?.(provider) ?? [];
+    const names = integrationAccountNames(accounts);
+    const servers = accounts.length > 0 ? accounts : [undefined];
+    return servers.map((account): ServerRow => {
+      const connection = account?.connection ?? provider;
+      const status = input.statusOf(connection);
+      const health = input.healthOf(connection);
+      const signIn = input.signInOf(connection);
+      const connected = status === INTEGRATION_STATUS.CONNECTED;
+      const named = names.get(connection);
+      return {
+        provider,
+        connection,
+        ...(account !== undefined ? { account } : undefined),
+        accounts: accounts.length,
+        name:
+          named !== undefined && accounts.length > 1
+            ? `${INTEGRATION_NAME[provider]} · ${named}`
+            : INTEGRATION_NAME[provider],
+        kind: kindOf(status, health, signIn, input.readFailed),
+        on: !input.disabled.includes(connection),
+        ...(connected && health.kind === CONNECTION_HEALTH.WORKING
+          ? { tools: health.tools }
+          : undefined),
+        ...wordsOf(provider, status, health, signIn),
+      };
+    });
   });
 }
 
@@ -243,31 +269,72 @@ export function searchServers(rows: readonly ServerRow[], query: string): Server
   const found = rows.map((row) => ({
     row,
     match: matchIntegration(row.provider, row.tools ?? [], tokens),
+    // An account's label finds its row too, so "personal" finds Notion · Personal.
+    labelled: row.accounts > 1 && tokens.every((token) => row.name.toLowerCase().includes(token)),
   }));
   return {
-    rows: found.flatMap(({ row, match }) => (match?.named ? [row] : [])),
+    rows: found.flatMap(({ row, match, labelled }) => (match?.named || labelled ? [row] : [])),
     tools: found.flatMap(({ row, match }) => (match?.tools ?? []).map((tool) => ({ row, tool }))),
   };
 }
 
-/** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
-export function lapsedServer(input: {
-  statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
-  disabled: readonly IntegrationProvider[];
-}): IntegrationProvider | undefined {
-  return INTEGRATION_PROVIDER_LIST.find(
-    (provider) =>
-      input.statusOf(provider) === INTEGRATION_STATUS.EXPIRED && !input.disabled.includes(provider),
-  );
+/** One server as a surface names it: its provider, its connection, and what it is called beside its provider's others. */
+export interface NamedServer {
+  readonly provider: IntegrationProvider;
+  readonly connection: string;
+  readonly name: string;
 }
 
-/** The servers off once one is switched, in the provider list's order, each once. */
+/**
+ * Every server the Luke account holds, standing as `status` says, in the
+ * provider list's order: each account at a provider, named by its label
+ * where the provider has more than one, and a provider with none by itself.
+ */
+export function namedServers(input: {
+  statusOf: (server: string) => IntegrationStatus | undefined;
+  accountsOf: (provider: IntegrationProvider) => readonly IntegrationAccount[];
+  standing: (status: IntegrationStatus | undefined) => boolean;
+}): readonly NamedServer[] {
+  return INTEGRATION_PROVIDER_LIST.flatMap((provider) => {
+    const accounts = input.accountsOf(provider);
+    const names = integrationAccountNames(accounts);
+    const servers: readonly NamedServer[] =
+      accounts.length === 0
+        ? [{ provider, connection: provider, name: INTEGRATION_NAME[provider] }]
+        : accounts.map((account) => ({
+            provider,
+            connection: account.connection,
+            name:
+              accounts.length > 1
+                ? `${INTEGRATION_NAME[provider]} · ${names.get(account.connection)}`
+                : INTEGRATION_NAME[provider],
+          }));
+    return servers.filter((server) => input.standing(input.statusOf(server.connection)));
+  });
+}
+
+/** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
+export function lapsedServer(input: {
+  statusOf: (server: string) => IntegrationStatus | undefined;
+  accountsOf: (provider: IntegrationProvider) => readonly IntegrationAccount[];
+  disabled: readonly string[];
+}): NamedServer | undefined {
+  return namedServers({
+    ...input,
+    standing: (status) => status === INTEGRATION_STATUS.EXPIRED,
+  }).find((server) => !input.disabled.includes(server.connection));
+}
+
+/**
+ * The servers off once one is switched, each once: the connection switched
+ * off where it is now off, and every other one already off kept, an account
+ * this window draws no row of among them.
+ */
 export function switchedServers(
-  disabled: readonly IntegrationProvider[],
-  provider: IntegrationProvider,
+  disabled: readonly string[],
+  connection: string,
   on: boolean,
-): readonly IntegrationProvider[] {
-  return INTEGRATION_PROVIDER_LIST.filter((each) =>
-    each === provider ? !on : disabled.includes(each),
-  );
+): readonly string[] {
+  const others = disabled.filter((each) => each !== connection);
+  return on ? others : [...others, connection];
 }

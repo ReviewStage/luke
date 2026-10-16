@@ -9,6 +9,7 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -20,6 +21,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
+import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
@@ -61,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -94,7 +97,9 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(createElement(Box, { sender })));
+  await act(async () =>
+    root.render(onRegistry(AtomRegistry.make(), createElement(Box, { sender }))),
+  );
   await settle();
   return {
     container,
@@ -349,7 +354,10 @@ async function mountedRefusedForMove() {
   roots.push(root);
   await act(async () =>
     root.render(
-      createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
+      ),
     ),
   );
   await settle();

@@ -52,6 +52,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "account/integrations/disconnect",
     query: "provider=$1",
   },
+  {
+    src: "/api/account/integrations/([^/]+)/rename",
+    route: "account/integrations/rename",
+    query: "provider=$1",
+  },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
   { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },
@@ -66,6 +71,12 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
   { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/attachments/([^/]+)",
+    route: "plans/attachment",
+    query: "id=$1&attachment=$2",
+  },
+  { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
@@ -96,6 +107,16 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
+  },
+  {
+    src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&call=$2&picture=$3",
+  },
+  {
+    src: "/api/agents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
@@ -161,7 +182,8 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
   return rewrites;
 }
 
-export const VERCEL_CONFIG_FILE = "vercel.json";
+/** The deployment's configuration, at the repository root two steps above the web app. */
+export const VERCEL_CONFIG_FILE = join("..", "..", "vercel.json");
 /** The committed generation of the `/api/` rewrites, which the web service's routes are assembled from. */
 export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
@@ -229,7 +251,7 @@ const ServiceRewriteSchema = Schema.Struct({
 
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
-  services: Schema.Struct({ web: WebService, eve: EveService, coder: CoderService }),
+  services: Schema.Struct({ web: WebService, luke: EveService, dev: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });

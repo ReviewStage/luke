@@ -18,6 +18,7 @@ import {
 } from "./account-call.js";
 import type { AccountSessionToken, AccountToken } from "./account-token.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
+import { type LinearIssueSummary, linearIssuesAnswerSchema } from "./linear-wire.js";
 import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -39,6 +40,9 @@ import {
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
 import {
+  type FormerMember,
+  type LinearIssuesRequest,
+  linearIssuesRequestSchema,
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
   type WorkspaceMember,
@@ -50,6 +54,8 @@ import {
   workspaceGithubRequestSchema,
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
+  workspaceLinearConnectAnswerSchema,
+  workspaceLinearRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberRoleSchema,
   workspaceMembersAnswerSchema,
@@ -92,6 +98,7 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
+  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE],
 ]);
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
@@ -212,15 +219,63 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One workspace's members, owners first; or why there are none: not a member, not permitted, or no answer. */
-  members(
+  /** Where the browser goes to connect Linear for the whole workspace: Vercel Connect's sign-in address. */
+  linearConnect(
     workspaceId: string,
-  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
+    return this.#linear(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECT, workspaceId, (body) =>
+      this.#answered(body, workspaceLinearConnectAnswerSchema, (answer) => answer.url),
+    );
+  }
+
+  /** The workspace's Linear disconnected, answering the workspace as it then stands. */
+  linearDisconnect(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    return this.#linear(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_DISCONNECT, workspaceId, (body) =>
+      this.#answered(body, workspaceAnswerSchema, (answer) => answer.workspace),
+    );
+  }
+
+  /**
+   * The Linear issues the workspace's connection reaches, newest changed
+   * first, or those the search matches; a request the service would refuse
+   * by shape never travels.
+   */
+  linearIssues(
+    request: LinearIssuesRequest,
+  ): Effect.Effect<
+    WorkspaceCallResult<readonly LinearIssueSummary[]>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(readEither(linearIssuesRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES,
+        body: JSON.stringify(admitted),
+      },
+      linearIssuesAnswerSchema,
+      (answer) => answer.issues,
+    );
+  }
+
+  /** One workspace's members, owners first, and who its work names but left; or why there are none: not a member, not permitted, or no answer. */
+  people(workspaceId: string): Effect.Effect<
+    WorkspaceCallResult<{
+      readonly members: readonly WorkspaceMember[];
+      readonly former: readonly FormerMember[];
+    }>,
+    never,
+    HttpClient.HttpClient
+  > {
     const query = new URLSearchParams({ [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId });
     return this.#answered(
       { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
       workspaceMembersAnswerSchema,
-      (answer) => answer.members,
+      (answer) => ({ members: answer.members, former: answer.former ?? [] }),
     );
   }
 
@@ -412,6 +467,21 @@ export class HostedWorkspaceClient {
   ): Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(
       readEither(workspaceGithubRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });
+  }
+
+  /** A call that names one workspace's Linear, sent where the workspace's id is one the service would take. */
+  #linear<A>(
+    path: string,
+    workspaceId: string,
+    send: (
+      request: CallRequest,
+    ) => Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient>,
+  ): Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLinearRequestSchema)({ workspaceId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });

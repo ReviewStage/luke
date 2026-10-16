@@ -1,24 +1,14 @@
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
+import { PLAN_BOUNDS } from "@luke/features/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
-import { MICROPHONE_PRESS, microphoneButton, repositoryGroups } from "./planning-model.js";
+import { MICROPHONE_PRESS, microphoneButton, planNameOfIssue } from "./planning-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-
-const PLAN: Plan = {
-  id: INVITES,
-  workspaceId: "workspace-personal",
-  name: "Teammate invitations",
-  createdAt: 1,
-  updatedAt: 2,
-  repository: null,
-  document: { body: "# Teammate invitations", assumptions: [] },
-};
 
 function _view(patch: Partial<PlanningView>): PlanningView {
   return {
@@ -106,18 +96,13 @@ function _onRepository(name: string, repository: string | null, updatedAt: numbe
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
 
-test("a repository group lists its plans newest updated first, the time each row shows", () => {
-  const plan = (id: string, createdAt: number, updatedAt: number) => ({
-    ...PLAN,
-    id,
-    name: id,
-    repository: "acme/relay",
-    createdAt,
-    updatedAt,
-  });
-  const groups = repositoryGroups([plan("old", 3, 10), plan("touched", 1, 30), plan("new", 2, 20)]);
-  assert.deepEqual(
-    groups.map((group) => group.plans.map((each) => each.name)),
-    [["touched", "new", "old"]],
+test("a plan started from a Linear issue is named by its title, cut to a name's bound, or by its key where the title is blank", () => {
+  const long = "x".repeat(PLAN_BOUNDS.MAX_NAME_CHARS + 20);
+
+  assert.equal(planNameOfIssue({ identifier: "ENG-1", title: "  Ship it  " }), "Ship it");
+  assert.equal(
+    planNameOfIssue({ identifier: "ENG-2", title: long }).length,
+    PLAN_BOUNDS.MAX_NAME_CHARS,
   );
+  assert.equal(planNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
 });

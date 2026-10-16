@@ -23,8 +23,11 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
   type AutomationTrigger,
+  GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  type GitHubSender,
   type GitHubTriggerEvent,
+  PULL_REQUEST_MOMENT,
 } from "@luke/features/automation-wire";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -468,10 +471,10 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.deepEqual(
           [first.body, again.body, fromBot.body, otherLabel.body],
           [
-            { read: 0, queued: 1 },
-            { read: 0, queued: 0 },
-            { read: 0, queued: 0 },
-            { read: 0, queued: 0 },
+            { read: 0, queued: 1, told: 0 },
+            { read: 0, queued: 0, told: 0 },
+            { read: 0, queued: 0, told: 0 },
+            { read: 0, queued: 0, told: 0 },
           ],
         );
         const runs = yield* listAutomationRuns(owner, made.id);
@@ -493,7 +496,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "a pull request opened, pushed to, or marked ready queues a run for a workspace automation listening for updates in any of its repositories, and a draft, a bot's push, a close, or an owner who left the workspace queues none",
+    "a pull request opened, pushed to, or marked ready queues a run for a workspace automation listening for updates in any of its repositories, and a draft, a bot's push, a close, or an owner who left the workspace queues none, its trigger naming no settings",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -520,14 +523,14 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const pull = (action: string, options: { draft?: boolean; sender?: string } = {}) => ({
           action,
           repository: { full_name: repositoryName.toLowerCase() },
-          sender: { type: options.sender ?? "User" },
+          sender: { type: options.sender ?? "User", login: "someone" },
           pull_request: {
             number: 7,
             title: "Teammate invitations",
             html_url: `https://github.com/${repositoryName}/pull/7`,
             labels: [],
             base: { ref: "main" },
-            head: { ref: "teammate-invitations" },
+            head: { ref: "teammate-invitations", repo: { full_name: repositoryName } },
             draft: options.draft ?? false,
           },
         });
@@ -545,8 +548,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
 
         assert.deepEqual(
           answers,
-          [2, 1, 1, 1, 0, 0].map((queued) => ({ read: 0, queued })),
-          "an opened pull request fires both automations; a draft fires only the one listening for opened",
+          [2, 1, 1, 0, 0, 0].map((queued) => ({ read: 0, queued, told: 0 })),
+          "an opened pull request fires both automations; a draft fires neither, asking for none",
         );
         const runs = yield* listAutomationRuns(owner, review.id);
         assert.equal(runs.length, 3);
@@ -559,11 +562,178 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           branch: "main",
           url: `https://github.com/${repositoryName}/pull/7`,
         });
-        assert.equal((yield* listAutomationRuns(owner, greet.id)).length, 2);
+        assert.equal((yield* listAutomationRuns(owner, greet.id)).length, 1);
 
         // Its owner gone from the workspace, the automation hears nothing more.
         yield* leaveWorkspace(plan.workspaceId, owner);
-        assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0 });
+        assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0, told: 0 });
+      }),
+  );
+
+  it.effect(
+    "a trigger's settings choose whose pull requests fire it, at which moments, and whether drafts and forks do, and a push by Luke's agents never fires it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const repositoryName = `Acme/settings-${randomUUID()}`;
+        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const listening = (trigger: AutomationTrigger) =>
+          Effect.map(
+            createAutomation(owner, {
+              planId: null,
+              organizationId: plan.workspaceId,
+              repositories: [repositoryName],
+              name: "Code review",
+              trigger,
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Review this pull request." },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: null,
+              webhookSecretHash: null,
+            }),
+            Option.getOrThrow,
+          );
+        const review = yield* listening({
+          kind: AUTOMATION_TRIGGER.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+          senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS],
+          moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.PUSHED],
+        });
+        const everything = yield* listening({
+          kind: AUTOMATION_TRIGGER.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+          senders: Object.values(GITHUB_SENDER),
+          drafts: true,
+          forks: true,
+        });
+        const github = githubReaching([]);
+        const pull = (
+          action: string,
+          sender: { readonly type: string; readonly login: string },
+          options: { readonly draft?: boolean; readonly head?: string | null } = {},
+        ) => ({
+          action,
+          repository: { full_name: repositoryName },
+          sender,
+          pull_request: {
+            number: 3,
+            title: "Teammate invitations",
+            html_url: `https://github.com/${repositoryName}/pull/3`,
+            labels: [],
+            base: { ref: "main" },
+            head: {
+              repo: options.head === null ? null : { full_name: options.head ?? repositoryName },
+            },
+            draft: options.draft ?? false,
+          },
+        });
+        const person = { type: "User", login: "ada" };
+        const agent = { type: "Bot", login: "luke[bot]" };
+        const dependabot = { type: "Bot", login: "dependabot[bot]" };
+        const runsOf = (automation: { readonly id: string }) =>
+          Effect.map(listAutomationRuns(owner, automation.id), (runs) => runs.length);
+        const counts = [];
+        for (const payload of [
+          pull("opened", person),
+          pull("ready_for_review", person),
+          pull("synchronize", person),
+          pull("opened", agent),
+          pull("synchronize", agent),
+          pull("opened", dependabot),
+          pull("opened", person, { draft: true }),
+          pull("opened", person, { head: "Stranger/settings-fork" }),
+        ]) {
+          yield* answer(github, SECRET, delivery("pull_request", payload));
+          counts.push([yield* runsOf(review), yield* runsOf(everything)]);
+        }
+
+        assert.deepEqual(counts, [
+          [1, 1], // a person opens it: both
+          [1, 2], // marked ready: not a moment the review chose
+          [2, 3], // a person's push: both
+          [3, 4], // Luke's agent opens one: both hear Luke's agents
+          [3, 4], // Luke's agent pushes: never, whatever a trigger says
+          [3, 5], // another bot: only the trigger that hears other bots
+          [3, 6], // a draft: only the trigger that asks for drafts
+          [3, 7], // a fork's: only the trigger that asks for forks
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a person opening, reopening, or marking ready a pull request from a luke/ branch of the repository is Luke's agents, as a coding agent writing as its developer does, while a person's push to it, a fork's luke/ branch, and any other branch are people's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const repositoryName = `Acme/agents-${randomUUID()}`;
+        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const hearing = (senders: readonly GitHubSender[]) =>
+          Effect.map(
+            createAutomation(owner, {
+              planId: null,
+              organizationId: plan.workspaceId,
+              repositories: [repositoryName],
+              name: "Code review",
+              trigger: {
+                kind: AUTOMATION_TRIGGER.GITHUB,
+                event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+                senders,
+                forks: true,
+              },
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Review this pull request." },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: null,
+              webhookSecretHash: null,
+            }),
+            Option.getOrThrow,
+          );
+        const people = yield* hearing([GITHUB_SENDER.PEOPLE]);
+        const agents = yield* hearing([GITHUB_SENDER.LUKE_AGENTS]);
+        const github = githubReaching([]);
+        const developer = { type: "User", login: "ada" };
+        const pull = (
+          action: string,
+          sender: { readonly type: string; readonly login: string },
+          ref: string,
+          from: string = repositoryName,
+        ) => ({
+          action,
+          repository: { full_name: repositoryName },
+          sender,
+          pull_request: {
+            number: 5,
+            title: "Teammate invitations",
+            html_url: `https://github.com/${repositoryName}/pull/5`,
+            labels: [],
+            base: { ref: "main" },
+            head: { ref, repo: { full_name: from } },
+            draft: false,
+          },
+        });
+        const runsOf = (automation: { readonly id: string }) =>
+          Effect.map(listAutomationRuns(owner, automation.id), (runs) => runs.length);
+        const counts = [];
+        for (const payload of [
+          pull("opened", developer, "luke/invitations"),
+          pull("ready_for_review", developer, "luke/invitations"),
+          pull("reopened", developer, "luke/invitations"),
+          pull("synchronize", { type: "Bot", login: "luke[bot]" }, "luke/invitations"),
+          pull("synchronize", developer, "luke/invitations"),
+          pull("opened", developer, "luke/invitations", "Stranger/agents-fork"),
+          pull("opened", developer, "invitations"),
+        ]) {
+          yield* answer(github, SECRET, delivery("pull_request", payload));
+          counts.push([yield* runsOf(people), yield* runsOf(agents)]);
+        }
+
+        assert.deepEqual(counts, [
+          [0, 1], // an agent opens its pull request as its developer
+          [0, 2], // and marks it ready
+          [0, 3], // and reopens it
+          [0, 3], // its push is the App's, which fires nothing
+          [1, 3], // the developer's own push to the agent's branch is a person's
+          [2, 3], // a fork's luke/ branch is no agent's
+          [3, 3], // any other branch is a person's
+        ]);
       }),
   );
 
@@ -613,9 +783,9 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       assert.deepEqual(
         [failedMain.body, passedMain.body, failedAgent.body],
         [
-          { read: 0, queued: 1 },
-          { read: 0, queued: 0 },
-          { read: 0, queued: 0 },
+          { read: 0, queued: 1, told: 0 },
+          { read: 0, queued: 0, told: 0 },
+          { read: 0, queued: 0, told: 0 },
         ],
       );
       assert.deepEqual(

@@ -8,7 +8,12 @@ import {
   parseLiveServerEvent,
 } from "@luke/live";
 import { Deferred, Effect, type Scope, Stream } from "effect";
-import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
+import {
+  type AvatarRequestFrame,
+  avatarRequestFrameFromWire,
+  type SessionReportFrame,
+  sessionReportFrameFromWire,
+} from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
 import {
@@ -25,10 +30,12 @@ import {
  * read by a fiber of the session's own scope, and they cross as the bytes
  * they arrived as; the service reads each frame's `type` and nothing else of
  * it, drops reflected audio by that type, and admits from the device only
- * the hang-up, read as an ask for the close, its idle report, and its stop,
- * closing the socket on anything else. The two reports are the frames read
- * past their type: they are the service's own vocabulary, handed to the exchange that holds the
- * idle decision and the one instruction the stop appends, never to OpenAI.
+ * the hang-up, read as an ask for the close, its idle report, its stop, and
+ * its avatar asks, closing the socket on anything else. The reports and the
+ * avatar asks are the frames read past their type: they are the service's
+ * own vocabulary, handed to the exchange that holds the idle decision and the
+ * one instruction the stop appends, or to the service that answers for the
+ * avatar, never to OpenAI.
  * The relay sends nothing of its own as a session starts: a new call's
  * opening is in the history it was created with. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
@@ -70,6 +77,10 @@ export interface RelayOptions<R = never> {
   onUsageUpdated?: ((seconds: number) => Effect.Effect<void, never, R>) | undefined;
   /** Runs on every report the device sent in the service's vocabulary, which is read here and forwarded nowhere. */
   onDeviceReport?: ((report: SessionReportFrame) => void) | undefined;
+  /** Runs on every avatar ask the device sent, read here and forwarded nowhere. */
+  onAvatarRequest?: ((request: AvatarRequestFrame) => void) | undefined;
+  /** Runs on the device's hang-up, before the close it asks for. */
+  onHangUp?: (() => void) | undefined;
   /** Runs once, when a device frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
   onFrameRefused?: ((type: string | undefined) => void) | undefined;
   /**
@@ -217,7 +228,18 @@ export function relaySession<R = never>(
       if (decision === FRAME_DECISION.HANG_UP) {
         // The caller has hung up here rather than when its socket goes.
         deviceAskedClose = true;
+        options.onHangUp?.();
         yield* askClose;
+        return;
+      }
+      if (decision === FRAME_DECISION.AVATAR) {
+        const request = avatarRequestFrameFromWire(decodeLivePayload(text));
+        if (request === undefined) {
+          yield* refuse(type);
+          return;
+        }
+        counts.reportsRead += 1;
+        options.onAvatarRequest?.(request);
         return;
       }
       if (decision === FRAME_DECISION.REPORT) {

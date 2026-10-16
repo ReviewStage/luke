@@ -7,6 +7,7 @@ import {
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
@@ -272,6 +273,14 @@ export const codingAgentArchiveParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentArchiveParams = typeof codingAgentArchiveParamsSchema.Type;
 
+/** One agent pinned or unpinned, as the window asks it: the agent and which. */
+export const codingAgentPinParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentPinRequestSchema.fields,
+});
+
+export type CodingAgentPinParams = typeof codingAgentPinParamsSchema.Type;
+
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -385,6 +394,15 @@ export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentInboxAttachmentParams = typeof codingAgentInboxAttachmentParamsSchema.Type;
+
+/** One picture a tool answered an agent, or one of its workers where `callId` names the delegation call that started it. */
+export const codingAgentPictureParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  pictureId: EffectSchema.NonEmptyString,
+  callId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
 /**
  * The image, as the window hears it: its bytes in base64 under the media

@@ -219,6 +219,68 @@
         "additionalProperties": false
       }
     },
+    "failedRuns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "automationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "automationName": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "concurrency",
+                  "daily-cap",
+                  "plan-unreachable",
+                  "creator-left",
+                  "no-repository",
+                  "repository-unreachable",
+                  "github-sign-in",
+                  "model",
+                  "unavailable",
+                  "repository-changed",
+                  "paused",
+                  "missed",
+                  "agent-gone"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "automationId",
+          "automationName",
+          "workspaceId",
+          "reason",
+          "failedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
     "cursor": {
       "type": "string"
     },

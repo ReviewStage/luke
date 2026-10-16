@@ -9,16 +9,25 @@ import {
 import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
+  type CodingAgentChangesPeople,
+  type CodingAgentOrigin,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act";
+import {
+  DRAFT_PLACE,
+  type Draft,
+  type KeptDraft,
+  type NewAgentPlace,
+  useDraftWriter,
+  useNewAgentDraft,
+} from "../composer-drafts";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import {
   type AgentRun,
@@ -76,7 +85,10 @@ const NO_KEYWORDS: readonly string[] = [];
  * agent; the agent's tab then opens as a Start's does. Each plan has at
  * most one draft, held with the words written in it and the choice made on
  * its chip, so a draft keeps them while its tab is away and while the
- * developer visits another plan.
+ * developer visits another plan. Its words and files are the plan's kept
+ * draft (`../composer-drafts.ts`), under the draft's key, so its words
+ * outlast a relaunch too, and a plan holding them opens on its draft's tab
+ * again, under the same key.
  *
  * An archived plan starts no agent and sends none a message: Start is
  * unavailable and says why, and `onUnarchive` stands, which every place
@@ -92,6 +104,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * as an archived plan's does.
  */
 
+/** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
+export interface HeldPeople {
+  readonly url: string;
+  readonly people: CodingAgentChangesPeople;
+}
+
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
 export interface CodingAgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
@@ -102,12 +120,18 @@ export interface CodingAgentsControl {
   archived: readonly CodingAgentSummary[] | undefined;
   /** The workspace the one agent read as its page belongs to; none on a plan, where the plan says it, and before the page's read lands. */
   workspaceId?: string | undefined;
+  /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
+  agentRepository?: string | undefined;
+  /** The automation's run that started the one agent read as its page; none on a plan, for an agent started by hand, and before the page's read lands. */
+  origin?: CodingAgentOrigin | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
   heldIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
+  /** Whether the last read answered that the agent read by its id is not there for the reader: deleted, or of a workspace they are not in. */
+  listMissing: boolean;
   /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
@@ -144,7 +168,7 @@ export interface CodingAgentsControl {
     prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
-    disabledServers?: readonly IntegrationProvider[],
+    disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -193,11 +217,13 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** Each of the plan's agents' pull requests, by agent, of those that have one (`usePlanPullRequests`). */
   pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
+  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, who it names kept in `changesPeople`. */
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
+  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
+  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
-  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
+  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
   /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
   readInbox: InboxReader;
@@ -213,7 +239,26 @@ export interface AgentDraft {
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
-  readonly disabledServers: readonly IntegrationProvider[];
+  readonly disabledServers: readonly string[];
+}
+
+/** What a draft agent holds beside its words and files: its key, and what its chips chose. */
+type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers">;
+
+/** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
+function planDraft(
+  held: DraftChoices | undefined,
+  kept: KeptDraft<NewAgentPlace> | undefined,
+): AgentDraft | undefined {
+  const id = held?.id ?? kept?.place.draftId;
+  if (id === undefined) return undefined;
+  return {
+    id,
+    prompt: kept?.text ?? "",
+    attachments: kept?.attachments ?? [],
+    choice: held?.choice,
+    disabledServers: held?.disabledServers ?? [],
+  };
 }
 
 /** A Start on its way or asked again: the plan, the key the press minted, and the choice it was for. */
@@ -234,6 +279,13 @@ function startReason(
   return repository === null ? START_NEEDS_REPOSITORY : undefined;
 }
 
+/** A list as read: the plan's agents, or the one agent read as its page, with its workspace, its repository, and the run that started it. */
+type PageList = CodingAgentListAnswer & {
+  readonly workspaceId?: string;
+  readonly repository?: string;
+  readonly origin?: CodingAgentOrigin;
+};
+
 /**
  * The read a list is taken from: the plan's agents, archived ones among
  * them, where a plan is open, and else the one agent named, read as its
@@ -243,21 +295,21 @@ function listRead(
   act: ActHandle["act"],
   planId: string | undefined,
   agentId: string | undefined,
-): Promise<CodingAgentListAnswer & { readonly workspaceId?: string }> {
+): Promise<PageList> {
   if (planId !== undefined) {
     return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
-    (answer): CodingAgentListAnswer & { readonly workspaceId?: string } => {
-      if ("failure" in answer) return answer;
-      const { automationId, ...agent } = answer.agent;
-      return {
-        agents: [automationId === null ? agent : { ...agent, automationId }],
-        workspaceId: answer.agent.workspaceId,
-      };
-    },
-  );
+  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
+    if ("failure" in answer) return answer;
+    const { automationId, origin, ...agent } = answer.agent;
+    return {
+      agents: [automationId === null ? agent : { ...agent, automationId }],
+      workspaceId: answer.agent.workspaceId,
+      repository: answer.agent.repository,
+      ...(origin === undefined ? undefined : { origin }),
+    };
+  });
 }
 
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
@@ -308,16 +360,22 @@ export function useCodingAgents(input: {
     agentId: string | undefined;
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
+    missing?: boolean;
     workspaceId?: string | undefined;
+    repository?: string | undefined;
+    origin?: CodingAgentOrigin | undefined;
   }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
   const listOf = planId === undefined ? agentId : undefined;
   const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
     was.planId === planId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
-  // Each plan's draft, by the plan's id.
-  const [drafts, setDrafts] = useState<ReadonlyMap<string, AgentDraft>>(new Map());
-  const draft = planId === undefined ? undefined : drafts.get(planId);
+  // Each plan's draft's key and chip, by the plan's id; its words and files are kept apart.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
+  const heldDraft = planId === undefined ? undefined : drafts.get(planId);
+  const keptDraft = useNewAgentDraft(planId, heldDraft?.id);
+  const writer = useDraftWriter();
+  const draft = planId === undefined ? undefined : planDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
@@ -340,6 +398,7 @@ export function useCodingAgents(input: {
     [held],
   );
   const listFailed = ours(list) && list.failed;
+  const listMissing = ours(list) && list.missing === true;
 
   // Read when the plan opens, or the page's agent where no plan is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
@@ -355,7 +414,10 @@ export function useCodingAgents(input: {
                 agentId: listOf,
                 agents: ours(was) ? was.agents : undefined,
                 failed: true,
+                missing: answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND,
                 workspaceId: ours(was) ? was.workspaceId : undefined,
+                repository: ours(was) ? was.repository : undefined,
+                origin: ours(was) ? was.origin : undefined,
               }
             : {
                 planId,
@@ -363,6 +425,8 @@ export function useCodingAgents(input: {
                 agents: answer.agents,
                 failed: false,
                 workspaceId: answer.workspaceId,
+                repository: answer.repository,
+                origin: answer.origin,
               },
         );
       },
@@ -375,6 +439,8 @@ export function useCodingAgents(input: {
             agents: ours(was) ? was.agents : undefined,
             failed: true,
             workspaceId: ours(was) ? was.workspaceId : undefined,
+            repository: ours(was) ? was.repository : undefined,
+            origin: ours(was) ? was.origin : undefined,
           }));
       },
     );
@@ -474,8 +540,8 @@ export function useCodingAgents(input: {
     });
   };
 
-  /** The drafts with the plan's set to `next`, or let go where it is nothing. */
-  const withDraft = (on: string, next: AgentDraft | undefined) =>
+  /** The drafts with the plan's key and chips set to `next`, or let go where it is nothing. */
+  const withDraft = (on: string, next: DraftChoices | undefined) =>
     setDrafts((was) => {
       const held = new Map(was);
       if (next === undefined) held.delete(on);
@@ -483,43 +549,49 @@ export function useCodingAgents(input: {
       return held;
     });
 
+  /** Lets a draft agent go by its key, its words and files with it. */
+  const letGo = (draftId: string) => {
+    for (const [on, held] of drafts) if (held.id === draftId) withDraft(on, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
+  };
+
   const onNewDraft = (): string => {
     if (draft !== undefined) return draft.id;
     const id = mintKey();
     if (planId !== undefined) {
-      withDraft(planId, {
-        id,
-        prompt: "",
-        attachments: [],
-        choice: undefined,
-        disabledServers: [],
-      });
+      withDraft(planId, { id, choice: undefined, disabledServers: [] });
     }
     return id;
+  };
+
+  /** The open plan's draft's words and files moved on from those kept for it. */
+  const writeWords = (next: (was: Draft) => Draft) => {
+    if (planId === undefined || draft === undefined) return;
+    writer.update({ kind: DRAFT_PLACE.NEW_AGENT, planId, draftId: draft.id }, next);
   };
 
   const onDraftChange = (
     change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
   ) => {
-    if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
-  };
-
-  // Note that the files are changed from the drafts as they stand when the
-  // change lands, because a file's read lands after the render that began it.
-  const onDraftAttachments = (
-    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
-  ) => {
-    if (planId === undefined) return;
-    setDrafts((was) => {
-      const held = was.get(planId);
-      if (held === undefined) return was;
-      return new Map(was).set(planId, { ...held, attachments: next(held.attachments) });
+    if (planId === undefined || draft === undefined) return;
+    const { prompt, ...choices } = change;
+    if (prompt !== undefined) writeWords((was) => ({ ...was, text: prompt }));
+    if (Object.keys(choices).length === 0) return;
+    withDraft(planId, {
+      id: draft.id,
+      choice: draft.choice,
+      disabledServers: draft.disabledServers,
+      ...choices,
     });
   };
 
-  const onDiscardDraft = (draftId: string) => {
-    for (const [on, held] of drafts) if (held.id === draftId) withDraft(on, undefined);
-  };
+  // Note that the files are changed from the draft as it stands when the
+  // change lands, because a file's read lands after the render that began it.
+  const onDraftAttachments = (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => writeWords((was) => ({ ...was, attachments: next(was.attachments) }));
+
+  const onDiscardDraft = letGo;
 
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost
@@ -529,7 +601,7 @@ export function useCodingAgents(input: {
     prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
-    disabledServers: readonly IntegrationProvider[] = [],
+    disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
     if (planId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -543,6 +615,7 @@ export function useCodingAgents(input: {
     });
     if ("failure" in answer) return startFailureNote(answer, planId);
     withDraft(planId, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(planId, answer.agent);
     return undefined;
   };
@@ -739,8 +812,35 @@ export function useCodingAgents(input: {
   );
   const published = usePlanPullRequests(planId, agents, readPullRequestOnce);
 
+  // Note that who a pull request names is kept beside the agent, with the
+  // pull request it was read for, so its Changes card says them wherever it
+  // hangs once its tab has read them, and never for another pull request.
+  // Each agent's reads are numbered, so only its newest read's answer is kept,
+  // as the tab draws only its newest.
+  const [changesPeople, setChangesPeople] = useState<ReadonlyMap<string, HeldPeople>>(
+    () => new Map(),
+  );
+  const changesAsked = useRef(new Map<string, number>());
   const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
+    (agentId) => {
+      const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
+      changesAsked.current.set(agentId, ask);
+      return act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }).then((answer) => {
+        if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
+        const read = answer.pullRequest;
+        setChangesPeople((was) => {
+          const next = new Map(was);
+          if (read === null) {
+            next.delete(agentId);
+          } else {
+            const { url, files: _files, truncated: _truncated, ...people } = read;
+            next.set(agentId, { url, people });
+          }
+          return next;
+        });
+        return answer;
+      });
+    },
     [act],
   );
 
@@ -755,14 +855,22 @@ export function useCodingAgents(input: {
   );
 
   // Note that the skills are kept for the plan and its repository as they
-  // stand, so another plan, or the plan moved to another repository, reads afresh.
-  const readSkills = useMemo(
-    () =>
-      planId === undefined || repository === null
+  // stand, so another plan, or the plan moved to another repository, reads
+  // afresh; an agent no plan holds reads its repository's through the
+  // workspace it belongs to, once the read of it has named that workspace.
+  const workspaceId = ours(list) ? list.workspaceId : undefined;
+  const agentRepository = ours(list) ? list.repository : undefined;
+  const readSkills = useMemo(() => {
+    if (planId !== undefined) {
+      return repository === null
         ? undefined
-        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId })),
-    [act, planId, repository],
-  );
+        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId }));
+    }
+    if (workspaceId === undefined || agentRepository === undefined) return undefined;
+    return keptSkills(() =>
+      act(ACT_KIND.PLANNING_SKILLS, { workspaceId, repository: agentRepository }),
+    );
+  }, [act, planId, workspaceId, agentRepository, repository]);
 
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
@@ -772,7 +880,9 @@ export function useCodingAgents(input: {
   return {
     agents,
     archived: archivedAgents,
-    workspaceId: ours(list) ? list.workspaceId : undefined,
+    workspaceId,
+    agentRepository,
+    origin: ours(list) ? list.origin : undefined,
     agentIds: agents?.map((agent) => agent.id),
     heldIds: held?.map((agent) => agent.id),
     draft,
@@ -782,6 +892,7 @@ export function useCodingAgents(input: {
     onDiscardDraft,
     startPrompt,
     listFailed,
+    listMissing,
     onRetryList: readAgain,
     models,
     readModels,
@@ -811,6 +922,7 @@ export function useCodingAgents(input: {
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
     readChanges,
+    changesPeople,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,

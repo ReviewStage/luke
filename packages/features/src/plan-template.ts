@@ -8,6 +8,7 @@ import {
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
+import { planPicturesIn } from "./plan-attachment-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
@@ -26,21 +27,25 @@ import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js
  * build from (`PLAN_FIELD_BAR`). The sections keep the keys the fixed
  * template once named its fields by (`PLAN_FIELD`).
  *
- * Luke changes the text only by taking notes: a point added under a heading,
- * a phrase corrected, or a line struck. Each note lands in one place and
- * touches nothing else, so a plan is written the way a person takes notes on
- * a call, and a draft drawn while the notes stream differs from the one
- * before only where the newest note lands (`textNotesInProgress`). A note
- * naming a phrase the text does not hold is passed over rather than guessed
- * into another. A note's words are contained where they land: a line that
- * would open a heading or an HTML block is escaped, and a code fence left
- * open is closed, so no note can open a section of its own or swallow the
- * ones after it. A point added to a section that still holds exactly what
- * the plan's template put there, one paragraph of guidance, takes the place
- * of that guidance, so a filled section never keeps its prompt above its
- * answer. The schema
- * guarantees shape only; whether a note is understood or agreed is the
- * model's judgment.
+ * Luke changes the text only by taking notes, of two kinds: a point added
+ * under a heading, and text replaced, the one generic edit, which names any
+ * text standing exactly once in the plan, headings and whole sections
+ * among it, and an empty replacement deletes. So a heading is renamed, a
+ * section split, merged, moved, or struck, and a point moved between
+ * sections the way a person edits a doc, while a draft drawn while the
+ * notes stream differs from the one before only where the newest note
+ * lands (`textNotesInProgress`). A batch of notes is taken whole or not at
+ * all: a note naming text or a heading the plan does not hold exactly once
+ * refuses every note beside it, so a move can never strike text without
+ * placing it. A note's words are
+ * contained where they land only so far as keeps the rest of the text as it
+ * was: a line that would open an HTML block or underline the line above into
+ * a heading is escaped, and a code fence left open is closed, so no note
+ * swallows the text after it. A point added to a section that still holds
+ * exactly what the plan's template put there, one paragraph of guidance,
+ * takes the place of that guidance, so a filled section never keeps its
+ * prompt above its answer. The schema guarantees shape only; whether a note
+ * is understood or agreed is the model's judgment.
  */
 
 /** The default template's headings, in the words the developer reads. */
@@ -65,12 +70,6 @@ function trimmedText(maximumChars: number) {
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
-
-/**
- * A line that would open an ATX heading, behind any blockquote or list
- * markers; the first group is everything before the hashes.
- */
-const HEADING_LINE = /^( {0,3}(?:(?:>|[-*+]|\d{1,9}[.)])[ \t]*)*)(?=#{1,6}(?:[ \t]|$))/u;
 
 /** A line that would underline the paragraph above it into a setext heading. */
 const SETEXT_LINE = /^( {0,3}(?:>[ \t]*)*)(?=(?:=+|-+)[ \t]*$)/u;
@@ -101,20 +100,25 @@ function fenceCloses(line: string, fence: OpenFence): boolean {
   return sameCharacter && marker.length >= fence.marker.length && (match?.[2] ?? "").trim() === "";
 }
 
-/** One line outside a fence, with a backslash before whatever would open a heading or an HTML block. */
+/**
+ * One line outside a fence, with a backslash before whatever would open an
+ * HTML block or underline the line above into a heading. Note that an ATX
+ * heading is written as given, because a note may open a section, while a
+ * setext heading is escaped, because the plan's sections are cut at `#`
+ * headings alone and one drawn as a heading but read as none misleads both.
+ */
 function escapedLine(line: string, afterText: boolean): string {
-  const heading = HEADING_LINE.exec(line) ?? (afterText ? SETEXT_LINE.exec(line) : null);
-  const opener = heading ?? HTML_LINE.exec(line);
+  const opener = (afterText ? SETEXT_LINE.exec(line) : null) ?? HTML_LINE.exec(line);
   if (opener === null) return line;
   const at = opener[1]?.length ?? 0;
   return `${line.slice(0, at)}\\${line.slice(at)}`;
 }
 
 /**
- * Field text as Markdown that stays inside its field. Note that we leave a
- * fence's own lines as written, because a `#` inside code is code, and that
- * we close a fence the text left open, because an open fence would turn
- * every heading after it into code.
+ * A note's text as Markdown that leaves the text after it as it was. Note
+ * that we leave a fence's own lines as written, because anything inside code
+ * is code, and that we close a fence the text left open, because an open
+ * fence would turn every heading after it into code.
  */
 function contained(text: string): string {
   const lines: string[] = [];
@@ -224,7 +228,13 @@ export const PLAN_FIELD_BAR = {
   assumptions: "Every choice Luke made for the developer is listed.",
 } as const satisfies Record<PlanField, string>;
 
-/** The kinds of note the notetaker takes. */
+/**
+ * The kinds of note the notetaker takes: a point added under a heading, and
+ * text replaced, which an empty replacement deletes. `REMOVE` is a kind the
+ * agents' journal still holds and writes for a deletion, so a deployment
+ * that reads only the older kinds reads every journal this one writes; no
+ * model is offered it.
+ */
 export const NOTE_KIND = {
   ADD: "add",
   REPLACE: "replace",
@@ -234,24 +244,16 @@ export const NOTE_KIND = {
 /** The most notes one answer may take. */
 const MAX_NOTES = 40;
 
-/** The longest phrase a note may name to correct or strike. */
-const MAX_FIND_CHARS = 500;
-
-const SECTION = describeWire(
+/** The heading a point goes under, as a note names one: the notetaker's and a coding agent's alike. */
+export const planNoteSectionSchema = describeWire(
   trimmedText(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
   "The heading the point goes under, copied exactly from the plan's text, without its #s. " +
     "A heading the text does not hold opens a new section at its end.",
 );
 
-const FIND = describeWire(
-  trimmedText(MAX_FIND_CHARS),
-  "A phrase copied exactly from the plan's saved text, long enough to name one place, " +
-    "and touching no heading.",
-);
-
 const addNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.ADD),
-  section: SECTION,
+  section: planNoteSectionSchema,
   text: describeWire(
     trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
     "The new point, added at the end of the section: Markdown, a bullet where the section " +
@@ -261,33 +263,49 @@ const addNoteSchema = EffectSchema.Struct({
 
 const replaceNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
-  find: FIND,
-  text: describeWire(trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS), "What the phrase becomes."),
+  find: describeWire(
+    trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+    "Text copied exactly from the plan's saved text, as much as names one place: a phrase, " +
+      "lines, or whole sections, headings and their #s included.",
+  ),
+  text: describeWire(
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS)),
+    "What that text becomes, which may open headings of its own; empty to delete it, and a " +
+      "line the deletion leaves empty is taken out.",
+  ),
 });
 
 const removeNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
-  find: describeWire(
-    trimmedText(MAX_FIND_CHARS),
-    "A phrase copied exactly from the line to strike, touching no heading.",
-  ),
+  find: EffectSchema.String,
 });
 
-const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema, removeNoteSchema]);
+const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema]);
 
-/** One note: a point added under a heading, a phrase corrected, or a line struck. */
+/** One note: a point added under a heading, or text replaced or deleted. */
 export type PlanNote = typeof planNoteSchema.Type;
 
 /** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
 export const planNotesSchema = EffectSchema.Struct({
   notes: describeWire(
     EffectSchema.Array(planNoteSchema).check(EffectSchema.isMaxLength(MAX_NOTES)),
-    "The notes the latest lines call for, in order; empty when nothing new was said.",
+    "The notes the latest lines call for, in order, taken together or not at all; empty " +
+      "when nothing new was said.",
   ),
 });
 
+/** One note as the agents' journal keeps it, a deletion among them as a strike. */
+const journaledNoteSchema = EffectSchema.Union([
+  addNoteSchema,
+  replaceNoteSchema,
+  removeNoteSchema,
+]);
+
 /** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
 const PLAN_AGENT_EDITS_KEPT = 50;
+
+/** The most of a replaced text the journal keeps: the bound the deployment before this one reads a phrase under. */
+const JOURNAL_FIND_CHARS = 500;
 
 /**
  * One save a coding agent made on the plan: which agent, when, and the notes
@@ -298,17 +316,32 @@ export const planAgentEditSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   /** Epoch milliseconds of the save. */
   at: EffectSchema.Number,
-  notes: EffectSchema.Array(planNoteSchema),
+  notes: EffectSchema.Array(journaledNoteSchema),
 });
 
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
 
-/** The journal with one more save on its end, the oldest let go past the bound. */
+/**
+ * A note as the journal keeps it, the text it replaced cut to the bound.
+ * Note that a deletion is kept as a strike rather than an empty
+ * replacement, and the text cut, because the deployment before this one
+ * reads a replacement only with words and a phrase only so long, and a
+ * journal it cannot read is a plan it cannot open.
+ */
+function journaledNote(note: PlanNote): PlanAgentEdit["notes"][number] {
+  if (note.kind === NOTE_KIND.ADD) return note;
+  const find = note.find.slice(0, JOURNAL_FIND_CHARS).trimEnd();
+  return note.text === "" ? { kind: NOTE_KIND.REMOVE, find } : { ...note, find };
+}
+
+/** The journal with one more save on its end, its notes as the journal keeps them, the oldest let go past the bound. */
 export function withAgentEdit(
   journal: readonly PlanAgentEdit[],
-  edit: PlanAgentEdit,
+  edit: { readonly agentId: string; readonly at: number; readonly notes: readonly PlanNote[] },
 ): readonly PlanAgentEdit[] {
-  return [...journal, edit].slice(-PLAN_AGENT_EDITS_KEPT);
+  return [...journal, { ...edit, notes: edit.notes.map(journaledNote) }].slice(
+    -PLAN_AGENT_EDITS_KEPT,
+  );
 }
 
 /** A line that opens a Markdown list item. */
@@ -395,21 +428,26 @@ function guidanceOnly(section: PlanSection, started: string | undefined): boolea
 }
 
 /**
- * The text with a point added at the end of the first section under the
+ * The text with a point added at the end of the one section under the
  * note's heading, or, where the text has no such section, a new one at the
  * end of the text holding it; a fence the section or the text leaves open is
- * closed before it. Note that a section still holding only its template's
- * guidance takes the point in place of the guidance, because the guidance is
- * the developer's prompt for the section and filled, it is no longer wanted.
+ * closed before it. Note that a heading standing over two sections is no
+ * place to add to, because a point landing in the wrong one is the edit a
+ * note must never make, and that a section still holding only its
+ * template's guidance takes the point in place of the guidance, because the
+ * guidance is the developer's prompt for the section and filled, it is no
+ * longer wanted.
  */
 function addedToText(
   text: string,
   note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
   started: string | undefined,
-): string {
+): string | undefined {
   const heading = note.section;
   const added = contained(note.text);
-  const section = planSections(text).find((each) => each.heading === heading);
+  const under = planSections(text).filter((each) => each.heading === heading);
+  if (under.length > 1) return undefined;
+  const section = under[0];
   if (section === undefined) {
     const head = fenceClosed(text.trimEnd());
     return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
@@ -420,27 +458,22 @@ function addedToText(
   }
   const words = fenceClosed(section.text);
   const lines = words.split("\n");
-  const under = lines.length > 1 ? appended(words, added) : `${words}\n\n${added}`;
-  return text.slice(0, section.from) + under + text.slice(section.to);
+  const grown = lines.length > 1 ? appended(words, added) : `${words}\n\n${added}`;
+  return text.slice(0, section.from) + grown + text.slice(section.to);
 }
 
-/** Whether a span touches a heading line of the text, which a note may never rewrite or strike. */
-function touchesHeading(text: string, at: Span): boolean {
-  return planSections(text).some((section) => {
-    if (section.heading === "" && !text.startsWith("#", section.from)) return false;
-    const lineEnd = text.indexOf("\n", section.from);
-    const headingTo = lineEnd === -1 ? text.length : lineEnd;
-    return at.from <= headingTo && at.to >= section.from;
-  });
+/** Where the lines a span touches start and end: the first one's start, and just past the last one's line break. */
+function linesOf(text: string, at: Span): Span {
+  const from = text.lastIndexOf("\n", at.from - 1) + 1;
+  // Note that the last line touched is the one holding the span's last character, so a span ending on a line break touches no line after it.
+  const newline = text.indexOf("\n", Math.max(at.from, at.to - 1));
+  return { from, to: newline === -1 ? text.length : newline + 1 };
 }
 
-/** The text with the lines a span touches struck out, and the blank line it leaves doubled taken back. */
-function struckFromText(text: string, at: Span): string {
-  const start = text.lastIndexOf("\n", at.from - 1) + 1;
-  const newline = text.indexOf("\n", at.to);
-  const end = newline === -1 ? text.length : newline + 1;
-  const head = text.slice(0, start);
-  const tail = text.slice(end);
+/** The text with whole lines struck out, and the blank line they leave doubled taken back. */
+function struckFromText(text: string, lines: Span): string {
+  const head = text.slice(0, lines.from);
+  const tail = text.slice(lines.to);
   if (tail.trim().length === 0) return head.replace(/\n+$/u, "\n");
   return head.endsWith("\n\n") || head.length === 0
     ? head + tail.replace(/^\n+/u, "")
@@ -448,27 +481,75 @@ function struckFromText(text: string, at: Span): string {
 }
 
 /**
+ * The text with the span deleted, or nothing where a deletion within lines
+ * would drop a mention or a picture. Note that where the lines it touches hold nothing
+ * else, they are struck whole, with the blank line they leave doubled taken
+ * back, because a model deleting a point copies its words and not the line
+ * break after them, and an empty line left standing is not what it meant.
+ * Striking whole lines is a retraction, which may take a mention with it;
+ * a deletion that leaves any of a line standing is a correction, and keeps
+ * every mention whole, so it cannot cut one's target short.
+ */
+function deletedFromText(text: string, at: Span): string | undefined {
+  const lines = linesOf(text, at);
+  const rest = text.slice(lines.from, at.from) + text.slice(at.to, lines.to);
+  if (rest.trim().length === 0) return struckFromText(text, lines);
+  const deleted = text.slice(0, at.from) + text.slice(at.to);
+  return keepsMentions(text, deleted) && keepsPictures(text, deleted) ? deleted : undefined;
+}
+
+/**
+ * The text with the one place `find` stands replaced, or nothing where it
+ * stands nowhere or more than once, or the replacement would drop a mention
+ * or a picture.
+ * An empty replacement deletes (`deletedFromText`).
+ */
+function replacedInText(
+  text: string,
+  note: Extract<PlanNote, { kind: typeof NOTE_KIND.REPLACE }>,
+): string | undefined {
+  const at = located(text, note.find);
+  if (at === undefined) return undefined;
+  if (note.text === "") return deletedFromText(text, at);
+  // A replacement inside a fence is code, written as given rather than contained as prose.
+  const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
+  const replaced = text.slice(0, at.from) + words + text.slice(at.to);
+  return keepsMentions(text, replaced) && keepsPictures(text, replaced) ? replaced : undefined;
+}
+
+/**
  * A document's text with one note taken, or nothing where the note cannot
- * be: an addition at the end of the first section under its heading, in
- * place of the template's guidance where the section holds only that, or as
- * a new section at the end of the text where it has none; a correction
- * or a strike names a phrase that must stand exactly once in the whole text
- * and touch no heading, since the headings are the developer's and a note
- * writes under them.
+ * be: an addition at the end of the one section under its heading, in place
+ * of the template's guidance where the section holds only that, or as a new
+ * section at the end of the text where it has none; a replacement names text
+ * that must stand exactly once in the whole text, headings among it, so a
+ * heading is renamed, a section moved or struck, and a point moved between
+ * sections by replacements alone.
  */
 function applyNoteToText(
   text: string,
   note: PlanNote,
   started: string | undefined,
 ): string | undefined {
-  if (note.kind === NOTE_KIND.ADD) return addedToText(text, note, started);
-  const at = located(text, note.find);
-  if (at === undefined || touchesHeading(text, at)) return undefined;
-  if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
-  // A correction inside a fence is code, written as given rather than contained as prose.
-  const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
-  const corrected = text.slice(0, at.from) + words + text.slice(at.to);
-  return keepsMentions(text, corrected) ? corrected : undefined;
+  return note.kind === NOTE_KIND.ADD
+    ? addedToText(text, note, started)
+    : replacedInText(text, note);
+}
+
+/** Whether a text after a change holds every address `addressesIn` finds in it before, each copy counted. */
+function keepsAddresses(
+  before: string,
+  after: string,
+  addressesIn: (text: string) => readonly string[],
+): boolean {
+  // Note that every copy is counted, each alike, however many the plan holds.
+  const counted = (text: string) => {
+    const counts = new Map<string, number>();
+    for (const address of addressesIn(text)) counts.set(address, (counts.get(address) ?? 0) + 1);
+    return counts;
+  };
+  const kept = counted(after);
+  return [...counted(before)].every(([address, count]) => (kept.get(address) ?? 0) >= count);
 }
 
 /**
@@ -482,43 +563,63 @@ function applyNoteToText(
  * them, is kept as surely as one it can.
  */
 function keepsMentions(before: string, after: string): boolean {
-  // Note that every mention is counted, each copy of one alike, however many the plan holds.
-  const counted = (text: string) => {
-    const counts = new Map<string, number>();
-    for (const { target } of mentionLinksIn(text)) {
-      counts.set(target, (counts.get(target) ?? 0) + 1);
-    }
-    return counts;
-  };
-  const kept = counted(after);
-  return [...counted(before)].every(([target, count]) => (kept.get(target) ?? 0) >= count);
-}
-
-/** Notes taken over a document's text: the text after, and the notes that could not be taken. */
-export interface TextNotesTaken {
-  readonly text: string;
-  readonly missed: readonly PlanNote[];
+  return keepsAddresses(before, after, (text) => mentionLinksIn(text).map(({ target }) => target));
 }
 
 /**
- * Every note taken over a document's text in order, and the notes that could
- * not be. `started` is the template text the plan started as, where it is
- * known, so a section still holding only its guidance takes its first point
- * in place of it; without it every point is added after what stands.
+ * Whether a correction keeps every picture the text held, counted by its
+ * address (`planPicturesIn`), on the same terms as a mention: a correction
+ * may reword a picture's alt text or caption, or move it within the phrase
+ * it corrects, but one that drops it, or leaves its address as a link that
+ * draws no picture, is not taken; striking the
+ * line a picture stands on is a retraction, and is. A picture of another
+ * plan is kept as surely as one of this plan.
+ */
+function keepsPictures(before: string, after: string): boolean {
+  return keepsAddresses(before, after, planPicturesIn);
+}
+
+/**
+ * Notes taken over a document's text: the text with every note taken, or,
+ * where one could not be, the text as it stood and the first note that
+ * could not, which refuses the whole batch.
+ */
+export interface TextNotesTaken {
+  readonly text: string;
+  readonly missed?: PlanNote;
+}
+
+/** Notes taken in order until one cannot be: the text so far, and the note that stopped them. */
+function takenInOrder(
+  text: string,
+  notes: readonly PlanNote[],
+  started: string | undefined,
+): TextNotesTaken {
+  let taken = text;
+  for (const note of notes) {
+    const next = applyNoteToText(taken, note, started);
+    if (next === undefined) return { text: taken, missed: note };
+    taken = next;
+  }
+  return { text: taken };
+}
+
+/**
+ * Every note taken over a document's text in order, each over the text the
+ * ones before it left, or none of them. Note that one note that cannot be
+ * taken refuses the batch whole, because the notes of one answer are one
+ * edit, and a move written as a strike and an addition must not land half.
+ * `started` is the template text the plan started as, where it is known, so
+ * a section still holding only its guidance takes its first point in place
+ * of it; without it every point is added after what stands.
  */
 export function applyNotesToText(
   text: string,
   notes: readonly PlanNote[],
   started?: string,
 ): TextNotesTaken {
-  let taken = text;
-  const missed: PlanNote[] = [];
-  for (const note of notes) {
-    const next = applyNoteToText(taken, note, started);
-    if (next === undefined) missed.push(note);
-    else taken = next;
-  }
-  return { text: taken, missed };
+  const taken = takenInOrder(text, notes, started);
+  return taken.missed === undefined ? taken : { text, missed: taken.missed };
 }
 
 const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
@@ -548,8 +649,9 @@ export interface NotesRead {
 }
 
 /**
- * The notes of an answer, each read on its own so a note that does not read
- * is passed over alone rather than costing the rest, and how many were.
+ * The notes of an answer that read, each read on its own, and how many did
+ * not, which is how many a save would be missing: a caller takes an answer
+ * with any unread note as no edit at all.
  */
 export function readNotes(answer: UnparsedWireValue): NotesRead {
   const values = isRecord(answer) && Array.isArray(answer.notes) ? answer.notes : [];
@@ -563,8 +665,9 @@ export function readNotes(answer: UnparsedWireValue): NotesRead {
 /**
  * A document's text as the notetaker's answer so far leaves it, for a draft
  * drawn while the answer streams. The answer arrives as the JSON emitted so
- * far, so every note before the last is whole, and each is taken in order;
- * one that does not read or cannot be taken is passed over alone. The last
+ * far, so every note before the last is whole, and each is taken in order
+ * up to the first that does not read or cannot be taken, since the save
+ * refuses an answer holding one, and the draft ends there. The last
  * note may be cut off partway, so it is drawn only when it adds a point, as
  * the text written so far, held back at a trailing line of nothing but
  * Markdown markers. Each draft therefore differs from the one before only
@@ -575,13 +678,18 @@ export function textNotesInProgress(
   partial: UnparsedWireValue,
   started?: string,
 ): string {
-  return applyNotesToText(text, notesSoFar(partial), started).text;
+  return takenInOrder(text, notesSoFar(partial), started).text;
 }
 
-/** The notes an answer so far holds: every whole note that reads, then the last, while it adds a point, as written so far. */
+/** The notes an answer so far holds: every whole note up to the first that does not read, then the last, while it adds a point, as written so far. */
 function notesSoFar(partial: UnparsedWireValue): readonly PlanNote[] {
   const values = isRecord(partial) && Array.isArray(partial.notes) ? partial.notes : [];
-  const { notes: whole } = readNotes(unparsedWire({ notes: values.slice(0, -1) }));
+  const whole: PlanNote[] = [];
+  for (const value of values.slice(0, -1)) {
+    const read = readNote(value);
+    if (Result.isFailure(read)) return whole;
+    whole.push(read.success);
+  }
   const growing = growingAddition(values.at(-1));
   return growing === undefined ? whole : [...whole, growing];
 }

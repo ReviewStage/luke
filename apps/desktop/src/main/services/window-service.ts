@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_LINK_SCHEME, type AppLinkPlace, appLinkClaim } from "@luke/features/app-links";
+import { APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
+import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
-import type { AgentEndToast, AgentPlace, InboxItemToast } from "@luke/host/agent-notices";
+import type {
+  AgentEndToast,
+  AgentPlace,
+  FailedRunPlace,
+  FailedRunToast,
+  InboxItemToast,
+} from "@luke/host/agent-notices";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import type { DesktopService } from "@luke/host/desktop-service";
@@ -24,7 +31,7 @@ import {
 } from "electron";
 import { channels } from "#shared/bridge";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { type AppStateStore, voiceWindowState } from "../app-state";
+import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -103,6 +110,10 @@ export interface WindowService extends DesktopService {
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
   toastInboxItem: (item: InboxItemToast) => void;
+  /** Asks the panels to open a failed run in its automation's workspace: its notification's click. */
+  showFailedRun: (place: FailedRunPlace) => void;
+  /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
+  toastFailedRun: (run: FailedRunToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -181,8 +192,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window replaced: ${reason}`);
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
-      // view at all.
-      state.update({ voice: {} });
+      // view at all, and keeps the avatar, which the host and the panel say.
+      state.update({ voice: voiceWindowGone(state.snapshot().voice) });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {
@@ -250,9 +261,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
     const call = callWindow.current();
     if (call) send(call.webContents, voiceWindowState(held));
-    // The call window follows the document it draws, so it stands and goes
-    // on the same version every window is told.
-    callPresence.voiceChanged(held.voice.view);
+    // The call window follows the document it draws, so it stands, goes, and
+    // grows for the avatar on the same version every window is told.
+    callPresence.voiceChanged(held.voice);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
@@ -290,6 +301,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function toastInboxItem(item: InboxItemToast): void {
     panels.broadcast(channels.onInboxItemOpened, item);
+  }
+
+  function showFailedRun(place: FailedRunPlace): void {
+    panels.broadcast(channels.onShowFailedRun, place);
+  }
+
+  function toastFailedRun({ place, words, detail }: FailedRunToast): void {
+    panels.broadcast(channels.onRunFailed, { ...place, words, detail });
   }
 
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
@@ -396,10 +415,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.reconcile();
     panels.focusExpanded();
   };
-  // A Luke link's plan opens in the panels, scrolled to its section, the window brought forward.
-  const openAppLink = (place: AppLinkPlace): void => {
+  // A Luke link's place opens in the panels, the window brought forward.
+  const openAppLink = (link: ReadLink): void => {
     panels.focusExpanded();
-    panels.broadcast(channels.onShowLink, place);
+    panels.broadcast(channels.onShowLink, link);
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.
@@ -435,6 +454,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showInboxItem,
     showSettings,
     toastInboxItem,
+    showFailedRun,
+    toastFailedRun,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,

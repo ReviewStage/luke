@@ -29,17 +29,38 @@ export const MODAL_ROLE = {
 
 type ModalRole = (typeof MODAL_ROLE)[keyof typeof MODAL_ROLE];
 
-/** What Tab may land on inside the card: its enabled controls, and never a hidden one. */
-const FOCUSABLE =
-  "button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([hidden])";
+/** What Tab may land on inside the card: its enabled controls, and never a hidden one nor one taken out of the Tab order, as a menu's rows are. */
+const FOCUSABLE = [
+  'button:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
+  'input:not([disabled]):not([hidden]):not([tabindex="-1"])',
+].join(", ");
 
 /** The `data-` attributes a dialog draws its card with, for its own styles. */
 type CardData = { [attribute: `data-${string}`]: string | undefined };
 
+/** Whether `first` comes before `second` in the document's order. */
+function precedes(first: Node, second: Node): boolean {
+  return (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+}
+
 /** The move Tab makes from the focused element, kept to the card's own controls. */
 function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
-  const controls = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  const at = controls.findIndex((control) => control === document.activeElement);
+  const card = event.currentTarget;
+  const controls = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  const focused = document.activeElement;
+  const at = focused instanceof HTMLElement ? controls.indexOf(focused) : -1;
+  // Note that a focus inside the card off its controls, a picker's list that
+  // holds the keyboard, moves to the control beside it in the card's order,
+  // because counting it as off the controls would send it to an end instead.
+  if (at === -1 && focused !== null && focused !== card && card.contains(focused)) {
+    const beside = event.shiftKey
+      ? controls.findLast((control) => precedes(control, focused))
+      : controls.find((control) => precedes(focused, control));
+    event.preventDefault();
+    (beside ?? (event.shiftKey ? controls.at(-1) : controls[0]))?.focus();
+    return;
+  }
   // Note that the ends wrap and a focus off the controls (the card itself,
   // while the dialog is at work) comes back onto them, because past either
   // end the browser's own move would leave the card for the window behind it.

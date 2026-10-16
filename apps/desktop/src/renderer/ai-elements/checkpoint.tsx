@@ -13,7 +13,9 @@ import type { ComponentProps, ReactNode } from "react";
  * are the caller's: the call's day and time, and whether it stands now or
  * how far it got. It sticks to the top of the log as the lines under it
  * scroll, on the well's own ground so nothing shows through, which is why
- * a log that holds one has no top padding of its own.
+ * a log that holds one has no top padding of its own. The log
+ * (`.checkpoint-log` in planning.css) holds it at one height, which its
+ * fade starts beneath.
  */
 
 export type CheckpointProps = ComponentProps<"div"> & {

@@ -1,8 +1,8 @@
 import {
+  encodeMention,
   MENTION_KIND,
   type MentionLines,
   type MentionPlace,
-  mentionMarkdown,
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
@@ -12,7 +12,7 @@ import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
-import { useCopyToast } from "../copy-feedback";
+import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
@@ -32,7 +32,14 @@ import {
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
-import { copyPlanLinkItem, renamePlanItem, versionHistoryItem } from "./plan-menu-items";
+import {
+  copyPlanLinkItem,
+  markReadItem,
+  type ReadMark,
+  renamePlanItem,
+  versionHistoryItem,
+} from "./plan-menu-items";
+import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import {
   type ChaseState,
   chaseBehind,
@@ -71,11 +78,13 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
- * anchor (`sectionAnchors`).
+ * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram once Luke
+ * has finished typing it (`../plan-diagram.tsx`).
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
- * pointer or the keyboard is on it, copies the section's mention
- * (`[@Heading](…)`, `@luke/features/mention-link`), and a mention in the
+ * pointer or the keyboard is on it, copies the section's address
+ * (`@luke/features/mention-link`), which a transcript or the plan draws as
+ * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
  * which copies the plan's link and offers Rename, where the title can be
@@ -107,18 +116,20 @@ interface LinkedPlan {
   readonly place: MentionPlace;
 }
 
-/** What a section's ⋯ and its one item are called. */
-const SECTION_MENU = {
-  LABEL: "Section actions",
-  COPY_LINK: "Copy link to section",
-  COPIED: "Link to section copied",
-} as const;
+/** What a section's ⋯ is called. */
+const SECTION_MENU_LABEL = "Section actions";
 
 /** What the title's ⋯ is called. */
 const TITLE_MENU_LABEL = "Title actions";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
+
+/** The room left above a section the scroller reveals: its scroll padding where that is wider, which clears its faded top edge (`scroll-fade`). */
+function revealMargin(scroller: HTMLElement): number {
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
+  return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);
+}
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
 interface Chase {
@@ -509,52 +520,51 @@ function UnitMenu({
 function SectionMenu({
   linked,
   anchor,
-  heading,
   tabbable,
 }: {
   linked: LinkedPlan;
   anchor: string;
-  heading: string;
   tabbable: boolean;
 }): React.JSX.Element {
   const copy = useCopyToast();
+  // Note that the link is the section's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown.
   const copyLink = () =>
     copy(
-      mentionMarkdown(
-        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
-        heading,
-        linked.place,
-      ),
-      SECTION_MENU.COPIED,
+      encodeMention({ kind: MENTION_KIND.SECTION, planId: linked.planId, anchor }, linked.place),
+      LINK_COPY.COPIED,
     );
   const item: MenuAction = {
-    label: SECTION_MENU.COPY_LINK,
+    label: LINK_COPY.LABEL,
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: copyLink,
   };
-  return <UnitMenu label={SECTION_MENU.LABEL} items={[item]} tabbable={tabbable} />;
+  return <UnitMenu label={SECTION_MENU_LABEL} items={[item]} tabbable={tabbable} />;
 }
 
 /**
- * The title's ⋯, drawn as a section's is: Copy link to plan, as the plan's
- * own ⋯ menu offers it, then Rename where the title can be edited and
- * Version history where the window opens it, and nothing more, since the
- * plan's menu holds the rest.
+ * The title's ⋯, drawn as a section's is: Copy link, the plan's, as the plan's
+ * own ⋯ menu offers it, then Mark as unread or read where the window keeps
+ * the plan's looks, Rename where the title can be edited, and Version
+ * history where the window opens it, and nothing more, since the plan's
+ * menu holds the rest.
  */
 function TitleMenu({
   linked,
   tabbable,
+  readMark,
   onRename,
   onShowHistory,
 }: {
   linked: LinkedPlan;
   tabbable: boolean;
+  readMark: ReadMark | undefined;
   onRename: (() => void) | undefined;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   const copy = useCopyToast();
   const items = [
     copyPlanLinkItem(copy, linked.planId, linked.place),
+    ...(readMark === undefined ? [] : [markReadItem(readMark)]),
     ...(onRename === undefined ? [] : [renamePlanItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
   ];
@@ -587,6 +597,7 @@ function DocumentUnit({
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
+  const picture = usePlanPictureDrawer();
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -594,11 +605,13 @@ function DocumentUnit({
       edit={view.edit}
       link={link}
       openLink={openLink}
+      diagrams
+      picture={picture}
     />
   );
   const menu =
     linked === undefined || anchor === "" ? null : (
-      <SectionMenu linked={linked} anchor={anchor} heading={view.heading} tabbable={entry} />
+      <SectionMenu linked={linked} anchor={anchor} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
@@ -616,7 +629,8 @@ function DocumentUnit({
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
  * none are. `crumb`, where given, stands over the "Edited by" line and
- * says where the plan lives (`plan-crumb.tsx`).
+ * says where the plan lives (`plan-crumb.tsx`). `readMark` is whether the
+ * plan is marked unread, which the title's ⋯ offers to flip.
  */
 export function PlanBody({
   plan,
@@ -626,6 +640,7 @@ export function PlanBody({
   onRename,
   onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
+  readMark,
   page,
   sectionLinks,
   reader = NO_READER,
@@ -641,6 +656,8 @@ export function PlanBody({
   /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;
+  /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
+  readMark?: ReadMark;
   /** The Settings page the document is drawn as: its actions and its note. */
   page?: { actions: React.ReactNode; note: React.ReactNode };
   /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
@@ -739,7 +756,7 @@ export function PlanBody({
         : element.scrollTop +
           unit.getBoundingClientRect().top -
           element.getBoundingClientRect().top -
-          REVEAL_MARGIN;
+          revealMargin(element);
     sectionLinks?.onRevealed?.(reveal.ask);
   });
 
@@ -814,56 +831,59 @@ export function PlanBody({
         linked={linked}
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
+        readMark={readMark}
         onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
         onShowHistory={onShowHistory}
       />
     );
   return (
-    <div ref={scroller} className="plan-document-scroll">
-      {page === undefined ? crumb : null}
-      {page === undefined ? editedNote : null}
-      <ChangedLine looks={looks} marks={marks} />
-      <div className="plan-body">
-        {titled ? (
-          attributed(
-            // Keyed by the plan, so words typed for one are saved to it as another opens.
-            <EditableTitle
-              key={plan.id}
-              name={plan.name}
-              entry={entry === EDITOR_PLACE.TITLE}
+    <PlanPictures planId={plan.id} text={plan.document.body}>
+      <div ref={scroller} className="plan-document-scroll scroll-fade">
+        {page === undefined ? crumb : null}
+        {page === undefined ? editedNote : null}
+        <ChangedLine looks={looks} marks={marks} />
+        <div className="plan-body">
+          {titled ? (
+            attributed(
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={plan.id}
+                name={plan.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />,
+              null,
+              titleMenu,
+            )
+          ) : page === undefined ? (
+            attributed(<PlanTitle name={plan.name} />, null, titleMenu)
+          ) : (
+            <header className="plan-page-head">
+              <div className="plan-title-line">
+                <PlanTitle name={plan.name} />
+                {page.actions}
+              </div>
+              {editedNote}
+              {page.note}
+            </header>
+          )}
+          {editing.editor === undefined ? (
+            sections
+          ) : (
+            <PlanDocumentEditor
+              plan={plan}
+              editor={editing.editor}
               editing={editing}
-              renaming={renaming}
-              onRename={onRename}
-              onDraft={onDraftName}
-            />,
-            null,
-            titleMenu,
-          )
-        ) : page === undefined ? (
-          attributed(<PlanTitle name={plan.name} />, null, titleMenu)
-        ) : (
-          <header className="plan-page-head">
-            <div className="plan-title-line">
-              <PlanTitle name={plan.name} />
-              {page.actions}
-            </div>
-            {editedNote}
-            {page.note}
-          </header>
-        )}
-        {editing.editor === undefined ? (
-          sections
-        ) : (
-          <PlanDocumentEditor
-            plan={plan}
-            editor={editing.editor}
-            editing={editing}
-            drawn={sections}
-            hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
-            mentions={mentionDoors}
-          />
-        )}
+              drawn={sections}
+              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+              mentions={mentionDoors}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </PlanPictures>
   );
 }

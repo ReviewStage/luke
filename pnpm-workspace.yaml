@@ -1,7 +1,5 @@
 packages:
   - "apps/*"
-  - "apps/web/coder"
-  - "apps/web/eve"
   - "packages/*"
   - "tools/*"
 
@@ -23,8 +21,9 @@ catalog:
   vitest: 5.0.0
   "@effect/vitest": 4.0.4
 
-# The two workspaces that resolve a dependency away from the catalog above, and
-# it is the compiler alone: `apps/web`, and the root, whose discarded-effect
+# The workspaces that resolve a dependency away from the catalog above, and
+# it is the compiler alone: `apps/web`; `apps/luke` and `apps/dev`, whose files
+# `apps/web`'s compiler checked until they moved out of it; and the root, whose discarded-effect
 # check needs the TypeScript 6 compiler API that the native 7 does not ship
 # (`scripts/lib/discarded-effect.mjs`). `@types/node` used to be pinned here
 # too, at 22.x, on the stated ground that it matched Vercel's own runtime; it

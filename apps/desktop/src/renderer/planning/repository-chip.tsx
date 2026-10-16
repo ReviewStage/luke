@@ -10,6 +10,7 @@ import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
 
@@ -36,6 +37,8 @@ import { useDisclosure } from "../use-disclosure";
  * are set, and a member is told to ask one. The list is read from the service when the chip mounts and again
  * whenever the window takes focus, so a developer back from connecting
  * GitHub in the browser sees the change on the next opening; nothing polls. The menu
+ * is placed as a Settings picker's is, below the chip or above it where the
+ * window leaves more room there, its list capped to that room. It
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
  * there, so it closes the menu and not the panel behind it.
  */
@@ -63,8 +66,6 @@ export interface RepositoryChooser {
    * has heard yet.
    */
   connected?: boolean | undefined;
-  /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
-  source?: string | undefined;
 }
 
 /** Where the chip stands, which is how it is sized. */
@@ -122,6 +123,13 @@ function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
   return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
 }
 
+/** A repository's row words: its name, and its owner as the muted detail; a name with no owner is its label alone. */
+function ownerApart(fullName: string): Pick<MenuRow, "label" | "detail"> {
+  const slash = fullName.indexOf("/");
+  if (slash <= 0) return { label: fullName };
+  return { label: fullName.slice(slash + 1), detail: fullName.slice(0, slash) };
+}
+
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
 function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
   const wanted = repository.toLowerCase();
@@ -133,7 +141,10 @@ function listedIn(reached: readonly GitHubRepository[], repository: string): boo
  * reaches as the service ordered them, most recently updated first, each
  * once, every one under its owner's picture whether private or not. Once
  * the read has answered, a recent repository it does not list is left out,
- * because a plan started on it would be refused.
+ * because a plan started on it would be refused. A row names the repository
+ * first and its owner muted after it, since the owner is the part rows most
+ * often share, and a narrow menu cuts the end of a row; it is found by its
+ * whole `owner/name` all the same.
  */
 function repositoryRows(
   recent: readonly string[],
@@ -147,7 +158,8 @@ function repositoryRows(
   }
   return names.map((fullName) => ({
     id: fullName,
-    label: fullName,
+    ...ownerApart(fullName),
+    terms: [fullName],
     icon: (
       <RepositoryPicture
         repository={fullName}
@@ -168,6 +180,8 @@ export function RepositoryChip(props: {
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
   place: ChipPlace;
+  /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
+  align?: PickerAlign | undefined;
 }): React.JSX.Element {
   const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
@@ -177,6 +191,7 @@ export function RepositoryChip(props: {
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
@@ -238,10 +253,7 @@ export function RepositoryChip(props: {
   // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
-  // Every row stands under where the repositories come from, which the heading says.
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).map((row) =>
-    chooser.source === undefined ? row : { ...row, section: chooser.source },
-  );
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   const label =
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
@@ -283,7 +295,13 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div className="repository-chip" data-place={props.place} ref={chip}>
+    <div
+      className="repository-chip"
+      data-place={props.place}
+      data-align={props.align ?? PICKER_ALIGN.END}
+      {...placement}
+      ref={chip}
+    >
       {triggerDrawn ? (
         <Chip
           ref={trigger}

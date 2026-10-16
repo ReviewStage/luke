@@ -8,26 +8,28 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
-import {
-  AUTOMATION_SCOPE,
-  type AutomationScope,
-  type AutomationSummary,
-} from "@luke/features/automation-wire";
+import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
-import { useOpenFeedback } from "../open-feedback";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { momentText, useMinute } from "../planning/plan-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
-import { STANDING_GLYPH } from "./automation-runs-panel";
+import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
+import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
 import { automationNextText, automationOwnerName } from "./automation-words";
 import { useAutomations } from "./use-automations";
 
@@ -47,6 +49,9 @@ import { useAutomations } from "./use-automations";
  * feedback.
  */
 
+/** What an automation's row's right-click menu is called. */
+const ROW_ACTIONS = "Automation actions";
+
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
 
@@ -59,74 +64,90 @@ function toggleRefusal(answer: AutomationView, enabled: boolean): string | undef
   return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
 }
 
-/** Who owns an automation, as its row's column says it: a building and the workspace, or a lock and Personal, its name whole on hover where the column cuts it short. */
+/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Personal, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
-  workspaceName,
+  mine,
+  workspace,
 }: {
   owner: AutomationScope;
-  workspaceName: string | undefined;
+  mine: boolean;
+  workspace: Workspace | undefined;
 }): React.JSX.Element {
+  const name = automationOwnerName(owner, workspace?.name);
   return (
-    <span
-      className="automation-owner"
-      data-owner={owner}
-      title={automationOwnerName(owner, workspaceName)}
-    >
-      {owner === AUTOMATION_SCOPE.WORKSPACE ? (
-        <BuildingIcon aria-hidden="true" />
-      ) : (
-        <LockIcon aria-hidden="true" />
-      )}
-      <span className="automation-owner-name">{automationOwnerName(owner, workspaceName)}</span>
+    <span className="automation-owner" data-owner={owner} title={name}>
+      <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+      <span className="automation-owner-name">{name}</span>
     </span>
   );
 }
 
 /**
- * One automation's row: its schedule's clock wearing where its newest run
+ * One automation's row: the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next, a
- * failure's mark, and its switch.
+ * failure's mark, and its switch. Everything but the switch is one press
+ * that opens its page, as a sidebar task's row is, so the row opens wherever
+ * it is pressed and the switch beside the press only switches.
  */
 function AutomationRow({
   automation,
-  workspaceName,
+  workspace,
   now,
   onOpen,
   onToggle,
 }: {
   automation: AutomationSummary;
-  workspaceName: string | undefined;
+  workspace: Workspace | undefined;
   now: number;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
-      <button type="button" className="automation-row-open" onClick={onOpen}>
-        <StateGlyph glyph={<ClockIcon />} state={state} />
+      <button
+        type="button"
+        className="automation-row-open"
+        onClick={onOpen}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+      >
+        <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
         <span className="automation-row-copy">
           <span className="automation-row-name">{automation.name}</span>
           <span className="automation-row-detail">
             {automationTriggerText(automation.trigger, automation.repositories ?? [])}
           </span>
         </span>
+        <OwnerCell
+          owner={automationOwner(automation)}
+          mine={automation.mine === true}
+          workspace={workspace}
+        />
+        <span
+          className="automation-row-when"
+          title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+        >
+          {automationNextText(automation, now)}
+        </span>
+        {stateEndMark(state, true)}
       </button>
-      <OwnerCell owner={automationOwner(automation)} workspaceName={workspaceName} />
-      <span
-        className="automation-row-when"
-        title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-      >
-        {automationNextText(automation, now)}
-      </span>
-      {stateEndMark(state, true)}
       <Switch
         checked={automation.enabled}
         label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
         onChange={(enabled) => onToggle(enabled)}
       />
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={ROW_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
     </div>
   );
 }
@@ -134,13 +155,13 @@ function AutomationRow({
 /** The list, each owner's automations under its own heading where both stand. */
 function AutomationList({
   groups,
-  workspaceName,
+  workspace,
   now,
   onOpen,
   onToggle,
 }: {
   groups: readonly AutomationGroup[];
-  workspaceName: string | undefined;
+  workspace: Workspace | undefined;
   now: number;
   onOpen: (automation: AutomationSummary) => void;
   onToggle: (automation: AutomationSummary, enabled: boolean) => void;
@@ -151,11 +172,11 @@ function AutomationList({
         <section
           key={group.owner}
           className="automation-group"
-          aria-label={automationOwnerName(group.owner, workspaceName)}
+          aria-label={automationOwnerName(group.owner, workspace?.name)}
         >
           {groups.length > 1 ? (
             <h2 className="settings-group-title">
-              {automationOwnerName(group.owner, workspaceName)}
+              {automationOwnerName(group.owner, workspace?.name)}
             </h2>
           ) : null}
           <div className="settings-card">
@@ -163,7 +184,7 @@ function AutomationList({
               <AutomationRow
                 key={automation.id}
                 automation={automation}
-                workspaceName={workspaceName}
+                workspace={workspace}
                 now={now}
                 onOpen={() => onOpen(automation)}
                 onToggle={(enabled) => onToggle(automation, enabled)}
@@ -186,7 +207,6 @@ function ListPage({
 }): React.JSX.Element {
   const view = plans.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
-  const openFeedback = useOpenFeedback();
   const toast = useToast();
   const now = useMinute();
   const workspace = plans.workspace;
@@ -207,16 +227,10 @@ function ListPage({
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">Automations</h1>
-          <span className="integration-tool-badge experiment-badge">Experimental</span>
+          <ExperimentTag />
         </div>
         <div className="desktop-toolbar-actions">
-          <button
-            type="button"
-            className="experiment-feedback"
-            onClick={() => openFeedback(EXPERIMENT.AUTOMATIONS)}
-          >
-            Send feedback
-          </button>
+          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
           <button
             type="button"
             className="toolbar-button bordered-button"
@@ -228,7 +242,7 @@ function ListPage({
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
+      <div className="automations-scroll scroll-fade-top">
         {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : groups.length === 0 ? (
@@ -239,7 +253,7 @@ function ListPage({
         ) : (
           <AutomationList
             groups={groups}
-            workspaceName={workspace?.name}
+            workspace={workspace}
             now={now}
             onOpen={(automation) =>
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
@@ -271,14 +285,14 @@ function UnreadPage({
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
+      <div className="automations-scroll scroll-fade-top">
         <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
       </div>
     </section>
   );
 }
 
-/** One automation's page that names an automation the list no longer holds: it was deleted, or is not this workspace's. */
+/** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
@@ -291,10 +305,8 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
-        <EmptyState icon={<ZapIcon />} title="This automation is gone">
-          It was deleted, or it belongs to another workspace.
-        </EmptyState>
+      <div className="automations-scroll scroll-fade-top">
+        <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
       </div>
     </section>
   );
@@ -307,6 +319,16 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * edit is in the list the moment it lands.
  */
 export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+  // Every Copy link on these pages is written under the listed workspace, whose automations they are.
+  return (
+    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+      <AutomationsPages plans={plans} />
+    </LinkWorkspaceProvider>
+  );
+}
+
+/** The Automations pages themselves, under the workspace their links are written in. */
+function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element {
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);
@@ -348,6 +370,8 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
+        linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
+        leaveGuard={plans.leaveGuard}
         onCreated={(automationId) => {
           setMade(automationId);
           view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });

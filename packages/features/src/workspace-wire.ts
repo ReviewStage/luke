@@ -1,6 +1,7 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import { sniffImageType } from "./image-signature.js";
+import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
 import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -73,7 +74,7 @@ export const ASSIGNABLE_ROLE = {
 /**
  * The first steps of tryluke.dev's paths that are Luke's own, now or likely
  * soon, which no workspace's slug may be: every page the web app serves
- * under its own name (`apps/web/vercel.json`, `apps/web/vite.config.ts`),
+ * under its own name (the root `vercel.json`, `apps/web/vite.config.ts`),
  * and the words a later page is likeliest to want.
  */
 export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
@@ -199,6 +200,13 @@ export const workspaceGithubInstallationSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
+export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSchema.Type;
+
+/** A workspace's Linear connection: whether Connect still holds a grant for it; false once Linear refused it, which an owner or admin mends by connecting again. */
+export const workspaceLinearSchema = EffectSchema.Struct({
+  active: EffectSchema.Boolean,
+});
+
 /**
  * One workspace the account is a member of. The name is held to no bound
  * here, because a name the service already holds must not make the whole
@@ -220,6 +228,12 @@ export const workspaceSchema = EffectSchema.Struct({
   githubInstallations: EffectSchema.optionalKey(
     EffectSchema.Array(workspaceGithubInstallationSchema),
   ),
+  /**
+   * The workspace's one Linear connection, which an owner or admin made for
+   * every member (`linear-wire.ts`); absent where none is connected, and
+   * from a service before it.
+   */
+  linear: EffectSchema.optionalKey(workspaceLinearSchema),
   /** How many members it has, the account among them, which the window says as who shares it; absent from a service before it. */
   memberCount: EffectSchema.optionalKey(countedNumber),
   /**
@@ -289,6 +303,32 @@ export const workspaceGithubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
 
+/** The workspace whose Linear is connected or disconnected (POST), by an owner or admin of it (`linear-wire.ts`). */
+export const workspaceLinearRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+});
+
+/** Where the browser goes to connect Linear: Vercel Connect's sign-in address, for the workspace. */
+export const workspaceLinearConnectAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/**
+ * The Linear issues a member asks for (POST): the workspace, and a search
+ * where one is typed, or the one issue an identifier names, as a link to it
+ * drawn in Luke's words asks for its title and state, answered alone or not
+ * at all.
+ */
+export const linearIssuesRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  query: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_QUERY_CHARS)),
+  ),
+  identifier: EffectSchema.optionalKey(linearIdentifierSchema),
+});
+
+export type LinearIssuesRequest = typeof linearIssuesRequestSchema.Type;
+
 /** One member of a workspace: the account, its name and email, its role, and its sign-in picture. */
 export const workspaceMemberSchema = EffectSchema.Struct({
   userId: EffectSchema.String,
@@ -305,9 +345,28 @@ export const workspaceMemberSchema = EffectSchema.Struct({
 
 export type WorkspaceMember = typeof workspaceMemberSchema.Type;
 
-/** A workspace's members, owners first, then admins, then members, each by name (GET, and after a removal, a role changed, or a handover). */
+/**
+ * Someone the workspace's work still names who is no longer a member of it:
+ * their account, the name it holds now, and their sign-in picture on the
+ * same terms as a member's.
+ */
+export const formerMemberSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+  pictureUrl: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type FormerMember = typeof formerMemberSchema.Type;
+
+/**
+ * A workspace's members, owners first, then admins, then members, each by
+ * name (GET, and after a removal, a role changed, or a handover); and on a
+ * read, who the workspace's work still names but left, by name, absent where
+ * nobody did and from a service before it.
+ */
 export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   members: EffectSchema.Array(workspaceMemberSchema),
+  former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
 });
 
 /** The query a members read names its workspace under. */

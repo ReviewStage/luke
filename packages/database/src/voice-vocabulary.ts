@@ -23,3 +23,18 @@ export const VOICE_SEGMENT_ROLE = {
 } as const;
 
 export type VoiceSegmentRole = (typeof VOICE_SEGMENT_ROLE)[keyof typeof VOICE_SEGMENT_ROLE];
+
+/**
+ * Why a call's avatar session ended: the developer turned video off, Keyframe
+ * closed it, it failed, the call it was on ended, or the sweep found it left
+ * open on a call that is gone.
+ */
+export const AVATAR_END_REASON = {
+  USER: "user",
+  SERVER_CLOSED: "server_closed",
+  ERROR: "error",
+  CALL_ENDED: "call_ended",
+  ORPHANED: "orphaned",
+} as const;
+
+export type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END_REASON];

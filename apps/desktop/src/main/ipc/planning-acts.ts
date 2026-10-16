@@ -10,14 +10,22 @@ import type {
   PlanningFileParams,
   PlanningGitHubDisconnectAnswer,
   PlanningGitHubPageAnswer,
+  PlanningLinearIssuesAnswer,
+  PlanningLinearIssuesParams,
   PlanningMessagesParams,
   PlanningMoveAnswer,
   PlanningMoveParams,
   PlanningPageAnswer,
   PlanningPageParams,
   PlanningPageSourceAnswer,
+  PlanningPictureAnswer,
+  PlanningPictureKeepAnswer,
+  PlanningPictureKeepParams,
+  PlanningPictureParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
+  PlanningPullRequestAnswer,
+  PlanningPullRequestParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
   PlanningRepositoriesParams,
@@ -60,6 +68,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
   isGitHubAddress,
+  LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { Effect } from "effect";
@@ -100,10 +109,17 @@ export interface PlanningActsDependencies {
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
     planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
     planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
+    planningPullRequest(
+      params: PlanningPullRequestParams,
+    ): Effect.Effect<PlanningPullRequestAnswer>;
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
     planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+    planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
+    planningPictureKeep(
+      params: PlanningPictureKeepParams,
+    ): Effect.Effect<PlanningPictureKeepAnswer>;
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
@@ -117,6 +133,15 @@ export interface PlanningActsDependencies {
     workspaceGitHubDisconnect(
       params: PlanningWorkspaceParams,
     ): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceLinearConnect(
+      params: PlanningWorkspaceParams,
+    ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+    workspaceLinearDisconnect(
+      params: PlanningWorkspaceParams,
+    ): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceLinearIssues(
+      params: PlanningLinearIssuesParams,
+    ): Effect.Effect<PlanningLinearIssuesAnswer>;
     workspaceMembers(
       params: PlanningWorkspaceMembersParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
@@ -187,11 +212,14 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_FILE
   | typeof ACT_KIND.PLANNING_TREE
   | typeof ACT_KIND.PLANNING_SKILLS
+  | typeof ACT_KIND.PLANNING_PULL_REQUEST
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
+  | typeof ACT_KIND.PLANNING_PICTURE_READ
+  | typeof ACT_KIND.PLANNING_PICTURE_KEEP
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_PHOTO_SET
@@ -200,7 +228,11 @@ type PlanningActKind =
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
@@ -216,7 +248,11 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
   | typeof ACT_KIND.WORKSPACE_TRANSFER
@@ -256,8 +292,15 @@ function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure)
       ? WORKSPACE_NOT_PERMITTED_REFUSAL
       : failure === WORKSPACE_CALL_FAILURE.ALREADY_INVITED
         ? ALREADY_INVITED_REFUSAL
-        : ACT[kind].refusal;
+        : failure === WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE
+          ? LINEAR_UNAVAILABLE_REFUSAL
+          : ACT[kind].refusal;
   return Effect.fail(new ActRefused({ message }));
+}
+
+/** Whether an address the host answered parses and is https, the one kind a browser is sent to unnamed. */
+function isBrowserAddress(url: string): boolean {
+  return URL.canParse(url) && new URL(url).protocol === "https:";
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -421,6 +464,16 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_SKILLS, sender);
       return host.planningSkills(params);
     },
+    // A service that did not answer is refused, so a link draws what it holds
+    // rather than reading the silence as no pull request.
+    [ACT_KIND.PLANNING_PULL_REQUEST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PULL_REQUEST, sender);
+      return Effect.flatMap(host.planningPullRequest(params), (answer) =>
+        "pullRequest" in answer
+          ? Effect.succeed(answer.pullRequest)
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.PLANNING_PULL_REQUEST].refusal })),
+      );
+    },
     [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);
       return dependencies.colourCode(language, code);
@@ -436,6 +489,18 @@ export function planningActRows(
     [ACT_KIND.PLANNING_RESTORE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_RESTORE, sender);
       return host.planningRestore(params);
+    },
+    // Note that the picture's answer, a failure among them, is the panel's to
+    // read, as a workspace photo's is, because a picture that hears none
+    // draws its words rather than a refusal.
+    [ACT_KIND.PLANNING_PICTURE_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_READ, sender);
+      return host.planningPicture(params);
+    },
+    // A refusal is the editor's to say on the picture, with its retry, so it is answered rather than refused.
+    [ACT_KIND.PLANNING_PICTURE_KEEP]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_KEEP, sender);
+      return host.planningPictureKeep(params);
     },
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
     [ACT_KIND.PLANNING_PAGE_SOURCE]: (params, sender) => {
@@ -525,12 +590,54 @@ export function planningActRows(
           : refusedWorkspace(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, answer.failure),
       );
     },
+    // Note that the address the service answered opens only where it is
+    // https, because it is Vercel Connect's and the panel did not name it.
+    [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_CONNECT, sender);
+      return Effect.flatMap(host.workspaceLinearConnect(params), (answer) => {
+        if ("failure" in answer) {
+          return refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_CONNECT, answer.failure);
+        }
+        if (!isBrowserAddress(answer.url)) {
+          return refusedWorkspace(
+            ACT_KIND.WORKSPACE_LINEAR_CONNECT,
+            WORKSPACE_CALL_FAILURE.UNANSWERED,
+          );
+        }
+        return Effect.promise(() => dependencies.openExternal(answer.url));
+      });
+    },
+    [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, sender);
+      return Effect.flatMap(host.workspaceLinearDisconnect(params), (answer) =>
+        "workspace" in answer
+          ? Effect.void
+          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_ISSUES, sender);
+      return Effect.flatMap(host.workspaceLinearIssues(params), (answer) =>
+        "issues" in answer
+          ? Effect.succeed(answer.issues)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_ISSUES, answer.failure),
+      );
+    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBERS_READ, sender);
       return Effect.flatMap(host.workspaceMembers(params), (answer) =>
         "members" in answer
           ? Effect.succeed(answer.members)
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
+      );
+    },
+    // Who left is read on the same read as the members, so a service that names nobody answers none.
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, sender);
+      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.former ?? [])
+          : refusedWorkspace(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, answer.failure),
       );
     },
     // Note that the photo's answer, a failure among them, is the panel's to

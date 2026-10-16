@@ -9,6 +9,13 @@
 
 import type { PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
+import {
+  AVATAR_STATUS,
+  type AvatarState,
+  type AvatarStatus,
+  avatarStanding,
+  avatarTiled,
+} from "@luke/voice/avatar";
 import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./planning-model.js";
 
@@ -77,4 +84,47 @@ export function callCardShown(input: {
 }): boolean {
   const { view, focused, planShown } = input;
   return focused && callInProgress(view) && planShown !== view.callPlanId;
+}
+
+/**
+ * What the top of one plan's Call tab draws while that plan's call is in
+ * progress: the avatar's tile while it is starting, live, or ended for a
+ * reason it offers to restart from, and `OFF` otherwise, which is the
+ * compact strip that offers to turn video on, because the developer's own
+ * off is not the end of video on the call. `undefined`, which draws nothing,
+ * on any other plan or once the call is over. With the Video calls
+ * experiment off nothing offers to put an avatar up, but an avatar still
+ * standing keeps its tile, and with it the one control that takes it down.
+ */
+export function callTabVideoStatus(input: {
+  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  avatar: AvatarState;
+  planId: string;
+  videoCalls: boolean;
+}): AvatarStatus | undefined {
+  const { view, avatar, planId, videoCalls } = input;
+  if (!callInProgress(view) || view.callPlanId !== planId) return undefined;
+  if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
+  return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
+}
+
+/**
+ * What the call card draws of the avatar while the call is in progress:
+ * the tile above its name while the avatar is starting or live, the card's
+ * own Video on beside its name once it is down for any reason, `OFF`, and
+ * `undefined`, which is today's card and nothing more, once the call is
+ * over or while the Video calls experiment is off. The card is small, so an
+ * avatar that ended is not drawn ended there: it falls back to the plain
+ * card, and the Call tab keeps saying why. As on the Call tab, an avatar
+ * still standing when the experiment is turned off keeps its tile.
+ */
+export function callCardVideoStatus(input: {
+  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  avatar: AvatarState;
+  videoCalls: boolean;
+}): AvatarStatus | undefined {
+  const { view, avatar, videoCalls } = input;
+  if (!callInProgress(view)) return undefined;
+  if (avatarStanding(avatar)) return avatar.status;
+  return videoCalls ? AVATAR_STATUS.OFF : undefined;
 }

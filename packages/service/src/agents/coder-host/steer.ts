@@ -29,6 +29,7 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**
@@ -140,7 +141,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention of the plan goes with them, read off the plan this send read as its sender.
-  const mentioned = mentionedContext(line.text, plan?.plan);
+  const reads = yield* hostedStoreOrUnavailable(readMentioned(userId, line.text, plan?.plan));
+  const mentioned = mentionedContext(line.text, plan?.plan, reads);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const handOver = eve

@@ -59,6 +59,18 @@ function fixture() {
           asked.push(`disconnect ${provider}`);
           return { status: INTEGRATION_STATUS.DISCONNECTED };
         }),
+      integrationsRename: ({ provider, connection, label }) =>
+        Effect.sync(() => {
+          asked.push(`rename ${provider} ${connection}`);
+          return {
+            account: {
+              provider,
+              connection,
+              label,
+              status: INTEGRATION_STATUS.CONNECTED,
+            },
+          };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.

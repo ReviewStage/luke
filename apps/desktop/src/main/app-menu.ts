@@ -322,6 +322,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         closeWindowItem(),
         SEPARATOR,
         commandItem(APP_COMMAND.COPY_PLAN),
+        commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
         commandItem(APP_COMMAND.ARCHIVE_PLAN),
         commandItem(APP_COMMAND.DELETE_PLAN),
@@ -350,6 +351,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         },
         SEPARATOR,
         commandItem(APP_COMMAND.MENTION_LINES),
+        commandItem(APP_COMMAND.INSERT_PICTURE),
         SEPARATOR,
         {
           label: "Speech",
@@ -390,7 +392,6 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
       submenu: [
         commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
-        commandItem(APP_COMMAND.FACTORY),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

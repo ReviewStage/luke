@@ -26,7 +26,13 @@ tabs described next. On disk, under its application data, Luke keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (a coding agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
-the Inbox. None of it is sent anywhere.
+the Inbox; and the words of a message you typed to a coding agent and have
+not sent, mentions and skills among them, kept per agent until you send it
+or empty its box, and an inbox answer you have not sent, kept per item until
+you send it or the agent changes the item, each shown only while the account
+that wrote it is signed in. The files attached to such a message stay in
+memory only.
+None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
@@ -126,9 +132,10 @@ A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
 he answers a spoken ask he reads on our service, from the plan and the record
 described under "Your account". During the call, Luke can
-list the task's coding agents, read the last few turns of one's transcript,
-send one a message it writes for you (kept in that agent's transcript as
-Luke's), and start a new one; what he read and sent is kept with the task's
+list the coding agents of the task's workspace, on any task and whichever
+member started them, read the last few turns of one's transcript, send one a
+message it writes for you (kept in that agent's transcript as Luke's), and
+start a new one on the task; what he read and sent is kept with the task's
 conversation. A fixture or evidence run keeps no conversation at all.
 
 **Tasks.** When you start a named task, our service stores it in a
@@ -141,7 +148,15 @@ message, rename, and stop the coding agents any member started on it. Each
 message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
 message of a member whose account is deleted keeps no account and reads as a
-former member's. It stores
+former member's. A coding agent can also list the other coding agents of its
+workspace, on any task and whichever member started them, send one a
+message, list the workspace's open tasks, and start a new one on its own
+task or another task of the workspace, without asking you first; a
+message is kept in the receiving agent's transcript under the sending
+agent's title, opening with the sending agent's title and id, and goes to
+the receiving agent's model provider as the rest of its conversation does,
+and an agent it starts runs as the member who started it, on that member's
+keys, and is told which agent started it. It stores
 under your account its name and its plan, one Markdown document, which begins as a copy of
 your plan template and is written by the call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
@@ -172,6 +187,32 @@ task's calls, with every line said on it (see "Your account"): at once for a
 call that has ended, and within a minute or so of its end for a call still
 open. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
+
+**A plan's pictures.** When you paste, drop, or choose a picture into a
+task's plan, Luke re-encodes it on your Mac to at most 1.5 MB and sends it
+to our service, which keeps it in our database beside the task, under the
+task rather than your account, with which member added it. A coding agent on
+the task may add a picture too: a PNG, JPEG, or WebP file of at most 1.5 MB in
+its sandbox, such as a screenshot it took of what it built, which our service
+reads from the sandbox and keeps the same way, as added by the member the
+agent's turn runs for, with the plan's history naming the agent. The plan's text
+names the picture by an address on tryluke.dev; our service serves its bytes
+only to Luke signed in as a member of the task's workspace, and opening the
+address in a browser shows a page that opens the task in Luke and nothing of
+the picture. Every member of the workspace sees it, as they see the plan.
+Pictures are stored as sent and readable by our own operators, like the plan.
+Luke and the coding agents read the plan with each picture's line, its
+address, its alt text, and its caption, but not the picture. Luke, or a
+coding agent on the task, may look at one of the plan's pictures when those
+words are not enough, read as the member the turn runs
+for, which sends the picture to the model that looked; our service keeps
+only that it looked in the task conversation or the agent's transcript, not
+the picture, though the model's session history may keep it (see "Who we send
+it to"). A picture stays as long as the task does, even once the plan no
+longer shows it, so every earlier version still shows its pictures; one no save of the
+plan ever showed, pasted and undone, is deleted a day after it was sent.
+Deleting the task deletes its pictures; deleting your account leaves the
+pictures you added to a task that stays, as it leaves the words you wrote.
 
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
@@ -232,6 +273,24 @@ the agent's transcript, stored as sent and readable by our own operators,
 except that the prompt an agent is started on keeps an image or PDF by name
 alone. They go when the transcript does; the sandbox's snapshot and the
 agent's session history keep them on the terms under "Who we send it to".
+
+**Pictures in a tool's answer.** When a tool answers Luke or a coding agent
+with a picture, as a connected service can answer a screenshot or an image
+attached to an issue, the model that made the call sees it, and our service
+keeps the picture once, a PNG, JPEG, or WebP of up to 4 MB, in our database
+beside the task's conversation or the agent's transcript the call is written
+to, which names the picture by an id rather than carrying it; a conversation
+or transcript keeps up to 200 MB of pictures. A larger picture, one past
+that, or one of another kind is not kept, and the record says only its kind
+and size. A coding agent or one of its workers can also show you pictures
+from its sandbox, such as screenshots of a page it changed, up to twenty at a
+time with a line of its own words each: our service reads each file from the
+sandbox and keeps it the same way, beside the agent's transcript or the
+worker's, and the model is told only that they were shown, never handed the
+pictures back. A coding agent's kept pictures, and its workers', are served only
+to Luke signed in as a member of the workspace who can read the agent. Kept
+pictures are readable by our own operators, like the transcript, and go
+when it does.
 
 **Your own API keys.** If you add an Anthropic or OpenAI API key in Settings,
 your Mac sends it once, over HTTPS, to our service, which keeps it only if the
@@ -332,7 +391,10 @@ GitHub with a token the Luke GitHub App mints for that one repository on the
 workspace's installation: each file's name and patch, for up to 300
 files, leaving out a patch over 100,000 characters. It stores none of it, and
 Luke holds it in memory while the tab is open, never on disk, except that
-downloading the patch writes it where you save it.
+downloading the patch writes it where you save it. Wherever Luke names
+someone on GitHub, as the tab does who opened and reviewed the pull request,
+it draws them by their GitHub avatar, which your Mac loads straight from
+GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
@@ -417,7 +479,8 @@ own retention policy.
 address, the address of your profile picture, and which of the two you used.
 An account made with Google can also link a GitHub account to itself, even
 one under a different email address, in Settings › Integrations, which lets
-agents use GitHub tools as you; signing in with GitHub, or linking it,
+agents use GitHub tools as you, and lets our service open the pull request
+of a coding agent you start as you; signing in with GitHub, or linking it,
 authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents,
@@ -511,7 +574,12 @@ memory for a short while, and sends it only to Linear's MCP server, never to
 your Mac, a model, or a sandbox. We keep only your connection's state
 (waiting for sign-in, connected, or expired), when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. The list of Linear's tools that menu
+one-time value that matches its return. Where you connect more than one
+account at one service, we also keep a name for each: the name the service
+gives that account's workspace when Vercel Connect hands us its token, or one
+you give it in Settings › Integrations. An agent handed more than one account
+at a service is told each one's name, so it can ask which you mean and say
+which it used. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are
 connected, Luke and the workers he hands work to can read and
 change whatever your Linear account can, through Linear's own MCP server,
@@ -528,6 +596,30 @@ Linear, and the record of it, stays. Deleting your account removes the record
 and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
 stays until you revoke Luke in Linear's own settings.
+
+**Linear for a whole workspace, if an owner or admin connects it.** An owner
+or admin can also connect Linear once for everyone in a workspace, in Settings
+› Workspace › Integrations. That signs them in to Linear in their browser
+through Vercel Connect, which stores the Linear token under the workspace
+rather than under their account, and our service handles the token as it
+does an account's, sending it only to Linear. We keep the workspace
+connection's state, who last began its sign-in, when it last changed and last
+finished signing in, and, while a sign-in is under way, when it began and a
+one-time value that matches its return. While it is connected, every member
+of the workspace can list the issues that Linear account can see, private
+teams' issues included, and start a plan from one, and Luke's agents working
+on that workspace's plans and coding agents use this connection for Linear in
+place of a member's own, so what they change in Linear shows as made by the
+person who connected it. Starting a plan from an issue copies the issue's
+key, title, address, and description onto the plan, where it stays with the
+plan, is shown to the planning model on every turn of its call, and is
+deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+to a Linear issue, the app asks our service for that issue's key, title, and
+state, which it reads through this connection as you look and keeps
+nowhere; the app shows them on the link, and they go no further.
+Disconnecting stops every read through it at once,
+removes the connection's record, and asks Vercel Connect to revoke the grant;
+what plans already copied of an issue stays with them.
 
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
@@ -785,6 +877,24 @@ only when you press Send.
   stores and logs neither the recording nor the text, and counts only the clip
   and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
+- Keyframe Labs, for video calls, only while the Video calls experiment is on
+  in Settings › Experimental, which it is not until you turn it on. The
+  choice is your account's, so it follows you to every Mac you sign in on.
+  Each call that shows Luke on video opens one avatar session at Keyframe: our
+  service asks Keyframe for it
+  on our key, naming the stock persona Luke appears as and nothing about you,
+  and hands the session's one-time pass to your Mac, where only Luke's main
+  window holds it. That window then sends Keyframe Luke's synthesized voice as
+  he speaks, which carries what he says about your plan, and plays back the
+  video, at the top of the plan's Call tab and on the call card, and the
+  audio Keyframe renders from it. While another app is in front, that window
+  also hands the video, and nothing else, to Luke's floating call window over
+  a connection between the two windows on your Mac. Your microphone never reaches
+  Keyframe, nor does anything else on your Mac or in your account: the voice it
+  receives is Luke's alone. Our service logs only whether a session started, the
+  Keyframe server it opened on, and, when one could not, why, and keeps, with
+  the call's record, when each session started and ended, its length, and why it
+  ended. Keyframe keeps what it receives under its own retention policy.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash
@@ -837,9 +947,23 @@ only when you press Send.
   in your daily usage and stored with the agent or worker; Anthropic keeps the
   request and its reply under its own retention policy.
 - GitHub, through the Luke GitHub App, for a coding agent's work. The agent
-  checks the repository out, pushes its branch, and opens a pull request with
-  an installation token the App mints for that one repository, set at the
-  sandbox's network boundary and never inside it; where the installation has
+  checks the repository out and pushes its branch with an installation token
+  the App mints for that one repository, set at the sandbox's network
+  boundary and never inside it. Where you started the agent, in the app or
+  by asking Luke, you signed in with GitHub (or linked it), and your GitHub
+  account may push to the repository, the agent writes as you: its commits
+  name your GitHub account at the private noreply address GitHub gives it,
+  each with Luke's App as co-author, and our service opens its pull request
+  as you, with your own GitHub App token, in one request to GitHub for that
+  one repository. Your token is used on our service alone and never reaches
+  the agent's sandbox, so neither the agent nor anyone with a terminal in it
+  holds it; everything else the agent asks of GitHub, such as a comment or
+  marking a draft ready, goes out as the App. Where GitHub refuses your
+  token, the App opens the pull request in your place and the agent keeps
+  why. Otherwise, and always for an agent an automation started, its commits
+  and pull request are the App's own, under its bot, and name no one's
+  GitHub account. Which of the two an agent writes as is kept with it.
+  Where the installation has
   accepted it, the agent also reads its pull request's checks and the logs of
   failed runs with that token, which land in its transcript like any other
   command's output. GitHub also tells our service, signed with a secret it
@@ -850,11 +974,20 @@ only when you press Send.
   the App mints on the workspace's installation the pull request's number,
   title, link, state, checks,
   and size of change, and the branch's latest commit, and keeps them with the
-  agent until the task is deleted. Commits and pull requests are the Luke
-  GitHub App's own, under its bot, and name no one's GitHub account. Our
-  service also reads from GitHub, through the workspace's installation and
-  storing none of it, a file or folder you open, a pull request's
-  changed files for the Changes tab, and a repository's skills.
+  agent until the task is deleted. When someone reviews or comments on an
+  agent's pull request, or a check fails on an agent's branch, GitHub tells
+  our service the same way; our service reads who did it by their GitHub
+  login, the pull request's number and branch, the link to the review,
+  comment, or failed commit, a review's verdict, and when, never what the
+  review or comment says, and sends that to the agents on that pull request
+  as a message, which their transcript keeps under that login until the
+  task is deleted. The agent then reads the review or comment itself with
+  the App's token, and what it reads lands in its transcript like any other
+  command's output. Our service also reads from GitHub, through
+  the workspace's installation and storing none of it, a file or folder you
+  open, a pull request's changed files for the Changes tab, a repository's
+  skills, and the number, title, link, and state of a pull request a plan, a
+  reply, or an Inbox item links to, which the app shows on the link.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
   Linear's MCP server, which keeps it under Linear's own policy.
@@ -912,6 +1045,11 @@ in, the site names you to PostHog by your account's id, name, and email
 address, which links your earlier visits to your account. Your browser
 contacts PostHog directly, so PostHog sees your network address, as it does
 for the app's recordings.
+
+A link to something in Luke, pasted into Slack, iMessage, or anywhere else
+that previews links, shows only Luke's own card: the Luke name and logo, the
+same for every link, and nothing of the task, the agent, the person, or the
+workspace it opens.
 
 ## Storage
 

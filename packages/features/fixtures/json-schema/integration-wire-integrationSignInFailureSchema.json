@@ -19,6 +19,9 @@
         "ycombinator"
       ]
     },
+    "connection": {
+      "type": "string"
+    },
     "reason": {
       "type": "string",
       "enum": [

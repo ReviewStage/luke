@@ -25,8 +25,8 @@ macOS check to wait for.
 Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
-`apps/web/server/routes/`, the deployment shell beside them, the two eve
-service roots, and build and release scripts. A React component, hook, or
+`apps/web/server/routes/`, the deployment shell beside them, the agents' eve
+apps, `apps/luke` and `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
 mount it, the hosted service's logic in `packages/service`, its contract
 and clients in `packages/features`, and a wire value in `packages/wire`. A
@@ -34,7 +34,7 @@ and clients in `packages/features`, and a wire value in `packages/wire`. A
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
 `@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
 check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, or `apps/web/server` unless it is shell:
+`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
 an app entry in `knip.json`, a `runtimeEdges` row in
 `tools/anti-slop/effect-edges.json`, or a deployment or test-support file
 the check names. A component is placed by review under the same rule.
@@ -42,8 +42,10 @@ the check names. A component is placed by review under the same rule.
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
-  voice window, a counted event, a trace, or a fixture. Nothing in this repository
-  scans for secrets, so this rule is the whole of the check. Two carve-outs,
+  voice window, a counted event, a trace, or a fixture. The repository check
+  (`scripts/repository-checks.sh`) refuses a tracked literal shaped like a
+  provider's credential; nothing else scans for secrets, so past that this rule
+  is the whole of the check. Two carve-outs,
   approved by Dean on 2026-10-13: the output of `run_on_mac`, a command an agent
   ran on the developer's own Mac, may reach the conversation, the model, and the
   tool's events as it printed; a trace, a counted event, and a fixture still never
@@ -57,7 +59,10 @@ the check names. A component is placed by review under the same rule.
   body an automation's caller sends may reach that run's agent task, transcript
   and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
   may be shown once, in the window that minted it, at creation or rotation;
-  never anywhere else.
+  never anywhere else. And, approved
+  on 2026-10-13: the Keyframe session token for a call's own avatar may reach
+  the panel window, which runs that session, and never the voice window,
+  a Gateway answer or event, app state, a counted event, a trace, or a fixture.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
@@ -71,7 +76,7 @@ the check names. A component is placed by review under the same rule.
 
 ## The scheduled sweep
 
-Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.json`;
+Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.json`;
 `packages/service/src/maintenance/maintenance-sweep.ts`) under the deployment's own
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
@@ -189,27 +194,27 @@ request, so there is no request fiber to compose it into),
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
 its own process), each eve root's own module-scope memoized runtime,
-`apps/web/eve/runtime.ts` and `apps/web/coder/runtime.ts`, built over the
+`apps/luke/runtime.ts` and `apps/dev/runtime.ts`, built over the
 same layer (`@luke/service/runtime`'s `webServices`) and holding its
 `runAgent`, the eve project's authored files —
-`apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
-`apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
-`apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
+`apps/luke/agent.ts`, `apps/luke/channels/eve.ts`,
+`apps/luke/hooks/store.ts`, `apps/luke/instructions/prompt.ts`,
+`apps/luke/instructions/seed.ts`, and `apps/luke/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
 an authored file is where this deployment runs what it hands eve — and
-`apps/web/eve/host.ts`, the one module those files share their host through,
+`apps/luke/host.ts`, the one module those files share their host through,
 which composes the production seams over `HostedEnvironment` with
 `Effect.runSync` as it loads, because the channel's door takes the
 deployment's secret as a value and the environment read suspends on nothing —
 and the coding-agent eve project's authored files on the same terms —
-`apps/web/coder/agent.ts`, `apps/web/coder/channels/eve.ts`,
-`apps/web/coder/hooks/store.ts`, `apps/web/coder/instructions/prompt.ts`, and
-`apps/web/coder/sandbox.ts` (the sandbox selector, which eve calls as a
+`apps/dev/agent.ts`, `apps/dev/channels/eve.ts`,
+`apps/dev/hooks/store.ts`, `apps/dev/instructions/prompt.ts`, and
+`apps/dev/sandbox.ts` (the sandbox selector, which eve calls as a
 promise when a tool first needs the sandbox and which runs the checkout
 there), each an edge because eve drives them through promise-shaped hooks of
-its own, and `apps/web/coder/host.ts`, the one module those files share their
+its own, and `apps/dev/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads for the same reason
-`apps/web/eve/host.ts` is. Not
+`apps/luke/host.ts` is. Not
 every seam in `packages/service/src/` is an effect down to its floor:
 `packages/service/src/agents/brain-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
@@ -269,7 +274,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/web/eve/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
+  `apps/luke/evals/brain-host.eval.ts`, `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
   statement) so a suite or an offline eval still written on `node:assert` or a
@@ -358,6 +363,13 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 Commit messages and PR titles follow Conventional Commits 1.0.0
 (https://www.conventionalcommits.org/en/v1.0.0/) and branch names follow
 Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
+
+## Merging
+
+To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
+step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits on
+CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
+arm a PR only once it targets `main`.
 
 ## TypeScript
 

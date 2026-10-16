@@ -2,31 +2,53 @@
 
 import assert from "node:assert/strict";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentPageAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CHECK_SUMMARY,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPage,
+  type CodingAgentPullRequestAnswer,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { newestToastSays } from "#testing/toast";
+import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { useSidePanel } from "../planning/use-side-panel";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it cannot, deleted or the experiment off, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
@@ -47,7 +69,55 @@ const PAGE: CodingAgentPage = {
   repository: "acme/relay",
 };
 
+/** The automation whose run started the agent, as the workspace's automations list it. */
+const SWEEP: AutomationSummary = {
+  id: PAGE.automationId ?? "",
+  planId: null,
+  planName: null,
+  workspaceId: PAGE.workspaceId,
+  name: "Flaky-test sweep",
+  enabled: true,
+  pausedReason: null,
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep the flaky tests." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: null,
+  lastRun: null,
+  createdAt: 1,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
+};
+
+/** The prompt an automation's run handed its agent: the automation's own, then what Luke adds of the firing. */
+const HANDED = `Sweep the flaky tests.
+
+---
+
+Luke started this run for the automation "Flaky-test sweep" because its schedule was due.`;
+
+/** The agent an automation's run started, read as its page with the run. */
+const RUN_PAGE: CodingAgentPage = {
+  ...PAGE,
+  title: null,
+  brief: CODING_AGENT_BRIEF.PROMPT,
+  automationName: "Flaky-test sweep",
+  origin: { prompt: "Sweep the flaky tests." },
+};
+
+/** The agent's workspace, as the account lists it. */
+const ACME = {
+  id: PAGE.workspaceId,
+  name: "Acme",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+  memberCount: 2,
+};
+
 let root: Root | undefined;
+
+// A message is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+/** Every address handed to GitHub, in order. */
+let openedOnGitHub: string[] = [];
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
@@ -60,6 +130,12 @@ let archiveRefused = false;
 let members: readonly WorkspaceMember[] | undefined;
 /** What the next read of the agent's transcript answers; none refuses it. */
 let transcript: CodingAgentMessagesAnswerView | undefined;
+/** Every act the page told or asked, in order. */
+let told: Act[] = [];
+/** What a read of what the agent published answers; none refuses it. */
+let published: CodingAgentPullRequestAnswer | undefined;
+/** What the window copied, in order. */
+let copied: string[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -68,12 +144,33 @@ beforeEach(() => {
   archiveRefused = false;
   members = undefined;
   transcript = undefined;
+  told = [];
+  published = undefined;
+  openedOnGitHub = [];
+  copied = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        told.push(request);
+        if (request.kind === ACT_KIND.PLANNING_SKILLS) {
+          const value = {
+            skills: {
+              repository: "acme/relay",
+              branch: "main",
+              skills: [
+                {
+                  name: "release",
+                  description: "Cut a release.",
+                  path: ".agents/skills/release/SKILL.md",
+                },
+              ],
+            },
+          };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
           archives.push(request.payload);
           const value = archiveRefused
@@ -89,6 +186,23 @@ beforeEach(() => {
           const value = transcript;
           transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { automations: [SWEEP] },
+          });
+        }
+        if (request.kind === ACT_KIND.GITHUB_OPEN) {
+          openedOnGitHub.push(request.payload.url);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
@@ -143,6 +257,200 @@ test("the page reads the agent by its id and titles it as its tab would", async 
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
+test("the page draws the task column's agent pane, at its reading width, and ⌘F finds in the agent's transcript", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+
+  assert.ok(page.querySelector(".desktop-agent [role='log']"), "the transcript is the pane's");
+  assert.equal(offered, true);
+  assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
+  assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+});
+
+/** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
+function PanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+  );
+  return createElement(DesktopAgentPage, {
+    plans: { ...plansControl({}), sidePanel },
+    agentId: AGENT_ID,
+  });
+}
+
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
+  localStorage.clear();
+  installScrollIntoView();
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { task: "Find the flakiest test." },
+            output: "Started task delegate-7k2m9q.",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  await settle();
+
+  const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
+  assert.ok(row, "the delegation's row opens its worker");
+  act(() => row.click());
+  await settle();
+  const panel = container.querySelector("aside.side-panel");
+  const opened = [...(panel?.querySelectorAll("[role='tab']") ?? [])].map((tab) => tab.textContent);
+  const add = panel?.querySelector<HTMLButtonElement>("button[aria-label='Open a tab']");
+  assert.ok(add, "the panel offers its +");
+  act(() => add.click());
+  await settle();
+  const offered = [...document.querySelectorAll("[role='option']")].map((each) => each.textContent);
+
+  assert.ok(
+    opened.some((label) => label?.includes("Find the flakiest test.")),
+    `the worker's tab stands in the panel: ${opened.join(", ")}`,
+  );
+  assert.deepEqual(
+    offered.filter((label) => /^(Board|Code|Call)$/u.test(label ?? "")),
+    [],
+    "no task's kind is offered",
+  );
+});
+
+/** The page drawn over the window's own side panel, held by the agent. */
+async function mountPanelPage(): Promise<HTMLElement> {
+  localStorage.clear();
+  installScrollIntoView();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  await settle();
+  return container;
+}
+
+test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
+  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  const container = await mountPanelPage();
+
+  act(() => {
+    runAppCommand(APP_COMMAND.NEW_TAB);
+  });
+  await settle();
+  const offer = [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) =>
+    (each.textContent ?? "").includes("#2911"),
+  );
+  assert.ok(offer, "the + offers the agent's pull request");
+  act(() => offer.click());
+  await settle();
+  const tabs = [...container.querySelectorAll("aside.side-panel [role='tab']")].map(
+    (tab) => tab.textContent ?? "",
+  );
+
+  assert.ok(
+    tabs.some((label) => label.includes("Changes")),
+    `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+  );
+});
+
+test("⌘T on an agent's page opens the panel beside it on its +, the page's one", async () => {
+  const container = await mountPanelPage();
+
+  act(() => {
+    runAppCommand(APP_COMMAND.NEW_TAB);
+  });
+  await settle();
+
+  assert.ok(container.querySelector("aside.side-panel"), "the panel opens");
+  assert.ok(
+    document.querySelector("input[placeholder='Search tabs']"),
+    "its + opens on the tabs it offers",
+  );
+});
+
+test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "line",
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: "Then run /release now." }],
+        sentBy: { userId: "user-dean", name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  // The skills are read once a sent message first asks for them, a settle after the transcript lands.
+  await settle();
+  const chip = page.querySelector<HTMLButtonElement>("button.skill-chip");
+  assert.ok(chip, "the skill is its chip");
+  act(() => chip.click());
+
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
+    [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
+  );
+});
+
 test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {
   pages = [{ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, { agent: PAGE }];
   const page = mount();
@@ -158,6 +466,22 @@ test("a read that did not land says so, and Retry reads the agent again and draw
 
   assert.deepEqual(read, [AGENT_ID, AGENT_ID]);
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+});
+
+test("an agent the service will not hand the reader, as a link to another workspace's may name, is not found, and nothing of it is drawn", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const page = mount();
+  await settle();
+
+  assert.match(
+    page.textContent ?? "",
+    /Not foundThis agent doesn't exist, or you don't have access to it\./u,
+  );
+  assert.equal(page.querySelector("h1"), null);
+  assert.equal(
+    [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
+    false,
+  );
 });
 
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
@@ -238,7 +562,197 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".message-sender .actor-ref");
+  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender .actor-ref");
   assert.equal(sender?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
+});
+
+/** The transcript of an automation's agent: the prompt its run handed it, and its answer. */
+function handedTranscript(): CodingAgentMessagesAnswerView {
+  return {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: HANDED }] },
+      { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "Done." }] },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+}
+
+/** What a line says, its actors' faces left out, as a reader reads it. */
+function words(line: Element | null | undefined): string {
+  if (line == null) return "";
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+  let said = "";
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.parentElement?.closest(".actor-face") == null) said += node.textContent ?? "";
+  }
+  return said;
+}
+
+/** The card a page opens on, and the line naming who sent it. */
+interface OpenedOrigin {
+  readonly card: HTMLElement;
+  readonly sender: HTMLElement | null;
+}
+
+/** The card the page opens on, opened, and the line naming who sent it. */
+function origin(page: HTMLElement): OpenedOrigin {
+  const card =
+    page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
+  const head = card.querySelector<HTMLElement>("[data-plan-card] > summary");
+  act(() => head?.click());
+  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+}
+
+test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  pages = [{ agent: RUN_PAGE }];
+  transcript = handedTranscript();
+  const opened: unknown[] = [];
+  const plans = plansControl({ workspaces: [ACME] });
+  const page = mount({
+    ...plans,
+    automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
+  });
+  await settle();
+
+  const { card, sender } = origin(page);
+  const automation = sender?.querySelector<HTMLButtonElement>("button.actor-ref");
+  assert.equal(words(automation), "Flaky-test sweep");
+  assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
+  assert.doesNotMatch(card.textContent ?? "", /Luke started this run/u);
+  act(() => automation?.click());
+
+  assert.deepEqual(opened, [{ kind: "edit", automationId: SWEEP.id }]);
+});
+
+test("a deleted automation's agent still names it, plainly, with nothing to open", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ workspaces: [ACME] }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep (deleted)");
+  assert.equal(sender?.querySelector("button"), null, "nothing opens it");
+});
+
+test("with the Automations experiment off, an automation's agent names it plainly, with nothing to open", async () => {
+  pages = [{ agent: RUN_PAGE }];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ workspaces: [ACME] }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep");
+  assert.equal(sender?.querySelector("button"), null, "nothing opens it");
+});
+
+test("a GitHub event's run names its pull request beside the automation, which opens on GitHub, and a run now names who ran it", async () => {
+  const url = "https://github.com/acme/relay/pull/2905";
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: {
+          prompt: "Review it.",
+          subject: { number: 2905, title: "View commands", url },
+          runBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ me: "user-dean" }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
+  act(() => sender?.querySelector<HTMLElement>("a")?.click());
+  assert.deepEqual(openedOnGitHub, [url]);
+});
+
+test("too narrow for the line naming who sent it, it breaks between the automation, the pull request, and who ran it, never cutting all three to their first letters", async () => {
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: {
+          prompt: "Review it.",
+          subject: { number: 2905, title: "View commands" },
+          runBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const styles = layContainersAt({});
+  const page = mount(plansControl({ me: "user-dean" }));
+  await settle();
+
+  const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
+  const wraps = getComputedStyle(line).flexWrap;
+  styles.remove();
+
+  assert.equal(wraps, "wrap");
+  assert.deepEqual(
+    [...line.children].map((part) => words(part)),
+    ["Flaky-test sweep", " · #2905 View commands", " · Run by you"],
+  );
+});
+
+test("a webhook's body stands folded inside the card under the prompt, and nowhere in the line naming who sent it", async () => {
+  const body = '{"release":"v2.4.0"}';
+  pages = [{ agent: { ...RUN_PAGE, origin: { prompt: "Write the notes.", body } } }];
+  transcript = handedTranscript();
+  const page = mount();
+  await settle();
+
+  const { card, sender } = origin(page);
+  assert.doesNotMatch(sender?.textContent ?? "", /release/u);
+  const fold = [...card.querySelectorAll<HTMLElement>("summary")].find(
+    (each) => each.textContent === "Webhook body",
+  );
+  assert.ok(fold, "the body folds under its own line");
+  act(() => fold.click());
+  assert.equal(card.querySelector("pre")?.textContent, body);
+});
+
+test("an automation's agent the model has not named yet is titled by its automation, not its model", async () => {
+  pages = [{ agent: RUN_PAGE }];
+  const page = mount();
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Flaky-test sweep");
+});
+
+test("the page's ⋯ copies the agent's link, under its workspace, and says Link copied", async () => {
+  const page = mount(
+    plansControl({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Acme",
+          slug: "acme",
+          role: WORKSPACE_ROLE.MEMBER,
+          github: null,
+        },
+      ],
+    }),
+  );
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more, "the page's toolbar has a ⋯");
+  act(() => more.click());
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(item, "the ⋯ offers Copy link");
+  await act(async () => item.click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
+  assert.equal(newestToastSays(), "Link copied");
 });

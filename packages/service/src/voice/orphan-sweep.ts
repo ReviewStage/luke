@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
+import {
+  closeAvatarSessionsOfEndedCalls,
+  closeOpenAvatarSessionsOf,
+} from "@luke/database/models/voice-avatar-sessions";
 import type {
   DetachedVoiceSession,
   VoiceSessionRecord,
 } from "@luke/database/models/voice-session-record";
-import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
+import { AVATAR_END_REASON, VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import {
   closeGracefully,
@@ -36,7 +40,12 @@ import type { LiveUpstream } from "./openai.js";
  * orphans stamped meanwhile, so a few that never answer cannot hold every
  * sweep's bounded batch; only a session past
  * OpenAI's own duration limit, which has ended whatever it answers, is
- * closed as expired instead.
+ * closed as expired instead. Whichever way a voice row is closed here, the
+ * avatar rows still open on it close behind it as orphaned, the voice row
+ * first so no avatar opens on it after. Every sweep then closes whatever
+ * avatar row is still open on a call already closed, as of that call's own
+ * close: the repair for a close that landed on the voice row and not behind
+ * it, here or in the service.
  *
  * Each sweep takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
  * time, each bounded by the attach's own wait and the close's, so the sweep
@@ -97,6 +106,19 @@ export interface VoiceOrphanSweepSeams {
   readonly recordSeconds: VoiceAccounts["recordSeconds"];
 }
 
+/** The avatar rows still open on an orphan whose voice row the sweep just closed. */
+const closeOrphanedAvatars = (
+  orphan: DetachedVoiceSession,
+  now: number,
+): Effect.Effect<void, unknown, DatabaseServices> =>
+  Effect.asVoid(
+    closeOpenAvatarSessionsOf({
+      voiceSessionId: orphan.voiceSessionId,
+      endedAt: new Date(now),
+      reason: AVATAR_END_REASON.ORPHANED,
+    }),
+  );
+
 /** The sideband's last word handed to the graceful close: its `session.closed`, or the socket's close before one. */
 function readLastWord(
   sideband: LiveSideband,
@@ -131,7 +153,13 @@ const unanswered = (
   now - orphan.startedAt < VOICE_SESSION_LIMIT_MS
     ? Effect.as(seams.record.sweepLater({ sessionId: orphan.sessionId }), ORPHAN_ENDING.PENDING)
     : Effect.as(
-        seams.record.closeLost({ sessionId: orphan.sessionId, reason: VOICE_CLOSE_REASON.EXPIRED }),
+        Effect.andThen(
+          seams.record.closeLost({
+            sessionId: orphan.sessionId,
+            reason: VOICE_CLOSE_REASON.EXPIRED,
+          }),
+          closeOrphanedAvatars(orphan, now),
+        ),
         ORPHAN_ENDING.LOST,
       );
 
@@ -149,6 +177,7 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
       return yield* unanswered(seams, orphan, now);
     }
     yield* seams.record.closeLost({ sessionId, reason: VOICE_CLOSE_REASON.CONNECTION_LOST });
+    yield* closeOrphanedAvatars(orphan, now);
     return ORPHAN_ENDING.LOST;
   }
   const socket = attached.success;
@@ -166,6 +195,7 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
   if (ended.outcome !== SIDEBAND_CLOSE_OUTCOME.CLOSED) return yield* unanswered(seams, orphan, now);
   const seconds = ended.closed.usage.seconds;
   yield* seams.record.close({ sessionId, seconds, reason: ended.closed.reason });
+  yield* closeOrphanedAvatars(orphan, now);
   yield* seams.recordSeconds({ userId, sessionId, seconds });
   return ORPHAN_ENDING.CLOSED;
 });
@@ -184,6 +214,8 @@ export const sweepVoiceOrphans = /* @__PURE__ */ Effect.fn("web/sweepVoiceOrphan
     (orphan) => Effect.exit(Effect.scoped(endOrphan(seams, orphan, options.now))),
     { concurrency: VOICE_ORPHAN_SWEEP.CONCURRENCY },
   );
+  // A repair that fails is the next sweep's to make again, never this one's outcome.
+  yield* Effect.ignore(closeAvatarSessionsOfEndedCalls());
   const outcome = { ...NOTHING_ORPHANED };
   for (const ending of endings) {
     if (Exit.isFailure(ending)) outcome.failed += 1;

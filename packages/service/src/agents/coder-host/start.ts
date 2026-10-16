@@ -11,8 +11,8 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -41,6 +41,7 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
@@ -59,7 +60,10 @@ import { anthropicFastAccess } from "./account-keys.js";
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy
  * would put on the clipboard, or with the ask's prompt in the plan's place
- * and the files attached to it, which only a prompt carries. An agent
+ * and the files attached to it, which only a prompt carries; a note the
+ * ask carries rides after either under a heading of its own, so what the
+ * developer said beyond the plan reaches the agent in the same first
+ * message rather than as a second one on its heels. An agent
  * started with no plan is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a plan's is.
@@ -72,9 +76,24 @@ import { anthropicFastAccess } from "./account-keys.js";
  * (`coder-host/channel.ts`).
  */
 
-/** Where a Start puts the agent: on a plan, handed the plan or a prompt in its place, or in a workspace with no plan, on a repository, handed a prompt. */
+/** The heading a start's note stands under, after the plan or the prompt it rides with: the developer's, or the coding agent's that started the agent (`../coding-agent-tools.ts`). */
+export const START_NOTE_HEADING = {
+  DEVELOPER: "## Note from the developer",
+  AGENT: "## Note from the coding agent that started you",
+} as const;
+
+type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEADING];
+
+/** Where a Start puts the agent: on a plan, handed the plan or a prompt in its place and a note after either, or in a workspace with no plan, on a repository, handed a prompt. */
 export type StartPlace =
-  | { readonly planId: string; readonly prompt: string | undefined }
+  | {
+      readonly planId: string;
+      readonly prompt: string | undefined;
+      /** What the developer said for the agent beyond the plan or the prompt; none where they said nothing more. */
+      readonly note?: string | undefined;
+      /** Whose note it is; the developer's unless a coding agent started this one. */
+      readonly noteHeading?: StartNoteHeading | undefined;
+    }
   | {
       readonly planId: null;
       readonly organizationId: string;
@@ -82,16 +101,20 @@ export type StartPlace =
       readonly prompt: string;
     };
 
-/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks. */
+/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks, with that run. */
 export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
-  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  readonly disabledServers?: readonly string[] | undefined;
   /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
   readonly rememberChoice?: boolean;
   /** The automation whose run starts the agent; none for a Start by hand. */
   readonly automationId?: string | undefined;
+  /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
+  readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
+  readonly title?: string | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -142,6 +165,15 @@ interface StartLanding {
   readonly place: CodingAgentPlace;
 }
 
+/** The brief with the note after it under its heading; the brief alone where there is no note. */
+function withNote(
+  brief: string,
+  note: string | undefined,
+  heading: StartNoteHeading = START_NOTE_HEADING.DEVELOPER,
+): string {
+  return note === undefined ? brief : `${brief}\n\n${heading}\n\n${note}`;
+}
+
 /** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the prompt; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
@@ -174,8 +206,16 @@ const landingOf = Effect.fnUntraced(function* (
     mover: ownerId === userId ? userId : undefined,
     place:
       place.prompt === undefined
-        ? { planId: place.planId, planSnapshot: planMarkdown(plan), prompt: null }
-        : { planId: place.planId, planSnapshot: null, prompt: place.prompt },
+        ? {
+            planId: place.planId,
+            planSnapshot: withNote(planMarkdown(plan), place.note, place.noteHeading),
+            prompt: null,
+          }
+        : {
+            planId: place.planId,
+            planSnapshot: null,
+            prompt: withNote(place.prompt, place.note, place.noteHeading),
+          },
   };
 });
 
@@ -189,19 +229,28 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const landing = yield* landingOf(userId, ask);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
+  // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
+  const words = brief.prompt ?? (ask.planId === null ? undefined : ask.note);
+  // What the words mention of the plan's pages and agents is read before the agent is made, so a
+  // read that fails leaves no agent its retry would find and never open a session for.
+  const reads =
+    words === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
       automationId: ask.automationId,
+      automationOrigin: ask.automationOrigin,
+      title: ask.title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
       disabledServers: ask.disabledServers,
-      // The servers the prompt mentions are its first turn's, whatever the switches say.
-      mentionedServers:
-        brief.prompt === null ? [] : mentionedServers(brief.prompt, landing.repository),
+      // The servers the prompt or the note mentions are its first turn's, whatever the switches say.
+      mentionedServers: words === undefined ? [] : mentionedServers(words, landing.repository),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -216,11 +265,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       turn: BRAIN_HOST_TURN.TYPED,
       message:
         brief.prompt === null
-          ? brief.planSnapshot
+          ? eveContent(
+              brief.planSnapshot,
+              [],
+              words === undefined ? undefined : mentionedContext(words, landing.plan, reads),
+            )
           : eveContent(
               brief.prompt,
               ask.attachments ?? [],
-              mentionedContext(brief.prompt, landing.plan),
+              mentionedContext(brief.prompt, landing.plan, reads),
             ),
     })
     .pipe(

@@ -8,6 +8,9 @@
           "enum": [
             true
           ]
+        },
+        "connection": {
+          "type": "string"
         }
       },
       "required": [

@@ -26,9 +26,12 @@
         "src/renderer/whiteboard/index.tsx",
         "src/renderer/whiteboard/index.css",
         "src/renderer/plan-editor/index.ts",
+        "src/renderer/diagram/index.ts",
         "src/renderer/session-recorder/index.ts",
         "src/renderer/terminal/index.ts",
         "src/renderer/terminal/index.css",
+        "src/renderer/avatar-feed/pcm-tee-worklet.ts",
+        "src/renderer/avatar-session/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],
@@ -55,7 +58,7 @@
       ],
       "project": ["src/**"]
     },
-    "apps/web/coder": {
+    "apps/dev": {
       "ignoreDependencies": [
         "@ai-sdk/anthropic",
         "@ai-sdk/openai",
@@ -68,10 +71,18 @@
         "diff",
         "ws"
       ],
-      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": [
+        "{,subagents/*/}agent.ts",
+        "{,subagents/*/}sandbox.ts",
+        "{,subagents/*/}instructions.ts",
+        "{,subagents/*/}instructions/*.ts",
+        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "evals/evals.config.ts",
+        "evals/*.eval.ts"
+      ],
       "project": ["**/*.ts"]
     },
-    "apps/web/eve": {
+    "apps/luke": {
       "ignoreDependencies": [
         "@ai-sdk/anthropic",
         "@ai-sdk/openai",
@@ -84,7 +95,15 @@
         "diff",
         "ws"
       ],
-      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": [
+        "{,subagents/*/}agent.ts",
+        "{,subagents/*/}sandbox.ts",
+        "{,subagents/*/}instructions.ts",
+        "{,subagents/*/}instructions/*.ts",
+        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "evals/evals.config.ts",
+        "evals/*.eval.ts"
+      ],
       "project": ["**/*.ts"]
     },
     "tools/anti-slop": {

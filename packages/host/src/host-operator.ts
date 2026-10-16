@@ -43,6 +43,8 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPictureParams,
+  type CodingAgentPinParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -81,11 +83,14 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   INTEGRATION_CALL_FAILURE,
+  type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationProviderParams,
+  type IntegrationRenameParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
+  integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
@@ -103,13 +108,21 @@ import {
   type PlanningFileParams,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningLinearIssuesAnswer,
+  type PlanningLinearIssuesParams,
   type PlanningMessagesParams,
   type PlanningMoveAnswer,
   type PlanningMoveParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
+  type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
+  type PlanningPictureKeepParams,
+  type PlanningPictureParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
+  type PlanningPullRequestAnswer,
+  type PlanningPullRequestParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
   type PlanningRepositoriesParams,
@@ -149,8 +162,12 @@ import {
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
+  planningLinearIssuesAnswerSchema,
   planningMoveAnswerSchema,
   planningPageAnswerSchema,
+  planningPictureAnswerSchema,
+  planningPictureKeepAnswerSchema,
+  planningPullRequestAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -203,6 +220,7 @@ import {
   type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
+  voiceSetVideoResultSchema,
   voiceStopSpeakingResultSchema,
 } from "@luke/gateway";
 import type { AgentWireTrace } from "@luke/gateway/devtrace";
@@ -295,6 +313,8 @@ export interface HostOperator {
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
   stopSpeaking(): Effect.Effect<boolean>;
+  /** Luke's avatar asked for on the standing call, or taken down as the developer's own; answers whether the service was asked. */
+  setVideo(on: boolean): Effect.Effect<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
   recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
@@ -347,6 +367,8 @@ export interface HostOperator {
   planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
   /** The skills a developer may choose of a plan's repository; or why they are not read. */
   planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
+  /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
+  planningPullRequest(params: PlanningPullRequestParams): Effect.Effect<PlanningPullRequestAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -355,6 +377,10 @@ export interface HostOperator {
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
   planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+  /** One picture of one plan as its bytes in base64, or why there is none. */
+  planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
+  /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
+  planningPictureKeep(params: PlanningPictureKeepParams): Effect.Effect<PlanningPictureKeepAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -363,8 +389,10 @@ export interface HostOperator {
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
   integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
+  /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
+  /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
+  integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -385,6 +413,18 @@ export interface HostOperator {
   workspaceGitHubDisconnect(
     params: PlanningWorkspaceParams,
   ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
+  workspaceLinearConnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+  /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
+  workspaceLinearDisconnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** The Linear issues a workspace's connection reaches; or why there are none. */
+  workspaceLinearIssues(
+    params: PlanningLinearIssuesParams,
+  ): Effect.Effect<PlanningLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(
     params: PlanningWorkspaceMembersParams,
@@ -446,6 +486,7 @@ export interface HostOperator {
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a plan or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
   /** The account's automations, or one plan's or one workspace's; or why there are none. */
@@ -511,6 +552,10 @@ export interface HostOperator {
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
+  ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
+  codingAgentPicture(
+    params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
@@ -718,6 +763,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
 
+  /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
+  const integrationTarget = (params: IntegrationProviderParams) => ({
+    provider: params.provider,
+    ...(params.connection !== undefined ? { connection: params.connection } : undefined),
+    ...(params.add !== undefined ? { add: params.add } : undefined),
+  });
+
   /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
   const integrationAnswer =
     <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
@@ -734,23 +786,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     integrationsConnect: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
         integrationAnswer(integrationConnectViewSchema),
       ),
     integrationsTools: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, integrationTarget(params)),
         integrationAnswer(integrationToolsViewSchema),
       ),
     integrationsCancel: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, integrationTarget(params)),
         integrationAnswer(integrationStatusViewSchema),
       ),
     integrationsDisconnect: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, integrationTarget(params)),
         integrationAnswer(integrationStatusViewSchema),
+      ),
+    integrationsRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_RENAME, {
+          provider: params.provider,
+          connection: params.connection,
+          label: params.label,
+        }),
+        integrationAnswer(integrationAccountViewSchema),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -833,6 +894,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 answer.result,
               ),
             )?.stopped ?? false)
+          : false,
+      ),
+    setVideo: (on) =>
+      Effect.map(client.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on }), (answer) =>
+        answer.ok
+          ? (Result.getOrUndefined(
+              readEither(voiceSetVideoResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+            )?.requested ?? false)
           : false,
       ),
     recordAgentTrace: (trace) =>
@@ -933,7 +1002,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningTree: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_TREE, {
-          planId: params.planId,
+          ...("planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
         }),
@@ -946,11 +1017,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningSkills: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: params.planId }),
+        client.call(
+          GATEWAY_METHOD.PLANNING_SKILLS,
+          "planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository },
+        ),
         (answer): PlanningSkillsAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPullRequest: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          number: params.number,
+        }),
+        (answer): PlanningPullRequestAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
@@ -976,6 +1068,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPictureKeep: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, {
+          planId: params.planId,
+          picture: params.picture,
+        }),
+        (answer): PlanningPictureKeepAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPictureKeepAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPicture: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PICTURE, {
+          planId: params.planId,
+          attachmentId: params.attachmentId,
+        }),
+        (answer): PlanningPictureAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
@@ -1045,6 +1167,27 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
         }),
         workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceLinearConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceLinearDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceLinearIssues: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
+          workspaceId: params.workspaceId,
+          ...("query" in params ? { query: params.query } : undefined),
+          ...("identifier" in params ? { identifier: params.identifier } : undefined),
+        }),
+        workspaceAnswer(planningLinearIssuesAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
@@ -1149,9 +1292,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningStart: (request) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
-          name: request.name,
+          ...("name" in request ? { name: request.name } : undefined),
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
+          ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok
@@ -1276,6 +1420,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
           agentId: params.agentId,
           archived: params.archived,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentPin: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PIN, {
+          agentId: params.agentId,
+          pinned: params.pinned,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -1424,6 +1576,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           attachmentId: params.attachmentId,
         }),
+        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+      ),
+    codingAgentPicture: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
     onSettingsChanged: (listener) =>

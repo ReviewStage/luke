@@ -1,5 +1,9 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_STATUS,
+  disabledServersSchema,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
@@ -111,17 +115,59 @@ const scheduleTriggerSchema = EffectSchema.Struct({
   ),
 });
 
+/** Who caused a GitHub event, as a trigger chooses whose events fire it. */
+export const GITHUB_SENDER = {
+  /** A person's own account. */
+  PEOPLE: "people",
+  /** Luke's coding agents: the Luke GitHub App, and a developer an agent opening its pull request from a `luke/` branch writes as. */
+  LUKE_AGENTS: "luke-agents",
+  /** Any other App or bot account: Dependabot, Renovate, and their like. */
+  OTHER_BOTS: "other-bots",
+} as const;
+
+export type GitHubSender = (typeof GITHUB_SENDER)[keyof typeof GITHUB_SENDER];
+
+/** The moments of a pull request a `pull-request-updated` trigger may fire on. */
+export const PULL_REQUEST_MOMENT = {
+  /** Opened, or reopened. */
+  OPENED: "opened",
+  /** A draft marked ready for review. */
+  READY: "ready",
+  /** New commits pushed to it. */
+  PUSHED: "pushed",
+} as const;
+
+export type PullRequestMoment = (typeof PULL_REQUEST_MOMENT)[keyof typeof PULL_REQUEST_MOMENT];
+
+/** Whose events a trigger hears where it names none: people's alone, so no automation hears its own agents unasked. */
+export const GITHUB_DEFAULT_SENDERS: readonly GitHubSender[] = [GITHUB_SENDER.PEOPLE];
+
+/** The moments a `pull-request-updated` trigger fires on where it names none: every one. */
+export const PULL_REQUEST_DEFAULT_MOMENTS: readonly PullRequestMoment[] =
+  Object.values(PULL_REQUEST_MOMENT);
+
 /**
- * An event of the plan's repository. `labels` keeps a labelled event to
- * those labels and `branches` an event to those branches (a pull request's
- * base, a push's or a check's branch); an empty or absent list keeps
- * nothing out.
+ * An event of the automation's repositories. `labels` keeps a labelled
+ * event to those labels and `branches` an event to those branches (a pull
+ * request's base, a push's or a check's branch); an empty or absent list
+ * keeps nothing out. `senders` says whose events fire it, people's alone
+ * where absent; `moments` which moments of a pull request an update fires
+ * on, every one where absent. A draft pull request fires it only where
+ * `drafts` is true, and one from a fork only where `forks` is.
  */
 const githubTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.GITHUB),
   event: EffectSchema.Literals(Object.values(GITHUB_TRIGGER_EVENT)),
   labels: EffectSchema.optionalKey(filterValuesSchema),
   branches: EffectSchema.optionalKey(filterValuesSchema),
+  senders: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(GITHUB_SENDER))),
+  ),
+  moments: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(PULL_REQUEST_MOMENT))),
+  ),
+  drafts: EffectSchema.optionalKey(EffectSchema.Boolean),
+  forks: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** A call to the automation's own address; the secret that admits it is the store's, never on this wire. */
@@ -137,7 +183,7 @@ export const automationTriggerSchema = EffectSchema.Union([
 
 export type AutomationTrigger = typeof automationTriggerSchema.Type;
 
-/** A coding agent handed the prompt as its task, on the model and effort named, or the account's default. */
+/** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const codingAgentActionSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_ACTION.CODING_AGENT),
   prompt: EffectSchema.Trim.check(
@@ -145,11 +191,16 @@ const codingAgentActionSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS),
   ),
   choice: EffectSchema.optionalKey(modelChoiceSchema),
+  /** The owner's connected MCP servers a run's new agent is not handed; every one is, where none are named. */
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 });
 
 export const automationActionSchema = codingAgentActionSchema;
 
 export type AutomationAction = typeof automationActionSchema.Type;
+
+/** An action as JSON holds it, before its servers are read against the providers this build knows. */
+export type AutomationActionJson = typeof automationActionSchema.Encoded;
 
 /**
  * How far one automation may go: how many of its agents may be at work at
@@ -209,13 +260,6 @@ const automationTargetSchema = EffectSchema.Union([
 
 export type AutomationTarget = typeof automationTargetSchema.Type;
 
-export const AUTOMATION_PAUSE = {
-  /** Its last runs failed one after another, so the service stopped firing it. */
-  FAILURES: "failures",
-} as const;
-
-export type AutomationPause = (typeof AUTOMATION_PAUSE)[keyof typeof AUTOMATION_PAUSE];
-
 /** Where a run came from, beyond the automation's own trigger. */
 export const AUTOMATION_FIRING = {
   ...AUTOMATION_TRIGGER,
@@ -225,9 +269,10 @@ export const AUTOMATION_FIRING = {
 
 /**
  * What fired a run, in brief: the instant a schedule was due, the GitHub
- * event with the issue or pull request it names, or a webhook call with how
- * large its body was. Only what the run's history shows is kept; a
- * webhook's body reaches the agent's prompt and is kept nowhere else here.
+ * event with the issue or pull request it names, a webhook call with how
+ * large its body was, or a "Run now" with who asked for it. Only what the
+ * run's history shows is kept; a webhook's body reaches the agent's prompt
+ * and is kept nowhere else here.
  */
 export const automationFiringSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -251,6 +296,8 @@ export const automationFiringSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AUTOMATION_FIRING.MANUAL),
+    /** The member who asked for the run; absent on a run recorded before it was kept. */
+    userId: EffectSchema.optionalKey(EffectSchema.String),
   }),
 ]);
 
@@ -310,7 +357,6 @@ export const automationRunStatusSchema = EffectSchema.Literals(
 export const automationRunReasonSchema = EffectSchema.Literals(
   Object.values(AUTOMATION_RUN_REASON),
 );
-export const automationPauseSchema = EffectSchema.Literals(Object.values(AUTOMATION_PAUSE));
 
 /** The query an automation list may narrow by: one plan's automations alone. */
 export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
@@ -331,6 +377,12 @@ const automationRunSummarySchema = EffectSchema.Struct({
       id: wireUuidSchema,
       title: EffectSchema.NullOr(EffectSchema.String),
       status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+      /** Whether it runs on the reading account's own keys; absent from a service before it. */
+      ownKey: EffectSchema.optionalKey(EffectSchema.Boolean),
+      /** Why it failed, where it did, as its own end line says; absent otherwise, and from a service before it. */
+      failureReason: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
+      ),
     }),
   ),
   firedAt: countedNumber,
@@ -353,7 +405,12 @@ export const automationSummarySchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   name: EffectSchema.String,
   enabled: EffectSchema.Boolean,
-  pausedReason: EffectSchema.NullOr(automationPauseSchema),
+  /**
+   * Always null: nothing pauses an automation for its failures. The service
+   * still sends it, because a desktop from before reads it as required, and
+   * a desktop reads past it.
+   */
+  pausedReason: EffectSchema.optionalKey(EffectSchema.Null),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: automationGuardsSchema,
@@ -381,6 +438,8 @@ export const automationSummarySchema = EffectSchema.Struct({
   webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
   /** Whether the account reading it created it, which a run starts as; absent from a service before it. */
   mine: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** The account that created it, which its creator's page lists it under; absent from a service before it. */
+  creatorId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;

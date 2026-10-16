@@ -1,9 +1,10 @@
+import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
   CONTEXT_WINDOW,
+  type CodingAgentAuthor,
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import {
   type AnyPgColumn,
   foreignKey,
@@ -50,15 +51,25 @@ import { conversations } from "./storage.js";
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
- * `disabled_servers` is the MCP servers, by integration provider, the
- * developer switched off for this agent from its composer, which its next
- * turns are not handed; null, like an empty list, switches none off, so a
+ * `disabled_servers` is the MCP servers, by connection name (one account
+ * at an integration: `notion`, `notion-2`, the first account's name being
+ * its provider's), the developer switched off for this agent from its
+ * composer, which its next turns are not handed; null, like an empty list, switches none off, so a
  * server connected later is on for every agent. A provider no longer
  * offered may stand in the list and is ignored where it is read.
  * `mentioned_servers` is the MCP servers a message to the agent mentioned
  * since its last turn started (`@Linear`), which its next turn is handed
  * whatever `disabled_servers` says and then takes back to null, so a mention
  * turns a server on for the one turn and never touches the switch.
+ * `automation_origin` is the run of an automation that started the agent,
+ * kept as it stood when the run started (`StoredAutomationOrigin`), so the
+ * agent still names its automation once that automation is deleted and
+ * `automation_id` goes null; null for an agent started by hand.
+ * `author` is who the agent's commits are by and its pull request is opened
+ * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
+ * settled once as its first session starts and never moved after, so its
+ * instructions and its checkout agree; null before then, and for an agent
+ * from before the column, which writes as the App.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -88,6 +99,21 @@ export interface StoredAgentStep {
   readonly at: number;
 }
 
+/**
+ * The run of an automation that started an agent, as the run started it: the
+ * automation's name, what fired the run, the automation's prompt alone,
+ * without the lines Luke adds of the firing, and a webhook call's body as
+ * its caller sent it, cut as the agent was handed it, where the firing was
+ * one. The body is the agent's task already, so it is kept nowhere the task
+ * is not.
+ */
+export interface StoredAutomationOrigin {
+  readonly name: string;
+  readonly firing: AutomationFiring;
+  readonly prompt: string;
+  readonly body?: string;
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -102,6 +128,8 @@ export const codingAgent = pgTable(
     automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
       onDelete: "set null",
     }),
+    /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
+    automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -137,9 +165,11 @@ export const codingAgent = pgTable(
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
-    disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
+    disabledServers: jsonb("disabled_servers").$type<readonly string[]>(),
     /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
-    mentionedServers: jsonb("mentioned_servers").$type<readonly IntegrationProvider[]>(),
+    mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
+    /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
+    author: text("author").$type<CodingAgentAuthor>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

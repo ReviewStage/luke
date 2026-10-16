@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { cn } from "@luke/ui";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
@@ -28,7 +29,9 @@ import { Tooltip } from "../tooltip";
  * column, so every text part asked for the whole column and the parts
  * beside it were shrunk to slivers. The content stacks as blocks here, and
  * `apps/desktop/src/renderer/planning/transcript-layout.test.ts` holds the
- * rule.
+ * rule. And one more: the registry's content clips with `overflow-hidden`,
+ * which cut the keyboard's ring off every fold, tool line, picture, and chip
+ * a reply holds, so it clips past the ring instead (base.css's room).
  */
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -54,7 +57,7 @@ export function MessageContent({ children, className, ...props }: MessageContent
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-hidden text-[13px] leading-relaxed text-foreground",
+        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--focus-ring-room)] text-[13px] leading-relaxed text-foreground",
         "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
         className,
       )}
@@ -126,8 +129,10 @@ export function MessageAction({
 /**
  * Markdown drawn at the panel's own scale. Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
- * are a note's, a step above the words around them and no more, and a
- * list keeps to the column's own indent.
+ * are a note's, a step above the words around them and no more, a
+ * list keeps to the column's own indent, and a quote is the one every
+ * Markdown in the window draws (`@luke/ui/quote-face`) rather than
+ * Streamdown's, which stood the browser's 40px in from the column.
  */
 export const PANEL_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className="mt-3 mb-1 text-[15px] font-semibold">{children}</h1>,
@@ -139,6 +144,7 @@ export const PANEL_MARKDOWN_COMPONENTS: Components = {
   ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
   li: ({ children }) => <li className="my-0.5">{children}</li>,
+  blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;

@@ -3,8 +3,10 @@
  *
  * Both roots open their sessions' sandboxes from one Vercel environment,
  * the coding agent's: the code extension's tooling (`gh`, signed commits,
- * TypeScript diagnostics) and the runtimes a repository's checks are likely
- * to need, which the base image carries or `prepare` installs. Node is the
+ * TypeScript diagnostics), the runtimes a repository's checks are likely
+ * to need, which the base image carries or `prepare` installs, and
+ * Playwright with its Chromium, which an agent screenshots what it built
+ * with. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the
@@ -35,6 +37,9 @@ import { CODER } from "../coder-host/bounds.js";
 import { PREPARE_TMUX } from "../terminal/tmux.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
+/** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
+const PLAYWRIGHT_VERSION = "1.64.1";
+
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
 const PREPARE_SCRIPT = [
   "set -e",
@@ -47,6 +52,10 @@ const PREPARE_SCRIPT = [
   "pnpm --version && python3 --version",
   // tmux holds each Terminal tab's shell, so it outlives any connection to it (`terminal/tmux.ts`).
   ...PREPARE_TMUX,
+  // Playwright and its Chromium, so a coding agent opens what it built and screenshots it; the
+  // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
+  `npm install -g playwright@${PLAYWRIGHT_VERSION}`,
+  "playwright install --with-deps chromium",
 ].join("\n");
 
 /**

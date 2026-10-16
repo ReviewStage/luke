@@ -42,8 +42,8 @@ import {
  * `HttpClient` and the rows on a real Postgres dialect. What is held here:
  * the App speaks as itself with a JWT its own key signed; an installation is
  * confirmed as the App's own or not at all; a workspace's repositories are
- * those of the installation connected to it, and none where nothing is
- * connected; a repository outside that installation is unreachable, and only
+ * those of every installation connected to it, combined, and none where
+ * nothing is connected; a repository outside that installation is unreachable, and only
  * one inside it admits the one token the App mints, for that repository
  * alone with contents read; a connect's one-time code is exchanged with its
  * PKCE verifier, read for the installations it sees, and revoked; and a
@@ -463,6 +463,161 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
             reason: REPOSITORY_UNREACHED.GONE,
             repository: "octo-org/renamed",
           }),
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a workspace holding installations on several accounts lists every one's repositories, all their pages, as one list newest first, each repository once however it is cased",
+    () =>
+      Effect.gen(function* () {
+        const many = Array.from({ length: 150 }, (_, index) => ({
+          owner: "octo-org",
+          name: `service-${String(index).padStart(3, "0")}`,
+          updatedAt: "2026-09-01T00:00:00Z",
+        }));
+        const organization: InstallationFixture = {
+          id: 140,
+          login: "octo-org",
+          repositories: [
+            ...many,
+            { owner: "octo-org", name: "relay", updatedAt: "2026-10-05T00:00:00Z" },
+          ],
+        };
+        const personal: InstallationFixture = {
+          id: 142,
+          login: "octocat",
+          repositories: [
+            { owner: "octocat", name: "dotfiles", updatedAt: "2026-10-06T00:00:00Z" },
+            // A transfer GitHub has not settled both installations on yet lists one repository twice.
+            { owner: "Octo-Org", name: "Relay", updatedAt: "2026-10-04T00:00:00Z" },
+          ],
+        };
+        const fake = githubReaching([organization, personal]);
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, organization);
+        yield* connectWorkspaceGitHub(workspace, personal);
+        const app = yield* GitHubApp;
+
+        const listed = yield* app.workspaceRepositories(workspace).pipe(Effect.provide(fake.layer));
+
+        const names = Option.getOrElse(
+          Option.map(listed, (repositories) => repositories.map((one) => one.fullName)),
+          () => [],
+        );
+        assert.equal(names.length, 152);
+        assert.deepEqual(names.slice(0, 3), [
+          "octocat/dotfiles",
+          "octo-org/relay",
+          "octo-org/service-000",
+        ]);
+        assert.equal(names.filter((name) => name.toLowerCase() === "octo-org/relay").length, 1);
+        assert.deepEqual(
+          fake.sent
+            .filter((sent) => sent.url.endsWith("/access_tokens"))
+            .map((sent) => sent.url.split("/").at(-2)),
+          ["140", "142"],
+        );
+        assert.equal(
+          fake.sent.filter((sent) => sent.url.includes("/installation/repositories")).length,
+          3,
+          "the organization's two pages and the account's one",
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "one installation's listing GitHub refuses fails the whole read, and a workspace whose every installation lapsed lists none",
+    () =>
+      Effect.gen(function* () {
+        const organization = relayInstallation(144);
+        const personal: InstallationFixture = {
+          id: 146,
+          login: "octocat",
+          repositories: [{ owner: "octocat", name: "dotfiles" }],
+        };
+        const refusing = githubReaching([organization, personal], undefined, {}, (sent) =>
+          sent.url.endsWith("/app/installations/146/access_tokens")
+            ? Response.json({ message: "Server Error" }, { status: 502 })
+            : undefined,
+        );
+        const suspended = { ...relayInstallation(148), suspendedAt: "2026-10-10T00:00:00Z" };
+        const lapsing = githubReaching([suspended]);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const lapsed = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, organization);
+        yield* connectWorkspaceGitHub(workspace, personal);
+        yield* connectWorkspaceGitHub(lapsed, suspended);
+        yield* connectWorkspaceGitHub(lapsed, { ...relayInstallation(150), login: "gone-org" });
+        const app = yield* GitHubApp;
+
+        const failure = yield* app
+          .workspaceRepositories(workspace)
+          .pipe(Effect.provide(refusing.layer), Effect.flip);
+        const none = yield* app.workspaceRepositories(lapsed).pipe(Effect.provide(lapsing.layer));
+
+        assert.ok(failure._tag === "GitHubUnavailable");
+        assert.equal(failure.status, 502);
+        assert.ok(Option.isNone(none));
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository's token is minted on the workspace's own installation on its owner, however the owner is cased, and never on another workspace's",
+    () =>
+      Effect.gen(function* () {
+        const organization = relayInstallation(152);
+        const personal: InstallationFixture = {
+          id: 154,
+          login: "octocat",
+          repositories: [{ owner: "octocat", name: "dotfiles" }],
+        };
+        const elsewhere: InstallationFixture = {
+          id: 156,
+          login: "third-org",
+          repositories: [{ owner: "third-org", name: "secret" }],
+        };
+        const fake = githubReaching([organization, personal, elsewhere]);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const other = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, organization);
+        yield* connectWorkspaceGitHub(workspace, personal);
+        yield* connectWorkspaceGitHub(other, elsewhere);
+        const app = yield* GitHubApp;
+
+        const dotfiles = yield* app
+          .repositoryReadToken(workspace, "OctoCat/Dotfiles")
+          .pipe(Effect.provide(fake.layer));
+        const relay = yield* app
+          .repositoryReadToken(workspace, "OCTO-ORG/relay")
+          .pipe(Effect.provide(fake.layer));
+        const secret = yield* app
+          .repositoryReach(workspace, "third-org/secret")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.deepEqual(
+          [dotfiles, relay].map((minted) => Option.map(minted, (one) => one.repository.fullName)),
+          [Option.some("octocat/dotfiles"), Option.some("octo-org/relay")],
+        );
+        assert.deepEqual(
+          fake.sent
+            .filter(
+              (sent) =>
+                sent.url.endsWith("/access_tokens") && "repositories" in JSON.parse(sent.body),
+            )
+            .map((sent) => sent.url.split("/").at(-2)),
+          ["154", "152"],
+        );
+        assert.deepEqual(
+          Result.getFailure(secret),
+          Option.some({ reason: REPOSITORY_UNREACHED.OTHER_OWNER, repository: "third-org/secret" }),
+        );
+        assert.equal(
+          fake.sent.some((sent) => sent.url.includes("/installations/156")),
+          false,
+          "another workspace's installation is never asked",
         );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );

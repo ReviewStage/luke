@@ -107,7 +107,7 @@ function bound(userId: string, planId: string): PlanDocumentBinding {
 /** The document a saved result carries, failing the test on any other outcome. */
 function savedDocument(result: PlanSaveResult): PlanDocument {
   if (result.status !== PLAN_SAVE_STATUS.SAVED) {
-    return assert.fail(`expected a save, got: ${result.reason}`);
+    return assert.fail(`expected a save, got: ${JSON.stringify(result)}`);
   }
   return result.document;
 }

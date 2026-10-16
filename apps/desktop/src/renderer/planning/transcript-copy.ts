@@ -23,6 +23,8 @@ import {
   agentRows,
   isDelegation,
   messageWords,
+  placedMessages,
+  turnStretches,
   workerLines,
 } from "./coding-agent-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
@@ -182,12 +184,21 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
   return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
 }
 
+/** One of the developer's messages as a copy reads it: their words. */
+function developerTurn(message: CodingAgentMessage): CopiedTurn {
+  return {
+    speaker: SPEAKER.DEVELOPER,
+    blocks: [{ kind: COPIED_BLOCK.WORDS, text: messageWords(message) }],
+  };
+}
+
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
  * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
  * agent's call carried. The rest are turns: the developer's words, and the
- * agent's rows as its tab draws them.
+ * agent's rows as its tab draws them, a line that reached a turn while it
+ * ran between the turn's work before and after it, as the tab draws it.
  */
 export function agentTranscript(input: {
   title: string;
@@ -205,14 +216,16 @@ export function agentTranscript(input: {
       : brief === CODING_AGENT_BRIEF.PROMPT
         ? BRIEF_LABEL.PROMPT
         : BRIEF_LABEL.PLAN;
-  const turns = messages.flatMap((message): CopiedTurn[] => {
+  const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
+  // A line that reached a turn while it ran is copied where the tab draws it, between the turn's work before and after it.
+  const turns = placedMessages(messages).flatMap(({ message, arrived }): CopiedTurn[] => {
     if (message === first) return [];
-    if (message.role === MESSAGE_ROLE.USER) {
-      const text = messageWords(message);
-      return [{ speaker: SPEAKER.DEVELOPER, blocks: [{ kind: COPIED_BLOCK.WORDS, text }] }];
-    }
-    const blocks = rowBlocks(agentRows(message, false, task === undefined)).flatMap(agentBlock);
-    return [{ speaker: task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT, blocks }];
+    if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message)];
+    return turnStretches(agentRows(message, false, { arrived })).map((stretch) =>
+      stretch.line === undefined
+        ? { speaker, blocks: rowBlocks(stretch.rows).flatMap(agentBlock) }
+        : developerTurn(stretch.line),
+    );
   });
   return {
     title,

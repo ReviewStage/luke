@@ -49,6 +49,7 @@ const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.png");
 const DEVIN = githubUser(1004, "devin-ai-integration[bot]");
+const PAIR = githubUser(1005, "pairdev");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
 
 /** A review as GitHub lists one. */
@@ -216,6 +217,94 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         );
         assert.equal(people.comments?.length, CHANGES_BOUNDS.MAX_PEOPLE);
         assert.equal(people.comments?.at(-1)?.excerpt, "Ship it.");
+      }),
+  );
+
+  it.effect(
+    "a pull request reviewed past many pages is read to its newest review, which is where its reviewer stands and the comment it ends on",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const NEWEST_PAGE = 7;
+        const people = yield* peopleOf(workspace, (sent) => {
+          const { pathname, searchParams } = new URL(sent.url);
+          const page = Number(searchParams.get("page") ?? 1);
+          if (pathname === PULL) return Response.json({ user: LUKE });
+          if (pathname === `${PULL}/commits`) return Response.json([]);
+          if (pathname !== `${PULL}/reviews`) return undefined;
+          if (page === NEWEST_PAGE) {
+            return Response.json([
+              review(CHARLES, "CHANGES_REQUESTED", "Not yet.", "2026-10-16T09:00:00Z"),
+            ]);
+          }
+          const notes = Array.from({ length: 100 }, (_, at) =>
+            review(DEVIN, "COMMENTED", `Note ${page}.${at}.`, "2026-10-15T09:00:00Z"),
+          );
+          if (page === 1)
+            notes[0] = review(CHARLES, "APPROVED", "Ship it.", "2026-10-15T08:00:00Z");
+          return Response.json(notes);
+        });
+
+        assert.equal(
+          people.reviewers?.find((reviewer) => reviewer.by.login === CHARLES.login)?.state,
+          REVIEW_STATE.CHANGES_REQUESTED,
+        );
+        assert.equal(people.comments?.at(-1)?.excerpt, "Not yet.");
+      }),
+  );
+
+  it.effect(
+    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, a person co-authoring there by the avatar GitHub serves for their id, and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const coAuthor = `Co-authored-by: ${LUKE.login} <${LUKE.id}+${LUKE.login}@users.noreply.github.com>`;
+
+        const people = yield* peopleOf(
+          workspace,
+          repository({
+            pull: { user: CHARLES, requested_reviewers: [] },
+            reviews: [],
+            commits: [
+              { author: CHARLES, commit: { message: `Add invitations\n\n${coAuthor}` } },
+              {
+                author: CHARLES,
+                commit: { message: "Rename the flag\n\nCo-authored-by: Priya <priya@example.com>" },
+              },
+              {
+                author: CHARLES,
+                commit: {
+                  message: `Quote the trailer\n\nThe agent ends each commit on\n${coAuthor.replace(String(LUKE.id), "4242")}\nas its instructions say.\n\nSigned-off-by: Charles <charles@example.com>`,
+                },
+              },
+              { author: CHARLES, commit: { message: `Fix the test\n\n${coAuthor}\n` } },
+              {
+                author: CHARLES,
+                commit: {
+                  message: `Pair on the copy\n\nCo-authored-by: ${PAIR.login} <${PAIR.id}+${PAIR.login}@users.noreply.github.com>`,
+                },
+              },
+            ],
+          }),
+        );
+
+        const asCharles = {
+          login: CHARLES.login,
+          bot: false,
+          avatarUrl: CHARLES.avatar_url,
+          userId: charles,
+        };
+        assert.deepEqual(people.author, asCharles);
+        assert.deepEqual(people.commitAuthors, [
+          asCharles,
+          { login: LUKE.login, bot: true, luke: true },
+          {
+            login: PAIR.login,
+            bot: false,
+            avatarUrl: "https://avatars.githubusercontent.com/u/1005?v=4",
+          },
+        ]);
       }),
   );
 

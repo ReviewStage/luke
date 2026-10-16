@@ -182,7 +182,7 @@ test("an agent an automation started says it was started by the automation, its 
   assert.equal(cards().length, 0, "the press takes the agent's card down");
 });
 
-test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, how its last run went, and Open automation", async () => {
+test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
   const { card, opened } = await agentCard(true);
   hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
   const standing = cards();
@@ -196,9 +196,12 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   assert.equal(notes[0], "Not scheduled");
   assert.match(notes[1] ?? "", /^Last ran .+ · Finished$/u);
 
-  const door = automation.querySelector<HTMLButtonElement>("[data-card-choice]");
-  assert.equal(door?.textContent, "Open automation");
-  act(() => door?.click());
+  assert.equal(
+    automation.querySelector("button")?.textContent,
+    undefined,
+    "the card offers nothing to press",
+  );
+  act(() => card.querySelector<HTMLElement>(".actor-words .actor-ref")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
 });
 
@@ -224,7 +227,7 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".card-sub")?.textContent,
-    "When a pull request is opened in acme/relay or acme/ledger",
+    "When a pull request by people is opened in acme/relay or acme/ledger",
   );
 });
 

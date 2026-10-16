@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
+import { layWindowStyles } from "#testing/focus-ring";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -124,7 +125,7 @@ test("a mention of a heading the plan no longer holds is struck through, and a p
   assert.deepEqual(opened, [{ kind: MENTION_KIND.PLAN, planId: PLAN_ID }]);
 });
 
-test("a section's ⋯ copies the section's link, which reads back as its mention", async () => {
+test("a section's ⋯ copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
   const { container } = drawn();
 
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
@@ -134,12 +135,12 @@ test("a section's ⋯ copies the section's link, which reads back as its mention
   assert.ok(more, "the Rollout section has a ⋯");
   act(() => more.click());
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "Copy link to section",
+    (each) => each.textContent === "Copy link",
   );
   assert.ok(item, "the ⋯ offers to copy the section's link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`[@Rollout](https://tryluke.dev/acme/plan/${PLAN_ID}#rollout)`]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${PLAN_ID}#rollout`]);
 });
 
 test("the plan's first words, under no heading, offer no link", () => {
@@ -176,6 +177,42 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   assert.equal(shown, 600 - 16);
   assert.equal(scroller.scrollTop, 0);
   assert.deepEqual(revealed, [1, 2], "each ask is said shown once, so it can be let go");
+});
+
+test("a section shown stands clear of the document's faded top edge, its heading whole", async () => {
+  const { container } = drawn();
+  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
+  assert.ok(scroller);
+  const rollout = container.querySelectorAll<HTMLElement>(".plan-unit")[1];
+  assert.ok(rollout);
+  // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
+  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
+  vi.spyOn(rollout, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 700 }));
+  const root = roots[0];
+  assert.ok(root);
+  const sheets = await layWindowStyles();
+  try {
+    const fade = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
+    );
+    act(() =>
+      root.render(
+        createElement(PlanBody, {
+          plan: PLAN,
+          live: false,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: () => undefined,
+            reveal: { anchor: "rollout", ask: 1 },
+          },
+        }),
+      ),
+    );
+    assert.ok(fade > 16, "the fade runs deeper than the room a section was shown with");
+    assert.equal(scroller.scrollTop, 600 - fade);
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("no attribute of the plan's page carries what a mention names", () => {
@@ -271,7 +308,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
 
   act(() => more.click());
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "Copy link to section",
+    (each) => each.textContent === "Copy link",
   );
   assert.ok(item);
   await act(async () => item.click());
@@ -407,7 +444,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   for (const more of container.querySelectorAll<HTMLButtonElement>(SECTION_MORE)) {
     act(() => more.click());
     const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Copy link to section",
+      (each) => each.textContent === "Copy link",
     );
     assert.ok(item);
     await act(async () => item.click());
@@ -415,8 +452,8 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
 
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "notes-1" }]);
   assert.deepEqual(copied, [
-    `[@Notes](https://tryluke.dev/acme/plan/${PLAN_ID}#notes)`,
-    `[@Notes](https://tryluke.dev/acme/plan/${PLAN_ID}#notes-1)`,
+    `https://tryluke.dev/acme/plan/${PLAN_ID}#notes`,
+    `https://tryluke.dev/acme/plan/${PLAN_ID}#notes-1`,
   ]);
 });
 
@@ -528,7 +565,7 @@ test("the title's ⋯ is a section's: in its row, shown while the keyboard is on
 
   act(() => more.click());
   const first = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
-  assert.deepEqual(menuLabels(), ["Copy link to task", "Rename", "Version history"]);
+  assert.deepEqual(menuLabels(), ["Copy link", "Rename", "Version history"]);
   assert.equal(document.activeElement, first, "the menu opens on its first item");
   act(() => {
     first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -541,7 +578,7 @@ test("the title's ⋯ copies the plan's link, its Rename puts the caret in the t
   const { container, more, histories } = drawnTitled();
 
   act(() => more.click());
-  await chooseItem("Copy link to task");
+  await chooseItem("Copy link");
   act(() => more.click());
   await chooseItem("Rename");
   const typing = document.activeElement;
@@ -561,5 +598,5 @@ test("on a plan that cannot be edited, the title's ⋯ is a Tab stop offering it
   act(() => more.click());
 
   assert.equal(more.tabIndex, 0);
-  assert.deepEqual(menuLabels(), ["Copy link to task"]);
+  assert.deepEqual(menuLabels(), ["Copy link"]);
 });

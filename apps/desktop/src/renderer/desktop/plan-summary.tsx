@@ -3,8 +3,9 @@ import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { agentPlace, useCopyLinkItem } from "../copy-link-item";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { ChangesCard } from "../planning/agent-changes-tab";
+import { ChangesCard, peopleOf } from "../planning/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { agentTabLabel } from "../planning/coding-agent-model";
@@ -48,7 +49,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
  * agents archived are folded under Archived at the foot of Coding agents
  * (`agent-archive.tsx`).
  *
- * It is always drawn, expanded or collapsed, and never hidden. Expanded and
+ * It is drawn expanded or collapsed wherever the column has room for its
+ * rail. Expanded and
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
@@ -61,7 +63,9 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
  * summary as a card over the rail's own footprint, the rail expanding in
  * place, with its own chevron back on the spot the rail's stood. The card
  * goes on that chevron, on Escape, on a row chosen, or on a press anywhere
- * outside it, which still lands where it was pressed. Whether it is pinned
+ * outside it, which still lands where it was pressed. A column too narrow to
+ * spare the rail's room draws no rail at all: the toolbar's button, which
+ * hangs the same card, is its one way in. Whether it is pinned
  * is the window's preference, kept in the renderer's storage as the
  * sidebar's fold is, and a fixture run keeps none.
  *
@@ -88,10 +92,19 @@ const SUMMARY_PINNED_KEY = "luke.summary-pinned";
  */
 const SUMMARY_WIDE = 1040;
 
-/** How the summary stands in the plan's column. */
+/**
+ * The least width of the plan's column, in CSS pixels, at which the summary
+ * stands as a rail rather than not at all. Note that below it the rail's
+ * 56px and the document's page insets either side, 80, would leave the words
+ * under 344px, and the toolbar's button hangs the same card the rail does.
+ */
+const SUMMARY_RAILED = 480;
+
+/** How the summary stands in the plan's column: pinned, a rail, or not drawn where the column has no room for one. */
 const SUMMARY_MODE = {
   COLUMN: "column",
   RAIL: "rail",
+  NONE: "none",
 } as const;
 
 type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
@@ -189,7 +202,8 @@ export interface SummaryLayout {
 /**
  * How the summary stands in the plan's `column`, measured whole: pinned
  * while it is pinned and the column holds it beside the document's measure,
- * and a rail otherwise. A card hangs only over the rail, and only while the
+ * a rail where the column spares the rail's room, and not drawn otherwise. A
+ * card hangs only where the summary is not pinned, and only while the
  * column is drawn, so the summary pinned, or a side panel `covering` the
  * column, takes it down. A column not laid out, hidden or not yet drawn,
  * measures nothing and changes nothing.
@@ -201,18 +215,22 @@ export function useSummaryLayout(
 ): SummaryLayout {
   const { wide, onMeasured } = pin;
   const [hung, setHung] = useState<CardFrom | undefined>(undefined);
+  const [railed, setRailed] = useState(true);
   useLayoutEffect(() => {
     if (column === null) return;
     const measure = () => {
       const width = column.getBoundingClientRect().width;
-      if (width > 0) onMeasured(width >= SUMMARY_WIDE);
+      if (width <= 0) return;
+      onMeasured(width >= SUMMARY_WIDE);
+      setRailed(width >= SUMMARY_RAILED);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(column);
     return () => observer.disconnect();
   }, [column, onMeasured]);
-  const mode = wide && pin.pinned ? SUMMARY_MODE.COLUMN : SUMMARY_MODE.RAIL;
+  const mode =
+    wide && pin.pinned ? SUMMARY_MODE.COLUMN : railed ? SUMMARY_MODE.RAIL : SUMMARY_MODE.NONE;
   // Note that the card's keys are heard on the window, so a card the
   // column no longer shows is let go rather than left taking Escape.
   const gone = mode === SUMMARY_MODE.COLUMN || covering;
@@ -366,6 +384,7 @@ function withCards(
           subject={subject}
           models={agents.models}
           pullRequest={offer.pullRequest}
+          people={peopleOf(agents.changesPeople.get(offer.agent.id), offer.pullRequest)}
           onOpenAgent={() => onOpenAgent(offer.agent.id)}
         />
       );
@@ -480,7 +499,7 @@ function SummaryRow({
   );
 }
 
-/** An agent's row, whose right-click offers Archive agent, asking first while the agent still works. */
+/** An agent's row, whose right-click offers Copy link and Archive agent, asking first while the agent still works. */
 function AgentSummaryRow({
   entry,
   agent,
@@ -496,6 +515,7 @@ function AgentSummaryRow({
 }) {
   const archive = useAgentArchive(agent, agents, shown);
   const menu = useActionMenu(shown);
+  const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>
       <SummaryRow entry={entry} onPick={onPick} onContextMenu={menu.contextMenu()} />
@@ -503,7 +523,7 @@ function AgentSummaryRow({
         <ActionMenu
           label="Agent actions"
           menu={menu.drawn}
-          groups={[[archive.action]]}
+          groups={copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]]}
           onClose={menu.close}
         />
       )}
@@ -715,8 +735,8 @@ function SummaryChevron({
 }
 
 /**
- * The summary in the plan's column, pinned or as its rail, and the card
- * while it hangs. The rail lists the panel's kinds alone, one glyph after
+ * The summary in the plan's column, pinned or as its rail, or nothing where
+ * the column spares no rail, and the card while it hangs. The rail lists the panel's kinds alone, one glyph after
  * another under its chevron at one even step, since a glyph tells an agent,
  * a subagent, or a file from its neighbours by nothing a reader could tell
  * at a glance.
@@ -753,18 +773,20 @@ export function PlanSummary({
   const card = useDisclosure(layout.card !== undefined);
   return (
     <>
-      <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
-        <SummaryChevron layout={layout} cardId={cardId} />
-        {layout.mode === SUMMARY_MODE.COLUMN ? (
-          <SummaryList sections={sections} agents={plans.agents} shown={plans.shown} />
-        ) : kinds.length === 0 ? null : (
-          <ul className="plan-summary-rows" aria-label={TABS_SECTION}>
-            {kinds.map((entry) => (
-              <RailRow key={entry.row.id} entry={entry} />
-            ))}
-          </ul>
-        )}
-      </aside>
+      {layout.mode === SUMMARY_MODE.NONE ? null : (
+        <aside className="plan-summary scroll-fade" aria-label="Summary" data-mode={layout.mode}>
+          <SummaryChevron layout={layout} cardId={cardId} />
+          {layout.mode === SUMMARY_MODE.COLUMN ? (
+            <SummaryList sections={sections} agents={plans.agents} shown={plans.shown} />
+          ) : kinds.length === 0 ? null : (
+            <ul className="plan-summary-rows" aria-label={TABS_SECTION}>
+              {kinds.map((entry) => (
+                <RailRow key={entry.row.id} entry={entry} />
+              ))}
+            </ul>
+          )}
+        </aside>
+      )}
       {!card.mounted || hungFrom === undefined ? null : (
         <SummaryCard
           id={cardId}

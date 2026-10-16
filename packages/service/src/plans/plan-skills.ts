@@ -67,11 +67,24 @@ export function readPlanSkills(
     if (Option.isNone(stored)) return Option.none();
     const repository = stored.value.plan.repository;
     if (repository === null) return Option.some(refused(PLAN_FILE_REFUSAL.NO_REPOSITORY));
-    const answer = yield* readSkills(stored.value.plan.workspaceId, repository).pipe(
-      Effect.catchTag("GitHubUnavailable", (failure) =>
-        Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
-      ),
-    );
-    return Option.some(answer);
+    return Option.some(yield* readWorkspaceSkills(stored.value.plan.workspaceId, repository));
   });
+}
+
+/**
+ * The skills a developer may choose of a repository the workspace's
+ * installation reaches, as GitHub holds it now, or why they are not read: a
+ * plan's read by the place its plan names, and the read of a place no plan
+ * names, whose caller has already confirmed the account is a member of the
+ * workspace.
+ */
+export function readWorkspaceSkills(
+  workspaceId: string,
+  repository: string,
+): Effect.Effect<PlanSkillsAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  return readSkills(workspaceId, repository).pipe(
+    Effect.catchTag("GitHubUnavailable", (failure) =>
+      Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
+    ),
+  );
 }

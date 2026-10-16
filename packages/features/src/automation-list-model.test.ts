@@ -19,9 +19,12 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  type AutomationTrigger,
+  GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 
 /**
  * The Automations list as a window draws it: the workspace's automations
@@ -96,24 +99,57 @@ test("a schedule the picker writes is said in words in its zone's city, and any 
   assert.equal(said("*/30 9-17 * * 1-5"), "*/30 9-17 * * 1-5 · New York");
 });
 
-test("a GitHub event is said as what happens, where, and the labels and branches it keeps to, and a webhook as its call", () => {
-  const event = (trigger: Partial<{ labels: string[]; branches: string[] }> = {}) => ({
+test("a GitHub event is said as what happens, by whom, where, and the labels, branches, drafts, and forks it keeps to, and a webhook as its call", () => {
+  const event = (settings: Partial<Extract<AutomationTrigger, { kind: "github" }>> = {}) => ({
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
-    ...trigger,
+    ...settings,
   });
 
   assert.equal(
     automationTriggerText(event(), ["acme/ledger"]),
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
   assert.equal(
-    automationTriggerText(event({ labels: ["bug", "p1"], branches: ["main"] }), [
-      "acme/api",
-      "acme/web",
+    automationTriggerText(event({ senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS] }), [
       "acme/ledger",
     ]),
-    "When a pull request is opened or updated in acme/api, acme/web, or acme/ledger labelled bug or p1 on main",
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  );
+  assert.equal(
+    automationTriggerText(
+      event({
+        senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.PEOPLE, GITHUB_SENDER.OTHER_BOTS],
+        moments: [
+          PULL_REQUEST_MOMENT.PUSHED,
+          PULL_REQUEST_MOMENT.OPENED,
+          PULL_REQUEST_MOMENT.PUSHED,
+        ],
+      }),
+      ["acme/ledger"],
+    ),
+    "When a pull request by people or other bots is opened or pushed to in acme/ledger",
+  );
+  assert.equal(
+    automationTriggerText(
+      event({
+        senders: Object.values(GITHUB_SENDER),
+        moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.READY],
+        labels: ["bug", "p1"],
+        branches: ["main"],
+        drafts: true,
+        forks: true,
+      }),
+      ["acme/api", "acme/web", "acme/ledger"],
+    ),
+    "When a pull request by anyone is opened or marked ready in acme/api, acme/web, or acme/ledger labelled bug or p1 on main, drafts and forks included",
+  );
+  assert.equal(
+    automationTriggerText(
+      { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.CHECK_FAILED },
+      ["acme/ledger"],
+    ),
+    "When a check fails in acme/ledger",
   );
   assert.equal(
     automationTriggerText({ kind: AUTOMATION_TRIGGER.WEBHOOK }, ["acme/ledger"]),
@@ -159,9 +195,6 @@ test("an automation turned off says so before any instant, and one with no insta
   assert.deepEqual(automationNext(automation("a")), { kind: AUTOMATION_NEXT.AT, at: 5_000 });
   assert.deepEqual(automationNext(automation("a", { enabled: false })), {
     kind: AUTOMATION_NEXT.OFF,
-  });
-  assert.deepEqual(automationNext(automation("a", { pausedReason: "failures" })), {
-    kind: AUTOMATION_NEXT.PAUSED,
   });
   assert.deepEqual(automationNext(automation("a", { nextRunAt: null })), {
     kind: AUTOMATION_NEXT.UNSCHEDULED,
@@ -209,4 +242,57 @@ test("a run's line says why it did not start, else where its agent stands, or th
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
+  assert.equal(
+    automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })),
+    "Its agent failed",
+  );
+  assert.equal(
+    automationRunLine(
+      run({
+        agent: {
+          ...agent(CODING_AGENT_STATUS.FAILED),
+          failureReason: CODING_AGENT_FAILURE.SANDBOX,
+        },
+      }),
+    ),
+    "Its agent failed: the sandbox or checkout failed",
+  );
+  const keyRefused = run({
+    agent: {
+      ...agent(CODING_AGENT_STATUS.FAILED),
+      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+    },
+  });
+  assert.equal(
+    automationRunLine(keyRefused, "its creator"),
+    "Its agent failed: its creator's API key was refused or can't be read",
+    "another's automation names whose key, and no Settings the reader cannot mend",
+  );
+  assert.match(automationRunLine(keyRefused), /check Settings › Coding agents › API keys$/u);
+  const onTeammatesAgent = run({
+    agent: {
+      ...agent(CODING_AGENT_STATUS.FAILED),
+      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+      ownKey: false,
+    },
+  });
+  assert.equal(
+    automationRunLine(onTeammatesAgent),
+    "Its agent failed: its owner's API key was refused or can't be read",
+    "a same-agent run on a teammate's agent names that agent's owner, whoever made the automation",
+  );
+  assert.match(
+    automationRunLine(
+      run({
+        agent: {
+          ...agent(CODING_AGENT_STATUS.FAILED),
+          failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+          ownKey: true,
+        },
+      }),
+      "its creator",
+    ),
+    /check Settings › Coding agents › API keys$/u,
+    "the reader's own agent is the reader's key, even on another's automation",
+  );
 });

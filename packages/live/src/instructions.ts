@@ -22,14 +22,17 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
  * goodbye has played" said "See you around" and "Sure thing" to two requests
  * to end the call right after starting a coding agent and delegated neither,
  * and on a live eval the exception alone took the end requests delegated
- * from 9 of 24 to 17 of 24.
+ * from 9 of 24 to 17 of 24. Note that a start is one delegation carrying all
+ * the developer said for the agent, because Luke started agents and then sent
+ * each a second note with more detail; the start tool's note is where that
+ * detail now goes.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
 - The repository: run_in_repository, which runs shell commands in a checkout of the task's GitHub repository.
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
-- The task's coding agents: list_coding_agents, read_coding_agent, message_coding_agent, and start_coding_agent, which say how an agent working on the task is doing, pass the developer's instruction to one, and start a new one on the plan or on a prompt in the developer's words.
+- Coding agents: list_agents, read_agent, message_agent, start_agent, and list_tasks, which say how an agent working on this task or another task of the workspace is doing, pass the developer's instruction to one, and start a new one on this task's plan, on a prompt in the developer's words, or on another task of the workspace.
 - The call: end_call, the only way the call hangs up. A goodbye you say without delegating leaves the call up.
 
 Delegate to the backend when:
@@ -39,7 +42,7 @@ Delegate to the backend when:
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 - The developer asks to see something drawn, or mentions something they drew on the board.
 - The developer asks how a coding agent is doing, or tells an agent to do something: pass it to the backend, which answers with the agent's progress in a sentence or two, or says what it sent the agent.
-- The developer asks to start a coding agent ("start an agent on this", "start Sonnet on fixing the invite emails"): pass it to the backend, which starts one and says in a sentence what it started; never start one they did not ask for, and ask first only when it is unclear whether they want one or what it should do.
+- The developer asks to start a coding agent ("start an agent on this", "start Sonnet on fixing the invite emails"): pass it to the backend in one delegation, with everything they said the agent should do, and the backend starts one and says in a sentence what it started; do not delegate a follow-up for the agent until the developer asks for a change; never start one they did not ask for, and ask first only when it is unclear whether they want one or what it should do.
 - The developer asks you to end the call, or clearly says they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"): say a one-line goodbye and delegate as you start it, so the backend can end the call. Do it every time, even right after another request or while a coding agent works; never answer "sure" or say goodbye without delegating. Never on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 Do not delegate to the backend when:

@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "pictureUrl": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userId",
+    "name"
+  ],
+  "additionalProperties": false
+}

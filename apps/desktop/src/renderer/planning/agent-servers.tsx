@@ -6,9 +6,9 @@ import {
 import { SIGN_IN_ACTION } from "@luke/features/integration-sign-in";
 import { byName, toolTitle } from "@luke/features/integration-tool-model";
 import {
-  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
-  type IntegrationProvider,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import {
   ArrowLeftIcon,
@@ -19,6 +19,7 @@ import {
   SearchIcon,
 } from "@luke/ui";
 import {
+  namedServers,
   opensTools,
   SERVER_ACTION,
   SERVER_ROW,
@@ -34,6 +35,7 @@ import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { CHIP_LOOK, Chip } from "../chip";
 import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
@@ -89,12 +91,15 @@ import { Tooltip } from "../tooltip";
 /** The servers an agent is handed, as the button changes them. */
 export interface AgentServersControl {
   /** The servers switched off for this agent: the one on its way where one is, else the agent's. */
-  readonly disabled: readonly IntegrationProvider[];
+  readonly disabled: readonly string[];
   /** Switches the agent's servers, the whole list of those off. */
-  readonly onSwitch: (next: readonly IntegrationProvider[]) => void;
+  readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
 }
+
+/** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
+const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
@@ -142,7 +147,7 @@ function ServerSwitch({
       onMouseDown={keepFieldFocus}
       onChange={(on, event) => {
         event.stopPropagation();
-        servers.onSwitch(switchedServers(servers.disabled, row.provider, on));
+        servers.onSwitch(switchedServers(servers.disabled, row.connection, on));
       }}
     />
   );
@@ -198,21 +203,25 @@ function ServersPopover({
   const list = useRef<HTMLDivElement>(null);
   const rowsId = useId();
   const reads = useIntegrationTools(
-    INTEGRATION_PROVIDER_LIST.filter(
-      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
-    ),
+    namedServers({
+      statusOf: statuses.statusOf,
+      accountsOf: statuses.accountsOf,
+      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
+    }).map((server) => server.connection),
   );
   const rows = serverRows({
     statusOf: statuses.statusOf,
-    healthOf: (provider) => connectionHealth(provider, reads[provider]),
+    healthOf: (server) =>
+      connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]),
     signInOf: statuses.signInOf,
+    accountsOf: statuses.accountsOf,
     readFailed: statuses.readFailed,
     disabled: servers.disabled,
   });
-  const [connecting, setConnecting] = useState<IntegrationProvider | undefined>(undefined);
+  const [connecting, setConnecting] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
-  const [opened, setOpened] = useState<IntegrationProvider | undefined>(undefined);
+  const [opened, setOpened] = useState<string | undefined>(undefined);
   const [highlight, setHighlight] = useState(0);
   const [pageHighlight, setPageHighlight] = useState(0);
   const [openedTool, setOpenedTool] = useState<string | undefined>(undefined);
@@ -220,7 +229,7 @@ function ServersPopover({
   const grant = useIntegrationGrant(statuses);
 
   // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
-  const page = rows.find((row) => row.provider === opened && opensTools(row));
+  const page = rows.find((row) => row.connection === opened && opensTools(row));
   // Note that the page's filter reads as the home's search does, so a query
   // handed down that found a tool by its server's name ("vercel get") still
   // finds it here.
@@ -250,7 +259,7 @@ function ServersPopover({
   useEffect(() => {
     if (tool !== undefined) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.provider, tool]);
+  }, [page?.connection, tool]);
 
   useLayoutEffect(() => {
     if (tool !== undefined) return;
@@ -261,19 +270,19 @@ function ServersPopover({
   }, [at, page, pageAt, tool, rowsId]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
-  const connect = (provider: IntegrationProvider) => {
-    setConnecting(provider);
-    void grant.begin(provider).then(() => setConnecting(undefined));
+  const connect = (server: string) => {
+    setConnecting(server);
+    void grant.begin(server).then(() => setConnecting(undefined));
   };
 
   /** A sign-in waited on, ended here; a Cancel the service refused leaves it waiting, to press again. */
-  const cancel = (provider: IntegrationProvider) => {
-    setConnecting(provider);
-    void statuses.cancelSignIn(provider).then(() => setConnecting(undefined));
+  const cancel = (server: string) => {
+    setConnecting(server);
+    void statuses.cancelSignIn(server).then(() => setConnecting(undefined));
   };
 
   const open = (row: ServerRow, search = "") => {
-    setOpened(row.provider);
+    setOpened(row.connection);
     setFilter(search);
     setPageHighlight(0);
     setOpenedTool(undefined);
@@ -316,7 +325,7 @@ function ServersPopover({
       row.kind === SERVER_ROW.SIGNING_IN ||
       row.kind === SERVER_ROW.TRY_AGAIN
     )
-      return connect(row.provider);
+      return connect(row.connection);
     if (row.kind === SERVER_ROW.RETRY) void statuses.read();
   };
 
@@ -338,7 +347,7 @@ function ServersPopover({
     } else if (event.key === " " && query.trim() === "" && pick?.row.kind === SERVER_ROW.SWITCH) {
       // Note that we flip the switch only on an empty search, because a space typed after a word is part of the search.
       event.preventDefault();
-      servers.onSwitch(switchedServers(servers.disabled, pick.row.provider, !pick.row.on));
+      servers.onSwitch(switchedServers(servers.disabled, pick.row.connection, !pick.row.on));
     }
   };
 
@@ -395,7 +404,7 @@ function ServersPopover({
             type="button"
             className="agent-servers-connect"
             onMouseDown={keepFieldFocus}
-            disabled={connecting === row.provider}
+            disabled={connecting === row.connection}
             title={
               grantedBySignIn(row.provider)
                 ? "Connect GitHub in your browser"
@@ -403,7 +412,7 @@ function ServersPopover({
             }
             onClick={(event) => {
               event.stopPropagation();
-              connect(row.provider);
+              connect(row.connection);
             }}
           >
             {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
@@ -416,11 +425,11 @@ function ServersPopover({
               type="button"
               className="agent-servers-connect"
               onMouseDown={keepFieldFocus}
-              disabled={connecting === row.provider}
+              disabled={connecting === row.connection}
               title={`Open the ${row.name} sign-in in your browser again`}
               onClick={(event) => {
                 event.stopPropagation();
-                connect(row.provider);
+                connect(row.connection);
               }}
             >
               {SIGN_IN_ACTION.REOPEN}
@@ -430,10 +439,10 @@ function ServersPopover({
               className="agent-servers-connect"
               onMouseDown={keepFieldFocus}
               data-tone="quiet"
-              disabled={connecting === row.provider}
+              disabled={connecting === row.connection}
               onClick={(event) => {
                 event.stopPropagation();
-                cancel(row.provider);
+                cancel(row.connection);
               }}
             >
               {SIGN_IN_ACTION.CANCEL}
@@ -446,11 +455,11 @@ function ServersPopover({
             type="button"
             className="agent-servers-connect"
             onMouseDown={keepFieldFocus}
-            disabled={connecting === row.provider}
+            disabled={connecting === row.connection}
             title={`Sign in to ${row.name} in your browser`}
             onClick={(event) => {
               event.stopPropagation();
-              connect(row.provider);
+              connect(row.connection);
             }}
           >
             {SIGN_IN_ACTION.TRY_AGAIN}
@@ -485,7 +494,7 @@ function ServersPopover({
       // biome-ignore lint/a11y/noStaticElementInteractions: the row's press is the field's Enter for the pointer; its switch and button are the controls.
       // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
       <div
-        key={row.provider}
+        key={row.connection}
         id={index < 0 ? undefined : `${rowsId}-${index}`}
         className="menu-item agent-servers-row"
         data-highlighted={index === at ? "true" : undefined}
@@ -532,7 +541,7 @@ function ServersPopover({
       // biome-ignore lint/a11y/noStaticElementInteractions: as a server's row, a press is the field's Enter for the pointer.
       // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
       <div
-        key={`${row.provider}:${tool.name}`}
+        key={`${row.connection}:${tool.name}`}
         id={`${rowsId}-${index}`}
         className="menu-item agent-servers-row agent-servers-hit"
         data-highlighted={index === at ? "true" : undefined}
@@ -695,12 +704,26 @@ function ServersPopover({
 export function AgentServersButton({
   servers,
   statuses,
+  face,
+  open: heldOpen,
+  onOpenChange,
 }: {
   servers: AgentServersControl;
   /** Where every connection stands, as the composer around the button reads it. */
   statuses: IntegrationStatuses;
+  /**
+   * What a form row's button shows in place of the MCP mark, which draws it
+   * as a Settings picker's field chip, chevron and all; the composer's
+   * button leaves it out.
+   */
+  face?: React.ReactNode;
+  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the button's own otherwise. */
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = heldOpen ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -711,23 +734,28 @@ export function AgentServersButton({
     setOpen(false);
     trigger.current?.focus();
   };
+  const press = {
+    ref: trigger,
+    "aria-label": SERVERS_LABEL,
+    "aria-haspopup": "dialog",
+    "aria-expanded": open,
+    "aria-controls": open ? popoverId : undefined,
+    onClick: () => setOpen(!open),
+  } as const;
 
   return (
     <div className="agent-servers" ref={root}>
-      <Tooltip label={SERVERS_LABEL}>
-        <button
-          ref={trigger}
-          type="button"
-          className="icon-button agent-servers-button"
-          aria-label={SERVERS_LABEL}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? popoverId : undefined}
-          onClick={() => setOpen(!open)}
-        >
-          <McpIcon />
-        </button>
-      </Tooltip>
+      {face === undefined ? (
+        <Tooltip label={SERVERS_LABEL}>
+          <button type="button" className="icon-button agent-servers-button" {...press}>
+            <McpIcon />
+          </button>
+        </Tooltip>
+      ) : (
+        <Chip look={CHIP_LOOK.FIELD} chevron className="settings-picker-chip" {...press}>
+          {face}
+        </Chip>
+      )}
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ServersPopover

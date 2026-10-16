@@ -4,18 +4,24 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
+  planlessAgentSchema,
   storedObjectSchema,
   turnRecordFields,
 } from "./coding-agent-wire.js";
 import {
+  githubPullRequestNumberSchema,
+  githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
+  githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
+import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
+import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -45,6 +51,8 @@ import {
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
 import {
+  formerMemberSchema,
+  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -384,6 +392,8 @@ export const githubConnectionSchema = EffectSchema.Struct({
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
+  /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
+  planlessAgents: EffectSchema.optionalKey(EffectSchema.Array(planlessAgentSchema)),
   listStatus: planningReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
@@ -545,6 +555,8 @@ export const PLAN_CALL_FAILURE = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The plan is archived, so it takes no write until it is brought back. */
   PLAN_ARCHIVED: "plan-archived",
+  /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
+  LINEAR_UNAVAILABLE: "linear-unavailable",
 } as const;
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
@@ -559,10 +571,18 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
+/** Why a start answered no plan: a repository call's reasons, or the Linear issue it was to start from could not be read. */
+const START_CALL_FAILURES = [
+  ...REPOSITORY_CALL_FAILURES,
+  PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE,
+] as const;
+
+export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
+
 /** Starting a plan, as the window hears it: the plan now active, or why none started. */
 export const planningStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
-  EffectSchema.Struct({ failure: repositoryCallFailureSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
 ]);
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;
@@ -658,11 +678,25 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
 
-/** One folder of a plan's repository, as the File tab's tree asks the host for it: the plan, and the folder's path from the root. */
-export const planningTreeParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
-  ...planTreeRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * One folder of a repository, as the File tab's tree or an `@` list asks
+ * the host for it: the plan whose repository it is, or the workspace and
+ * the repository where no plan names it, and the folder's path from the root.
+ */
+export const planningTreeParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ planId: EffectSchema.NonEmptyString, ...planTreeRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...planTreeRequestSchema.fields }),
+]);
 
 export type PlanningTreeParams = typeof planningTreeParamsSchema.Type;
 
@@ -675,10 +709,11 @@ export const planningTreeAnswerSchema = EffectSchema.Union([
 
 export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
 
-/** The skills a developer may choose of a plan's repository, as the window asks the host for them: the plan. */
-export const planningSkillsParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
-});
+/** The skills a developer may choose of a repository, as the window asks the host for them: the plan whose repository it is, or the workspace and the repository where no plan names it. */
+export const planningSkillsParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ planId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct(repositoryPlaceFields),
+]);
 
 export type PlanningSkillsParams = typeof planningSkillsParamsSchema.Type;
 
@@ -690,6 +725,27 @@ export const planningSkillsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningSkillsAnswer = typeof planningSkillsAnswerSchema.Type;
+
+/** One pull request of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the pull request's number. */
+export const planningPullRequestParamsSchema = EffectSchema.Struct({
+  ...repositoryPlaceFields,
+  number: githubPullRequestNumberSchema,
+});
+
+export type PlanningPullRequestParams = typeof planningPullRequestParamsSchema.Type;
+
+/** The read of one pull request, as the window hears it: the pull request, null where there is none to draw, or that the service did not answer. */
+export const planningPullRequestAnswerSchema = EffectSchema.Union([
+  githubRepositoryPullRequestAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningPullRequestAnswer = typeof planningPullRequestAnswerSchema.Type;
+
+/** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
+export const planningPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
+
+export type PlanningPullRequest = typeof planningPullRequestSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({
@@ -722,6 +778,53 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
+
+/** One picture of a plan, as the window drawing it names it: the plan, and the picture's id its text names. */
+export const planningPictureParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  attachmentId: EffectSchema.NonEmptyString,
+});
+
+export type PlanningPictureParams = typeof planningPictureParamsSchema.Type;
+
+/**
+ * One picture of a plan, as the window hears it: its bytes in base64 under
+ * its media type, which the window draws from a `data:` URL of its own
+ * making, or why there is none: not the account's to read, or no answer.
+ * The host fetched it under the account, so the window holds no bearer and
+ * no address.
+ */
+export const planningPictureAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ contentType: pictureTypeSchema, base64: EffectSchema.String }),
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals([PLAN_CALL_FAILURE.NOT_FOUND, PLAN_CALL_FAILURE.UNANSWERED]),
+  }),
+]);
+
+export type PlanningPictureAnswer = typeof planningPictureAnswerSchema.Type;
+
+/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture as a `data:` URL. */
+export const planningPictureKeepParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  picture: pictureDataUrlSchema,
+});
+
+export type PlanningPictureKeepParams = typeof planningPictureKeepParamsSchema.Type;
+
+/** Why a picture was not kept: the plan holds its bound of pictures, the plan is not the account's to write, or no answer. */
+export const PICTURE_KEEP_FAILURE = {
+  TOO_MANY: "too-many",
+  NOT_FOUND: PLAN_CALL_FAILURE.NOT_FOUND,
+  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+} as const;
+
+/** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
+export const planningPictureKeepAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ id: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(Object.values(PICTURE_KEEP_FAILURE)) }),
+]);
+
+export type PlanningPictureKeepAnswer = typeof planningPictureKeepAnswerSchema.Type;
 
 /** One version of one page of a plan, as the frame drawing it names it. */
 export const planningPageParamsSchema = EffectSchema.Struct({
@@ -789,6 +892,19 @@ export const planningWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
 export type PlanningWorkspaceGitHubConnectAnswer =
   typeof planningWorkspaceGitHubConnectAnswerSchema.Type;
 
+/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
+export const planningLinearIssuesParamsSchema = linearIssuesRequestSchema;
+
+export type PlanningLinearIssuesParams = typeof planningLinearIssuesParamsSchema.Type;
+
+/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
+export const planningLinearIssuesAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningLinearIssuesAnswer = typeof planningLinearIssuesAnswerSchema.Type;
+
 /** A workspace's members, as the window asks for them: the workspace. */
 export const planningWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
 
@@ -812,7 +928,11 @@ export type PlanningWorkspaceTransferParams = typeof planningWorkspaceTransferPa
 
 /** A workspace's members, as the window hears them after a read, a removal, a role changed, or a handover: the members as they then stand, or why there are none. */
 export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
+  EffectSchema.Struct({
+    members: EffectSchema.Array(workspaceMemberSchema),
+    /** Who the workspace's work names but left, on a read; absent after a change, and from a service before it. */
+    former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
+  }),
   workspaceCallFailureSchema,
 ]);
 

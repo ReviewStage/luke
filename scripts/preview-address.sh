@@ -17,8 +17,9 @@ set -euo pipefail
 # earlier one, so the lookup walks back along first parents to the nearest
 # commit whose deployed tree matches the head's and that has a record of its
 # own: a commit pushed under a later one has none and is passed over rather
-# than waited on. The walk exits NOT_AFFECTED once the deployed tree differs,
-# since then no preview was ever built from what this commit would serve. That address is then asked
+# than waited on, and so is one whose deployed tree differs. The walk exits
+# NOT_AFFECTED when no ancestor within reach built what this commit would
+# serve. That address is then asked
 # for one page, because a preview behind Vercel Authentication redirects every
 # stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
 # session, so such a preview is PROTECTED and useless to point a build at.
@@ -44,12 +45,15 @@ EXIT_UNREADABLE=7
 
 # Vercel's own words on a build its ignoreCommand skipped, compared whole.
 SKIPPED_DESCRIPTION="Skipped - Not affected"
+# The project's Ignored Build Step (`scripts/vercel-ignore.sh`) writes no
+# deployment record for a commit it skips, only this commit status.
+IGNORED_STATUS="success: Canceled by Ignored Build Step"
 PREVIEW_ENVIRONMENT=Preview
 SSO_HOST=vercel.com
 SSO_PATH=/sso-api
-# The deployed tree is whatever the web project's ignoreCommand diffs, read
-# from the command itself so the two cannot drift apart.
-VERCEL_CONFIG="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../apps/web/vercel.json"
+# The deployed tree is whatever the deployment's ignoreCommand diffs, read
+# from its script so the two cannot drift apart.
+VERCEL_IGNORE="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/vercel-ignore.sh"
 
 # Twenty minutes by default, on the probe's own observation that a record
 # appears within about 25 s of the push and settles 85–115 s later.
@@ -174,6 +178,10 @@ read_preview() {
             # as a queue rather than as nothing.
             vercel_status=$(gh api "repos/$repo/commits/$sha/status" \
                 --jq '[.statuses[] | select(.context == "Vercel")][0] | select(. != null) | "\(.state): \(.description)"' 2>/dev/null || true)
+            if [[ $vercel_status == "$IGNORED_STATUS" ]]; then
+                printf 'preview: %s was skipped by the Ignored Build Step; nothing it deploys changed\n' "$sha" >&2
+                return
+            fi
             printf 'preview: waiting (no record yet for %s; Vercel says %s)\n' "$sha" "${vercel_status:-nothing}" >&2
         fi
         if ((attempt < attempts)); then
@@ -184,29 +192,39 @@ read_preview() {
     exit "$EXIT_NOT_READY"
 }
 
-if ! ignore_command=$(jq -r '.services.web.ignoreCommand' "$VERCEL_CONFIG"); then
-    printf 'UNREADABLE: could not read the ignoreCommand in %s\n' "$VERCEL_CONFIG" >&2
+if ! deployed=$("$VERCEL_IGNORE" --paths); then
+    printf 'UNREADABLE: could not read the deployed tree from %s\n' "$VERCEL_IGNORE" >&2
     exit "$EXIT_UNREADABLE"
 fi
-read -ra deployed_paths <<<"${ignore_command#* -- }"
+deployed_paths=()
+while IFS= read -r path; do
+    deployed_paths+=("$path")
+done <<<"$deployed"
 
 head=$sha
 is_head=true
-for ((walked = 0; ; walked++)); do
+walked=0
+while true; do
     read_preview "$is_head"
-    if ! parent=$(git rev-parse --verify --quiet "$sha^"); then
-        printf 'NOT_AFFECTED: %s has no parent to find a preview on\n' "$sha" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    if ! git diff --quiet "$parent" "$head" -- "${deployed_paths[@]}"; then
-        printf 'NOT_AFFECTED: no preview was built from the deployed tree of %s; run without --preview, or pass --preview URL\n' "$head" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    if ((walked >= ancestors)); then
-        printf 'NOT_AFFECTED: no preview within %s commits of %s\n' "$ancestors" "$head" >&2
-        exit "$EXIT_NOT_AFFECTED"
-    fi
-    printf 'preview: %s deploys what %s does; looking there\n' "$parent" "$head" >&2
-    sha=$parent
+    # Note that the walk passes over an ancestor whose deployed tree differs
+    # from the head's rather than stopping there, because the ignore step
+    # skips against the branch's last deployment, which a push that changes
+    # a service and then restores it leaves further back than the parent.
+    while true; do
+        if ((walked >= ancestors)); then
+            printf 'NOT_AFFECTED: no preview of the deployed tree of %s within %s commits; run without --preview, or pass --preview URL\n' "$head" "$ancestors" >&2
+            exit "$EXIT_NOT_AFFECTED"
+        fi
+        if ! parent=$(git rev-parse --verify --quiet "$sha^"); then
+            printf 'NOT_AFFECTED: %s has no parent to find a preview on\n' "$sha" >&2
+            exit "$EXIT_NOT_AFFECTED"
+        fi
+        sha=$parent
+        walked=$((walked + 1))
+        if git diff --quiet "$sha" "$head" -- "${deployed_paths[@]}"; then
+            break
+        fi
+    done
+    printf 'preview: %s deploys what %s does; looking there\n' "$sha" "$head" >&2
     is_head=false
 done

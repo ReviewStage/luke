@@ -5,7 +5,6 @@ import type { IntegrationTool } from "@luke/features/integration-health";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
-  type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -28,14 +27,14 @@ const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const VERCEL = INTEGRATION_PROVIDER.VERCEL;
 
 /** Where each provider stands; one absent here is not offered. */
-const STANDING = new Map<IntegrationProvider, IntegrationStatus>([
+const STANDING = new Map<string, IntegrationStatus>([
   [LINEAR, INTEGRATION_STATUS.CONNECTED],
   [VERCEL, INTEGRATION_STATUS.CONNECTED],
   [INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.DISCONNECTED],
 ]);
 
 /** Each connected server's tools, as its server listed them. */
-const TOOLS = new Map<IntegrationProvider, readonly IntegrationTool[]>([
+const TOOLS = new Map<string, readonly IntegrationTool[]>([
   [
     LINEAR,
     [{ name: "list_issues", description: "Lists issues.", annotations: { readOnlyHint: true } }],
@@ -87,7 +86,9 @@ beforeEach(() => {
           request.kind === ACT_KIND.INTEGRATIONS_TOOLS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
-                value: { tools: TOOLS.get(request.payload.provider) ?? [] },
+                value: {
+                  tools: TOOLS.get(request.payload.connection ?? request.payload.provider) ?? [],
+                },
               }
             : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
         ),
@@ -102,7 +103,10 @@ afterEach(() => {
 });
 
 const statuses: IntegrationStatuses = {
-  statusOf: (provider) => STANDING.get(provider) ?? INTEGRATION_STATUS.UNAVAILABLE,
+  statusOf: (server) => STANDING.get(server) ?? INTEGRATION_STATUS.UNAVAILABLE,
+  accountsOf: () => [],
+  canAdd: () => false,
+  listed: () => false,
   signInOf: () => undefined,
   readFailed: false,
   read: () => Promise.resolve(),
@@ -112,8 +116,8 @@ const statuses: IntegrationStatuses = {
 };
 
 /** The button over the servers, opened once every tools read has answered, keeping each switch it was asked for. */
-async function opened() {
-  const switched: (readonly IntegrationProvider[])[] = [];
+async function opened(standing: IntegrationStatuses = statuses) {
+  const switched: (readonly string[])[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -126,7 +130,7 @@ async function opened() {
           onSwitch: (next) => switched.push(next),
           onOpenSettings: () => undefined,
         },
-        statuses,
+        statuses: standing,
       }),
     ),
   );
@@ -407,4 +411,42 @@ test("a press on a tool opens its page with the popover standing open, and its b
   );
   assert.equal(container.querySelector(".integration-tool-detail"), null);
   assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
+});
+
+test("two accounts at a provider stand as two rows, each named by its label, and one switched off leaves the other on", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  const accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const two: IntegrationStatuses = {
+    ...statuses,
+    statusOf: (server) =>
+      server === notion || server === "notion-2"
+        ? INTEGRATION_STATUS.CONNECTED
+        : INTEGRATION_STATUS.UNAVAILABLE,
+    accountsOf: (provider) => (provider === notion ? accounts : []),
+  };
+  const { container, switched } = await opened(two);
+
+  assert.deepEqual(sections(container), [["Connected", ["Notion · Acme", "Notion · Personal"]]]);
+  act(() =>
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
+      .find((row) => row.textContent?.includes("Personal"))
+      ?.querySelector<HTMLElement>('[role="switch"]')
+      ?.click(),
+  );
+  assert.deepEqual(switched, [["notion-2"]]);
 });

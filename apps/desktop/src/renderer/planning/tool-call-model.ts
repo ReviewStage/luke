@@ -12,9 +12,15 @@ import {
   type InboxPostBlock,
   inboxPostInputSchema,
 } from "@luke/features/inbox-wire";
+import {
+  type IntegrationProvider,
+  type IntegrationRemoteCall,
+  integrationOfRemoteTool,
+  integrationRemoteCallSchema,
+} from "@luke/features/integration-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { PlanNote } from "@luke/features/plan-template";
+import type { PlanAgentEdit } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
@@ -42,6 +48,9 @@ import { shortCommit } from "./file-tab-model";
  * through it too, its row naming the item the Inbox tab draws. A call
  * about something the window opens elsewhere, a page, the board, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
+ * A call of an integration's own MCP tool, stored under its provider's
+ * remote name, is drawn as the tool it ran: the provider's mark, the
+ * remote tool's own name, and the input it was sent (`remoteCallOf`).
  * Nothing here draws.
  */
 
@@ -54,6 +63,8 @@ export interface ToolCallView {
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
   readonly output: ToolBlock | undefined;
+  /** For a call of an integration's own tool, the integration, whose mark its row wears in its kind's icon's place. */
+  readonly provider?: IntegrationProvider;
 }
 
 /** The escape every terminal colour and cursor sequence starts with. */
@@ -104,6 +115,14 @@ function pathsSubject(paths: readonly string[]): string {
 /** The string under a key of a record, or nothing where the record has none. */
 function stringAt(value: WireValue | undefined, key: string): string | undefined {
   return isRecord(value) && isWireString(value[key]) ? value[key] : undefined;
+}
+
+/** The files a `show_image` call named, in order, as its row's subject. */
+function shownPaths(input: WireValue | undefined): string {
+  const images = isRecord(input) && Array.isArray(input.images) ? input.images : [];
+  return images
+    .flatMap((image) => (isRecord(image) && isWireString(image.path) ? [image.path] : []))
+    .join(", ");
 }
 
 function isWireArray(value: WireValue): value is readonly WireValue[] {
@@ -178,26 +197,37 @@ export function loadedSkill(input: WireValue | undefined): string | undefined {
 }
 
 /**
- * What a plan note of each kind did, in the row's words, keyed by the
- * template's kinds. Note that the keys are held to the template's type and
- * not read from its module, because the template reaches Effect's Schema,
- * which the renderer bundle does not carry for one table of words.
+ * What a plan note of each kind did, in the row's words, keyed by the kinds
+ * the agents' journal keeps, a deletion among them as a strike. Note that the
+ * keys are held to the template's type and not read from its module, because
+ * the template reaches Effect's Schema, which the renderer bundle does not
+ * carry for one table of words.
  */
 const NOTE_VERB = {
   add: "added",
   replace: "corrected",
   remove: "struck",
-} as const satisfies Record<PlanNote["kind"], string>;
+} as const satisfies Record<PlanAgentEdit["notes"][number]["kind"], string>;
 
-/** The notes a plan edit took, summed by what each did: "2 added, 1 corrected". */
+/** What one note of a call's input did, by its kind: a replacement with no words is a strike. */
+function noteKind(note: WireValue): string {
+  const kind = stringAt(note, "kind") ?? "";
+  const text = stringAt(note, "text");
+  return kind === "replace" && text !== undefined && text.trim() === "" ? "remove" : kind;
+}
+
+/** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
 function planEditSummary(input: WireValue | undefined): string {
   const notes = isRecord(input) ? input.notes : undefined;
   if (notes === undefined || !isWireArray(notes)) return "";
+  const pictured = isRecord(input) ? input.pictures : undefined;
+  const pictures = pictured !== undefined && isWireArray(pictured) ? pictured.length : 0;
   return Object.entries(NOTE_VERB)
     .flatMap(([kind, verb]) => {
-      const count = notes.filter((note) => stringAt(note, "kind") === kind).length;
+      const count = notes.filter((note) => noteKind(note) === kind).length;
       return count === 0 ? [] : [`${count} ${verb}`];
     })
+    .concat(pictures === 0 ? [] : [`${pictures} ${pictures === 1 ? "picture" : "pictures"} added`])
     .join(", ");
 }
 
@@ -348,6 +378,33 @@ function inboxRefusal(output: WireValue | undefined): ToolBlock | undefined {
   return textBlock(stringAt(output, "reason") ?? "");
 }
 
+/** The units a pause is said in, longest first, each by its seconds and its word. */
+const SPAN_UNITS = [
+  [3_600, "hour"],
+  [60, "minute"],
+  [1, "second"],
+] as const;
+
+/** A count of seconds as a row says it, in its largest whole unit or two: "45 seconds", "5 minutes", "1 hour 30 minutes". */
+function spanText(seconds: number): string {
+  const rounded = Math.max(1, Math.round(seconds));
+  const parts = SPAN_UNITS.flatMap(([span, word], index) => {
+    const count = Math.floor((rounded % (SPAN_UNITS[index - 1]?.[0] ?? Infinity)) / span);
+    return count === 0 ? [] : [`${count} ${word}${count === 1 ? "" : "s"}`];
+  });
+  return parts.slice(0, 2).join(" ");
+}
+
+/** How a pause ended: how long it waited, or that a message ended it early. */
+function sleepOutput(output: WireValue): ToolBlock {
+  if (isRecord(output) && output.interrupted === true) {
+    return textBlock("Stopped early: a message arrived.");
+  }
+  const waited =
+    isRecord(output) && isWireNumber(output.waitedSeconds) ? output.waitedSeconds : undefined;
+  return waited === undefined ? jsonBlock(output) : textBlock(`Waited ${spanText(waited)}.`);
+}
+
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
 function knownToolView(
   tool: string,
@@ -456,10 +513,26 @@ function knownToolView(
         input: textBlock(stringAt(input, "path") ?? stringAt(input, "html") ?? ""),
         output: output === undefined ? undefined : jsonBlock(output),
       };
+    case AGENT_TOOL.SHOW_IMAGE:
+      return {
+        kind: CALL_KIND.SHOW_IMAGE,
+        subject: shownPaths(input),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : jsonBlock(output),
+      };
     case AGENT_TOOL.POST_TO_INBOX:
     case AGENT_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
       return inboxToolView(tool, input, output);
+    case AGENT_TOOL.SLEEP: {
+      const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
+      return {
+        kind: CALL_KIND.SLEEP,
+        subject: seconds === undefined ? "" : spanText(seconds),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : sleepOutput(output),
+      };
+    }
     default:
       return undefined;
   }
@@ -508,7 +581,9 @@ function stoppedTask(input: WireValue | undefined, jobs: WorkerJobs | undefined)
  * A call of one of the planning model's own tools, or one eve gives a
  * planning session, drawn from its part as a coding agent's call is: its
  * kind and the one input a reader looks for first. A look at the board
- * answers with an image of it, which is nothing to read, so it shows none.
+ * answers with an image of it, which is nothing to read, so it shows none;
+ * a look at one of the plan's pictures is kept as whether it looked alone,
+ * and shows that.
  */
 function planningToolView(
   tool: string,
@@ -537,17 +612,24 @@ function planningToolView(
       return namedCall(CALL_KIND.DRAW_ON_BOARD, input, output, undefined);
     case AGENT_TOOL.LOOK_AT_BOARD:
       return namedCall(CALL_KIND.LOOK_AT_BOARD, input, undefined, undefined);
+    case AGENT_TOOL.LOOK_AT_PICTURE:
+      return namedCall(CALL_KIND.LOOK_AT_PICTURE, input, output, undefined);
     case AGENT_TOOL.QUEUE_QUESTION:
       return namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question");
     case AGENT_TOOL.WITHDRAW_QUESTION:
       return namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question");
-    case AGENT_TOOL.LIST_CODING_AGENTS:
+    // An agent tool is read alike under its name and the one it had on Luke's calls before every agent was offered it.
+    case AGENT_TOOL.LIST_AGENTS:
+    case RETIRED_TOOL.LIST_CODING_AGENTS:
       return namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined);
-    case AGENT_TOOL.READ_CODING_AGENT:
+    case AGENT_TOOL.READ_AGENT:
+    case RETIRED_TOOL.READ_CODING_AGENT:
       return namedCall(CALL_KIND.READ_AGENT, input, output, "agentId");
-    case AGENT_TOOL.MESSAGE_CODING_AGENT:
+    case AGENT_TOOL.MESSAGE_AGENT:
+    case RETIRED_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
-    case AGENT_TOOL.START_CODING_AGENT:
+    case AGENT_TOOL.START_AGENT:
+    case RETIRED_TOOL.START_CODING_AGENT:
       // Note that a start journaled before the prompt had its name carries it as `task`.
       return namedCall(
         CALL_KIND.START_AGENT,
@@ -569,6 +651,36 @@ function planningToolView(
   }
 }
 
+const readRemoteCall = Schema.decodeUnknownOption(integrationRemoteCallSchema);
+
+/** A call of an integration's own tool, as its stored part names it: the integration, and the envelope the call is kept in; nothing for any other call, or an envelope that does not read. */
+export function remoteCallOf(
+  tool: string,
+  input: WireValue | undefined,
+): { readonly provider: IntegrationProvider; readonly call: IntegrationRemoteCall } | undefined {
+  const provider = integrationOfRemoteTool(tool);
+  if (provider === undefined) return undefined;
+  const call = readRemoteCall(input);
+  return Option.isSome(call) ? { provider, call: call.value } : undefined;
+}
+
+/** A call of an integration's own tool, drawn as the tool it ran: the integration's mark, the tool's own name, and the input the tool was sent. */
+function remoteToolView(
+  tool: string,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView | undefined {
+  const remote = remoteCallOf(tool, input);
+  if (remote === undefined) return undefined;
+  return {
+    kind: CALL_KIND.OTHER,
+    subject: remote.call.remoteTool,
+    provider: remote.provider,
+    input: jsonBlock(remote.call.input),
+    output: output === undefined ? undefined : jsonBlock(output),
+  };
+}
+
 /** How one tool call is drawn: its row and its body, from the part's input and output, a stop naming the worker it stopped by its job where `jobs` knows it. */
 export function toolCallView(input: {
   readonly tool: string;
@@ -578,7 +690,8 @@ export function toolCallView(input: {
 }): ToolCallView {
   return (
     knownToolView(input.tool, input.input, input.output) ??
-    planningToolView(input.tool, input.input, input.output, input.jobs) ?? {
+    planningToolView(input.tool, input.input, input.output, input.jobs) ??
+    remoteToolView(input.tool, input.input, input.output) ?? {
       kind: CALL_KIND.OTHER,
       subject: input.tool,
       input: input.input === undefined ? textBlock("") : jsonBlock(input.input),
@@ -636,14 +749,27 @@ const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
   const agent = stringAt(call.input, "agentId");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
+}
+
+/**
+ * Whether a call's answer says its agent is on another task than the one
+ * the call was made on, which opens nothing here: a task's column draws
+ * its own agents' tabs alone, so such an agent's row folds open in place.
+ * An answer from before the service said so is read as this task's.
+ */
+function onAnotherTask(call: TargetedCall): boolean {
+  const answer = isRecord(call.output) ? call.output.agent : undefined;
+  return isRecord(answer) && answer.onYourTask === false;
 }
 
 /** The agent a start began, which its answer names once it has. */
 function startedAgent(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.agent : undefined;
   const agent = stringAt(answer, "id");
-  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+  if (agent === undefined || onAnotherTask(call)) return undefined;
+  return { kind: TOOL_TARGET.AGENT, agent };
 }
 
 /** The page a write made or moved on, which its answer names once it has. */
@@ -678,16 +804,20 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
   [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
-  [AGENT_TOOL.READ_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.MESSAGE_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.START_CODING_AGENT, startedAgent],
+  [AGENT_TOOL.READ_AGENT, namedAgent],
+  [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
+  [AGENT_TOOL.START_AGENT, startedAgent],
+  [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
+  [AGENT_TOOL.LOOK_AT_PICTURE, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],

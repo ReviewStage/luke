@@ -49,6 +49,7 @@ import {
   type IntegrationConnect,
   revokeIntegrationGrants,
 } from "../integrations/integration-connect.js";
+import { readIntegrationConnections } from "../integrations/integration-store.js";
 import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -214,9 +215,9 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * the developer, while eve's door still admits them to it
  * (`retire-sessions.ts`); a session eve did not retire is logged and the
  * delete proceeds, and the delete itself queues the sandbox of every session
- * the account ran for the sweep. The account's grant at every integration is
- * revoked at Vercel Connect once the rows are gone, as a Disconnect revokes
- * one, so no grant outlives the account; a revoke that fails is logged by its
+ * the account ran for the sweep. Every grant the account's integration rows
+ * name is revoked at Vercel Connect once the rows are gone, as a Disconnect
+ * revokes one, so no grant outlives the account; a revoke that fails is logged by its
  * word and the account is deleted all the same.
  */
 const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoint")(function* (
@@ -237,8 +238,10 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
   yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   yield* forgetAnalytics(userId);
+  // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
+  const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
   yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
-  yield* revokeIntegrationGrants(userId);
+  yield* revokeIntegrationGrants(userId, grants);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 

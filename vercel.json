@@ -1,0 +1,494 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "apps/web",
+      "framework": "vite",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
+      "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
+      "routes": [
+        {
+          "src": "/api/auth/(.*)",
+          "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/connect",
+          "dest": "/api/default.js?route=account/integrations/connect&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/tools",
+          "dest": "/api/default.js?route=account/integrations/tools&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/cancel",
+          "dest": "/api/default.js?route=account/integrations/cancel&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/disconnect",
+          "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/rename",
+          "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/board",
+          "dest": "/api/default.js?route=plans/board&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/transcript",
+          "dest": "/api/default.js?route=plans/transcript&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/work",
+          "dest": "/api/default.js?route=plans/work&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
+          "dest": "/api/default.js?route=plans/subagent-messages&id=$1&call=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/messages",
+          "dest": "/api/default.js?route=plans/messages&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/code",
+          "dest": "/api/default.js?route=plans/code&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/file",
+          "dest": "/api/default.js?route=plans/file&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/tree",
+          "dest": "/api/default.js?route=plans/tree&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/skills",
+          "dest": "/api/default.js?route=plans/skills&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/edit",
+          "dest": "/api/default.js?route=plans/edit&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/attachments/([^/]+)",
+          "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/attachments",
+          "dest": "/api/default.js?route=plans/attachments&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/agents",
+          "dest": "/api/default.js?route=plans/agents&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/inbox",
+          "dest": "/api/default.js?route=plans/inbox&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
+          "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/revisions/([^/]+)",
+          "dest": "/api/default.js?route=plans/revision&id=$1&seq=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/revisions",
+          "dest": "/api/default.js?route=plans/revisions&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
+          "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
+        },
+        {
+          "src": "/api/plans/([^/]+)/pages",
+          "dest": "/api/default.js?route=plans/pages&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)",
+          "dest": "/api/default.js?route=plans/plan&id=$1"
+        },
+        {
+          "src": "/api/account/plan-template/revisions/([^/]+)/restore",
+          "dest": "/api/default.js?route=account/plan-template/restore&seq=$1"
+        },
+        {
+          "src": "/api/account/plan-template/revisions/([^/]+)",
+          "dest": "/api/default.js?route=account/plan-template/revision&seq=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
+          "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
+        },
+        {
+          "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+          "dest": "/api/default.js?route=agents/picture&id=$1&call=$2&picture=$3"
+        },
+        {
+          "src": "/api/agents/([^/]+)/pictures/([^/]+)",
+          "dest": "/api/default.js?route=agents/picture&id=$1&picture=$2"
+        },
+        {
+          "src": "/api/agents/([^/]+)/messages",
+          "dest": "/api/default.js?route=agents/messages&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/stop",
+          "dest": "/api/default.js?route=agents/stop&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/pull-request",
+          "dest": "/api/default.js?route=agents/pull-request&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/changes",
+          "dest": "/api/default.js?route=agents/changes&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/inbox",
+          "dest": "/api/default.js?route=agents/inbox&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/terminals/([^/]+)",
+          "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
+        },
+        {
+          "src": "/api/agents/([^/]+)/terminals",
+          "dest": "/api/default.js?route=agents/terminals&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/sandbox/resume",
+          "dest": "/api/default.js?route=agents/sandbox-resume&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)",
+          "dest": "/api/default.js?route=agents/agent&id=$1"
+        },
+        {
+          "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
+          "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
+        },
+        {
+          "src": "/api/inbox/([^/]+)",
+          "dest": "/api/default.js?route=inbox/item&id=$1"
+        },
+        {
+          "src": "/api/workspaces/([^/]+)/photo",
+          "dest": "/api/default.js?route=workspaces/photo&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)/webhook",
+          "dest": "/api/default.js?route=automations/webhook&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)/runs",
+          "dest": "/api/default.js?route=automations/runs&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)/run",
+          "dest": "/api/default.js?route=automations/run&id=$1"
+        },
+        {
+          "src": "/api/automations/([^/]+)",
+          "dest": "/api/default.js?route=automations/automation&id=$1"
+        },
+        {
+          "src": "/api/account/delete",
+          "dest": "/api/default.js?route=account/delete"
+        },
+        {
+          "src": "/api/account/integrations",
+          "dest": "/api/default.js?route=account/integrations"
+        },
+        {
+          "src": "/api/account/integrations/connected",
+          "dest": "/api/default.js?route=account/integrations/connected"
+        },
+        {
+          "src": "/api/account/plan-template",
+          "dest": "/api/default.js?route=account/plan-template"
+        },
+        {
+          "src": "/api/account/plan-template/revisions",
+          "dest": "/api/default.js?route=account/plan-template/revisions"
+        },
+        {
+          "src": "/api/account/preferences",
+          "dest": "/api/default.js?route=account/preferences"
+        },
+        {
+          "src": "/api/account/provider-keys",
+          "dest": "/api/default.js?route=account/provider-keys"
+        },
+        {
+          "src": "/api/admin/day",
+          "dest": "/api/default.js?route=admin/day"
+        },
+        {
+          "src": "/api/admin/favorite",
+          "dest": "/api/default.js?route=admin/favorite"
+        },
+        {
+          "src": "/api/admin/metrics",
+          "dest": "/api/default.js?route=admin/metrics"
+        },
+        {
+          "src": "/api/admin/user",
+          "dest": "/api/default.js?route=admin/user"
+        },
+        {
+          "src": "/api/admin/users",
+          "dest": "/api/default.js?route=admin/users"
+        },
+        {
+          "src": "/api/agents",
+          "dest": "/api/default.js?route=agents"
+        },
+        {
+          "src": "/api/automations",
+          "dest": "/api/default.js?route=automations"
+        },
+        {
+          "src": "/api/dictation",
+          "dest": "/api/default.js?route=dictation"
+        },
+        {
+          "src": "/api/events",
+          "dest": "/api/default.js?route=events"
+        },
+        {
+          "src": "/api/github/connect",
+          "dest": "/api/default.js?route=github/connect"
+        },
+        {
+          "src": "/api/github/connect/claim",
+          "dest": "/api/default.js?route=github/connect/claim"
+        },
+        {
+          "src": "/api/github/connection",
+          "dest": "/api/default.js?route=github/connection"
+        },
+        {
+          "src": "/api/github/disconnect",
+          "dest": "/api/default.js?route=github/disconnect"
+        },
+        {
+          "src": "/api/github/install",
+          "dest": "/api/default.js?route=github/install"
+        },
+        {
+          "src": "/api/github/installed",
+          "dest": "/api/default.js?route=github/installed"
+        },
+        {
+          "src": "/api/github/installed/authorized",
+          "dest": "/api/default.js?route=github/installed/authorized"
+        },
+        {
+          "src": "/api/github/pr-fetch",
+          "dest": "/api/default.js?route=github/pr-fetch"
+        },
+        {
+          "src": "/api/github/repositories",
+          "dest": "/api/default.js?route=github/repositories"
+        },
+        {
+          "src": "/api/github/repositories/pull-request",
+          "dest": "/api/default.js?route=github/repositories/pull-request"
+        },
+        {
+          "src": "/api/github/repositories/skills",
+          "dest": "/api/default.js?route=github/repositories/skills"
+        },
+        {
+          "src": "/api/github/repositories/tree",
+          "dest": "/api/default.js?route=github/repositories/tree"
+        },
+        {
+          "src": "/api/github/webhook",
+          "dest": "/api/default.js?route=github/webhook"
+        },
+        {
+          "src": "/api/inbox",
+          "dest": "/api/default.js?route=inbox"
+        },
+        {
+          "src": "/api/mac-commands",
+          "dest": "/api/default.js?route=mac-commands"
+        },
+        {
+          "src": "/api/maintenance/provider-keys-rewrap",
+          "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
+        },
+        {
+          "src": "/api/models",
+          "dest": "/api/default.js?route=models"
+        },
+        {
+          "src": "/api/plans",
+          "dest": "/api/default.js?route=plans"
+        },
+        {
+          "src": "/api/repository-pins",
+          "dest": "/api/default.js?route=repository-pins"
+        },
+        {
+          "src": "/api/workspaces",
+          "dest": "/api/default.js?route=workspaces"
+        },
+        {
+          "src": "/api/workspaces/github/connect",
+          "dest": "/api/default.js?route=workspaces/github/connect"
+        },
+        {
+          "src": "/api/workspaces/github/disconnect",
+          "dest": "/api/default.js?route=workspaces/github/disconnect"
+        },
+        {
+          "src": "/api/workspaces/invitations",
+          "dest": "/api/default.js?route=workspaces/invitations"
+        },
+        {
+          "src": "/api/workspaces/invitations/cancel",
+          "dest": "/api/default.js?route=workspaces/invitations/cancel"
+        },
+        {
+          "src": "/api/workspaces/invitations/offer",
+          "dest": "/api/default.js?route=workspaces/invitations/offer"
+        },
+        {
+          "src": "/api/workspaces/leave",
+          "dest": "/api/default.js?route=workspaces/leave"
+        },
+        {
+          "src": "/api/workspaces/linear/connect",
+          "dest": "/api/default.js?route=workspaces/linear/connect"
+        },
+        {
+          "src": "/api/workspaces/linear/connected",
+          "dest": "/api/default.js?route=workspaces/linear/connected"
+        },
+        {
+          "src": "/api/workspaces/linear/disconnect",
+          "dest": "/api/default.js?route=workspaces/linear/disconnect"
+        },
+        {
+          "src": "/api/workspaces/linear/issues",
+          "dest": "/api/default.js?route=workspaces/linear/issues"
+        },
+        {
+          "src": "/api/workspaces/members",
+          "dest": "/api/default.js?route=workspaces/members"
+        },
+        {
+          "src": "/api/workspaces/members/remove",
+          "dest": "/api/default.js?route=workspaces/members/remove"
+        },
+        {
+          "src": "/api/workspaces/members/role",
+          "dest": "/api/default.js?route=workspaces/members/role"
+        },
+        {
+          "src": "/api/workspaces/photo/set",
+          "dest": "/api/default.js?route=workspaces/photo/set"
+        },
+        {
+          "src": "/api/workspaces/rename",
+          "dest": "/api/default.js?route=workspaces/rename"
+        },
+        {
+          "src": "/api/workspaces/transfer",
+          "dest": "/api/default.js?route=workspaces/transfer"
+        },
+        {
+          "src": "/api/maintenance/sweep",
+          "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
+        },
+        {
+          "src": "/about",
+          "dest": "/about.html"
+        },
+        {
+          "src": "/privacy",
+          "dest": "/privacy.html"
+        },
+        {
+          "src": "/changelog",
+          "dest": "/changelog.html"
+        },
+        {
+          "src": "/changelog/page/(\\d+)",
+          "dest": "/changelog/page/$1.html"
+        },
+        {
+          "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
+          "dest": "/changelog/$1.html"
+        },
+        {
+          "src": "/admin",
+          "dest": "/admin.html"
+        },
+        {
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "dest": "/open.html"
+        }
+      ]
+    },
+    "luke": {
+      "root": "apps/luke",
+      "framework": "eve",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
+      "buildCommand": "pnpm exec eve build",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
+    },
+    "dev": {
+      "root": "apps/dev",
+      "framework": "eve",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/coder...",
+      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
+      "routes": [
+        {
+          "src": "^/eve/coder/v1/(.*)$",
+          "transforms": [
+            {
+              "type": "request.path",
+              "op": "set",
+              "args": "/eve/v1/$1"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/maintenance/sweep",
+      "schedule": "* * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/eve/coder/v1/(.*)",
+      "destination": {
+        "service": "dev"
+      }
+    },
+    {
+      "source": "/eve/v1/(.*)",
+      "destination": {
+        "service": "luke"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}

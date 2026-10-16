@@ -18,8 +18,15 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/page-tool.js";
+import {
+  PICTURE_LOOK_REFUSAL,
+  type PictureLookResult,
+  pictureNotLooked,
+  runLookAtPicture,
+} from "../../plans/picture-look.js";
 import {
   ModelCatalog,
   type OfferedModel,
@@ -36,8 +43,18 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import {
+  AGENT_CALLER,
+  agentToolRejected,
+  CODING_AGENT_TOOL_REFUSAL,
+  runListAgents,
+  runListTasks,
+  runMessageAgent,
+  runStartAgent,
+} from "../coding-agent-tools.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -50,6 +67,7 @@ import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentCiReadable,
+  agentCoAuthor,
   agentRepositoryToken,
   CheckoutRefused,
   type CheckoutServices,
@@ -77,6 +95,13 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import {
+  openPullRequest,
+  PULL_REQUEST_UNAVAILABLE,
+  type PullRequestToolResult,
+  pullRequestRejected,
+} from "./pull-request.js";
+import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -96,10 +121,10 @@ import { CODER_TOOL } from "./tool-set.js";
  * awaiting its turn by the message route, and the relay takes that line
  * into the turn that receives it, so nothing needs binding here. The
  * agent's title is the host's one model call of its own: generated from its
- * first exchange as one of its first turns ends, written where no title
- * stands yet, and never again, so a name the developer gives is the last
- * word; each worker is named by the same call over the task its delegation
- * handed it.
+ * opening as the relay writes it, and from its first exchange as one of its
+ * first turns ends, written where no title stands yet, and never again, so
+ * a name the developer gives is the last word; each worker is named by the
+ * same call over the task its delegation handed it.
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
@@ -115,21 +140,25 @@ type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseS
 /** How a checkout or a mint fails: the checkout's refusal, which the host's own refusal of a conversation that is no agent's is carried as, or the store's. */
 export type CheckoutFailure = CheckoutRefused | QueryError | Schema.SchemaError;
 
-/** The prompt a session runs under and the content address its turns are recorded under, with the one fact of the repository it was composed on. */
+/** The prompt a session runs under and the content address its turns are recorded under, with the facts of the repository it was composed on. */
 interface CoderSessionPrompt {
   readonly text: string;
   readonly hash: string;
   readonly ciReadable: boolean;
+  /** The co-author trailer the prompt handed, where the agent writes as its developer. */
+  readonly coAuthor: string | undefined;
 }
 
 /**
  * What the coder project keeps of the session's prompt, beside the content
  * address the planning brain keeps (`brain-host/host.ts`): whether the
- * prompt said the repository's CI is readable, which is what composes the
- * same text again for a step's estimate of it.
+ * prompt said the repository's CI is readable, and the co-author trailer it
+ * handed where it handed one, which are what compose the same text again
+ * for a step's estimate of it.
  */
 export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly ciReadable?: boolean;
+  readonly coAuthor?: string;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -182,7 +211,7 @@ export interface CoderHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI; the text itself is stored nowhere. */
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
     agent: CodingAgent,
@@ -230,8 +259,6 @@ export interface CoderHost extends HostAdmission {
     session: SessionContext["session"],
     state: RelayStateStore,
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
-  /** The agent's title generated from its first exchange as one of its first turns ends, written where none stands; a later turn, a failed or empty answer, and a title already standing each leave the row as it is. */
-  title(admitted: AdmittedConversation): HostEffect<void>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
   delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
   /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
@@ -239,7 +266,13 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     takenInTurn: number,
+    sandbox: InboxSandboxDoor,
   ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
+  /** Opens the agent's pull request (`pull-request.ts`): as its developer where it writes as them, as the App otherwise. */
+  openPullRequest(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+  ): Effect.Effect<PullRequestToolResult, never, CheckoutServices>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
     admitted: AdmittedConversation,
@@ -258,13 +291,49 @@ export interface CoderHost extends HostAdmission {
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
+  /**
+   * Runs one `look_at_picture` call (`../../plans/picture-look.ts`): one of
+   * the pictures of the agent's plan, read as the member whose turn this is.
+   */
+  lookAtPicture(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+  ): Effect.Effect<PictureLookResult, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
+  /** Runs one `show_image` call (`show-image.ts`): the pictures read from the session's sandbox through the door given and kept beside the agent's transcript. */
+  showImage(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /** Runs one of a worker's `show_image` calls, its pictures kept beside the worker's own transcript, the child of the call that started it; nothing kept for a session that is no worker the account reaches. */
+  showDelegatedImage(
+    session: SessionContext["session"],
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Runs one of the agent's tools about the workspace's coding agents
+   * (`../coding-agent-tools.ts`), the agent its session was admitted to as
+   * the caller: a list of agents or of tasks, a message sent under the
+   * call's own key, or a start on a task of its workspace under the same key, which reach eve as the deployment
+   * acting for this agent's starter, and reach nothing where the deployment
+   * names no secret or no origin for eve.
+   */
+  agentTools(
+    admitted: AdmittedConversation,
+    call: AgentToolCall,
+  ): Effect.Effect<
+    WireRecord,
+    never,
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
+  >;
+  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed, then, as the developer's words are received or a turn completes, asks for the agent's title where none stands and waits for it (`title.ts`); a title that fails is logged and the relay still answers. */
   relay(
     event: MessageStreamEvent,
     admitted: AdmittedConversation,
@@ -286,9 +355,33 @@ export type InboxCall =
       readonly input: UnparsedWireValue;
     };
 
+/** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input eve held to its schema, and eve's id for the call. */
+export interface AgentToolCall {
+  readonly tool:
+    | typeof CODER_TOOL.LIST_AGENTS
+    | typeof CODER_TOOL.MESSAGE_AGENT
+    | typeof CODER_TOOL.START_AGENT
+    | typeof CODER_TOOL.LIST_TASKS;
+  readonly input: UnparsedWireValue;
+  readonly callId: string;
+}
+
+/** Each of the agent tools a coding agent is offered, run under the call it makes. */
+const AGENT_TOOL_RUN = {
+  [CODER_TOOL.LIST_AGENTS]: runListAgents,
+  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
+  [CODER_TOOL.START_AGENT]: runStartAgent,
+  [CODER_TOOL.LIST_TASKS]: runListTasks,
+} as const;
+
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
+}
+
+/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too. */
+function asksTitle(event: MessageStreamEvent): boolean {
+  return event.type === "message.received" || event.type === "turn.completed";
 }
 
 /** The host over the deployment's seams. */
@@ -343,11 +436,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       );
     });
 
-  /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
-  const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
+  /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
+  const promptOf = (
+    agent: CodingAgent,
+    ciReadable: boolean,
+    coAuthor: string | undefined,
+  ): CoderSessionPrompt => {
     const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
-    const text = coderInstructions(agent.repository, brief, ciReadable, agent.planId !== null);
-    return { text, hash: promptHashOf(text), ciReadable };
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      agent.planId !== null,
+      coAuthor,
+    );
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor };
   };
 
   /**
@@ -369,7 +472,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const step = agentStepOf(
             event.data.usage,
             {
-              instructions: promptOf(agent, prompt.ciReadable ?? false).text,
+              instructions: promptOf(agent, prompt.ciReadable ?? false, prompt.coAuthor).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
             seams.now(),
@@ -469,8 +572,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
 
     prompt: (admitted, agent) =>
-      Effect.map(agentCiReadable(admitted.target, agent), (ciReadable) =>
-        promptOf(agent, ciReadable),
+      Effect.map(
+        Effect.all([
+          agentCiReadable(admitted.target, agent),
+          agentCoAuthor(admitted.target, agent),
+        ]),
+        ([ciReadable, coAuthor]) => promptOf(agent, ciReadable, coAuthor),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),
@@ -529,7 +636,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           state,
         });
       }),
-    editPlan: (admitted, input, takenInTurn) =>
+    editPlan: (admitted, input, takenInTurn, sandbox) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
@@ -539,7 +646,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (planId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         // The plan is written as the member whose turn this is, whoever started the agent.
         const binding = { userId: admitted.caller, planId };
-        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn);
+        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
@@ -564,6 +671,29 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
       ),
 
+    lookAtPicture: (admitted, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return pictureNotLooked(found.failure);
+        const { planId } = found.success;
+        if (planId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.PLANLESS);
+        // The plan is read as the member whose turn this is, as `editPlan` writes it.
+        return yield* runLookAtPicture({ userId: admitted.caller, planId }, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
+      ),
+
+    openPullRequest: (admitted, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return pullRequestRejected(found.failure);
+        return yield* openPullRequest(admitted.target, found.success, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
+      ),
+
     showPage: (admitted, input, sandbox) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
@@ -581,14 +711,44 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
       ),
 
-    title: (admitted) =>
+    showImage: (admitted, input, sandbox) =>
+      runShowImage({ target: admitted.target, sandbox, checkout: CODER.CHECKOUT_PATH }, input),
+
+    showDelegatedImage: (session, input, sandbox) =>
       Effect.gen(function* () {
-        const model = seams.titleModel(admitted.target.userId);
-        if (model === undefined) return;
+        const found = yield* delegatedChildOf(session);
+        if (Option.isNone(found)) return showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE);
+        const binding = { target: found.value.child, sandbox, checkout: CODER.CHECKOUT_PATH };
+        return yield* runShowImage(binding, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    agentTools: (admitted, call) =>
+      Effect.gen(function* () {
         const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return;
-        yield* titleCodingAgent(model, admitted.target, found.success);
-      }),
+        if (Result.isFailure(found)) return agentToolRejected(found.failure);
+        // The agent asking is the one the session was admitted to, and eve is reached as its starter.
+        const sender = found.success;
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        const compose = yield* eveSessionsComposer;
+        const eve =
+          secret === undefined || origin === undefined
+            ? undefined
+            : compose({
+                origin,
+                caller: { secret, account: sender.userId },
+                mount: EVE_MOUNT.CODER,
+              });
+        const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
+        const toolCall = { caller, eve, writer: seams.writer(), clientKey: call.callId };
+        return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
+      ),
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
@@ -624,9 +784,17 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           state,
         });
-        if (agent !== undefined) {
-          yield* recordContext(event, admitted.target.userId, agent, prompt);
-        }
+        if (agent === undefined) return;
+        yield* recordContext(event, admitted.target.userId, agent, prompt);
+        const titleModel = seams.titleModel(admitted.target.userId);
+        if (titleModel === undefined || !asksTitle(event)) return;
+        // Note that the title is awaited here rather than forked, because eve's step, and the
+        // function instance under it, end when the hook returns and take a detached call with them.
+        yield* titleCodingAgent(titleModel, admitted.target, agent).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`The agent's title was not written: ${failure._tag}`),
+          ),
+        );
       }),
   };
 }

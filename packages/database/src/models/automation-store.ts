@@ -7,7 +7,6 @@ import {
   type AutomationAction,
   type AutomationFiring,
   type AutomationGuards,
-  type AutomationPause,
   type AutomationRunReason,
   type AutomationRunStatus,
   type AutomationScope,
@@ -16,7 +15,6 @@ import {
   automationActionSchema,
   automationFiringSchema,
   automationGuardsSchema,
-  automationPauseSchema,
   automationRunReasonSchema,
   automationRunStatusSchema,
   automationScopeSchema,
@@ -85,7 +83,6 @@ const AutomationRowSchema = Schema.Struct({
   planRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
-  pausedReason: Schema.NullOr(automationPauseSchema),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: automationGuardsSchema,
@@ -119,7 +116,6 @@ const AUTOMATION_COLUMNS = {
   planRepository: plan.repository,
   name: automation.name,
   enabled: automation.enabled,
-  pausedReason: automation.pausedReason,
   trigger: automation.trigger,
   action: automation.action,
   guards: automation.guards,
@@ -168,7 +164,6 @@ export interface NewAutomation {
 export interface AutomationChanges {
   readonly name?: string;
   readonly enabled?: boolean;
-  readonly pausedReason?: AutomationPause | null;
   readonly trigger?: AutomationTrigger;
   readonly action?: AutomationAction;
   readonly guards?: AutomationGuards;
@@ -443,7 +438,6 @@ const writeAutomation = SqlSchema.findAll({
     access: automationAccessSchema,
     name: Schema.optionalKey(Schema.String),
     enabled: Schema.optionalKey(Schema.Boolean),
-    pausedReason: Schema.optionalKey(Schema.NullOr(automationPauseSchema)),
     trigger: Schema.optionalKey(automationTriggerSchema),
     action: Schema.optionalKey(automationActionSchema),
     guards: Schema.optionalKey(automationGuardsSchema),
@@ -533,9 +527,11 @@ const HistoryRowSchema = Schema.Struct({
   agentConversationId: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentCreatedAt: Schema.NullOr(InstantColumnSchema),
+  /** The account the agent runs as, whose keys its turns spend. */
+  agentUserId: Schema.NullOr(Schema.String),
 });
 
-/** One run as the history reads it, with the conversation, title, and start of the agent it started where that agent stands. */
+/** One run as the history reads it, with the conversation, title, start, and account of the agent it started where that agent stands. */
 export type AutomationRunInHistory = typeof HistoryRowSchema.Type;
 
 /** The runs of one automation the account may read, with each one's agent, newest first. */
@@ -554,6 +550,7 @@ const HISTORY_COLUMNS = {
   agentConversationId: codingAgent.conversationId,
   agentTitle: codingAgent.title,
   agentCreatedAt: codingAgent.createdAt,
+  agentUserId: codingAgent.userId,
 };
 
 const findRuns = SqlSchema.findAll({
@@ -976,6 +973,55 @@ const findRunsSince = SqlSchema.findAll({
     ),
 });
 
+/** One run that failed to start, as its automation's owner is told of it. */
+const FailedRunRowSchema = Schema.Struct({
+  id: Schema.String,
+  automationId: Schema.String,
+  automationName: Schema.String,
+  workspaceId: Schema.String,
+  reason: Schema.NullOr(automationRunReasonSchema),
+  failedAt: InstantColumnSchema,
+});
+
+/**
+ * The newest run of each of the account's own automations that failed to
+ * start since `since`, the latest first. Note that the account must still
+ * be a member of the automation's workspace, because a creator who left
+ * reaches nothing of it.
+ */
+const findOwnFailedRuns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
+  Result: FailedRunRowSchema,
+  execute: ({ userId, since }) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([automationRun.automationId], {
+          id: automationRun.id,
+          automationId: automationRun.automationId,
+          automationName: automation.name,
+          workspaceId: AUTOMATION_WORKSPACE,
+          reason: automationRun.reason,
+          // Note that a failed run is settled by the filter below, so its instant is never null.
+          failedAt: automationRun.settledAt,
+        })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .where(
+          and(
+            eq(automation.userId, userId),
+            memberOfAutomationWorkspace(userId),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+            gte(automationRun.settledAt, since),
+          ),
+        )
+        .orderBy(
+          asc(automationRun.automationId),
+          desc(automationRun.settledAt),
+          desc(automationRun.id),
+        ),
+    ),
+});
+
 /** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
@@ -1150,6 +1196,19 @@ export function automationRunsSince(
  * firing later than the grace, a sweep that was down or a schedule just
  * resumed, is moved on without a run, so a backlog is never replayed.
  */
+/** One run that failed to start, as its automation's owner is told of it: the automation, why, and when. */
+export type OwnFailedRun = typeof FailedRunRowSchema.Type;
+
+/** The newest run of each of the account's own automations that failed to start since `since`, the latest failed first. */
+export function ownFailedAutomationRuns(
+  userId: string,
+  since: Date,
+): PlanStoreEffect<readonly OwnFailedRun[]> {
+  return Effect.map(findOwnFailedRuns({ userId, since }), (runs) =>
+    runs.toSorted((a, b) => b.failedAt.getTime() - a.failedAt.getTime()),
+  );
+}
+
 export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly ClaimedFiring[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(

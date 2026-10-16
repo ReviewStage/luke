@@ -22,6 +22,7 @@ import {
   latestActivity,
   personActor,
   SOMEONE_REASON,
+  teammateCreator,
 } from "./actor-model.js";
 
 /**
@@ -84,6 +85,7 @@ test("a member named on the wire is read against the workspace's members: their 
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Lee Park",
+    userId: "user-lee",
   });
   // Before the members answer, the wire's name stands alone and nobody is taken for gone.
   assert.deepEqual(personActor({ userId: "user-lee", name: "Lee Park" }, undefined, SAM.userId), {
@@ -196,6 +198,17 @@ test("a facepile of who did a thing draws each of them once, where they first st
   ]);
 });
 
+test("two who left under one name each keep a face, told apart by their account ids", () => {
+  const left = (userId: string) => ({
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Alex",
+    userId,
+  });
+
+  assert.equal(distinctActors([left("user-1"), left("user-2"), left("user-1")]).length, 2);
+});
+
 test("two agents of one name each keep a face, told apart by their ids, and agents an older service sent no id for are told apart by name", () => {
   const edit = (agentId?: string) => ({
     actor: PLAN_ACTOR.AGENT,
@@ -227,6 +240,26 @@ test("a plan's creator is the member it names, or, from a service that names onl
   assert.equal(called(creatorActor({ ownerId: DANA.userId }, SAM_READS, you)), "Dana Reyes");
   assert.deepEqual(creatorActor({ ownerId: SAM.userId }, unread, undefined), someone);
   assert.deepEqual(creatorActor({ ownerId: DANA.userId }, unread, you), someone);
+});
+
+test("a task wears its creator only where someone other than the reader created it, a member by their face and one whose account is gone on the outline", () => {
+  const dana = { createdBy: DANA_REF, ownerId: DANA.userId };
+  assert.equal(called(teammateCreator(dana, SAM_READS)), "Dana Reyes");
+  assert.equal(teammateCreator(dana, { ...SAM_READS, readerId: DANA.userId }), undefined);
+  // A member who left is drawn as having left, and an account that is gone sends only its id.
+  assert.deepEqual(teammateCreator(dana, { members: [SAM], readerId: SAM.userId }), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Dana Reyes",
+    userId: DANA.userId,
+  });
+  assert.deepEqual(teammateCreator({ ownerId: "user-gone" }, SAM_READS), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.UNNAMED,
+  });
+  // Nobody is worn where the row cannot tell the task is someone else's.
+  assert.equal(teammateCreator({}, SAM_READS), undefined);
+  assert.equal(teammateCreator(dana, { members: [DANA, SAM], readerId: undefined }), undefined);
 });
 
 test("the signed-in account is drawn as the reader, by the name, address, and picture their sign-in holds", () => {
@@ -267,7 +300,12 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
   );
   assert.deepEqual(
     githubActor({ login: "leepark", bot: false, userId: "user-lee" }, place),
-    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: "leepark" },
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "leepark",
+      userId: "user-lee",
+    },
     "a linked login the members no longer list has left",
   );
 
@@ -295,5 +333,46 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
     distinctActors([stranger, devin, { ...stranger, login: "OctoCat" }]).length,
     2,
     "one GitHub account is one face, whatever case its login is spelled in",
+  );
+});
+
+test("a member who left keeps the picture the read of who left names them by, and nobody else takes one from it", () => {
+  const lee = { userId: "user-lee", name: "Lee Park" };
+  const former = [{ ...lee, pictureUrl: "https://avatars.githubusercontent.com/u/7" }];
+
+  assert.deepEqual(personActor(lee, [DANA, SAM], SAM.userId, former), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Park",
+    userId: "user-lee",
+    pictureUrl: "https://avatars.githubusercontent.com/u/7",
+  });
+  assert.equal(
+    "pictureUrl" in
+      personActor({ userId: "user-kim", name: "Kim Ito" }, [DANA], SAM.userId, former),
+    false,
+  );
+});
+
+test("a linked GitHub login who left keeps their picture and their account's name now, from the read of who left", () => {
+  const former = [
+    {
+      userId: "user-lee",
+      name: "Lee Chen",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
+  ];
+  assert.deepEqual(
+    githubActor(
+      { login: "leepark", bot: false, userId: "user-lee" },
+      { members: [DANA, SAM], readerId: SAM.userId, agent: undefined, former },
+    ),
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "Lee Chen",
+      userId: "user-lee",
+      pictureUrl: "https://avatars.githubusercontent.com/u/7",
+    },
   );
 });

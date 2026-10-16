@@ -2,7 +2,7 @@ import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
 } from "@luke/features/integration-view";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "./act";
@@ -22,22 +22,20 @@ import { useAct } from "./act";
  * `integration-health.ts`'s to say.
  */
 
-/** What each provider's tools read answered so far; a provider absent here has not answered yet. */
-export type IntegrationToolsReads = Partial<Record<IntegrationProvider, IntegrationToolsView>>;
+/** What each server's tools read answered so far, by its name; a server absent here has not answered yet. */
+export type IntegrationToolsReads = Readonly<Record<string, IntegrationToolsView>>;
 
 const UNANSWERED: IntegrationToolsView = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
 
-/** The tools read of every provider in `connected`, asked once per focus of the window while the caller is drawn. */
-export function useIntegrationTools(
-  connected: readonly IntegrationProvider[],
-): IntegrationToolsReads {
+/** The tools read of every server in `connected` (an account by its connection name, or a provider), asked once per focus of the window while the caller is drawn. */
+export function useIntegrationTools(connected: readonly string[]): IntegrationToolsReads {
   const { act } = useAct();
   const [reads, setReads] = useState<IntegrationToolsReads>({});
   const [focus, setFocus] = useState(0);
-  // The focus each provider was last asked under, so each is asked once per focus.
-  const asked = useRef(new Map<IntegrationProvider, number>());
-  // Each provider's newest ask, so an answer to an older one never lands over it.
-  const newest = useRef(new Map<IntegrationProvider, number>());
+  // The focus each server was last asked under, so each is asked once per focus.
+  const asked = useRef(new Map<string, number>());
+  // Each server's newest ask, so an answer to an older one never lands over it.
+  const newest = useRef(new Map<string, number>());
   const asks = useRef(0);
 
   useEffect(() => {
@@ -48,27 +46,31 @@ export function useIntegrationTools(
 
   useEffect(() => {
     // A provider no longer connected forgets its read, so a grant made later is never drawn with the old one's answer.
-    for (const provider of asked.current.keys()) {
-      if (connected.includes(provider)) continue;
-      asked.current.delete(provider);
-      newest.current.delete(provider);
+    for (const server of asked.current.keys()) {
+      if (connected.includes(server)) continue;
+      asked.current.delete(server);
+      newest.current.delete(server);
       setReads((read) => {
         const kept = { ...read };
-        delete kept[provider];
+        delete kept[server];
         return kept;
       });
     }
-    for (const provider of connected) {
-      if (asked.current.get(provider) === focus) continue;
-      asked.current.set(provider, focus);
+    for (const server of connected) {
+      const provider = integrationConnectionOf(server)?.provider;
+      if (provider === undefined || asked.current.get(server) === focus) continue;
+      asked.current.set(server, focus);
       asks.current += 1;
       const ask = asks.current;
-      newest.current.set(provider, ask);
+      newest.current.set(server, ask);
       const land = (answer: IntegrationToolsView) => {
-        if (newest.current.get(provider) !== ask) return;
-        setReads((read) => ({ ...read, [provider]: answer }));
+        if (newest.current.get(server) !== ask) return;
+        setReads((read) => ({ ...read, [server]: answer }));
       };
-      act(ACT_KIND.INTEGRATIONS_TOOLS, { provider }).then(land, () => land(UNANSWERED));
+      act(ACT_KIND.INTEGRATIONS_TOOLS, {
+        provider,
+        ...(server === provider ? undefined : { connection: server }),
+      }).then(land, () => land(UNANSWERED));
     }
   });
 

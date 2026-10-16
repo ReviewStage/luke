@@ -63,7 +63,7 @@ const ITEM: InboxItem = {
   updatedAt: 1_800_000_060_000,
 };
 
-function fixture() {
+function fixture(answered: CodingAgentAgentAnswer = STARTED) {
   const asked: string[] = [];
   /** What the notices were told, in order. */
   const noted: string[] = [];
@@ -150,7 +150,7 @@ function fixture() {
       codingAgentRename: ({ agentId, title }) =>
         Effect.sync(() => {
           asked.push(`rename:${agentId}:${title}`);
-          return STARTED;
+          return answered;
         }),
       codingAgentServers: ({ agentId, disabledServers }) =>
         Effect.sync(() => {
@@ -165,7 +165,16 @@ function fixture() {
       codingAgentArchive: ({ agentId, archived }) =>
         Effect.sync(() => {
           asked.push(`archive:${agentId}:${String(archived)}`);
-          return STARTED;
+          return answered;
+        }),
+      codingAgentPin: ({ agentId, pinned }) =>
+        Effect.sync(() => {
+          asked.push(`pin:${agentId}:${String(pinned)}`);
+          return answered;
+        }),
+      planningRefresh: () =>
+        Effect.sync(() => {
+          asked.push("refresh");
         }),
       codingAgentPage: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
@@ -256,6 +265,11 @@ function fixture() {
           asked.push(`attachment:${itemId}:${attachmentId}`);
           return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
         }),
+      codingAgentPicture: ({ agentId, pictureId, callId }) =>
+        Effect.sync(() => {
+          asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
+          return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -279,6 +293,43 @@ it.effect(
 
       assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
       assert.deepEqual(asked, [`start:${PLAN_ID}:press-1`]);
+    }),
+);
+it.effect(
+  "a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not",
+  () =>
+    Effect.gen(function* () {
+      assert.ok("agent" in STARTED);
+      const planless = fixture({ agent: { ...STARTED.agent, planId: null } });
+      const onPlan = fixture();
+      const rename = {
+        kind: ACT_KIND.CODING_AGENTS_RENAME,
+        payload: { agentId: AGENT_ID, title: "Triage" },
+      } as const;
+      const archive = {
+        kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
+        payload: { agentId: AGENT_ID, archived: true },
+      } as const;
+
+      const pin = {
+        kind: ACT_KIND.CODING_AGENTS_PIN,
+        payload: { agentId: AGENT_ID, pinned: true },
+      } as const;
+
+      yield* planless.router.performAct(rename, PANEL);
+      yield* planless.router.performAct(archive, PANEL);
+      yield* planless.router.performAct(pin, PANEL);
+      yield* onPlan.router.performAct(rename, PANEL);
+
+      assert.deepEqual(planless.asked, [
+        `rename:${AGENT_ID}:Triage`,
+        "refresh",
+        `archive:${AGENT_ID}:true`,
+        "refresh",
+        `pin:${AGENT_ID}:true`,
+        "refresh",
+      ]);
+      assert.deepEqual(onPlan.asked, [`rename:${AGENT_ID}:Triage`]);
     }),
 );
 it.effect(
@@ -360,5 +411,39 @@ it.effect(
       });
       assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
       assert.deepEqual(asked, ["workspace agents workspace-1"]);
+    }),
+);
+
+it.effect(
+  "a panel's read of an agent's or a worker's picture reaches the host as asked, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const pictureId = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
+      const read = (callId?: string) =>
+        ({
+          kind: ACT_KIND.CODING_AGENTS_PICTURE,
+          payload: {
+            agentId: AGENT_ID,
+            pictureId,
+            ...(callId === undefined ? undefined : { callId }),
+          },
+        }) as const;
+
+      const agents = yield* router.performAct(read(), PANEL);
+      const workers = yield* router.performAct(read("call-worker"), PANEL);
+      const refused = yield* router.performAct(read(), VOICE);
+
+      const picture = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      assert.deepEqual(agents, { status: ACT_OUTCOME_STATUS.DONE, value: picture });
+      assert.deepEqual(workers, { status: ACT_OUTCOME_STATUS.DONE, value: picture });
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PICTURE].refusal,
+      });
+      assert.deepEqual(asked, [
+        `picture:${AGENT_ID}:${pictureId}:`,
+        `picture:${AGENT_ID}:${pictureId}:call-worker`,
+      ]);
     }),
 );

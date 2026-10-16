@@ -295,7 +295,10 @@ export function fakeSessionRecord(): FakeSessionRecord {
     owned: (input) =>
       Effect.sync(() => {
         const owner = owners.get(input.sessionId);
-        return owner?.userId === input.userId ? { planId: owner.planId } : undefined;
+        const voiceSessionId = fake.voiceSessionIds.get(input.sessionId);
+        return owner?.userId === input.userId && voiceSessionId !== undefined
+          ? { voiceSessionId, planId: owner.planId }
+          : undefined;
       }),
     earlierCalls: () => Effect.succeed([]),
     noteUsage: (input) =>

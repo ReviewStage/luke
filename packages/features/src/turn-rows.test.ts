@@ -19,6 +19,7 @@ const call = (name: string): Block => ({ part: ROW_PART.CALL, name });
 const thought = (name: string): Block => ({ part: ROW_PART.NOTE, name });
 const words = (name: string): Block => ({ part: ROW_PART.WORDS, name });
 const subagent = (name: string): Block => ({ part: ROW_PART.SUBAGENT, name });
+const arrived = (name: string): Block => ({ part: ROW_PART.ARRIVED, name });
 
 /** A turn's rows as a reader scans them: each block by name, each group's line, what it holds, and whether it is open and running, each fold's line and what it holds. */
 function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
@@ -37,9 +38,7 @@ function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
 
 /** The rows of a turn of `blocks`, moving or finished. */
 function rowsOf(blocks: readonly Block[], moving: boolean, said = false) {
-  return scanned(
-    turnRows(blocks, READING, { key: "turn", moving, done: !moving, grouped: true, said }),
-  );
+  return scanned(turnRows(blocks, READING, { key: "turn", moving, done: !moving, said }));
 }
 
 test("a thought between two calls joins their group, whose line counts the calls alone", () => {
@@ -72,6 +71,35 @@ test("a finished turn folds everything ahead of its last words under the same li
       ],
       "Seven days.",
     ],
+  );
+});
+
+test("a message that reached a turn while it ran stands where it arrived: between the groups while the turn moves, and splitting the fold once it has finished, each fold counting its own calls", () => {
+  const turn = [
+    call("a"),
+    call("b"),
+    arrived("GitHub reviewed the pull request."),
+    call("c"),
+    words("Fixed."),
+  ];
+  assert.deepEqual(rowsOf(turn.slice(0, 4), true), [
+    ["2 tools called", ["a", "b"], { open: false, running: false }],
+    "GitHub reviewed the pull request.",
+    ["1 tool called", ["c"], { open: true, running: false }],
+  ]);
+  assert.deepEqual(rowsOf(turn, false), [
+    ["2 tool calls", ["a", "b"]],
+    "GitHub reviewed the pull request.",
+    ["1 tool call", ["c"]],
+    "Fixed.",
+  ]);
+  // A stretch with no call between two messages keeps its rows, as a lead with none does.
+  assert.deepEqual(
+    rowsOf(
+      [call("a"), arrived("First."), thought("Read both."), arrived("Second."), words("Done.")],
+      false,
+    ),
+    [["1 tool call", ["a"]], "First.", "Read both.", "Second.", "Done."],
   );
 });
 

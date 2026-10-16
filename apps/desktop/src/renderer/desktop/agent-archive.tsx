@@ -27,9 +27,8 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
  * transcript and its pull request are kept, and a toast offers Undo
  * (`use-coding-agents.ts`).
  *
- * The archived agents are kept the way the sidebar keeps archived plans
- * (`ArchivedPlans`): folded away behind the same header
- * (`sidebar-group-header.tsx`), an archive box that gives way to the fold's
+ * The archived agents are folded away behind the header every group of the
+ * window folds under (`sidebar-group-header.tsx`), an archive box that gives way to the fold's
  * chevron while hovered or reached from the keyboard, and folded, the count
  * after its name, the fold landing at once as the sidebar's does.
  * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
@@ -42,7 +41,7 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
  * starts folded.
  */
 
-/** What the archived agents' fold says, as the sidebar's archived plans' does. */
+/** What the archived agents' fold says. */
 const ARCHIVED_LABEL = "Archived";
 
 /** What the fold's count is read as while folded. */

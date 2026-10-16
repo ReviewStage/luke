@@ -43,7 +43,7 @@ const RUNTIME_CLOSE_WAIT_MS = 15_000;
 
 // A Luke link macOS hands the app (`tryluke://`) is heard from the first
 // moment, since the one that launched the app arrives before it is ready,
-// and held until a window can open it (`window/app-links.ts`).
+// and held until a window can open it (`@luke/features/app-links`).
 const appLinks = appLinkInbox();
 app.on("open-url", (event, url) => {
   event.preventDefault();

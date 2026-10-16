@@ -1,0 +1,40 @@
+{
+  "name": "@luke/coder",
+  "version": "0.15.0",
+  "private": true,
+  "type": "module",
+  "description": "The coding agent: a coding agent's run in a sandbox, as an eve app on the web deployment",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "test:agent": "LUKE_CODER_MODEL_FIXTURE=scripted eve eval",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.78",
+    "@ai-sdk/openai": "4.0.91",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/electron": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@effect/sql-pg": "catalog:",
+    "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/service": "workspace:*",
+    "@luke/wire": "workspace:*",
+    "@vercel/connect": "2.4.1",
+    "@vercel/oidc": "4.0.0",
+    "ai": "catalog:",
+    "better-auth": "1.7.7",
+    "diff": "9.0.0",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "eve": "0.74.0",
+    "pg": "8.23.0",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:web"
+  }
+}

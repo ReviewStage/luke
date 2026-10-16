@@ -7,6 +7,7 @@ import {
   type Automation,
   archivableRunAgents,
   createAutomation,
+  deleteAutomation,
   listAutomationRuns,
   readAutomation,
   recordAutomationRun,
@@ -26,6 +27,7 @@ import { automationRun, automation as automationTable } from "@luke/database/sch
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startPlan } from "@luke/database/testing";
+import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -36,9 +38,11 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq, inArray } from "drizzle-orm";
@@ -141,6 +145,8 @@ const openAutomation = (
     readonly repository?: string | null;
     readonly guards?: AutomationGuards;
     readonly archiveSuccessful?: boolean;
+    readonly disabledServers?: readonly IntegrationProvider[];
+    readonly prompt?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -159,8 +165,11 @@ const openAutomation = (
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: {
         kind: AUTOMATION_ACTION.CODING_AGENT,
-        prompt: PROMPT,
+        prompt: options.prompt ?? PROMPT,
         choice: { model: SOL, effort: "low" },
+        ...(options.disabledServers === undefined
+          ? undefined
+          : { disabledServers: options.disabledServers }),
       },
       guards: options.guards ?? AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: new Date(now - 60_000),
@@ -232,6 +241,24 @@ const toSameAgent = (automation: Automation, agentId: string) =>
   });
 
 it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "a run's new agent is handed its owner's MCP servers but the ones the automation switched off",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+        });
+        const started = yield* startedNow(eve, automation);
+
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started));
+        assert.deepEqual(agent.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+          INTEGRATION_PROVIDER.SENTRY,
+        ]);
+      }),
+  );
+
   it.effect(
     "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived fails as agent-gone",
     () =>
@@ -695,7 +722,6 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         );
         const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
         assert.equal(standing.enabled, true);
-        assert.equal(standing.pausedReason, null);
         assert.deepEqual(eve.opened, []);
       }),
   );
@@ -972,6 +998,158 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.match(
           agent.prompt ?? "",
           /because a pull request was opened or pushed to on GitHub\./u,
+        );
+      }),
+  );
+
+  it.effect(
+    "a run's agent keeps its automation's name, what fired it, and the prompt alone, and still names the automation once it is deleted",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.MANUAL, userId: owner },
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+
+        yield* deleteAutomation(owner, automation.id);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+
+        assert.equal(agent.automationId, null, "the automation is gone");
+        assert.deepEqual(agent.automationOrigin, {
+          name: "Flaky-test sweep",
+          firing: { kind: AUTOMATION_FIRING.MANUAL, userId: owner },
+          prompt: PROMPT,
+        });
+      }),
+  );
+
+  it.effect(
+    "a run about a pull request starts its agent named by the pull request, and a push's run starts it unnamed for the title model",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 2 },
+        });
+        const eve = fakeEve();
+        const titleOf = (event: GitHubTriggerEvent) =>
+          Effect.gen(function* () {
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(automation, {
+                dedupeKey: randomUUID(),
+                firing: {
+                  kind: AUTOMATION_FIRING.GITHUB,
+                  event,
+                  repository: `${RELAY.owner}/${RELAY.name}`,
+                  number: 2905,
+                  title: "View commands",
+                },
+                firedAt: new Date(),
+              }),
+            );
+            const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(
+              Effect.provide(services),
+            );
+            const agentId =
+              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+            return Option.getOrThrow(yield* readCodingAgent(owner, agentId)).title;
+          });
+
+        const opened = yield* titleOf(GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED);
+        const pushed = yield* titleOf(GITHUB_TRIGGER_EVENT.PUSH);
+
+        assert.equal(opened, "#2905 View commands");
+        assert.equal(pushed, null);
+      }),
+  );
+
+  it.effect(
+    "a code review's run about a pull request starts its agent named as a review of it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({ prompt: codeReviewPreset().prompt });
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: {
+              kind: AUTOMATION_FIRING.GITHUB,
+              event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+              repository: `${RELAY.owner}/${RELAY.name}`,
+              number: 2905,
+              title: "View commands",
+            },
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(owner, agentId)).title,
+          "Review #2905 View commands",
+        );
+      }),
+  );
+
+  it.effect(
+    "a webhook run's agent keeps the caller's body as they sent it, beside the prompt alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const payload = '{"title":"Release <v2> & notes"}';
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: payload.length },
+            payload,
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+
+        assert.equal(agent.automationOrigin?.prompt, PROMPT);
+        assert.equal(agent.automationOrigin?.body, payload);
+      }),
+  );
+
+  it.effect(
+    "a webhook body cut to fit the task is kept cut where the task cut it, however much fencing spells it out",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const payload = "<".repeat(40_000);
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: payload.length },
+            payload,
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+        const told = /<webhook-body>\n([\s\S]*?)\n<\/webhook-body>/u.exec(agent.prompt ?? "")?.[1];
+
+        assert.equal(
+          told?.replaceAll("&lt;", "<"),
+          agent.automationOrigin?.body,
+          "the agent keeps the words it was told",
         );
       }),
   );

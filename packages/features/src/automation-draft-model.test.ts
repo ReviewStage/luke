@@ -8,6 +8,7 @@ import {
   DRAFT_FIELD,
   draftNextRuns,
   draftProblems,
+  presetDraft,
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
@@ -21,8 +22,11 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
+  GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
+import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 
 /**
  * An automation as its editor holds it: a schedule read into the picker's
@@ -197,7 +201,7 @@ test("a save changes only what moved, the task keeping its model, and a draft th
         cron: "0 3 * * 1-5",
         timezone: "America/Los_Angeles",
       },
-      action: { ...SAVED.action, prompt: "Fix the two flakiest tests." },
+      action: { ...SAVED.action, prompt: "Fix the two flakiest tests.", disabledServers: [] },
     },
   );
   assert.deepEqual(
@@ -213,6 +217,44 @@ test("a save changes only what moved, the task keeping its model, and a draft th
     changeOf({ ...automationDraft(onPlan, DEFAULTS), repository: "acme/web" }, onPlan, DEFAULTS),
     undefined,
     "a plan's automation works in its plan's repository",
+  );
+});
+
+test("the servers a draft switches off are saved with its task, opened as saved, and a change of them in any order is a change of the task only once they differ", () => {
+  const opened = automationDraft(SAVED, DEFAULTS);
+  assert.deepEqual(opened.disabledServers, []);
+  const switched = {
+    ...opened,
+    disabledServers: [INTEGRATION_PROVIDER.SENTRY, INTEGRATION_PROVIDER.LINEAR],
+  };
+
+  assert.deepEqual(changeOf(switched, SAVED, DEFAULTS), {
+    action: {
+      ...SAVED.action,
+      disabledServers: [INTEGRATION_PROVIDER.SENTRY, INTEGRATION_PROVIDER.LINEAR],
+    },
+  });
+  const saved = {
+    ...SAVED,
+    action: {
+      ...SAVED.action,
+      disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+    },
+  };
+  assert.deepEqual(automationDraft(saved, DEFAULTS).disabledServers, [
+    INTEGRATION_PROVIDER.LINEAR,
+    INTEGRATION_PROVIDER.SENTRY,
+  ]);
+  assert.equal(changeOf(switched, saved, DEFAULTS), undefined, "the same servers in another order");
+  assert.deepEqual(changeOf({ ...switched, disabledServers: [] }, saved, DEFAULTS), {
+    action: { ...SAVED.action, disabledServers: [] },
+  });
+  assert.equal(
+    createRequestOf(
+      { ...switched, name: "Sweep", prompt: "Sweep.", repository: "acme/ledger" },
+      "workspace-acme",
+    ).action.disabledServers?.length,
+    2,
   );
 });
 
@@ -242,6 +284,47 @@ test("an automation fired by an event keeps its trigger: its schedule fields sto
   assert.equal(changeOf(rescheduled, onEvent, DEFAULTS), undefined);
 });
 
+/** The settings a GitHub trigger a draft writes always states, at a new draft's defaults. */
+const SAID_SETTINGS = { senders: [GITHUB_SENDER.PEOPLE], drafts: false, forks: false };
+
+test("a GitHub trigger's settings are written as the row of choices leaves them, and a change of one is a change of the trigger", () => {
+  const onEvent = {
+    ...SAVED,
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+  };
+  const opened = automationDraft(onEvent, DEFAULTS);
+  const chosen = {
+    ...opened,
+    githubSettings: {
+      senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.LUKE_AGENTS],
+      moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.READY],
+      drafts: true,
+      forks: false,
+    },
+  };
+
+  assert.equal(
+    changeOf(opened, onEvent, DEFAULTS),
+    undefined,
+    "a trigger naming none opens on the defaults",
+  );
+  assert.deepEqual(changeOf(chosen, onEvent, DEFAULTS), {
+    trigger: {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+      ...chosen.githubSettings,
+    },
+  });
+  assert.deepEqual(
+    draftProblems(
+      { ...chosen, githubSettings: { ...chosen.githubSettings, senders: [] } },
+      false,
+      NOW,
+    )[DRAFT_FIELD.SCHEDULE],
+    "Choose whose events start it.",
+  );
+});
+
 test("a trigger written as a GitHub event or a webhook is made and changed as one, and a GitHub trigger keeps the filters it was given", () => {
   const fresh = {
     ...automationDraft(undefined, DEFAULTS),
@@ -261,7 +344,12 @@ test("a trigger written as a GitHub event or a webhook is made and changed as on
 
   assert.deepEqual(
     createRequestOf({ ...fresh, triggerKind: AUTOMATION_TRIGGER.GITHUB }, "workspace-1").trigger,
-    { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+    {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+      ...SAID_SETTINGS,
+      moments: Object.values(PULL_REQUEST_MOMENT),
+    },
   );
   assert.deepEqual(
     changeOf(
@@ -278,6 +366,7 @@ test("a trigger written as a GitHub event or a webhook is made and changed as on
         kind: AUTOMATION_TRIGGER.GITHUB,
         event: GITHUB_TRIGGER_EVENT.ISSUE_LABELED,
         labels: ["bug"],
+        ...SAID_SETTINGS,
       },
     },
   );
@@ -356,7 +445,11 @@ test("a saved automation opens on where its runs land, and a save sends only the
     },
   );
   assert.deepEqual(changeOf({ ...opened, choice: null }, onAgent, DEFAULTS), {
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: SAVED.action.prompt },
+    action: {
+      kind: AUTOMATION_ACTION.CODING_AGENT,
+      prompt: SAVED.action.prompt,
+      disabledServers: [],
+    },
   });
   assert.equal(
     changeOf({ ...opened, agentId: null }, onAgent, DEFAULTS),
@@ -404,7 +497,13 @@ test("a move to another GitHub event lets go of the filters the event before was
 
   assert.deepEqual(
     changeOf(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.PUSH), filtered, DEFAULTS),
-    { trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PUSH } },
+    {
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: GITHUB_TRIGGER_EVENT.PUSH,
+        ...SAID_SETTINGS,
+      },
+    },
   );
   assert.equal(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.ISSUE_OPENED), opened);
   // Away and back again, the filters let go of are a change the editor can save, since it now shows none.
@@ -414,6 +513,31 @@ test("a move to another GitHub event lets go of the filters the event before was
   );
   assert.ok(!sameDraft(opened, back));
   assert.deepEqual(changeOf(back, filtered, DEFAULTS), {
-    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+    trigger: {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+      ...SAID_SETTINGS,
+    },
   });
+});
+
+test("a preset's guards are the draft's and are what it is made with, a saved automation opens on its own, and a draft that set none is the same as the automation made from it", () => {
+  const fresh = automationDraft(undefined, DEFAULTS);
+  const preset = {
+    name: "Code review",
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+    prompt: "Review this pull request.",
+    guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+    archiveSuccessful: true,
+    description: "Reviews pull requests.",
+  } as const;
+  const taken = presetDraft(fresh, preset);
+
+  assert.ok(!sameDraft({ ...taken, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }, taken));
+  assert.ok(sameDraft(fresh, { ...fresh, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }));
+  assert.deepEqual(createRequestOf(taken, "workspace-1").guards, preset.guards);
+  assert.deepEqual(
+    automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
+    preset.guards,
+  );
 });

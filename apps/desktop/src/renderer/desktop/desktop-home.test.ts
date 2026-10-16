@@ -25,10 +25,14 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
 
@@ -136,7 +140,7 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
 
 /** The teammate who started Invitations' agent, and the workspace's members as a read of them answers. */
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/1?v=4";
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-1";
 const MEMBERS: readonly WorkspaceMember[] = [
   {
     userId: "user-dean",
@@ -198,6 +202,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 /** Every door the page opens, in order. */
@@ -281,7 +286,28 @@ test("the home page greets the account, lists what needs it with each item's pla
     "Usage alerts · acme/relay",
     "Onboarding checklist · No repository",
   ]);
-  assert.ok(button(page, "Search all 8 tasks"));
+});
+
+test("Home's rows fade into the window's drag strip as they scroll up under it, rather than vanishing at an unseen line", async () => {
+  const { page } = mount();
+  await settle();
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("Home offers no line to search every task, though Recent lists fewer than the workspace holds", async () => {
+  const { page } = mount();
+  await settle();
+
+  assert.equal(rows(page, "home-recent").length, 6);
+  assert.doesNotMatch(page.textContent ?? "", /Search all/u);
+  const palette = commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE);
+  assert.equal(page.querySelector(`[aria-keyshortcuts="${palette}"]`), null);
 });
 
 test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
@@ -317,6 +343,28 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
   assert.equal(section?.querySelector("svg"), null);
 });
 
+test("a refused read of the task list says so under Recent, with Retry, which asks for the list again", async () => {
+  let retries = 0;
+  const { page } = mount({
+    plans: [],
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    listFailed: true,
+    onRetryList: () => {
+      retries += 1;
+    },
+  });
+  await settle();
+
+  const recent = page.querySelector('section[aria-labelledby="home-recent"]');
+  const said = recent?.querySelector('[role="alert"]')?.textContent;
+  act(() => button(page, "Retry").click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u, "the Inbox claims nothing");
+  assert.match(said ?? "", /^Your tasks could not be read\./u);
+  assert.equal(retries, 1);
+});
+
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
   const { page } = mount({
     plans: [],
@@ -330,7 +378,7 @@ test("an account with no plan yet is welcomed with New plan, and nothing the pag
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
 });
 
-test("↑ and ↓ move the focus through the rows from the window, Search all included, and leave a key pressed elsewhere alone", async () => {
+test("↑ and ↓ move the focus through the rows from the window, and leave a key pressed elsewhere alone", async () => {
   mount();
   await settle();
   const field = document.createElement("input");
@@ -357,7 +405,7 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
 
   field.blur();
   press("ArrowUp");
-  assert.match(focused(), /^Search all 8 tasks/u);
+  assert.match(focused(), /^Onboarding checklist/u);
 });
 
 test("a workspace with no plan of its own, in an account with plans elsewhere, welcomes the account back rather than as new, and lists none of the others' Inbox", async () => {
@@ -602,4 +650,51 @@ test("a question of another workspace's automation, which Home does not list, re
   await settle();
 
   assert.deepEqual(automationReads, []);
+});
+
+test("a recent task a teammate created wears their face before its time, and the reader's own wears none", async () => {
+  const plans = PLANS.map((each) =>
+    each.id === INVITES.id
+      ? { ...each, ownerId: CHARLES.userId, createdBy: CHARLES }
+      : {
+          ...each,
+          ownerId: "user-dean",
+          createdBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+  );
+  const { page } = mount({
+    me: "user-dean",
+    workspace: {
+      id: "workspace-personal",
+      name: "Personal",
+      role: WORKSPACE_ROLE.OWNER,
+      github: null,
+      memberCount: 2,
+    },
+    plans,
+    listed: { plans, archived: [], ...HOLDING },
+  });
+  await settle();
+
+  const region = page.querySelector('section[aria-labelledby="home-recent"]');
+  const faces = [...(region?.querySelectorAll(".sidebar-plan") ?? [])].flatMap((row) => {
+    const face = row.querySelector<HTMLImageElement>(".sidebar-plan-time .actor-mark img");
+    return face === null ? [] : [[row.querySelector(".sidebar-plan-name")?.textContent, face.src]];
+  });
+  assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});
+
+test("a row whose title runs long keeps the task or repository it is about in sight: the title gives way, and what it is about keeps a floor", async () => {
+  const { page } = mount();
+  await settle();
+  const style = layContainersAt({});
+  const abouts = [...page.querySelectorAll(".home-row-context")];
+  assert.equal(abouts.length, 8, "both sections' rows say what they are about");
+  for (const about of abouts) {
+    const title =
+      about.parentElement?.querySelector(".sidebar-plan-name") ?? assert.fail("a title");
+    assert.notEqual(getComputedStyle(title).flexShrink, "0", "the title gives way");
+    assert.notEqual(getComputedStyle(about).minWidth, "0px", "what it is about keeps a floor");
+  }
+  style.remove();
 });

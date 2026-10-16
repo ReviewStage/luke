@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { Redacted } from "effect";
+import { Duration, Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
+import { serializeModelInputSchema } from "eve/tools";
 import { test } from "vitest";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { toolsOf } from "../agent-runtime/tools.js";
 import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -13,10 +16,12 @@ import {
   BRAIN_HOST_TURN,
 } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
+import { CODER } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
-import { CODER_TOOL } from "./tool-set.js";
+import { SLEEP_TOOL } from "./sleep.js";
+import { CODER_TOOL, planToolsOf } from "./tool-set.js";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
@@ -141,6 +146,18 @@ test("an agent on a task is told of the task's links and pages, and one an autom
   }
 });
 
+test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
+  const offered = (agent: Parameters<typeof planToolsOf>[0]) => [...planToolsOf(agent)].sort();
+  assert.deepEqual(offered({ planId: "plan-1", prompt: null }), [
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+  ]);
+  assert.deepEqual(offered({ planId: "plan-1", prompt: "Fix the flaky test." }), [
+    CODER_TOOL.SHOW_PAGE,
+  ]);
+  assert.deepEqual(offered({ planId: null, prompt: "Sweep the flaky tests." }), []);
+});
+
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
@@ -153,4 +170,75 @@ test("the session and the post tool are told never to ask for a credential or a 
   assert.ok(
     INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
+});
+
+test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
+  const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const developer = coderInstructions("Acme/Relay", brief, true, true, TRAILER);
+    const app = coderInstructions("Acme/Relay", brief, true);
+    assert.ok(developer.includes(`exactly as written: \`${TRAILER}\``), brief);
+    assert.ok(!developer.includes("add a `Co-authored-by` trailer"), brief);
+    assert.ok(app.includes("add a `Co-authored-by` trailer"), brief);
+    assert.ok(!app.includes(TRAILER), brief);
+    for (const instructions of [developer, app]) {
+      assert.ok(
+        instructions.includes(
+          `open the pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\``,
+        ),
+        brief,
+      );
+    }
+  }
+});
+
+test("an agent whose credential reads its checks waits on them with sleep, which it is offered and its read-only worker is not", () => {
+  const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    assert.ok(coderInstructions("Acme/Relay", brief, true).includes(WAIT), brief);
+    assert.ok(!coderInstructions("Acme/Relay", brief, false).includes(WAIT), brief);
+  }
+  assert.deepEqual(
+    [
+      toolsOf(AGENT_ROLE.CODER).has(CODER_TOOL.SLEEP),
+      toolsOf(AGENT_ROLE.CODER_WORKER).has(CODER_TOOL.SLEEP),
+    ],
+    [true, false],
+  );
+});
+
+test("one pause is held inside what is left of the GitHub credential its background commands use, and the model is told the bound and to wait again for longer", () => {
+  const shown = serializeModelInputSchema(SLEEP_TOOL.inputSchema);
+  assert.equal(
+    JSON.stringify(shown).includes(`"maximum":${Duration.toSeconds(CODER.SLEEP_MAX)}`),
+    true,
+  );
+  assert.ok(
+    Duration.isLessThan(
+      Duration.sum(CODER.SLEEP_MAX, CODER.GITHUB_TOKEN_REFRESH),
+      Duration.hours(1),
+    ),
+  );
+  assert.ok(SLEEP_TOOL.description?.includes("to wait longer, wait again"));
+});
+
+test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const ciReadable of [true, false]) {
+      const instructions = coderInstructions("Acme/Relay", brief, ciReadable);
+      assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
+      assert.ok(instructions.includes("before you end a turn on an open pull request"), brief);
+    }
+  }
+});
+
+test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const onPlan of [true, false]) {
+      const instructions = coderInstructions("Acme/Relay", brief, true, onPlan);
+      assert.ok(instructions.includes("playwright screenshot"), brief);
+      assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
+      assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
+    }
+  }
 });

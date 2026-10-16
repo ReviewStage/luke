@@ -3,14 +3,16 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { UPDATE_STATUS } from "@luke/settings/update";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
+import { OpenPersonProvider } from "../person-door";
 import { SidebarFoot } from "./sidebar-foot";
 
 /**
@@ -48,6 +50,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
 
@@ -61,7 +64,12 @@ function HelpOffers({ ran }: { ran: string[] }): null {
 
 function mount(
   account: AccountSnapshot,
-  options: { onSignOut?: () => Promise<void>; ran?: string[] } = {},
+  options: {
+    onSignOut?: () => Promise<void>;
+    ran?: string[];
+    openPerson?: (userId: string) => void;
+    update?: UpdateSnapshot;
+  } = {},
 ): HTMLButtonElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -72,28 +80,32 @@ function mount(
       onRegistry(
         AtomRegistry.make(),
         createElement(
-          "div",
-          null,
-          createElement(SidebarFoot, {
-            account,
-            updates: {
-              update: {
-                status: UPDATE_STATUS.IDLE,
-                currentVersion: "1.0.0",
-                installSupported: true,
-                upToDate: true,
+          OpenPersonProvider,
+          { value: options.openPerson },
+          createElement(
+            "div",
+            null,
+            createElement(SidebarFoot, {
+              account,
+              updates: {
+                update: options.update ?? {
+                  status: UPDATE_STATUS.IDLE,
+                  currentVersion: "1.0.0",
+                  installSupported: true,
+                  upToDate: true,
+                },
+                build: { packaged: false },
+                onCheck: () => Promise.resolve(),
+                onInstall: () => undefined,
+                onOpenLatest: () => undefined,
               },
-              build: { packaged: false },
-              onCheck: () => Promise.resolve(),
-              onInstall: () => undefined,
-              onOpenLatest: () => undefined,
-            },
-            shown: true,
-            settingsOpen: false,
-            onSettings: () => undefined,
-            onSignOut: options.onSignOut ?? (() => Promise.resolve()),
-          }),
-          createElement(HelpOffers, { ran: options.ran ?? [] }),
+              shown: true,
+              settingsOpen: false,
+              onSettings: () => undefined,
+              onSignOut: options.onSignOut ?? (() => Promise.resolve()),
+            }),
+            createElement(HelpOffers, { ran: options.ran ?? [] }),
+          ),
         ),
       ),
     ),
@@ -307,4 +319,58 @@ test("signed out, the account says so and its menu names no one and offers no Lo
     "Keyboard shortcuts ⌘/",
     "Contact us",
   ]);
+});
+
+test("in the window, the account's menu opens with the reader's own profile, once their account's id is known", () => {
+  const opened: string[] = [];
+  const button = mount(
+    { ...DEAN, id: "user-dean" },
+    { openPerson: (userId) => opened.push(userId) },
+  );
+  act(() => button.click());
+
+  assert.equal(accountMenuLines()[2], "Your profile");
+  act(() => accountItem("Your profile").click());
+  assert.deepEqual(opened, ["user-dean"]);
+});
+
+/** The foot's row at the sidebar's least width, 200, less the column's insets, and at its default, 264. */
+const FOOT = { NARROWEST: 176, DEFAULT: 240 } as const;
+
+/** The update's press as drawn on a foot this wide: its name, and whether its word is drawn beside its glyph. */
+function updateAt(width: number) {
+  const style = layContainersAt({ "sidebar-foot": width });
+  const press =
+    document.querySelector<HTMLButtonElement>(".sidebar-update") ??
+    assert.fail("the update stands");
+  const word = press.querySelector(".sidebar-update-word") ?? assert.fail("the press has a word");
+  const drawn = { name: press.getAttribute("aria-label"), word: shown(word) };
+  style.remove();
+  return drawn;
+}
+
+test("a release waiting on its restart draws Restart's glyph alone on the sidebar's narrowest foot, so the account's name keeps its room, and its word at the default width", () => {
+  mount(DEAN, {
+    update: {
+      status: UPDATE_STATUS.READY,
+      currentVersion: "1.0.0",
+      installSupported: true,
+      latestVersion: "1.1.0",
+    },
+  });
+  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Restart", word: false });
+  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Restart", word: true });
+});
+
+test("a release that failed to install draws Download's glyph alone on the sidebar's narrowest foot, named still", () => {
+  mount(DEAN, {
+    update: {
+      status: UPDATE_STATUS.ERROR,
+      currentVersion: "1.0.0",
+      installSupported: true,
+      latestVersion: "1.1.0",
+    },
+  });
+  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Download", word: false });
+  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Download", word: true });
 });

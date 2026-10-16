@@ -1,6 +1,12 @@
 import { Schema as EffectSchema } from "effect";
-import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  planlessAgentSchema,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { linearIssueIdSchema } from "./linear-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -48,6 +54,9 @@ export const PLAN_BOUNDS = {
   /** The most characters a workspace's id may spell; the service mints them far shorter. */
   MAX_WORKSPACE_ID_CHARS: 200,
 } as const;
+
+/** The name a plan started without one stands under until the developer renames it. */
+export const UNTITLED_PLAN_NAME = "Untitled";
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -104,15 +113,21 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Starting a plan (POST): its name, the repository it is about where one is
- * chosen, and the workspace it starts in where one is named, the account's
- * first workspace where none is; the document starts as the untouched
- * template.
+ * Starting a plan (POST): its name where one is given, the repository it is
+ * about where one is chosen, the workspace it starts in where one is named,
+ * the account's first workspace where none is, and the Linear issue it
+ * starts from where one was picked, which the service reads through the
+ * workspace's own Linear connection (`linear-wire.ts`); the document starts
+ * as the untouched template. A name left out, or nothing but whitespace,
+ * starts the plan as `UNTITLED_PLAN_NAME` until it is renamed.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
-  name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  name: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  ),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
+  linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
@@ -292,6 +307,13 @@ export const planAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
+  /**
+   * Epoch milliseconds the plan's agents last did something settled, every
+   * agent's counted and not only those named: one started, handed a
+   * message, or its turn ended. It holds still while a turn streams. Absent
+   * from a service before it.
+   */
+  activityAt: EffectSchema.optionalKey(countedNumber),
   agents: EffectSchema.Array(planAgentLineSchema).check(
     EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_AGENTS),
   ),
@@ -412,10 +434,18 @@ export const planSchema = EffectSchema.Struct({
 
 export type Plan = typeof planSchema.Type;
 
-/** The plan list (GET): every plan the account owns, newest started first, the archived ones only where the query asks for them. */
+/**
+ * The plan list (GET): every plan the account owns, newest started first,
+ * and beside them every agent with no plan in the account's workspaces,
+ * newest started first, the archived ones of each only where the query asks
+ * for them. The agents are absent from a service before them.
+ */
 export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
+  planlessAgents: EffectSchema.optionalKey(EffectSchema.Array(planlessAgentSchema)),
 });
+
+export type PlanListAnswer = typeof planListAnswerSchema.Type;
 
 /** A started, opened, or changed plan (POST, GET, PATCH), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });

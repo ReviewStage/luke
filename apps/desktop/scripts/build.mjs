@@ -178,8 +178,35 @@ const rendererBuild = build({
   },
 });
 
+// A plan's diagrams, Mermaid, its own bundle so the bundle every window
+// parses never carries it; the plan's page loads it the first time a
+// diagram is shown (`src/renderer/diagram/contract.ts`). Unlike the bundles
+// below it is an ES module split into chunks, because Mermaid reaches each
+// diagram type and its layouts through dynamic imports, which a script would
+// inline all of (about 950 KB gzipped) where a flowchart needs a quarter of
+// that. Its chunks stand in `diagram/`, apart from the renderer's own, and
+// its metafile is what the bundle budget reads them off.
+const diagramBuild = build({
+  entryPoints: { diagram: path.join(appRoot, "src/renderer/diagram/index.ts") },
+  outdir: path.join(outputRoot, "renderer"),
+  chunkNames: "diagram/[name]-[hash]",
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  splitting: true,
+  metafile: true,
+  target: "chrome140",
+  minify: true,
+  conditions: ["production"],
+  plugins: sentryPlugins(),
+  sourcemap: true,
+  logLevel: "info",
+  define: { "process.env.NODE_ENV": '"production"' },
+});
+
 await Promise.all([
   rendererBuild,
+  diagramBuild,
   build({
     entryPoints: [path.join(appRoot, "src/main/index.ts")],
     outfile: path.join(outputRoot, "main.js"),
@@ -321,6 +348,39 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
+  // module by URL into a scope of its own on the audio thread; the voice
+  // window adds it from beside `voice.html`, whose `script-src 'self'` is the
+  // policy a worklet module answers to (`@luke/voice/avatar-pcm`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-feed/pcm-tee-worklet.ts")],
+    outfile: path.join(outputRoot, "renderer/pcm-tee-worklet.js"),
+    bundle: true,
+    platform: "browser",
+    format: "esm",
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  // A call's avatar, its own bundle so the bundle every window parses never
+  // carries Keyframe's SDK or the LiveKit client under it; the panel
+  // loads it the first time an avatar is shown
+  // (`@luke/ui/avatar-session-contract`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-session/index.ts")],
+    outfile: path.join(outputRoot, "renderer/avatar-session.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    conditions: ["production"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"' },
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),
@@ -392,7 +452,9 @@ await Promise.all(
 // fetched when that code first runs, and is left out. Each file is gzipped on
 // its own, as each is read on its own.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
-const { metafile } = await rendererBuild;
+const metafile = {
+  outputs: { ...(await rendererBuild).metafile.outputs, ...(await diagramBuild).metafile.outputs },
+};
 const measured = Object.fromEntries(
   await Promise.all(
     Object.keys(budget.gzipBytes).map(async (bundle) => {

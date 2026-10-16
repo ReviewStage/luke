@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type PlanlessAgent,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_RESPONSE, INBOX_STATUS, INBOX_WIRE_VERSION } from "@luke/features/inbox-wire";
 import type {
   PlanAgentLine,
   PlanAgentsSummary,
@@ -12,14 +14,18 @@ import type {
 } from "@luke/features/plan-wire";
 import type { AppInboxPlan } from "@luke/host/app-state";
 import { test } from "vitest";
+import { INBOX_HOLDER, planHolder } from "../planning/inbox-model";
 import {
-  EMPTY_MERGED,
-  FACTORY_STEP,
+  FACTORY_BLOCK,
+  FACTORY_STOP,
+  FACTORY_WORK,
   type FactoryInput,
+  type FactoryStop,
+  type FactoryWork,
   factoryBoard,
-  noteMerged,
-  PLANNING_WINDOW_MS,
-  SHIPPED_LINGER_MS,
+  factoryOneOffWaiting,
+  factoryWaiting,
+  LOOKBACK_MS,
 } from "./factory-model";
 
 const NOW = 1_800_000_000_000;
@@ -82,16 +88,34 @@ function board(patch: Partial<FactoryInput>) {
     plans: [],
     waiting: [],
     callPlanId: undefined,
-    merged: EMPTY_MERGED,
+    oneOff: [],
+    oneOffWaiting: [],
     now: NOW,
     ...patch,
   });
 }
 
-const names = (rows: readonly { plan: PlanSummary }[]) => rows.map((row) => row.plan.name);
+/** Each row's task, or its automation for an agent with no task. */
+const names = (rows: readonly (FactoryStop | FactoryWork | { readonly plan: PlanSummary })[]) =>
+  rows.map((row) => ("plan" in row ? row.plan.name : (row.agent.automationName ?? "no task")));
 
-test("a plan stands in the step its own state puts it in: drafted lately in Plan, worked on in Build, and an old draft or an archived plan nowhere", () => {
-  const working = agent(1, CODING_AGENT_STATUS.RUNNING);
+/** Build's work as a reader scans it: an agent by its title, a pull request by its number, each with its plan. */
+const work = (rows: readonly FactoryWork[]) =>
+  rows.map((row) =>
+    row.kind === FACTORY_WORK.PULL_REQUEST
+      ? `#${row.pullRequest.number} (${row.plan.name})`
+      : `${row.agent.title} (${row.kind === FACTORY_WORK.AGENT ? row.plan.name : (row.agent.automationName ?? "no task")})`,
+  );
+
+/** What stops an agent as a reader scans it: a question by its words, a failure by its agent. */
+const stops = (rows: readonly FactoryStop[]) =>
+  rows.map((row) =>
+    row.kind === FACTORY_STOP.QUESTION || row.kind === FACTORY_STOP.ONE_OFF_QUESTION
+      ? row.item.title
+      : `${row.agent.title} failed`,
+  );
+
+test("a task's agents at work stand in Build each on a row of their own, the latest moved first; a draft, an archived task, or a finished one stands nowhere", () => {
   const drawn = board({
     plans: [
       plan(1, "Usage alerts", 2 * HOUR),
@@ -99,49 +123,62 @@ test("a plan stands in the step its own state puts it in: drafted lately in Plan
         2,
         "Search across plans",
         5 * HOUR,
-        agents([agent(2, CODING_AGENT_STATUS.COMPLETED), working]),
+        agents([
+          agent(2, CODING_AGENT_STATUS.COMPLETED),
+          agent(1, CODING_AGENT_STATUS.RUNNING, NOW - 2 * MINUTE),
+          agent(3, CODING_AGENT_STATUS.STARTING, NOW - MINUTE),
+        ]),
       ),
-      plan(3, "Old dashboard", PLANNING_WINDOW_MS + MINUTE),
       { ...plan(4, "Shelved", MINUTE), archivedAt: NOW - MINUTE },
-      plan(5, "Finished research", HOUR, agents([agent(3, CODING_AGENT_STATUS.COMPLETED)])),
+      plan(5, "Finished research", HOUR, agents([agent(4, CODING_AGENT_STATUS.COMPLETED)])),
     ],
   });
-  assert.deepEqual(names(drawn.planning), ["Usage alerts"]);
-  assert.deepEqual(names(drawn.building), ["Search across plans"]);
-  assert.equal(drawn.building[0]?.agent, working);
-  assert.equal(drawn.agentsWorking, 1);
-  assert.equal(drawn.plansWorking, 1);
-  assert.equal(drawn.first, undefined);
+  assert.deepEqual(drawn.talking, []);
+  assert.deepEqual(work(drawn.working), [
+    "Agent 3 (Search across plans)",
+    "Agent 1 (Search across plans)",
+  ]);
+  assert.equal(drawn.agentsWorking, 2);
+  assert.deepEqual(drawn.stopped, []);
+  assert.deepEqual(drawn.blocked, []);
+  assert.deepEqual(drawn.shipped, []);
 });
 
-test("the plan on the call is being planned however long ago it was saved, and stands first", () => {
-  const call = plan(1, "Factory tab", 3 * PLANNING_WINDOW_MS);
-  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callPlanId: call.id });
-  assert.deepEqual(
-    drawn.planning.map((row) => [row.plan.name, row.onCall]),
-    [
-      ["Factory tab", true],
-      ["Usage alerts", false],
-    ],
+test("the task on this Mac's call stands in Talk however long ago it was saved, even while its agents build it", () => {
+  const call = plan(
+    1,
+    "Factory tab",
+    3 * LOOKBACK_MS,
+    agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
+  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callPlanId: call.id });
+  assert.deepEqual(names(drawn.talking.map((each) => ({ plan: each }))), ["Factory tab"]);
+  assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });
 
-test("each open Inbox item waits under Build with its plan, the longest waiting first, and is the wait to take first", () => {
+test("what stops an agent leads Build: each open Inbox item with its plan, the latest first, then each agent whose turn failed in the last day, the latest first", () => {
   const stalled = agent(1, CODING_AGENT_STATUS.COMPLETED);
   const billing = plan(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
   const invites = plan(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
+  const pooling = plan(
+    3,
+    "Connection pooling",
+    HOUR,
+    agents([agent(5, CODING_AGENT_STATUS.FAILED, NOW - HOUR)]),
+  );
+  const push = plan(
+    4,
+    "Mobile push",
+    3 * HOUR,
+    agents([agent(6, CODING_AGENT_STATUS.FAILED, NOW - 3 * HOUR)]),
+  );
+  const stale = plan(
+    5,
+    "Old retry",
+    2 * LOOKBACK_MS,
+    agents([agent(7, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE)]),
+  );
   const waiting: AppInboxPlan[] = [
-    {
-      planId: invites.id,
-      items: [
-        {
-          id: "i1",
-          agentId: "unlisted",
-          title: "Expire invites after a week?",
-          postedAt: NOW - 6 * MINUTE,
-        },
-      ],
-    },
     {
       planId: billing.id,
       items: [
@@ -153,172 +190,302 @@ test("each open Inbox item waits under Build with its plan, the longest waiting 
         },
       ],
     },
+    {
+      planId: invites.id,
+      items: [
+        {
+          id: "i1",
+          agentId: "unlisted",
+          title: "Expire invites after a week?",
+          postedAt: NOW - 6 * MINUTE,
+        },
+      ],
+    },
   ];
-  const drawn = board({ plans: [billing, invites], waiting });
-  assert.deepEqual(
-    drawn.questions.map((question) => [question.item.title, question.plan.name]),
-    [
-      ["Which account pays out?", "Mercury payouts"],
-      ["Expire invites after a week?", "Invitations"],
-    ],
-  );
-  // A plan whose only agent is stalled stands in the wait alone, not among the plans being built.
-  assert.deepEqual(names(drawn.building), ["Invitations"]);
-  assert.equal(drawn.first, FACTORY_STEP.BUILD);
+  const drawn = board({ plans: [billing, invites, push, pooling, stale], waiting });
+  assert.deepEqual(stops(drawn.stopped), [
+    "Expire invites after a week?",
+    "Which account pays out?",
+    "Agent 5 failed",
+    "Agent 6 failed",
+  ]);
+  assert.deepEqual(names(drawn.stopped), [
+    "Invitations",
+    "Mercury payouts",
+    "Connection pooling",
+    "Mobile push",
+  ]);
+  // A plan whose only agent is stalled stands in the wait alone, not among the work.
+  assert.deepEqual(work(drawn.working), ["Agent 2 (Invitations)"]);
 });
 
-test("an open pull request with its checks passed, or none to run, waits to be merged; one in checks, failing, or a draft is still being built; a closed one stands nowhere", () => {
+test("what stops a merge leads Ship: failing checks, then pull requests ready to merge (passing, or no checks to run); one in checks or a draft is still built, and a closed one stands nowhere", () => {
+  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+    plan(
+      n,
+      name,
+      HOUR,
+      agents([agent(n, CODING_AGENT_STATUS.COMPLETED, NOW - n * MINUTE)], [line]),
+    );
   const drawn = board({
     plans: [
-      plan(
+      withPullRequest(
         1,
         "Invitations",
-        HOUR,
-        agents(
-          [agent(1, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
       ),
-      plan(
-        2,
-        "Docs",
-        HOUR,
-        agents(
-          [agent(2, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2506, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.NONE)],
-        ),
-      ),
-      plan(
+      withPullRequest(2, "Docs", pullRequest(2506, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.NONE)),
+      withPullRequest(
         3,
         "Board export",
-        HOUR,
-        agents(
-          [agent(3, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2516, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PENDING)],
-        ),
+        pullRequest(2516, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PENDING),
       ),
-      plan(
+      withPullRequest(
         4,
         "Neon branches",
-        HOUR,
-        agents(
-          [agent(4, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2509, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)],
-        ),
+        pullRequest(2509, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING),
       ),
-      plan(
+      withPullRequest(
         5,
         "Draft",
-        HOUR,
-        agents(
-          [agent(5, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2511, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2511, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.PASSING),
       ),
-      plan(
+      withPullRequest(
         6,
         "Abandoned",
-        HOUR,
-        agents(
-          [agent(6, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2490, PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2490, PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.PASSING),
       ),
     ],
   });
   assert.deepEqual(
-    drawn.merges.map((merge) => merge.pullRequest.number),
-    [2505, 2506],
+    drawn.blocked.map((row) => [row.kind, row.pullRequest.number]),
+    [
+      [FACTORY_BLOCK.CHECKS, 2509],
+      [FACTORY_BLOCK.MERGE, 2505],
+      [FACTORY_BLOCK.MERGE, 2506],
+    ],
   );
-  assert.deepEqual(
-    drawn.building.map((row) => row.pullRequest?.number),
-    [2516, 2509, 2511],
-  );
-  assert.equal(drawn.first, FACTORY_STEP.SHIP);
+  assert.deepEqual(work(drawn.working), ["#2516 (Board export)", "#2511 (Draft)"]);
 });
 
-test("a pull request seen turning merged stands in Ship for a minute, then leaves; one already merged when first read never stands", () => {
-  const open = plan(
-    1,
-    "Invitations",
-    HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-  const merged = plan(
-    1,
-    "Invitations",
-    HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2505, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-  const long = plan(
-    2,
-    "Transcript search",
-    4 * HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2502, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-
-  const first = noteMerged(EMPTY_MERGED, undefined, [open, long], NOW);
-  const seen = noteMerged(first, [open, long], [merged, long], NOW);
-  const now = board({ plans: [merged, long], merged: seen });
+test("a pull request merged in the last day stands in Ship at its task's last activity, the latest first; one merged longer ago stands nowhere", () => {
+  const merged = (n: number, name: string, ago: number) =>
+    plan(
+      n,
+      name,
+      ago,
+      agents(
+        [agent(n, CODING_AGENT_STATUS.COMPLETED, NOW - ago)],
+        [pullRequest(2500 + n, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
+      ),
+    );
+  const drawn = board({
+    plans: [
+      merged(1, "CSV export", 5 * HOUR),
+      merged(2, "Tax IDs", 40 * MINUTE),
+      merged(3, "Old export", LOOKBACK_MS + MINUTE),
+    ],
+  });
   assert.deepEqual(
-    now.shipped.map((row) => [row.pullRequest.number, row.at]),
-    [[2505, NOW]],
+    drawn.shipped.map((row) => [row.pullRequest.number, row.plan.name, row.at]),
+    [
+      [2502, "Tax IDs", NOW - 40 * MINUTE],
+      [2501, "CSV export", NOW - 5 * HOUR],
+    ],
   );
-  assert.deepEqual(now.merges, []);
-
-  const later = NOW + SHIPPED_LINGER_MS;
-  const kept = noteMerged(seen, [merged, long], [merged, long], later);
-  assert.deepEqual(board({ plans: [merged, long], merged: kept, now: later }).shipped, []);
+  assert.deepEqual(drawn.blocked, []);
 });
 
-test("two repositories' pull requests sharing a number are told apart by their pages, so only the one seen merging ships", () => {
-  const old = {
-    ...pullRequest(12, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
-    url: "https://github.com/acme/a/pull/12",
-  };
-  const open = {
-    ...pullRequest(12, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
-    url: "https://github.com/acme/b/pull/12",
-  };
-  const done = agent(1, CODING_AGENT_STATUS.COMPLETED);
-  const before = plan(1, "Moved repositories", HOUR, agents([done], [open, old]));
-  const after = plan(
-    1,
-    "Moved repositories",
-    HOUR,
-    agents([done], [{ ...open, state: PULL_REQUEST_STATE.MERGED }, old]),
-  );
-  const seen = noteMerged(
-    noteMerged(EMPTY_MERGED, undefined, [before], NOW),
-    [before],
-    [after],
-    NOW,
-  );
-  assert.deepEqual(
-    board({ plans: [after], merged: seen }).shipped.map((row) => row.pullRequest.url),
-    ["https://github.com/acme/b/pull/12"],
-  );
-});
-
-test("with nothing standing anywhere, the board is empty and no wait comes first", () => {
-  const drawn = board({ plans: [plan(1, "Old dashboard", 10 * PLANNING_WINDOW_MS)] });
+test("with nothing standing anywhere, the board is empty", () => {
+  const drawn = board({ plans: [plan(1, "Old dashboard", 10 * LOOKBACK_MS)] });
   assert.deepEqual(drawn, {
-    planning: [],
-    building: [],
-    questions: [],
-    merges: [],
+    talking: [],
+    stopped: [],
+    working: [],
+    blocked: [],
     shipped: [],
     agentsWorking: 0,
-    plansWorking: 0,
-    first: undefined,
   });
+});
+
+test("an agent that failed before its first turn waits in Build as recent as its task's last activity, however old the task's last save", () => {
+  const turnless: PlanAgentLine = {
+    id: "a0000000-0000-4000-8000-000000000001",
+    title: "Agent 1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    status: CODING_AGENT_STATUS.FAILED,
+  };
+  const old = plan(1, "Old billing", 3 * LOOKBACK_MS, agents([turnless]));
+  const started = plan(1, "Old billing", 3 * LOOKBACK_MS, {
+    ...agents([turnless]),
+    activityAt: NOW - 5 * MINUTE,
+  });
+  assert.deepEqual(stops(board({ plans: [started] }).stopped), ["Agent 1 failed"]);
+  // With no activity of its own since, the old task's failure has aged out.
+  assert.deepEqual(board({ plans: [old] }).stopped, []);
+});
+
+test("a draft's failing checks are its own work still, standing in Build; only an open pull request's wait in Ship", () => {
+  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+    plan(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
+  const drawn = board({
+    plans: [
+      withPullRequest(1, "Draft", pullRequest(42, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.FAILING)),
+      withPullRequest(2, "Open", pullRequest(43, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)),
+    ],
+  });
+  assert.deepEqual(
+    drawn.blocked.map((row) => row.pullRequest.number),
+    [43],
+  );
+  assert.deepEqual(work(drawn.working), ["#42 (Draft)"]);
+});
+
+test("what waits is every open item the Inbox read of the listed plans and main's own besides, an item both name standing once, and an agent's with no plan left to its own place", () => {
+  const billing = plan(1, "Mercury payouts", HOUR);
+  const invites = plan(2, "Invitations", HOUR);
+  const item = (id: string, title: string) => ({
+    id,
+    agentId: "a1",
+    key: id,
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: NOW - HOUR,
+    updatedAt: NOW - HOUR,
+  });
+  const waiting = factoryWaiting(
+    [
+      { holder: planHolder(billing), item: item("i1", "Which account pays out?") },
+      { holder: planHolder(invites), item: item("i2", "Expire after a week?") },
+      {
+        holder: {
+          kind: INBOX_HOLDER.AUTOMATION,
+          automationId: null,
+          name: "Nightly flake sweep",
+          repository: "acme/relay",
+          agents: new Map(),
+        },
+        item: item("i3", "Quarantine the flaky test?"),
+      },
+    ],
+    [
+      {
+        planId: billing.id,
+        items: [
+          { id: "i1", agentId: "a1", title: "Which account pays out?", postedAt: NOW - HOUR },
+        ],
+      },
+      {
+        planId: invites.id,
+        items: [{ id: "i4", agentId: "a2", title: "Send a reminder?", postedAt: NOW - MINUTE }],
+      },
+    ],
+  );
+  assert.deepEqual(
+    waiting.map(({ planId, items }) => [planId, items.map((each) => each.title)]),
+    [
+      [billing.id, ["Which account pays out?"]],
+      [invites.id, ["Expire after a week?", "Send a reminder?"]],
+    ],
+  );
+});
+
+/** An agent with no task, as the plan list carries it, its automation's name where it has one. */
+function oneOff(
+  n: number,
+  status: PlanlessAgent["status"],
+  activityAt: number,
+  automationName?: string,
+): PlanlessAgent {
+  const agent: PlanlessAgent = {
+    id: `c0000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: `Sweep ${n}`,
+    createdAt: activityAt,
+    status,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-personal",
+    repository: "acme/relay",
+    activityAt,
+  };
+  return automationName === undefined ? agent : { ...agent, automationName };
+}
+
+test("an agent with no task stands in Build beside the tasks' agents: at work among the work, a failure in the last day and its open question among what waits, each by its automation", () => {
+  const working = oneOff(1, CODING_AGENT_STATUS.RUNNING, NOW - 3 * MINUTE, "Nightly flake sweep");
+  const failed = oneOff(2, CODING_AGENT_STATUS.FAILED, NOW - HOUR, "Dependency bumps");
+  const stale = oneOff(3, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE, "Old run");
+  const asking = oneOff(4, CODING_AGENT_STATUS.COMPLETED, NOW - 10 * MINUTE);
+  const drawn = board({
+    plans: [plan(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
+    oneOff: [working, failed, stale, asking],
+    oneOffWaiting: [
+      {
+        agentId: asking.id,
+        item: {
+          id: "q1",
+          agentId: asking.id,
+          title: "Quarantine the flaky test?",
+          postedAt: NOW - 5 * MINUTE,
+        },
+      },
+    ],
+  });
+  assert.deepEqual(work(drawn.working), ["Agent 1 (Search)", "Sweep 1 (Nightly flake sweep)"]);
+  assert.deepEqual(stops(drawn.stopped), ["Quarantine the flaky test?", "Sweep 2 failed"]);
+  assert.deepEqual(names(drawn.stopped), ["no task", "Dependency bumps"]);
+  assert.equal(drawn.agentsWorking, 2);
+});
+
+test("the open items an agent with no task posted are read off the Inbox by their agent, a task's left to the task, and main's count stands in for an agent not read", () => {
+  const item = (id: string, agentId: string) => ({
+    id,
+    agentId,
+    key: id,
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: id,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: NOW,
+    updatedAt: NOW,
+  });
+  const read = factoryOneOffWaiting(
+    [
+      { holder: planHolder(plan(1, "Search", HOUR)), item: item("t1", "a1") },
+      {
+        holder: {
+          kind: INBOX_HOLDER.AUTOMATION,
+          automationId: null,
+          name: "Nightly flake sweep",
+          repository: "acme/relay",
+          agents: new Map(),
+        },
+        item: item("o1", "c1"),
+      },
+    ],
+    [
+      { id: "o1", agentId: "c1", title: "o1", postedAt: NOW },
+      { id: "o2", agentId: "c2", title: "o2", postedAt: NOW },
+    ],
+  );
+  // Main's count stands for the agent whose read is not current, an item both name once.
+  assert.deepEqual(
+    read.map((each) => [each.agentId, each.item.id]),
+    [
+      ["c1", "o1"],
+      ["c2", "o2"],
+    ],
+  );
 });

@@ -155,6 +155,19 @@ membership of the plan's workspace rather than on the plan's starter. Past
 that gate a shared plan's transcript and a new call's earlier calls are
 every member's calls about it.
 
+A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
+`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
+(`packages/database/src/models/plan-attachments.ts`), gated by the same
+`planReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
+`data:` URL of a PNG, JPEG, or WebP whose bytes sniff as its label, on a plan
+that is not archived and holds fewer than `MAX_PER_PLAN`, answering `{ id }`
+or `{ refused: "too-many" }`; `GET /api/plans/<id>/attachments/<picture>`
+serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
+to a member alone, anyone else reading `not-found`. The plan's text names a
+picture by its address (`@luke/features/plan-attachment-link`), which
+`savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
+deletes, a day on, a picture no save stamped.
+
 A plan's conversation keeps the member who opened it as its `user_id`, the
 address its messages, turns, and asks are written under, and is reached by
 every member of the plan's workspace: `conversationReachableBy` in
@@ -288,10 +301,8 @@ sent as a header or the OPTIONS allowlist, and names which it relies on.
 It runs by hand, against an address or a commit's preview found through its
 GitHub deployment record (`server/preview-deployment.ts`); CI does not run
 it, since a PR's preview could take twenty minutes to appear or never come. The
-table is its own file so a `vercel.ts` can one day import it and `vercel.json`
-be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
-bundles only its relative imports, which takes a JSON table and not this
-generator's dependencies. `server/feedback.mjs` is the one
+table is its own file, and the root `vercel.json` is assembled from it
+(LUKE-183). `server/feedback.mjs` is the one
 hand-written function, emitted into the tree at `api/feedback.mjs` as it
 stands.
 
@@ -352,21 +363,20 @@ commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
 The Vercel project is three services in one deployment, declared under `services`
-in `vercel.json`, which Vercel reads only while the project's Framework Preset
-is Services. `web` is this app at its root and carries the migrate-and-seed
+in the repository root's `vercel.json`, which Vercel reads at the project's
+Root Directory (the repository root, so each service's `root` is relative to
+it) and only while the project's Framework Preset is Services. `web` is this
+app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`eve` is the hosted brain: its root is `eve/`, the flat eve app root described
-below, whose own `package.json` declares `eve`, so the service's install pulls
-`@luke/eve` beside this app and its build is a plain `pnpm exec eve build` run
-in that root. eve resolves that directory as its app root and writes its Build
-Output there, which is where static-build reads a service's output, so nothing
-relocates it and no variable of eve's own is set by hand. The block is one
-isolated declaration with no shared keys, so replacing it with a generated
-service later is removing a block rather than untangling one (LUKE-183).
-`coder` is the coding-agent service, a second eve app root at `coder/` built
-and deployed on the same terms ("The coding-agent service" below).
+`luke` is the hosted brain, the standalone eve app at `apps/luke`
+(`apps/luke/README.md`), built by a plain `pnpm exec eve build` in that root,
+which writes the Build Output static-build reads back from it, so nothing
+relocates it and no variable of eve's own is set by hand.
+`dev` is the coding-agent service, a second standalone eve app at `apps/dev`
+built and deployed on the same terms (`packages/service/README.md`'s "The
+coding-agent service").
 Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
+`/eve/coder/v1/*` enters the dev service, `/eve/v1/*` the luke service, and
 everything else the web service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
@@ -376,7 +386,10 @@ file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
 environment variables reach all three services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, or the workspace manifests deploys none of them.
+`apps/web`, `packages`, the workspace manifests, or `vercel.json` deploys none
+of them. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
+`{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
+string`, #2838) although `vercel.json` takes the same rewrites.
 
 ## The data layer
 
@@ -450,8 +463,9 @@ writes the migration that brings the newest snapshot under
 migrator above applies; hand-edit the generated SQL only for what drizzle-kit
 cannot know, such as a backfill. `0095_snapshot.json` is the baseline the loop
 restarted from: `0026`–`0094` were hand-written and carry no snapshot.
-`packages/database/src/schemas/__tests__/migrations.test.ts` fails when a
-module changes without its generated migration, and
+`./scripts/check.sh` fails when a module changes without its generated
+migration, by running `drizzle-kit generate` and refusing any folder it
+writes, and
 `tests/drizzle-schema.test.ts` still compares the barrel against the
 `information_schema` of a database `runWebMigrations` has just built, in both
 directions, which is what catches a generated migration edited into
@@ -685,47 +699,16 @@ Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
 on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
 the model. The exchange also needs `CRON_SECRET`, the deployment's secret at
 eve's door, and without it every session is refused as unavailable; eve's
-origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. No
+origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. Luke's
+avatar needs `KEYFRAME_API_KEY` and `LUKE_KEYFRAME_PERSONA_ID` as well; without
+either, a call asking for video goes on as voice. No
 separate service is deployed. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`packages/service/src/voice/service.test.ts`, `packages/service/src/testing/voice-fakes.ts`).
 
-## The eve app root
+## The agents
 
-The hosted brain's eve agent lives in `eve/`, beside `server/`, as a flat eve
-app root with its own `package.json` (`@luke/eve`, a workspace member whose one
-dependency is `eve`) and its evals under `eve/evals/`. The layout is
-load-bearing for the deployment: eve resolves the directory that holds
-`agent.ts` and declares `eve` as its app root, and writes its build output
-there (`.vercel/output` under Vercel, `.output` locally), so the eve service's
-root is `eve` and its build command is a plain `pnpm exec eve build`, run by
-static-build in that root and read back from it. A directory named `agent`
-under `apps/web` would resolve as eve's nested layout instead, with the app
-root at `apps/web` and the output one level above where the service reads it,
-which an earlier shape of this block relocated by hand through eve's internal
-environment variables. The
-agent still reaches `server/` by relative import and nothing else: neither
-package depends on the other, so `pnpm install --filter @luke/web...` pulls
-nothing of eve's and the web build never traces into `eve/` (the function
-bundle guard refuses it).
-
-`eve/sandbox.ts` is the session's sandbox, a `VercelSandbox.environment`
-whose `prepare` holds the one thing the checkout needs of eve's base image,
-git; `eve build` prewarms its snapshot on Vercel, so the eve service's build
-needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
-`VERCEL_TOKEN` with `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and a prewarm
-that fails stops the deployment. The running
-service needs the GitHub App's five variables and `BETTER_AUTH_SECRET` as the
-web functions do: `run_in_repository`'s checkout confirms the plan's
-repository is reachable and mints its token through `GitHubApp`, which the
-shared layer builds from them (`@luke/service/runtime`,
-`githubAppFromEnvironment`), the session secret being what the account's
-user token is sealed under.
-
-`eve/evals/brain-host.eval.ts` is the planning brain's end-to-end eval, and nothing local
-runs it. `./scripts/check.sh` runs vitest over the workspaces
-`vitest.config.ts` lists, and `@luke/eve` is not one of them; the eval is
-`pnpm --filter @luke/web test:agent`, which writes through the real store
-writer against the database `DATABASE_URL` names. CI does not run it either, so
-run it by hand before a change to the brain host, the writer, or a schema
-module it reads back through.
+Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
+is another, `apps/dev`; their layout, deployment, and evals are in
+`apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
+"The coding-agent service".
 

@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { Database } from "@luke/database/core/query";
+import { createAutomation } from "@luke/database/models/automation-store";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  readCodingAgent,
+} from "@luke/database/models/coding-agent-store";
+import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
+import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { Effect, Option, Redacted } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
@@ -11,20 +25,24 @@ import {
   githubReaching,
   type InstallationFixture,
   openGithubUser,
+  type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
-import { checkOutAgentRepository } from "./checkout.js";
+import { agentCoAuthor, checkOutAgentRepository } from "./checkout.js";
 
 /**
  * A coding agent's checkout: the repository cloned whole into its sandbox
  * through the firewall on a write token minted for that one repository,
  * which the sandbox's commands and output never carry, and handed back for
- * the session's own `gh` and `git`; and the checkout's commits made the
- * App's bot's, under its login and noreply address. The repository is reached through the installation connected to
- * the plan's workspace. The sandbox is a double at eve's boundary, GitHub a
- * script, and the store PGlite. Synthetic accounts, repositories, and tokens
- * throughout.
+ * the session's own `gh` and `git`; no developer's own token ever is.
+ * Who the agent writes as: the developer who started it, on their GitHub
+ * account with the App's bot as co-author, where their sign-in may push to
+ * the repository; the App's bot otherwise, and always for an agent an
+ * automation started, its row saying why. The repository is reached through
+ * the installation connected to the plan's workspace. The sandbox is a
+ * double at eve's boundary, GitHub a script, and the store PGlite.
+ * Synthetic accounts, repositories, and tokens throughout.
  */
 
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
@@ -43,22 +61,82 @@ const BOT_IDENTITY = {
   email: `${GITHUB_FIXTURE_BOT.id}+${GITHUB_FIXTURE_BOT.login}@users.noreply.github.com`,
 } as const;
 
-/** The token as the firewall carries it: GitHub's Basic header over the token user. */
+/** The developer's own GitHub account, as `GET /user` answers on their token. */
+const DEVELOPER = { id: 7_001, login: "ada", name: "Ada Lovelace" } as const;
+
+/** The token the developer's GitHub sign-in left on their row (`standingGithubRow`). */
+const DEVELOPER_TOKEN = "ghu_standing";
+
+/** The token as `git` carries it at the firewall: GitHub's Basic header over the token user. */
 const TOKEN_HEADER = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
 
 function carriesToken(text: string): boolean {
-  return text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN) || text.includes(TOKEN_HEADER);
+  return [GITHUB_FIXTURE_INSTALLATION_TOKEN, TOKEN_HEADER, DEVELOPER_TOKEN].some((token) =>
+    text.includes(token),
+  );
 }
 
-/** An account with one agent started on a plan of the repository given, the installation given connected to the plan's workspace. */
-const openAgent = (repository: string, installation: InstallationFixture) =>
+/** GitHub as the developer's token reads it: their account, and the repository with whether they may push to it. */
+function developerReach(pushes: boolean) {
+  return (sent: SentToGitHub): Response | undefined => {
+    if (sent.headers.get("authorization") !== `Bearer ${DEVELOPER_TOKEN}`) return undefined;
+    const { pathname } = new URL(sent.url);
+    if (pathname === "/user") return Response.json({ ...DEVELOPER, type: "User" });
+    if (pathname === `/repos/${RELAY_FULL_NAME}`) {
+      return Response.json({ full_name: RELAY_FULL_NAME, permissions: { push: pushes } });
+    }
+    return undefined;
+  };
+}
+
+/** An account with no GitHub sign-in, as one made with Google stands. */
+const openGoogleUser = Effect.gen(function* () {
+  const id = `user-${randomUUID()}`;
+  yield* Effect.flatMap(Database, (db) =>
+    db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` }),
+  );
+  return id;
+});
+
+/**
+ * An account with one agent on a plan of the repository given, the
+ * installation given connected to the plan's workspace; the account signed
+ * in with GitHub unless it is handed one, and the agent started by an
+ * automation of the account's where asked.
+ */
+const openAgent = (
+  installation: InstallationFixture,
+  options: { readonly userId?: string; readonly byAutomation?: boolean } = {},
+) =>
   Effect.gen(function* () {
-    const userId = yield* openGithubUser();
-    const plan = yield* startPlan(userId, { name: "Teammate invitations", repository });
+    const userId = options.userId ?? (yield* openGithubUser());
+    const plan = yield* startPlan(userId, {
+      name: "Teammate invitations",
+      repository: RELAY_FULL_NAME,
+    });
     assert.equal(
       yield* connectWorkspaceGitHub(plan.workspaceId, installation),
       LINK_OUTCOME.LINKED,
     );
+    const automation =
+      options.byAutomation === true
+        ? Option.getOrThrow(
+            yield* createAutomation(userId, {
+              planId: plan.id,
+              name: "Nightly invitations",
+              trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+              action: {
+                kind: AUTOMATION_ACTION.CODING_AGENT,
+                prompt: "Fix the invitations.",
+                choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+              },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: new Date("2026-10-15T09:00:00Z"),
+              webhookSecretHash: null,
+              archiveSuccessful: false,
+            }),
+          )
+        : undefined;
     const started = yield* createCodingAgent(userId, {
       planId: plan.id,
       idempotencyKey: "start-1",
@@ -66,21 +144,29 @@ const openAgent = (repository: string, installation: InstallationFixture) =>
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
-      repository,
+      repository: RELAY_FULL_NAME,
+      automationId: automation?.id,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
     return { agent, target: { userId, conversationId: agent.conversationId } };
   });
 
+/** Who the agent's row says it writes as now. */
+const authorOf = (userId: string, agent: CodingAgent) =>
+  Effect.map(
+    readCodingAgent(userId, agent.id),
+    (read): CodingAgentAuthor | null => Option.getOrThrow(read).author,
+  );
+
 it.layer(getTestDB())("a coding agent's checkout", (it) => {
   it.effect(
-    "the repository is cloned whole at its default branch with a write token at the firewall for the clone alone, the token reaches no command and no output, and the checkout's commits are the App's bot's",
+    "the repository is cloned whole at its default branch with a write token at the firewall for the clone alone, no token reaches a command or its output, and a developer whose GitHub may not push leaves the commits the App's",
     () =>
       Effect.gen(function* () {
         const installation = installationOf(7);
-        const { agent, target } = yield* openAgent(RELAY_FULL_NAME, installation);
-        const github = githubReaching([installation]);
+        const { agent, target } = yield* openAgent(installation);
+        const github = githubReaching([installation], undefined, {}, developerReach(false));
         const sandbox = sandboxDouble(() => undefined);
 
         const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
@@ -119,8 +205,8 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        // The identity is the checkout's own, set once it stands, under the App's bot and nobody's
-        // own account; the double refuses a run in a checkout that does not stand yet.
+        // The identity is the checkout's own, set once it stands, under the App's bot; the
+        // double refuses a run in a checkout that does not stand yet.
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
         const identity = sandbox.runs.find(
           (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.GIT_NAME] !== undefined,
@@ -128,6 +214,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         assert.ok(identity);
         assert.equal(identity.workingDirectory, REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT);
         assert.ok(sandbox.runs.indexOf(identity) > sandbox.runs.indexOf(clone));
+        assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.APP_NO_PUSH);
         // The repository's mint, beside the one the installation's listing is read on, asked for
         // exactly what a push and a pull request need.
         const mint = github.sent.find(
@@ -141,11 +228,82 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
       }),
   );
 
+  it.effect(
+    "a developer whose GitHub may push authors the commits with the App's bot as co-author, and the sandbox is still handed the App's token alone",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(9);
+        const { agent, target } = yield* openAgent(installation);
+        const github = githubReaching([installation], undefined, {}, developerReach(true));
+        const sandbox = sandboxDouble(() => undefined);
+
+        const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
+          Effect.provide(github.layer),
+        );
+        const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
+
+        assert.equal(Redacted.value(token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.deepEqual(sandbox.identities, [
+          {
+            name: DEVELOPER.name,
+            email: `${DEVELOPER.id}+${DEVELOPER.login}@users.noreply.github.com`,
+          },
+        ]);
+        for (const policy of sandbox.policies) {
+          assert.equal(JSON.stringify(policy).includes(DEVELOPER_TOKEN), false);
+        }
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
+        assert.equal(coAuthor, `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`);
+        assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.DEVELOPER);
+      }),
+  );
+
+  it.effect(
+    "an agent an automation started writes as the App's bot without reading its owner's GitHub, and one whose developer has no GitHub sign-in does too, each row saying why",
+    () =>
+      Effect.gen(function* () {
+        const byAutomation = installationOf(10);
+        const automated = yield* openAgent(byAutomation, { byAutomation: true });
+        const unlinked = installationOf(11);
+        const google = yield* openAgent(unlinked, { userId: yield* openGoogleUser });
+        const github = githubReaching(
+          [byAutomation, unlinked],
+          undefined,
+          {},
+          developerReach(true),
+        );
+
+        for (const { agent, target } of [automated, google]) {
+          const sandbox = sandboxDouble(() => undefined);
+          yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+          const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
+          assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
+          assert.equal(coAuthor, undefined);
+        }
+
+        assert.deepEqual(
+          [
+            yield* authorOf(automated.target.userId, automated.agent),
+            yield* authorOf(google.target.userId, google.agent),
+          ],
+          [CODING_AGENT_AUTHOR.APP_AUTOMATION, CODING_AGENT_AUTHOR.APP_UNLINKED],
+        );
+        assert.ok(
+          github.sent.every(
+            (sent) => sent.headers.get("authorization") !== `Bearer ${DEVELOPER_TOKEN}`,
+          ),
+          "the automation's owner's token is never read",
+        );
+      }),
+  );
+
   it.effect("a sandbox with no firewall cannot carry the credential, so nothing is cloned", () =>
     Effect.gen(function* () {
       const installation = installationOf(8);
-      const { agent, target } = yield* openAgent(RELAY_FULL_NAME, installation);
-      const github = githubReaching([installation]);
+      const { agent, target } = yield* openAgent(installation);
+      const github = githubReaching([installation], undefined, {}, developerReach(false));
       const sandbox = sandboxDouble(() => undefined, { firewall: false });
 
       const refused = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
