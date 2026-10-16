@@ -216,11 +216,14 @@ export function agentSubject(
 export function AgentCard({
   subject,
   models,
+  foot,
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
+  /** One line under a rule, said by a place naming the agent off its task's page: the task it works on. */
+  foot?: React.ReactNode;
 }): React.JSX.Element {
-  return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} />;
+  return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} foot={foot} />;
 }
 
 /**

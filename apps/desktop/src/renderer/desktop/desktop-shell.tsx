@@ -5,7 +5,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -13,6 +13,7 @@ import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { MentionedAgents } from "../planning/mentioned-agent-card";
 import { NewPlanDialog } from "../planning/new-plan-dialog";
 import { usePlanLooks } from "../planning/use-plan-looks";
 import {
@@ -370,6 +371,10 @@ export function DesktopShell({
   useWindowTitle(titleSubject(tab, plans, shownPlan));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = usePlanLooks(shownPlan, plans.me);
+  const mentionedAgents = useMemo(
+    () => ({ models: plans.agents.models, me: plans.me }),
+    [plans.agents.models, plans.me],
+  );
   if (gated) {
     return (
       <div className="desktop-onboarding">
@@ -410,15 +415,18 @@ export function DesktopShell({
   if (plans.history.open) {
     return (
       <div className="desktop-shell">
-        <DesktopVersionHistory
-          sidebar={sidebar}
-          history={history}
-          subject={planVersionSubject(plans)}
-          account={account}
-          call={call}
-          onExit={history.canGoBack ? history.onBack : plans.history.onClose}
-          onRestored={history.onLeaveVersionHistory}
-        />
+        {/* A chip in a version's words names an agent's model and starter as the plan's own words do. */}
+        <MentionedAgents value={mentionedAgents}>
+          <DesktopVersionHistory
+            sidebar={sidebar}
+            history={history}
+            subject={planVersionSubject(plans)}
+            account={account}
+            call={call}
+            onExit={history.canGoBack ? history.onBack : plans.history.onClose}
+            onRestored={history.onLeaveVersionHistory}
+          />
+        </MentionedAgents>
         <CaptionStrip {...captions} />
         {newPlanDialog}
       </div>
@@ -463,46 +471,49 @@ export function DesktopShell({
         onPressWithin={keepOverlay}
       />
       <main className="desktop-main">
-        {inboxOpen ? (
-          <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
-            <DesktopInbox plans={plans} />
-          </PageFind>
-        ) : pageAgent !== undefined ? (
-          // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-          <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
-        ) : pagePerson !== undefined ? (
-          // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-          <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
-            <PersonPage
+        {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
+        <MentionedAgents value={mentionedAgents}>
+          {inboxOpen ? (
+            <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
+              <DesktopInbox plans={plans} />
+            </PageFind>
+          ) : pageAgent !== undefined ? (
+            // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+            <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
+          ) : pagePerson !== undefined ? (
+            // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+            <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
+              <PersonPage
+                plans={plans}
+                userId={pagePerson}
+                name={plans.personView.name}
+                staged={sidebar.staged}
+              />
+            </PageFind>
+          ) : factoryOpen ? (
+            <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
+              <DesktopFactory plans={plans} />
+            </PageFind>
+          ) : automationsOpen ? (
+            <PageFind
+              page={FIND_PAGE.AUTOMATIONS}
+              at={automationsPlaceKey(plans.automationsView.place)}
+              active={plans.shown}
+            >
+              <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
+                <AutomationsPage plans={plans} />
+              </Suspense>
+            </PageFind>
+          ) : (
+            <DesktopPlans
               plans={plans}
-              userId={pagePerson}
-              name={plans.personView.name}
-              staged={sidebar.staged}
+              looks={looks}
+              captions={captionsInColumn ? captionStrip : undefined}
+              summary={summary}
+              accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
             />
-          </PageFind>
-        ) : factoryOpen ? (
-          <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
-            <DesktopFactory plans={plans} />
-          </PageFind>
-        ) : automationsOpen ? (
-          <PageFind
-            page={FIND_PAGE.AUTOMATIONS}
-            at={automationsPlaceKey(plans.automationsView.place)}
-            active={plans.shown}
-          >
-            <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
-              <AutomationsPage plans={plans} />
-            </Suspense>
-          </PageFind>
-        ) : (
-          <DesktopPlans
-            plans={plans}
-            looks={looks}
-            captions={captionsInColumn ? captionStrip : undefined}
-            summary={summary}
-            accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-          />
-        )}
+          )}
+        </MentionedAgents>
       </main>
       {captionsInColumn ? null : captionStrip}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}

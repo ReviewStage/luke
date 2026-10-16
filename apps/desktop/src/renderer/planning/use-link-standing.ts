@@ -211,6 +211,11 @@ function wordsWorkspace(
   );
 }
 
+/** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */
+export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
+  return wordsWorkspace(useAppState()?.tasks, where, useContext(WordsWorkspaceContext))?.id;
+}
+
 /** What the provider answers for the page a link mention names, through the workspace `where` stands in; none for any other mention, while unread, refused, or unconnected. */
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
   const { act } = useAct();
