@@ -38,7 +38,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * right that the developer opens and closes, as every devtool window's
  * secondary sidebar does. What opens it on its own is Luke drawing on a
  * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
- * does; a subagent's tab opened from an agent's transcript opens it too. Not to be confused with "the
+ * does; a subagent's tab opened from an agent's transcript opens it too. A
+ * task just started opens with it hidden, whatever the task before it showed
+ * (`use-tasks-tab.ts`), since a new task has nothing in it yet. Not to be confused with "the
  * panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
@@ -487,6 +489,8 @@ export interface SidePanelControl {
   width: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
+  /** Hides the panel where it was shown, leaving full screen too, as a task just started asks. */
+  onHide: () => void;
   onToggleFullScreen: () => void;
   /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -1468,6 +1472,11 @@ export function useSidePanel(
     setFullScreen(false);
     setNewTabAsked(false);
   }, [update]);
+  const onHide = useCallback(() => {
+    update((held) => (held.open ? { ...held, open: false } : held));
+    setFullScreen(false);
+    setNewTabAsked(false);
+  }, [update]);
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
@@ -1622,6 +1631,7 @@ export function useSidePanel(
     fullScreen: state.open && fullScreen,
     newTabAsked: state.open && newTabAsked,
     onToggle,
+    onHide,
     onToggleFullScreen,
     onNewTab,
     onNewTabAnswered,

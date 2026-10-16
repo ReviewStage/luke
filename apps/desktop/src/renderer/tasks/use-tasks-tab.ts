@@ -1771,7 +1771,8 @@ export function useTasksTab(input: {
 
   // A started plan becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
-  // it gives way. It starts in the chosen workspace; with none listed the
+  // it gives way, and it opens with the side panel hidden, since it has
+  // nothing in it yet. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
@@ -1798,6 +1799,7 @@ export function useTasksTab(input: {
         setNewTaskAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
+        sidePanel.onHide();
         if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
