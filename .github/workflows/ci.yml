@@ -27,14 +27,6 @@ concurrency:
 # turbo says "Remote caching disabled" and the local cache does the work.
 # `scripts/turbo.mjs` hands the token to turbo on its command line, so no task
 # sees it in its environment and no cached log can carry it.
-#
-# A release's version change touches nothing but the changelog, its
-# screenshots, and package versions (`scripts/release-only.mjs`), so for one
-# the test and Postgres jobs skip their steps, all but the tests of web, which
-# renders the changelog, and the TypeScript checks run whole. Each job still
-# runs and reports its required name as a success: a job skipped by a job-level
-# `if` reports a matrix job under its unexpanded name, which the ruleset never
-# sees, and the merge queue would wait on it forever.
 jobs:
   portable:
     name: TypeScript checks
@@ -53,18 +45,12 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The four jobs keep the names the ruleset requires, and split the suites
-  # so no job waits on another's tail: @luke/service's suite, the largest, is
-  # cut into two vitest shards, one per job; the desktop's, the next, runs
-  # alone in the third; and the fourth runs every other workspace's tests,
-  # one workspace at a time (`scripts/check.mjs` says why). The third and
-  # fourth filter on the desktop and everything but it, so between them they
-  # name every workspace. Every workspace with tests runs under one of these
-  # task names or `scripts/repository-checks.sh` fails, so no test file can
-  # fall outside all four jobs.
-  #
-  # The job holding web's tests (`changelog`) runs them alone for a
-  # release-only change, because they parse CHANGELOG.md as the page does.
+  # The four jobs keep the names the ruleset requires. @luke/service's suite
+  # is the largest, so it is cut into three vitest shards, one per job, and
+  # the fourth job runs every other workspace's tests, one
+  # workspace at a time (`scripts/check.mjs` says why). Every workspace with
+  # tests runs under one of these names or `scripts/repository-checks.sh`
+  # fails, so no test file can fall outside all four jobs.
   tests:
     name: Tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -75,39 +61,21 @@ jobs:
         include:
           - shard: 1
             task: test:vitest:1
-            changelog: false
           - shard: 2
             task: test:vitest:2
-            changelog: false
           - shard: 3
-            task: test:vitest --filter=@luke/desktop
-            changelog: false
+            task: test:vitest:3
           - shard: 4
-            task: test:vitest --filter=!@luke/desktop
-            changelog: true
+            task: test:vitest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 2
-      - id: scope
-        uses: ./.github/actions/release-only
-      - if: ${{ steps.scope.outputs.release-only != 'true' || matrix.changelog }}
-        uses: ./.github/actions/setup
-      - if: ${{ steps.scope.outputs.release-only != 'true' || matrix.changelog }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      - uses: ./.github/actions/setup
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
           restore-keys: turbo-${{ github.job }}-${{ matrix.shard }}-
-      - name: Run the shard's tests
-        if: ${{ steps.scope.outputs.release-only != 'true' }}
-        run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      - name: Run the tests that read the changelog
-        if: ${{ steps.scope.outputs.release-only == 'true' && matrix.changelog }}
-        run: node scripts/turbo.mjs run test:vitest --filter=@luke/web
+      - run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -120,9 +88,7 @@ jobs:
   # `db:migrate` goes first. The job keeps its old name because the ruleset
   # requires it. The image comes from whichever of three registries answers
   # first, because each one rate-limits anonymous pulls; it starts before the
-  # workspace installs so it boots meanwhile. A release-only change migrates
-  # nothing and touches no store, so the job skips every step after it is
-  # classified.
+  # checkout so it boots while the workspace installs.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
@@ -131,13 +97,7 @@ jobs:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
       LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 2
-      - id: scope
-        uses: ./.github/actions/release-only
       - name: Start Postgres
-        if: ${{ steps.scope.outputs.release-only != 'true' }}
         run: |
           for round in 1 2 3 4; do
             for image in \
@@ -163,10 +123,9 @@ jobs:
           done
           echo "::error::Every registry refused postgres:18"
           exit 1
-      - if: ${{ steps.scope.outputs.release-only != 'true' }}
-        uses: ./.github/actions/setup
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
       - name: Wait for Postgres
-        if: ${{ steps.scope.outputs.release-only != 'true' }}
         run: |
           for _ in $(seq 90); do
             status=$(docker inspect --format '{{.State.Health.Status}}' postgres)
@@ -177,7 +136,5 @@ jobs:
           docker logs postgres
           echo "::error::Postgres did not become healthy"
           exit 1
-      - if: ${{ steps.scope.outputs.release-only != 'true' }}
-        run: pnpm --filter @luke/web db:migrate
-      - if: ${{ steps.scope.outputs.release-only != 'true' }}
-        run: pnpm --filter @luke/web test:store
+      - run: pnpm --filter @luke/web db:migrate
+      - run: pnpm --filter @luke/web test:store
