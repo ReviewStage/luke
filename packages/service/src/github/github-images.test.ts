@@ -121,8 +121,11 @@ it.effect(
     }),
 );
 
+/** A whole PNG file's signature, as a repository's file must open to be read as one. */
+const PNG_FILE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+
 /** A repository's file as the contents API answers its raw bytes, under GitHub's own type. */
-function raw(bytes: Uint8Array<ArrayBuffer> = PNG): Response {
+function raw(bytes: Uint8Array<ArrayBuffer> = PNG_FILE): Response {
   return new Response(bytes, {
     headers: {
       "content-type": "application/vnd.github.raw; charset=utf-8",
@@ -142,7 +145,7 @@ it.effect(
 
       assert.ok(Option.isSome(result));
       assert.equal(result.value.contentType, GITHUB_IMAGE_TYPE.PNG);
-      assert.deepEqual([...result.value.bytes], [...PNG]);
+      assert.deepEqual([...result.value.bytes], [...PNG_FILE]);
       const [contents] = sent;
       assert.equal(
         contents?.url,
@@ -154,7 +157,7 @@ it.effect(
 );
 
 it.effect(
-  "a file of another repository is never asked for, and a contents answer that is not the file's bytes is none",
+  "a file of another repository is never asked for, and a contents answer that is not the file's bytes, or bytes of another kind than its extension names, is none",
   () =>
     Effect.gen(function* () {
       const elsewhere = yield* read(
@@ -173,5 +176,13 @@ it.effect(
         raw(new Uint8Array(GITHUB_IMAGE_BOUNDS.MAX_BYTES + 1)),
       );
       assert.ok(Option.isNone(large.result));
+
+      const page = new TextEncoder().encode("<html><script>alert(1)</script></html>");
+      for (const name of ["shot.png", "shot.svg", "shot.webp"]) {
+        const disguised = yield* read(`https://github.com/acme/relay/raw/main/${name}`, () =>
+          raw(page),
+        );
+        assert.ok(Option.isNone(disguised.result), name);
+      }
     }),
 );

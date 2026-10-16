@@ -71,6 +71,7 @@ test("anything else, plain HTTP, credentials, or an upload with no asset id, is 
     "https://raw.githubusercontent.com/acme/relay/a.png",
     "https://raw.githubusercontent.com/acme/relay/main/a%2Fb.png",
     "https://raw.githubusercontent.com/acme/relay/main/%E0%A4%A.png",
+    "https://raw.githubusercontent.com/acme/relay/main/%FF.png",
     "https://github.com/acme/relay/raw/main",
     "javascript:alert(1)",
     "not a url",

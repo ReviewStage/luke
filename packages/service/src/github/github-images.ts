@@ -58,8 +58,35 @@ const ENTITIES = new Map([
 
 const ENTITY = /&(?:amp|lt|gt|quot|#39);/gu;
 
+const ASCII = new TextEncoder();
+
 /** The media type GitHub serves a repository's file as when asked for its raw bytes, whatever the file holds. */
 const RAW_CONTENTS = "application/vnd.github.raw";
+
+/** The bytes each type's file opens with, or for an SVG holds near its start, which a repository's file must show to be read as it. */
+const SIGNATURES: ReadonlyMap<GitHubImageType, (bytes: Uint8Array) => boolean> = new Map([
+  [
+    GITHUB_IMAGE_TYPE.PNG,
+    (bytes) => opensWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  ],
+  [GITHUB_IMAGE_TYPE.JPEG, (bytes) => opensWith(bytes, [0xff, 0xd8, 0xff])],
+  [GITHUB_IMAGE_TYPE.GIF, (bytes) => opensWith(bytes, [...ASCII.encode("GIF8")])],
+  [
+    GITHUB_IMAGE_TYPE.WEBP,
+    (bytes) =>
+      opensWith(bytes, [...ASCII.encode("RIFF")]) &&
+      opensWith(bytes.subarray(8), [...ASCII.encode("WEBP")]),
+  ],
+  [
+    GITHUB_IMAGE_TYPE.SVG,
+    (bytes) => new TextDecoder().decode(bytes.subarray(0, 4_096)).includes("<svg"),
+  ],
+]);
+
+/** Whether the bytes open with the ones given. */
+function opensWith(bytes: Uint8Array, opening: readonly number[]): boolean {
+  return opening.every((byte, at) => bytes[at] === byte);
+}
 
 /** The media type an answer's `content-type` names, its parameters left off. */
 function mediaTypeOf(header: string | undefined): string {
@@ -139,8 +166,10 @@ function imageAt(
 
 /**
  * A file of the agent's own repository, its raw bytes read through the
- * repository's contents on the token, as the type its extension names;
- * none for a file of any other repository, which is never asked for.
+ * repository's contents on the token, as the type its extension names where
+ * its bytes show that type's signature; none for a file whose bytes are some
+ * other kind, and none for a file of any other repository, which is never
+ * asked for.
  */
 function repositoryFile(
   token: Redacted.Redacted,
@@ -156,8 +185,12 @@ function repositoryFile(
     HttpClientRequest.setHeader("accept", RAW_CONTENTS),
   );
   // Note that GitHub serves the raw bytes under its own type, so a JSON answer, a directory's listing, is no image.
-  return imageOf(request, (header) =>
+  const read = imageOf(request, (header) =>
     mediaTypeOf(header) === RAW_CONTENTS ? file.contentType : undefined,
+  );
+  return Effect.map(
+    read,
+    Option.filter((image) => SIGNATURES.get(image.contentType)?.(image.bytes) === true),
   );
 }
 

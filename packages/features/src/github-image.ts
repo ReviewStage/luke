@@ -116,7 +116,13 @@ function assetIdOf(url: URL): string | undefined {
 /** A path segment as it is written, or nothing where it is no segment a file's path may hold. */
 function decodedSegment(segment: string): string | undefined {
   if (!/^(?:[^%]|%[0-9a-f]{2})+$/iu.test(segment)) return undefined;
-  const decoded = decodeURIComponent(segment);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    // Note that an escape may spell no UTF-8 (`%FF`), which names no file.
+    return undefined;
+  }
   return decoded === "." || decoded === ".." || decoded.includes("/") ? undefined : decoded;
 }
 
