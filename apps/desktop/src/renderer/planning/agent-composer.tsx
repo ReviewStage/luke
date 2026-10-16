@@ -13,7 +13,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
-import { lapsedServer, namedServers } from "@luke/ui/agent-servers-model";
+import { lapsedServer, namedServers, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -46,6 +46,7 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useMentionBox, usePlanMentions } from "./plan-mentions";
 import { useRepositoryRemedy } from "./repository-remedy";
+import { MentionedServers } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -567,8 +568,16 @@ export function AgentComposer({
               ? undefined
               : {
                   onTrigger: mentionPicker.onTrigger,
+                  // A server's chip in the box says what a send now does with it: opens a turn, or steers the one running.
                   chip: (mention) => (
-                    <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                    <MentionedServers
+                      value={{
+                        disabled: servers.disabled,
+                        handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
+                      }}
+                    >
+                      <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                    </MentionedServers>
                   ),
                   pasted: (words) => pastedMentionNode(words, planMentions.doors.place),
                 }
