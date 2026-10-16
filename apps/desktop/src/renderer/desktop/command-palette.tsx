@@ -49,7 +49,7 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
 import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { Command, defaultFilter } from "cmdk";
@@ -93,6 +93,7 @@ import {
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
+import { planOf } from "./plan-actions";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -618,6 +619,32 @@ function readMarkRows(
 }
 
 /**
+ * Pin task, or Unpin task once it is pinned, for the plan on screen, as its
+ * sidebar row's menu offers it: the reader's own pin, through the same mark.
+ * None while no plan is looked at, nor for an archived plan, which offers
+ * no pin.
+ */
+function planPinRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const plan = reads.watched === undefined ? undefined : planOf(plans, reads.watched);
+  if (plan === undefined || plan.archivedAt !== undefined) return [];
+  const pinned = plan.pinnedAt !== undefined;
+  const label = pinned ? "Unpin task" : "Pin task";
+  const mark = pinned ? PLAN_MARK.UNPIN : PLAN_MARK.PIN;
+  return [
+    {
+      icon: pinned ? <UnpinIcon /> : <PinIcon />,
+      label,
+      terms: [label],
+      onChoose: () => choose(() => plans.onMarkPlan(plan.id, mark)),
+    },
+  ];
+}
+
+/**
  * Pin agent, or Unpin agent once it is pinned, for the agent whose page
  * stands, as its sidebar row's menu offers it: the reader's own pin. None
  * while no agent's page stands, nor for an archived agent, which offers no
@@ -992,6 +1019,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
         ...readMarkRows(plans, reads, choose),
+        ...planPinRows(plans, reads, choose),
         ...agentPinRows(plans, choose),
       ],
     ],

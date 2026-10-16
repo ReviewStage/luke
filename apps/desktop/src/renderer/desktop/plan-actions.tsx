@@ -74,7 +74,7 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  */
 
 /** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
-function planOf(plans: PlansControl, planId: string): PlanSummary | undefined {
+export function planOf(plans: PlansControl, planId: string): PlanSummary | undefined {
   const listed = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId);
   if (listed !== undefined) return listed;
   const { region } = plans;

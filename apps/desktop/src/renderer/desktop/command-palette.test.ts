@@ -11,21 +11,22 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { PLAN_TREE_ENTRY, type Plan } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "@luke/ui/planning-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -38,6 +39,7 @@ import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../planning/use-side-panel";
 import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
+import { DesktopSidebar } from "./desktop-sidebar";
 import { ListedAutomations } from "./listed-automations";
 import { panelEntries } from "./side-panel";
 
@@ -1155,4 +1157,75 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   press("Unpin agent");
   assert.deepEqual(pinRows([]), []);
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
+});
+
+/** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
+function PinnableTask(): React.JSX.Element {
+  const [listed, setListed] = useState<Plan>(DOCUMENT_PLAN);
+  const plans = plansControl({
+    plans: [listed],
+    region: { kind: DOCUMENT_REGION.READY, plan: listed },
+    activePlanId: listed.id,
+    onMarkPlan: (planId, mark) => {
+      assert.equal(planId, listed.id);
+      setListed(mark === PLAN_MARK.PIN ? { ...DOCUMENT_PLAN, pinnedAt: 5 } : DOCUMENT_PLAN);
+    },
+  });
+  return createElement(
+    Fragment,
+    null,
+    createElement(Looker, { looked: listed }),
+    createElement(DesktopSidebar, sidebarProps(plans)),
+    createElement(WindowPalette, {
+      available: true,
+      tab: PANEL_TAB.PLANS,
+      onTabChange: () => undefined,
+      plans,
+      settings: {
+        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        onViewChange: () => undefined,
+      },
+      readFiles: () => Promise.reject(new Error("no repository is open")),
+    }),
+  );
+}
+
+/** The names the sidebar's Pinned section lists, none while it stands nowhere. */
+function pinnedNames(): (string | null)[] {
+  const section = document.querySelector('nav[aria-label="Pinned"]');
+  return [...(section?.querySelectorAll(".sidebar-plan-name") ?? [])].map(
+    (name) => name.textContent,
+  );
+}
+
+/** The rows ⌘K lists for "pin", the palette opened afresh. */
+function pinRows(): string[] {
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+  type("pin");
+  return rows().filter((row) => /^(Pin|Unpin) /u.test(row));
+}
+
+test("with a task open, ⌘K offers Pin task, which pins it under Pinned and turns to Unpin task", () => {
+  // The sidebar asks whether motion is reduced, which jsdom cannot answer.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(PinnableTask))));
+
+  assert.deepEqual(pinRows(), ["Pin task"]);
+  press("Pin task");
+  assert.deepEqual(pinnedNames(), [DOCUMENT_PLAN.name]);
+  assert.deepEqual(pinRows(), ["Unpin task"]);
+  press("Unpin task");
+  assert.deepEqual(pinnedNames(), []);
+  assert.deepEqual(pinRows(), ["Pin task"]);
 });
