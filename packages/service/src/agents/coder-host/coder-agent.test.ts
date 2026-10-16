@@ -237,6 +237,7 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
     for (const onPlan of [true, false]) {
       const instructions = coderInstructions("Acme/Relay", brief, true, onPlan);
       assert.ok(instructions.includes("playwright screenshot"), brief);
+      assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
     }
   }
