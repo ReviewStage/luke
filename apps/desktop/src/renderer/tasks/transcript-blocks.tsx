@@ -7,6 +7,7 @@ import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { readLink } from "@luke/features/luke-link";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -85,6 +86,7 @@ import { useClipped } from "../use-clipped";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";
+import { usePlanPictureDrawer } from "./plan-pictures";
 import { SubagentMark } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -153,17 +155,18 @@ const MENTION_ELEMENT = {
   TARGET: "to",
 } as const;
 
-/** The element a picture's Markdown is drawn as, and the attributes that carry its address and its words. */
+/** The element a picture's Markdown is drawn as, and the attributes that carry its address, its words, and its caption. */
 const PICTURE_ELEMENT = {
   TAG: "luke-picture",
   ADDRESS: "to",
   WORDS: "words",
+  CAPTION: "caption",
 } as const;
 
 /** The mention's element and the picture's, let through the drawing's sanitizer with what each carries. */
 const MENTION_TAGS = {
   [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
-  [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS],
+  [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS, PICTURE_ELEMENT.CAPTION],
   [LINK_GLUE.TAG]: [],
 };
 
@@ -178,6 +181,7 @@ interface WordsNode {
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
   readonly alt?: string | null;
+  readonly title?: string | null;
   readonly identifier?: string;
   children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
@@ -233,13 +237,15 @@ function definitionsIn(
 
 /**
  * Marks every picture in the words to be drawn as its own element, which
- * names it as a link to where it points and never draws it, because a
+ * names it as a link to where it points and never fetches it, because a
  * picture an agent writes is a request to wherever its address points the
  * moment the tab opens, and a model's words must make none; the pictures an
- * agent shows are its `show_image` calls'. Note that the mark is made on
- * the markdown, before the drawing's hardening reads a picture at all,
- * which draws a relative one as a placeholder of its own and an absolute
- * one as nothing.
+ * agent shows are its `show_image` calls'. The one picture drawn is a plan's
+ * own, inside the plan's card, which is read through the host
+ * (`plan-pictures.tsx`) rather than from its address. Note that the mark is
+ * made on the markdown, before the drawing's hardening reads a picture at
+ * all, which draws a relative one as a placeholder of its own and an
+ * absolute one as nothing.
  */
 function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
   const address =
@@ -254,6 +260,7 @@ function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, strin
       hProperties: {
         [PICTURE_ELEMENT.ADDRESS]: address ?? "",
         [PICTURE_ELEMENT.WORDS]: node.alt ?? "",
+        [PICTURE_ELEMENT.CAPTION]: node.title ?? "",
       },
     };
     return;
@@ -283,10 +290,20 @@ function markLinks(tree: MarkdownNode): void {
 /** What a picture with no words of its own is called where it is named. */
 const UNNAMED_PICTURE = "Picture";
 
-/** A picture in a transcript's words: a link to where it points, with the picture's glyph, never drawn. */
+/**
+ * A picture in a transcript's words: a plan's own picture drawn as the plan
+ * draws it where its words stand inside `PlanPictures`, as the plan's card
+ * does; any other a link to where it points, with the picture's glyph,
+ * never drawn.
+ */
 function PictureElement({ node }: ExtraProps): ReactNode {
+  const planPicture = usePlanPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
   const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
+  const caption = String(node?.properties[PICTURE_ELEMENT.CAPTION] ?? "");
+  if (planPicture !== undefined && planAttachmentOf(address) !== undefined) {
+    return planPicture(address, said, caption === "" ? undefined : caption);
+  }
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>

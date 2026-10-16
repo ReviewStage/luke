@@ -5,9 +5,9 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
@@ -15,6 +15,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
 import { useConfirmDialog } from "../settings/confirm-dialog";
+import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { PlanBody } from "./plan-body";
 import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
@@ -24,7 +25,8 @@ import { VersionView } from "./version-view";
  * read through the host and drawn from its bytes with its caption, one this
  * reader cannot reach drawn as its words, one from outside Luke a link that
  * reads nothing, a press opening the plan's pictures over the window, and a
- * version drawing a picture it struck and the one it wrote in, each marked.
+ * version drawing a picture it struck and the one it wrote in, each marked,
+ * and the plan's card in an agent's transcript drawing the plan's pictures.
  * Synthetic plans and pictures.
  */
 
@@ -305,4 +307,47 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
   await settle();
 
   assert.equal(view.querySelector(".picture-block img")?.getAttribute("alt"), "Second mock");
+});
+
+test("an agent's plan card draws the plan's pictures once opened, while the agent's own words keep one a link", async () => {
+  const planId = "5b8c2d34-7e1f-4a9b-8c6d-0e1f2a3b4c07";
+  const asked: string[] = [];
+  standHost(new Set([MOCK]), asked);
+  const address = picture(planId, MOCK);
+  const handed = {
+    id: "plan",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      { type: "text", text: `# Invites\n\n![Invite email](${address} "The mock Lee shared")` },
+    ],
+  };
+  const turn = {
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: `Matched ![the mock](${address}).` }],
+    startedAt: 1_000,
+    finishedAt: 61_000,
+  };
+  const shared = { lead: AGENT_LEAD, moving: false, delegation: { models: [] } };
+  const view = await drawn(
+    createElement(
+      Fragment,
+      null,
+      createElement(AgentMessage, { ...shared, message: handed, plan: true, planId }),
+      createElement(AgentMessage, { ...shared, message: turn, plan: false }),
+    ),
+  );
+  assert.deepEqual(asked, [], "a closed card reads nothing");
+
+  act(() => view.querySelector<HTMLElement>("[data-task-card] > summary")?.click());
+  await settle();
+
+  const card = view.querySelector("[data-task-card]");
+  const image = card?.querySelector(".picture-block img");
+  assert.equal(image?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`);
+  assert.equal(image?.getAttribute("alt"), "Invite email");
+  assert.equal(card?.querySelector(".picture-caption")?.textContent, "The mock Lee shared");
+  assert.deepEqual(asked, [MOCK]);
+  assert.equal(view.querySelectorAll("img").length, 1, "the agent's turn draws no picture");
+  assert.match(view.textContent ?? "", /Matched the mock\./u);
 });
