@@ -7,7 +7,7 @@ import {
 } from "@luke/features/mac-repository-wire";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { macTerminalActRows } from "./mac-terminal-acts";
@@ -61,13 +61,13 @@ interface ScriptedTerminal {
   exit(code: number): void;
 }
 
-function fixture(repositories: readonly MacRepository[]) {
+function fixture(repositories: readonly MacRepository[], read: Effect.Effect<void> = Effect.void) {
   const opened: ScriptedPort[] = [];
   const started: ScriptedTerminal[] = [];
   const gone = new Map<WebContents, () => void>();
   const rows = macTerminalActRows({
     host: {
-      macRepositories: () => Effect.succeed({ repositories }),
+      macRepositories: () => Effect.as(read, { repositories }),
       setMacRepository: () => Effect.succeed({ repositories }),
     },
     stateRoot: "/state",
@@ -154,7 +154,7 @@ it.effect("an open runs the branch's script, its output out on the port and typi
     assert.ok(terminal !== undefined && port !== undefined);
     assert.match(terminal.script, /'\/Users\/dev\/app'/u);
     assert.match(terminal.script, /'luke\/add-thing'/u);
-    assert.match(terminal.script, /'\/state\/worktrees\/acme\/app\/luke-add-thing'/u);
+    assert.match(terminal.script, /'\/state\/worktrees\/acme\/app\/luke%2Fadd-thing'/u);
     assert.match(terminal.script, /pnpm dev/u);
 
     terminal.output("ready");
@@ -224,4 +224,50 @@ it.effect("a closed tab and a gone page close their terminals; only a panel is a
     });
     assert.equal(started.length, 2);
   }),
+);
+
+it.effect("a tab closed, or its page gone, while the settings are read starts nothing", () =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<void>();
+    const { router, started, pageGone } = fixture([SET], Deferred.await(gate));
+    const panel = panelOf();
+    const other = panelOf();
+
+    const closing = yield* Effect.forkChild(
+      router.performAct({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel),
+    );
+    const leaving = yield* Effect.forkChild(
+      router.performAct({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, other),
+    );
+    yield* Effect.yieldNow;
+    yield* router.performAct(
+      { kind: ACT_KIND.MAC_TERMINAL_CLOSE, payload: { agentId: AGENT_ID } },
+      panel,
+    );
+    pageGone(other.sender);
+    yield* Deferred.succeed(gate, undefined);
+    yield* Fiber.join(closing);
+    yield* Fiber.join(leaving);
+
+    assert.equal(started.length, 0);
+  }),
+);
+
+it.effect(
+  "an open of another branch the agent pushed closes the old terminal and starts on the new branch",
+  () =>
+    Effect.gen(function* () {
+      const { router, started, opened } = fixture([SET]);
+      const panel = panelOf();
+      yield* router.performAct({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+      yield* router.performAct(
+        { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: { ...OPEN, branch: "luke/next-thing" } },
+        panel,
+      );
+
+      assert.equal(started.length, 2);
+      assert.equal(started[0]?.closed, true);
+      assert.equal(opened[0]?.closed, true);
+      assert.match(started[1]?.script ?? "", /'luke\/next-thing'/u);
+    }),
 );

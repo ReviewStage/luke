@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -102,10 +102,12 @@ export function startMacTerminal(options: {
     },
     close: () => {
       if (ended) return;
+      // Every process on the tty is hung up first, and waited for, so a job in a
+      // process group of its own is reached before the wrapper's end takes the tty away.
       const device = tty();
       if (device !== undefined) {
         const [command, hangUpArgs] = tools.hangUp(device);
-        execFile(command, [...hangUpArgs], () => undefined);
+        spawnSync(command, [...hangUpArgs], { stdio: "ignore", timeout: 2_000 });
       }
       try {
         if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
@@ -115,11 +117,18 @@ export function startMacTerminal(options: {
     },
   };
   standing.add(terminal);
-  child.on("exit", (code) => {
+  const finish = (code: number | null) => {
+    if (ended) return;
     ended = true;
     standing.delete(terminal);
     rmSync(folder, { recursive: true, force: true });
     options.onExit(code);
+  };
+  child.on("exit", finish);
+  // A terminal that could not be started says why on its screen, and ends.
+  child.on("error", (error) => {
+    options.onOutput(new TextEncoder().encode(`Could not start a terminal: ${error.message}\r\n`));
+    finish(null);
   });
   return terminal;
 }

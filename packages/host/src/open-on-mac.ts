@@ -23,10 +23,14 @@ function shellQuoted(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`;
 }
 
-/** Where a branch's worktree lives: under the state root, by repository, its branch's slashes made dashes. */
+/**
+ * Where a branch's worktree lives: under the state root, by repository, its
+ * branch percent-encoded into one folder name, so no two branches share a
+ * folder and none reaches outside it.
+ */
 export function worktreeFolder(stateRoot: string, repository: string, branch: string): string {
   const [owner = "", name = ""] = repository.toLowerCase().split("/");
-  return path.join(stateRoot, WORKTREES_FOLDER, owner, name, branch.replaceAll("/", "-"));
+  return path.join(stateRoot, WORKTREES_FOLDER, owner, name, encodeURIComponent(branch));
 }
 
 /** The script, its values quoted, that brings the branch into a worktree of the clone and runs the command there. */

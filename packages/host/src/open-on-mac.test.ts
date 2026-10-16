@@ -77,7 +77,7 @@ test("the agent's branch is checked out in a worktree of the clone and the comma
 
   assert.equal(
     worktree,
-    path.join(scratch, "state", "worktrees", "octocat", "relay", "luke-fix-relay"),
+    path.join(scratch, "state", "worktrees", "octocat", "relay", "luke%2Ffix-relay"),
   );
   assert.equal(readFileSync(path.join(worktree, "ran.txt"), "utf8").trim(), second);
   assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "second\n");
@@ -103,4 +103,13 @@ test("a command with quotes and dollars in it runs as written, and the script de
 
   assert.equal(readFileSync(path.join(worktree, "said.txt"), "utf8"), "it's $HOME");
   assert.throws(() => readFileSync(path.join(scratch, "open.command")));
+});
+
+test("two branches never share a worktree, and none reaches outside the repository's folder", () => {
+  const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b"].map((branch) =>
+    worktreeFolder("/state", "acme/app", branch),
+  );
+
+  assert.equal(new Set(folders).size, folders.length);
+  for (const folder of folders) assert.equal(path.dirname(folder), "/state/worktrees/acme/app");
 });

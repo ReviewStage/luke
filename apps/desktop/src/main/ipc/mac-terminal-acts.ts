@@ -69,10 +69,19 @@ const KEPT_OUTPUT_BYTES = 256 * 1024;
 /** One terminal a panel opened: the terminal, main's end of the channel its tab now draws it on, if any, and its latest output. */
 interface Drawn {
   readonly terminal: MacTerminal;
+  /** The repository and branch it opened, which an open of another branch for the agent replaces. */
+  readonly repository: string;
+  readonly branch: string;
   port: MainMacTerminalPort | undefined;
   readonly kept: Uint8Array[];
   keptBytes: number;
   exited: boolean;
+}
+
+/** One panel's terminals by agent, and the open asked last for each agent still reading the settings. */
+interface Panel {
+  readonly terminals: Map<string, Drawn>;
+  readonly asking: Map<string, number>;
 }
 
 const readInbound = readEither(macTerminalPortInboundSchema);
@@ -85,8 +94,13 @@ export function macTerminalActRows(
   dependencies: MacTerminalActsDependencies,
 ): Pick<ActRows, MacTerminalActKind> {
   const { host, stateRoot, ports, chooseFolder, start } = dependencies;
-  /** Each panel's terminals, by the agent whose branch each opened. */
-  const panels = new Map<WebContents, Map<string, Drawn>>();
+  /**
+   * Each panel's terminals, by the agent whose branch each opened, and the
+   * newest open asked for each agent while it reads the settings, which a
+   * close or the page's end cancels.
+   */
+  const panels = new Map<WebContents, Panel>();
+  let asks = 0;
 
   const closed = (drawn: Drawn) => {
     drawn.terminal.close();
@@ -110,14 +124,15 @@ export function macTerminalActRows(
   };
 
   /** The panel's terminals, its page's end watched the first time it opens one. */
-  const drawnOf = (sender: WebContents) => {
+  const panelOf = (sender: WebContents): Panel => {
     const held = panels.get(sender);
     if (held !== undefined) return held;
-    const fresh = new Map<string, Drawn>();
+    const fresh: Panel = { terminals: new Map(), asking: new Map() };
     panels.set(sender, fresh);
     ports.whenGone(sender, () => {
       panels.delete(sender);
-      for (const drawn of fresh.values()) closed(drawn);
+      fresh.asking.clear();
+      for (const drawn of fresh.terminals.values()) closed(drawn);
     });
     return fresh;
   };
@@ -133,15 +148,20 @@ export function macTerminalActRows(
     clone: string,
     command: string,
   ) => {
-    const terminals = drawnOf(sender);
+    const { terminals } = panelOf(sender);
     const standing = terminals.get(params.agentId);
-    if (standing !== undefined && !standing.exited) {
+    const same = standing?.repository === params.repository && standing.branch === params.branch;
+    if (standing !== undefined && !standing.exited && same) {
       attached(sender, params.agentId, standing);
       standing.terminal.resize(params.cols, params.rows);
       return;
     }
+    // An agent's terminal on another branch it pushed earlier is closed before the new one starts.
+    if (standing !== undefined) closed(standing);
     // Note that output the script prints before its port is posted is kept, and replayed as the port is posted.
     const drawn: Drawn = {
+      repository: params.repository,
+      branch: params.branch,
       port: undefined,
       kept: [],
       keptBytes: 0,
@@ -197,8 +217,14 @@ export function macTerminalActRows(
     },
     [ACT_KIND.MAC_TERMINAL_OPEN]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_OPEN, sender);
+      const panel = panelOf(sender.sender);
+      const ask = ++asks;
+      panel.asking.set(params.agentId, ask);
       return Effect.gen(function* () {
         const answer = yield* host.macRepositories();
+        // A tab closed, or a page gone, while the settings were read starts nothing.
+        if (panel.asking.get(params.agentId) !== ask) return;
+        panel.asking.delete(params.agentId);
         const key = params.repository.toLowerCase();
         const entry = answer?.repositories.find((each) => each.repository.toLowerCase() === key);
         if (entry?.folder == null || entry.command == null) {
@@ -213,10 +239,11 @@ export function macTerminalActRows(
     },
     [ACT_KIND.MAC_TERMINAL_CLOSE]: ({ agentId }, sender) => {
       refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_CLOSE, sender);
-      const terminals = panels.get(sender.sender);
-      const drawn = terminals?.get(agentId);
+      const panel = panels.get(sender.sender);
+      panel?.asking.delete(agentId);
+      const drawn = panel?.terminals.get(agentId);
       if (drawn === undefined) return;
-      terminals?.delete(agentId);
+      panel?.terminals.delete(agentId);
       closed(drawn);
     },
   };

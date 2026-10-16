@@ -111,3 +111,35 @@ test("closing every terminal ends what each still open started", async () => {
 
   assert.equal(alive(child), false);
 });
+
+test("a close hangs up a job in a process group of its own on the terminal", async () => {
+  const { terminal, until, ended, printed } = open((ttyFile) =>
+    [`tty > ${ttyFile}`, "set -m", 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
+  );
+
+  await until("child:");
+  const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
+  assert.ok(alive(child));
+  terminal.close();
+  await ended;
+  execFileSync("sleep", ["0.2"]);
+
+  assert.equal(alive(child), false);
+});
+
+test("a terminal that cannot start says why and ends, and Luke goes on", async () => {
+  let printed = "";
+  const code = await new Promise<number | null>((resolve) => {
+    startMacTerminal({
+      build: () => "",
+      tools: { ...LINUX_TOOLS, script: () => ["/nonexistent/script", []] },
+      onOutput: (bytes) => {
+        printed += Buffer.from(bytes).toString("utf8");
+      },
+      onExit: resolve,
+    });
+  });
+
+  assert.equal(code, null);
+  assert.match(printed, /Could not start a terminal: .*ENOENT/u);
+});
