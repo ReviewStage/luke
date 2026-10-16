@@ -60,17 +60,21 @@ fi
 
 # Fetches the commit `$1` from origin within thirty seconds, by a watchdog of
 # the shell's own rather than coreutils' `timeout`, which macOS lacks. Note
-# that neither the fetch nor the watchdog writes to the step's output, because
-# a remote helper the kill leaves running, or the watchdog's `sleep`, would
-# otherwise hold the pipe Vercel reads open after the verdict.
+# that job control (`set -m`) starts the fetch and the watchdog each in a
+# process group of its own, so the kill that ends either one ends everything
+# it started: the fetch's remote helper and the watchdog's `sleep` alike.
+# Neither writes to the step's output.
 fetch_previous() {
+    set -m
     GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1 &
     local fetching=$!
-    (sleep 30 && kill "$fetching") >/dev/null 2>&1 &
+    (sleep 30 && kill -TERM -- "-$fetching") >/dev/null 2>&1 &
     local watchdog=$!
+    set +m
     wait "$fetching"
     local fetched=$?
-    kill "$watchdog" 2>/dev/null
+    kill -TERM -- "-$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
     return "$fetched"
 }
 
