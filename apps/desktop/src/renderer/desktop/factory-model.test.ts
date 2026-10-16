@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type PlanlessAgent,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_RESPONSE, INBOX_STATUS, INBOX_WIRE_VERSION } from "@luke/features/inbox-wire";
@@ -22,6 +23,7 @@ import {
   type FactoryStop,
   type FactoryWork,
   factoryBoard,
+  factoryOneOffWaiting,
   factoryWaiting,
   LOOKBACK_MS,
 } from "./factory-model";
@@ -86,25 +88,31 @@ function board(patch: Partial<FactoryInput>) {
     plans: [],
     waiting: [],
     callPlanId: undefined,
+    oneOff: [],
+    oneOffWaiting: [],
     now: NOW,
     ...patch,
   });
 }
 
-const names = (rows: readonly { plan: PlanSummary }[]) => rows.map((row) => row.plan.name);
+/** Each row's task, or its automation for an agent with no task. */
+const names = (rows: readonly (FactoryStop | FactoryWork | { readonly plan: PlanSummary })[]) =>
+  rows.map((row) => ("plan" in row ? row.plan.name : (row.agent.automationName ?? "no task")));
 
 /** Build's work as a reader scans it: an agent by its title, a pull request by its number, each with its plan. */
 const work = (rows: readonly FactoryWork[]) =>
   rows.map((row) =>
-    row.kind === FACTORY_WORK.AGENT
-      ? `${row.agent.title} (${row.plan.name})`
-      : `#${row.pullRequest.number} (${row.plan.name})`,
+    row.kind === FACTORY_WORK.PULL_REQUEST
+      ? `#${row.pullRequest.number} (${row.plan.name})`
+      : `${row.agent.title} (${row.kind === FACTORY_WORK.AGENT ? row.plan.name : (row.agent.automationName ?? "no task")})`,
   );
 
 /** What stops an agent as a reader scans it: a question by its words, a failure by its agent. */
 const stops = (rows: readonly FactoryStop[]) =>
   rows.map((row) =>
-    row.kind === FACTORY_STOP.QUESTION ? row.item.title : `${row.agent.title} failed`,
+    row.kind === FACTORY_STOP.QUESTION || row.kind === FACTORY_STOP.ONE_OFF_QUESTION
+      ? row.item.title
+      : `${row.agent.title} failed`,
   );
 
 test("a task's agents at work stand in Build each on a row of their own, the latest moved first; a draft, an archived task, or a finished one stands nowhere", () => {
@@ -384,6 +392,100 @@ test("what waits is every open item the Inbox read of the listed plans and main'
     [
       [billing.id, ["Which account pays out?"]],
       [invites.id, ["Expire after a week?", "Send a reminder?"]],
+    ],
+  );
+});
+
+/** An agent with no task, as the plan list carries it, its automation's name where it has one. */
+function oneOff(
+  n: number,
+  status: PlanlessAgent["status"],
+  activityAt: number,
+  automationName?: string,
+): PlanlessAgent {
+  const agent: PlanlessAgent = {
+    id: `c0000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: `Sweep ${n}`,
+    createdAt: activityAt,
+    status,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-personal",
+    repository: "acme/relay",
+    activityAt,
+  };
+  return automationName === undefined ? agent : { ...agent, automationName };
+}
+
+test("an agent with no task stands in Build beside the tasks' agents: at work among the work, a failure in the last day and its open question among what waits, each by its automation", () => {
+  const working = oneOff(1, CODING_AGENT_STATUS.RUNNING, NOW - 3 * MINUTE, "Nightly flake sweep");
+  const failed = oneOff(2, CODING_AGENT_STATUS.FAILED, NOW - HOUR, "Dependency bumps");
+  const stale = oneOff(3, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE, "Old run");
+  const asking = oneOff(4, CODING_AGENT_STATUS.COMPLETED, NOW - 10 * MINUTE);
+  const drawn = board({
+    plans: [plan(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
+    oneOff: [working, failed, stale, asking],
+    oneOffWaiting: [
+      {
+        agentId: asking.id,
+        item: {
+          id: "q1",
+          agentId: asking.id,
+          title: "Quarantine the flaky test?",
+          postedAt: NOW - 5 * MINUTE,
+        },
+      },
+    ],
+  });
+  assert.deepEqual(work(drawn.working), ["Agent 1 (Search)", "Sweep 1 (Nightly flake sweep)"]);
+  assert.deepEqual(stops(drawn.stopped), ["Quarantine the flaky test?", "Sweep 2 failed"]);
+  assert.deepEqual(names(drawn.stopped), ["no task", "Dependency bumps"]);
+  assert.equal(drawn.agentsWorking, 2);
+});
+
+test("the open items an agent with no task posted are read off the Inbox by their agent, a task's left to the task, and main's count stands in for an agent not read", () => {
+  const item = (id: string, agentId: string) => ({
+    id,
+    agentId,
+    key: id,
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: id,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: NOW,
+    updatedAt: NOW,
+  });
+  const read = factoryOneOffWaiting(
+    [
+      { holder: planHolder(plan(1, "Search", HOUR)), item: item("t1", "a1") },
+      {
+        holder: {
+          kind: INBOX_HOLDER.AUTOMATION,
+          automationId: null,
+          name: "Nightly flake sweep",
+          repository: "acme/relay",
+          agents: new Map(),
+        },
+        item: item("o1", "c1"),
+      },
+    ],
+    [
+      { id: "o1", agentId: "c1", title: "o1", postedAt: NOW },
+      { id: "o2", agentId: "c2", title: "o2", postedAt: NOW },
+    ],
+  );
+  // Main's count stands for the agent whose read is not current, an item both name once.
+  assert.deepEqual(
+    read.map((each) => [each.agentId, each.item.id]),
+    [
+      ["c1", "o1"],
+      ["c2", "o2"],
     ],
   );
 });

@@ -1,3 +1,4 @@
+import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -15,7 +16,9 @@ import { INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
  * Factory is a live view, not a report: it holds no totals, only where work
  * stands now and what moved in the last day. Talk holds the task on this
  * Mac's call with Luke, being talked through. Build lists each agent still
- * at work with its task, and each pull request still in checks or a draft;
+ * at work with its task, each agent with no task (one an automation started,
+ * by its automation's name) the same way, and each pull request still in
+ * checks or a draft;
  * it leads with what stops an agent until the developer acts, the Inbox's
  * open items, every member's as the Inbox lists them, and the agents whose
  * turn failed in the last day. Ship lists
@@ -44,6 +47,8 @@ export const LOOKBACK_MS = 24 * 3_600_000;
 export const FACTORY_WORK = {
   AGENT: "agent",
   PULL_REQUEST: "pull-request",
+  /** An agent with no task at work, one an automation or a hand started on its own. */
+  ONE_OFF: "one-off",
 } as const;
 
 export type FactoryWork =
@@ -56,12 +61,17 @@ export type FactoryWork =
       readonly kind: typeof FACTORY_WORK.PULL_REQUEST;
       readonly plan: PlanSummary;
       readonly pullRequest: PlanPullRequestLine;
-    };
+    }
+  | { readonly kind: typeof FACTORY_WORK.ONE_OFF; readonly agent: PlanlessAgent };
 
 /** What stops an agent until the developer acts: an open Inbox item it posted, or its failed turn. */
 export const FACTORY_STOP = {
   QUESTION: "question",
   FAILED: "failed",
+  /** An open item an agent with no task posted. */
+  ONE_OFF_QUESTION: "one-off-question",
+  /** An agent with no task whose turn failed. */
+  ONE_OFF_FAILED: "one-off-failed",
 } as const;
 
 export type FactoryStop =
@@ -74,7 +84,19 @@ export type FactoryStop =
       readonly kind: typeof FACTORY_STOP.FAILED;
       readonly plan: PlanSummary;
       readonly agent: PlanAgentLine;
-    };
+    }
+  | {
+      readonly kind: typeof FACTORY_STOP.ONE_OFF_QUESTION;
+      readonly agent: PlanlessAgent;
+      readonly item: AppInboxWaitingItem;
+    }
+  | { readonly kind: typeof FACTORY_STOP.ONE_OFF_FAILED; readonly agent: PlanlessAgent };
+
+/** An open item an agent with no task posted, by that agent. */
+export interface FactoryOneOffItem {
+  readonly agentId: string;
+  readonly item: AppInboxWaitingItem;
+}
 
 /** What stops a merge until the developer acts: failing checks to fix, or a pull request ready to merge. */
 export const FACTORY_BLOCK = {
@@ -103,6 +125,10 @@ export interface FactoryInput {
   readonly waiting: readonly AppInboxPlan[];
   /** The plan on this Mac's call, or none. */
   readonly callPlanId: string | undefined;
+  /** The listed workspace's agents with no task that stand, not archived (chain D's plan list). */
+  readonly oneOff: readonly PlanlessAgent[];
+  /** The open items those agents posted, as the Inbox reads them (`factoryOneOffWaiting`). */
+  readonly oneOffWaiting: readonly FactoryOneOffItem[];
   readonly now: number;
 }
 
@@ -212,31 +238,60 @@ function placePlan(plan: PlanSummary, input: FactoryInput) {
   return { questions, failed, working, blocked, shipped };
 }
 
+/** Where the agents with no task stand: what of them stops, and what works. */
+function placeOneOff(input: FactoryInput) {
+  const questions = input.oneOffWaiting.flatMap(({ agentId, item }): FactoryStop[] => {
+    const agent = input.oneOff.find((each) => each.id === agentId);
+    return agent === undefined ? [] : [{ kind: FACTORY_STOP.ONE_OFF_QUESTION, agent, item }];
+  });
+  const failed = input.oneOff
+    .filter(
+      (agent) =>
+        agent.status === CODING_AGENT_STATUS.FAILED && input.now - agent.activityAt < LOOKBACK_MS,
+    )
+    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.ONE_OFF_FAILED, agent }));
+  const working = input.oneOff
+    .filter((agent) => agentStillWriting(agent.status))
+    .map((agent): FactoryWork => ({ kind: FACTORY_WORK.ONE_OFF, agent }));
+  return { questions, failed, working };
+}
+
 /** When a stop or a piece of work last moved: a question's post, an agent's turn, a pull request's plan. */
 function stopAt(stop: FactoryStop): number {
-  return stop.kind === FACTORY_STOP.QUESTION
-    ? stop.item.postedAt
-    : agentMovedAt(stop.plan, stop.agent);
+  switch (stop.kind) {
+    case FACTORY_STOP.QUESTION:
+    case FACTORY_STOP.ONE_OFF_QUESTION:
+      return stop.item.postedAt;
+    case FACTORY_STOP.FAILED:
+      return agentMovedAt(stop.plan, stop.agent);
+    case FACTORY_STOP.ONE_OFF_FAILED:
+      return stop.agent.activityAt;
+  }
 }
 
 function workAt(work: FactoryWork): number {
-  return work.kind === FACTORY_WORK.AGENT
-    ? agentMovedAt(work.plan, work.agent)
-    : factoryMovedAt(work.plan);
+  switch (work.kind) {
+    case FACTORY_WORK.AGENT:
+      return agentMovedAt(work.plan, work.agent);
+    case FACTORY_WORK.PULL_REQUEST:
+      return factoryMovedAt(work.plan);
+    case FACTORY_WORK.ONE_OFF:
+      return work.agent.activityAt;
+  }
 }
 
 function latestFirst<T>(at: (each: T) => number): (a: T, b: T) => number {
   return (a, b) => at(b) - at(a);
 }
 
-/** One kind of a list ahead of the other, each the latest first. */
+/** Each group of kinds of a list ahead of the next, each group the latest first. */
 function kindsInOrder<T extends { readonly kind: string }>(
   list: readonly T[],
-  order: readonly T["kind"][],
+  order: readonly (readonly T["kind"][])[],
   at: (each: T) => number,
 ): T[] {
-  return order.flatMap((kind) =>
-    list.filter((each) => each.kind === kind).toSorted(latestFirst(at)),
+  return order.flatMap((kinds) =>
+    list.filter((each) => kinds.includes(each.kind)).toSorted(latestFirst(at)),
   );
 }
 
@@ -244,23 +299,36 @@ function kindsInOrder<T extends { readonly kind: string }>(
 export function factoryBoard(input: FactoryInput): FactoryBoard {
   const plans = input.plans.filter((plan) => plan.archivedAt === undefined);
   const placed = plans.map((plan) => placePlan(plan, input));
-  const stops = placed.flatMap((each) => [...each.questions, ...each.failed]);
+  const oneOff = placeOneOff(input);
+  const stops = [
+    ...placed.flatMap((each) => [...each.questions, ...each.failed]),
+    ...oneOff.questions,
+    ...oneOff.failed,
+  ];
   const blockAt = (block: FactoryBlock) => factoryMovedAt(block.plan);
   return {
     talking: plans.filter((plan) => plan.id === input.callPlanId),
-    stopped: kindsInOrder(stops, [FACTORY_STOP.QUESTION, FACTORY_STOP.FAILED], stopAt),
+    stopped: kindsInOrder(
+      stops,
+      [
+        [FACTORY_STOP.QUESTION, FACTORY_STOP.ONE_OFF_QUESTION],
+        [FACTORY_STOP.FAILED, FACTORY_STOP.ONE_OFF_FAILED],
+      ],
+      stopAt,
+    ),
     working: kindsInOrder(
-      placed.flatMap((each) => each.working),
-      [FACTORY_WORK.AGENT, FACTORY_WORK.PULL_REQUEST],
+      [...placed.flatMap((each) => each.working), ...oneOff.working],
+      [[FACTORY_WORK.AGENT, FACTORY_WORK.ONE_OFF], [FACTORY_WORK.PULL_REQUEST]],
       workAt,
     ),
     blocked: kindsInOrder(
       placed.flatMap((each) => each.blocked),
-      [FACTORY_BLOCK.CHECKS, FACTORY_BLOCK.MERGE],
+      [[FACTORY_BLOCK.CHECKS], [FACTORY_BLOCK.MERGE]],
       blockAt,
     ),
     shipped: placed.flatMap((each) => each.shipped).toSorted((a, b) => b.at - a.at),
-    agentsWorking: plans.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0),
+    agentsWorking:
+      plans.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0) + oneOff.working.length,
   };
 }
 
@@ -287,4 +355,29 @@ export function factoryWaiting(
   }
   for (const { planId, items } of main) for (const item of items) add(planId, item);
   return [...byPlan].map(([planId, items]) => ({ planId, items: [...items.values()] }));
+}
+
+/**
+ * The open items of agents with no task, each by its agent: those the
+ * Inbox read, and main's own count besides where the caller hands it, which
+ * it does for an agent whose read is out or did not answer. An item both
+ * name stands once.
+ */
+export function factoryOneOffWaiting(
+  read: readonly InboxListed[],
+  main: readonly AppInboxWaitingItem[],
+): FactoryOneOffItem[] {
+  const fromRead = read.flatMap(({ holder, item }) => {
+    if (holder.kind === INBOX_HOLDER.PLAN) return [];
+    const { id, agentId, title, postedAt } = item;
+    return [{ agentId, item: { id, agentId, title, postedAt } }];
+  });
+  const seen = new Set(fromRead.map((each) => each.item.id));
+  const fromMain = main
+    .filter((item) => !seen.has(item.id))
+    .map(({ id, agentId, title, postedAt }) => ({
+      agentId,
+      item: { id, agentId, title, postedAt },
+    }));
+  return [...fromRead, ...fromMain];
 }

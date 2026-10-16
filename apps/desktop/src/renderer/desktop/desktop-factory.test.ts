@@ -5,6 +5,7 @@ import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-vie
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type PlanlessAgent,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -756,4 +757,80 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
     `https://tryluke.dev/acme/plan/${SEARCH.id}/agent/${AGENT_ID}`,
     "https://github.com/acme/relay/pull/2505",
   ]);
+});
+
+test("an agent with no task stands in Build by its automation, opens its own page, and copies its own link", async () => {
+  const sweep: PlanlessAgent = {
+    id: "c0000000-0000-4000-8000-000000000001",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Flake sweep",
+    createdAt: NOW - 3 * MINUTE,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: null,
+    automationId: null,
+    automationName: "Nightly flake sweep",
+    workspaceId: "workspace-personal",
+    repository: "acme/relay",
+    activityAt: NOW - 3 * MINUTE,
+  };
+  const failed: PlanlessAgent = {
+    ...sweep,
+    id: "c0000000-0000-4000-8000-000000000002",
+    title: "Bump deps",
+    automationName: "Dependency bumps",
+    status: CODING_AGENT_STATUS.FAILED,
+    activityAt: NOW - HOUR,
+  };
+  const pages: string[] = [];
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
+  const { page } = mount([SEARCH], {
+    workspace: {
+      id: "workspace-personal",
+      slug: "acme",
+      name: "Acme",
+      role: "owner",
+      github: null,
+    },
+    listedAgents: { standing: [sweep, failed], archived: [] },
+    agentView: {
+      agentId: undefined,
+      onOpen: (agentId) => pages.push(agentId),
+      onClose: () => undefined,
+    },
+  });
+  assert.deepEqual(rows(page, "build"), [
+    "Bump deps failed · Dependency bumps (waits)",
+    "Plan index · Search across plans",
+    "Flake sweep · Nightly flake sweep",
+  ]);
+  assert.equal(
+    page.querySelector(".factory-summary")?.textContent?.includes("2 agents working"),
+    true,
+  );
+  act(() => row(page, "Flake sweep").click());
+  act(() => row(page, "Bump deps failed").click());
+  assert.deepEqual(pages, [sweep.id, failed.id]);
+  act(() => {
+    row(page, "Flake sweep").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  const copy = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(copy);
+  await act(async () => copy.click());
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${sweep.id}`]);
 });
