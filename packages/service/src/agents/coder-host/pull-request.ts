@@ -100,6 +100,14 @@ export const OPEN_PULL_REQUEST_TOOL = {
 const PULL_REQUEST_REFUSAL = {
   UNREADABLE: `Not opened: the call needs head, title, and body, the title at most ${PULL_REQUEST_BOUNDS.MAX_TITLE_CHARS} characters.`,
   UNAVAILABLE: "Not opened: GitHub could not be reached. The call may be made again.",
+  RATE_LIMITED:
+    "Not opened: GitHub is limiting how fast requests may come. Make the call again in a minute.",
+} as const;
+
+/** The headers GitHub marks a rate limit with, which it may answer 403 rather than 429. */
+const RATE_LIMIT_HEADER = {
+  REMAINING: "x-ratelimit-remaining",
+  RETRY_AFTER: "retry-after",
 } as const;
 
 /** Why a call opened nothing where the service could not reach GitHub or its store. */
@@ -178,10 +186,23 @@ function refusalWords(refusal: typeof RefusalSchema.Type): string {
 }
 
 /**
+ * Whether GitHub's 403 is a rate limit rather than a refusal of the
+ * account's access: GitHub marks a primary limit with no requests
+ * remaining, and a secondary one with a wait to retry after.
+ */
+function rateLimited(headers: Readonly<Record<string, string | undefined>>): boolean {
+  return (
+    headers[RATE_LIMIT_HEADER.REMAINING] === "0" ||
+    headers[RATE_LIMIT_HEADER.RETRY_AFTER] !== undefined
+  );
+}
+
+/**
  * One attempt to open the pull request on the token given. A token GitHub
  * will not take (401), or whose account may not write the repository (403,
  * or 404 for a repository it cannot see), is told apart from a refusal of
- * the pull request itself, which GitHub answers 422 with its reason.
+ * the pull request itself, which GitHub answers 422 with its reason, and
+ * from a rate limit, which GitHub may answer 403 too and which passes.
  */
 const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function* (
   token: Redacted.Redacted,
@@ -197,6 +218,9 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
         case GITHUB_HTTP_STATUS.UNAUTHORIZED:
           return { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_UNLINKED };
         case GITHUB_HTTP_STATUS.FORBIDDEN:
+          return rateLimited(response.headers)
+            ? { kind: ATTEMPT.REFUSED, reason: PULL_REQUEST_REFUSAL.RATE_LIMITED }
+            : { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_NO_PUSH };
         case GITHUB_HTTP_STATUS.NOT_FOUND:
           return { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_NO_PUSH };
         case GITHUB_HTTP_STATUS.UNPROCESSABLE: {
@@ -217,39 +241,15 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
 });
 
 /**
- * The developer's own token where the agent writes as them, or why it
- * writes as the App this time: their sign-in yielding none is a sign-in
- * GitHub no longer honours. Note that the author is read off the row and
- * never settled here, because an agent from before the column, whose
- * standing session and checkout are the App's, must open as the App too.
- */
-const developerToken = /* @__PURE__ */ Effect.fn("web/pullRequestDeveloperToken")(function* (
-  target: ConversationTarget,
-  agent: CodingAgent,
-): Effect.fn.Return<
-  Result.Result<Redacted.Redacted, FallbackReason> | undefined,
-  never,
-  CheckoutServices
-> {
-  if (agent.author !== CODING_AGENT_AUTHOR.DEVELOPER) return undefined;
-  const app = yield* GitHubApp;
-  return yield* app.userToken(target.userId).pipe(
-    Effect.map((token) => Result.succeed(token)),
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(
-          `The developer's GitHub token for conversation ${target.conversationId} was not read: ${failure._tag}`,
-        ),
-        Result.fail(CODING_AGENT_AUTHOR.APP_UNLINKED),
-      ),
-    ),
-  );
-});
-
-/**
- * The attempt as the developer, where the agent writes as them: on their
- * token, or refused as their token was where their sign-in yields none;
- * nothing for an agent that writes as the App.
+ * The attempt as the developer, where the agent writes as them, on their
+ * own token; nothing for an agent that writes as the App. A sign-in that
+ * yields no token is one GitHub no longer honours, and is refused as their
+ * token would be; any other failure to read it, the store or GitHub's
+ * refresh not answering, refuses the call to be made again, so a passing
+ * outage never writes the developer out of their agent. Note that the
+ * author is read off the row and never settled here, because an agent from
+ * before the column, whose standing session and checkout are the App's,
+ * must open as the App too.
  */
 const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDeveloper")(function* (
   target: ConversationTarget,
@@ -257,12 +257,25 @@ const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDevel
   fullName: string,
   pullRequest: PullRequestAsked,
 ): Effect.fn.Return<Attempt | undefined, never, CheckoutServices> {
-  const developer = yield* developerToken(target, agent);
-  if (developer === undefined) return undefined;
-  if (Result.isFailure(developer)) {
-    return { kind: ATTEMPT.TOKEN_REFUSED, reason: developer.failure };
-  }
-  return yield* attempt(developer.success, fullName, pullRequest);
+  if (agent.author !== CODING_AGENT_AUTHOR.DEVELOPER) return undefined;
+  const app = yield* GitHubApp;
+  return yield* app.userToken(target.userId).pipe(
+    Effect.flatMap((token) => attempt(token, fullName, pullRequest)),
+    Effect.catchTag("GitHubSignInRequired", () =>
+      Effect.succeed<Attempt>({
+        kind: ATTEMPT.TOKEN_REFUSED,
+        reason: CODING_AGENT_AUTHOR.APP_UNLINKED,
+      }),
+    ),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `The developer's GitHub token for conversation ${target.conversationId} was not read: ${failure._tag}`,
+        ),
+        { kind: ATTEMPT.REFUSED, reason: PULL_REQUEST_REFUSAL.UNAVAILABLE } satisfies Attempt,
+      ),
+    ),
+  );
 });
 
 /** The pull request GitHub is asked to open: the agent's branch against the default branch, its description ending on Luke's line. */

@@ -9,10 +9,12 @@ import {
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import {
   connectWorkspaceGitHub,
+  GITHUB_FIXTURE,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  type GitHubAccountRow,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
@@ -64,14 +66,18 @@ function repository(answer: Opening) {
 }
 
 /** An agent of a signed-in developer on the repository, its author settled as given. */
-const openAgent = (installationId: number, author: CodingAgentAuthor | null) =>
+const openAgent = (
+  installationId: number,
+  author: CodingAgentAuthor | null,
+  row?: GitHubAccountRow,
+) =>
   Effect.gen(function* () {
     const installation: InstallationFixture = {
       id: installationId,
       login: RELAY.owner,
       repositories: [RELAY],
     };
-    const userId = yield* openGithubUser();
+    const userId = yield* openGithubUser(row);
     const plan = yield* startPlan(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
     yield* connectWorkspaceGitHub(plan.workspaceId, installation);
     const started = yield* createCodingAgent(userId, {
@@ -219,6 +225,47 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
         assert.equal(refused.author, CODING_AGENT_AUTHOR.DEVELOPER);
         assert.equal(untitled.result.status, ACTION_RESULT_STATUS.REJECTED);
         assert.deepEqual(untitled.openings, []);
+      }),
+  );
+
+  it.effect(
+    "a rate limit on the developer's request, or their token not refreshing while GitHub is down, opens nothing and leaves the agent theirs, for the call to be made again",
+    () =>
+      Effect.gen(function* () {
+        const limited = yield* openAgent(27, CODING_AGENT_AUTHOR.DEVELOPER);
+        const now = yield* Clock.currentTimeMillis;
+        const expired = yield* openAgent(28, CODING_AGENT_AUTHOR.DEVELOPER, {
+          accessToken: "ghu_expired",
+          refreshToken: "ghr_standing",
+          accessTokenExpiresAt: new Date(now - GITHUB_FIXTURE.HOUR_MS),
+          refreshTokenExpiresAt: new Date(now + 170 * 24 * GITHUB_FIXTURE.HOUR_MS),
+        });
+        const rateLimit = (bearer: string) =>
+          bearer === `Bearer ${DEVELOPER_TOKEN}`
+            ? Response.json(
+                { message: "You have exceeded a secondary rate limit." },
+                { status: 403, headers: { "retry-after": "60" } },
+              )
+            : opened();
+
+        const throttled = yield* open(limited, limited.target, rateLimit);
+        const outage = yield* open(expired, expired.target, opened);
+
+        assert.deepEqual(throttled.result, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason:
+            "Not opened: GitHub is limiting how fast requests may come. Make the call again in a minute.",
+        });
+        assert.equal(throttled.openings.length, 1, "the App does not open it in their place");
+        assert.deepEqual(outage.result, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "Not opened: GitHub could not be reached. The call may be made again.",
+        });
+        assert.deepEqual(outage.openings, []);
+        assert.deepEqual(
+          [throttled.author, outage.author],
+          [CODING_AGENT_AUTHOR.DEVELOPER, CODING_AGENT_AUTHOR.DEVELOPER],
+        );
       }),
   );
 });
