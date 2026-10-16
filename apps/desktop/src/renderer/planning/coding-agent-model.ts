@@ -1051,28 +1051,6 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
 }
 
 /**
- * The coding agents an agent's own calls started, by id, in the order its
- * transcript holds them: each `start_agent` that answered an agent. A tab
- * that sees one it had not reads its plan's agents again, as the plan does
- * when Luke starts one, since nothing else tells the list.
- */
-export function startedAgentIds(messages: readonly CodingAgentMessage[]): readonly string[] {
-  return messages.flatMap(agentParts).flatMap((part) => startedAgentOf(part) ?? []);
-}
-
-/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
-export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
-}
-
-/** Whether a part is a delegation to a worker (`delegates`). */
-export function isDelegation(
-  part: AgentPart,
-): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
-  return part.kind === AGENT_PART.TOOL && delegates(part);
-}
-
-/**
  * The coding agent a call started, read off its answer, which is the agent
  * its row opens; nothing for any other call, one still running, or a start
  * refused, which answers no agent.
@@ -1086,6 +1064,37 @@ export function startedAgentOf(part: AgentPart): string | undefined {
   }
   const target = toolTarget(part);
   return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
+}
+
+/** The calls that change which agents a task holds and which of them stand archived: a start, an archive, and an unarchive. */
+const AGENT_LIST_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.START_AGENT,
+  RETIRED_TOOL.START_CODING_AGENT,
+  AGENT_TOOL.ARCHIVE_AGENT,
+  AGENT_TOOL.UNARCHIVE_AGENT,
+]);
+
+/** The answered calls of a transcript that change the task's agents or which stand archived, by call id: what the agents are read again on as each lands. */
+export function agentListCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages
+    .flatMap(agentParts)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TOOL && AGENT_LIST_TOOLS.has(part.tool) && part.output !== undefined
+        ? [part.callId]
+        : [],
+    );
+}
+
+/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
+  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
+}
+
+/** Whether a part is a delegation to a worker (`delegates`). */
+export function isDelegation(
+  part: AgentPart,
+): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return part.kind === AGENT_PART.TOOL && delegates(part);
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */

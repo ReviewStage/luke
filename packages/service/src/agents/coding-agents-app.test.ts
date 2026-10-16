@@ -1357,6 +1357,36 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "the plan list names the teammate who archived an agent with no plan, as its own page does",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: task.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        yield* ask(
+          request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived: true } }),
+        );
+
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
+        );
+        const by = listed.planlessAgents?.find((each) => each.id === agent.id)?.archivedBy;
+        assert.equal(by?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(by?.member?.userId, other);
+        assert.ok((by?.member?.name ?? "") !== "", JSON.stringify(by));
+      }),
+  );
+
+  it.effect(
     "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
     () =>
       Effect.gen(function* () {
