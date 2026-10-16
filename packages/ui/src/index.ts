@@ -4,6 +4,7 @@ export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/layout/layout.js";
+export * from "./components/switch/switch.js";
 export * from "./components/text/text.js";
 export * from "./components/text-field/text-field.js";
 export * from "./css.js";
