@@ -73,14 +73,13 @@ agent you start works in a sandbox of its own, on a full checkout, and pushes
 its branch and pull request through the same App, as the App's own bot.
 
 You can also run a coding agent's pull request on your Mac: Run on this Mac,
-in the pull request's menu, fetches its newest commit into a checkout Luke
-keeps for it under its application data, with a one-repository read token the
-same App mints and Luke gives back once the fetch ends, and runs the command
-you set for that repository in its Workspace › Repositories settings, from the
-checkout's root,
-its output live in a tab of its own. Nothing runs until you press it, and the
-pull request never chooses the command. See [PRIVACY.md](PRIVACY.md) for
-details.
+in the pull request's menu, fetches its newest commit into a clone Luke keeps
+under its application data, with a one-repository read token the same App
+mints and Luke gives back once the fetch ends, and runs the repository's
+setup and run commands, shared by the workspace under Settings › Workspace ›
+Repositories, from the pull request's own checkout, its output live in a tab
+of its own. Nothing runs until you press it, and the pull request never
+chooses the commands. See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Contributing
 

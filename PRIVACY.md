@@ -74,34 +74,40 @@ is told that no Mac is listening.
 
 **Pull requests you run on your Mac.** Run on this Mac, in a coding agent's
 pull request menu, runs that pull request on your Mac, and only when you press
-it. It runs the command you set for the pull request's repository in Settings ›
-Workspace › Repositories; Luke never takes the command from the pull request, an agent cannot
-set or start one, and a repository with no command set runs nothing. Each
-press asks our service for the pull request's newest commit; the service
-checks you are a member of its workspace, reads the pull request on GitHub,
-and hands this Mac a token the Luke GitHub App mints for that one repository,
-for reading its contents, good for an hour. Luke hands the token to Git on
-this Mac through a private socket for the one fetch, never on a command line,
-in an environment variable, or in a file, gives it back to GitHub as soon as
-the fetch ends, and never shows, stores, logs, or sends it anywhere else.
-Git fetches the pull request into a folder Luke keeps for it under its
-application data (`Library/Application Support/Luke/pr-runs/`, by account,
-workspace, repository, and pull request), checks out exactly the commit the
-service read, and the command then runs from that folder in your login shell,
-as your macOS user, with Luke's own environment, so it reaches everything you
-can, like the commands above, and runs until it ends or you stop it. The
-checkout is a real Git repository with the repository's full history up to
-that commit; submodules are not fetched and Git LFS files stay pointers. It
-stays on your Mac between runs, with whatever the command installed in it,
-until you delete it with Delete Local Checkout; Luke never overwrites edits,
-commits, or files of yours in it, and refuses to refresh it instead. What the
-command prints is shown in the run's tab in the one window that ran it, and
-nowhere else: it never leaves your Mac, and is not stored, logged, counted in
-usage data, written to a trace, or seen by Luke or a model. Stop, closing the
-tab, signing out, and quitting Luke each stop the command and the processes it
-started, though a process that put itself apart from them can outlive them;
-the checkout stays. The commands you set are kept on this Mac only, for the
-account you set them under, and are never sent anywhere.
+it. It runs the setup and run commands set for the pull request's repository
+under Settings › Workspace › Repositories. Those commands are the
+workspace's: any member can set them, they are stored on our service with the
+workspace and who last changed them, and every member's Mac runs them when
+that member presses Run. Luke never takes them from the pull request, an
+agent cannot set or start them, and a repository with no run command runs
+nothing. Each press asks our service for the pull request's newest commit;
+the service checks you are a member of its workspace, reads the pull request
+on GitHub, and hands this Mac a token the Luke GitHub App mints for that one
+repository, for reading its contents, good for an hour. Luke hands the token
+to Git on this Mac through a private socket for the one fetch, never on a
+command line, in an environment variable, or in a file, gives it back to
+GitHub as soon as the fetch ends, and never shows, stores, logs, or sends it
+anywhere else. Git fetches the pull request into a clone of the repository
+Luke keeps under its application data
+(`Library/Application Support/Luke/pr-runs/`, by account, workspace, and
+repository), whose `origin` is the repository's GitHub address with no
+credential in it, and checks out exactly the commit the service read in a
+folder of the pull request's own, on a branch named for its head branch.
+The setup command runs there the first time and again whenever a lockfile
+changes, then the run command, both in your login shell, as your macOS user,
+with Luke's own environment and a free port in `LUKE_PORT`, so they reach
+everything you can, like the commands above; the run command runs until it
+ends or you stop it. The clone holds the repository's full history up to the
+commits it fetched; submodules are not fetched and Git LFS files stay
+pointers. A pull request's folder stays on your Mac between runs, with
+whatever setup installed in it, until you delete it with Delete Local
+Checkout; Luke never overwrites edits, commits, or files of yours in it, and
+refuses to refresh it instead. What the commands print is shown in the run's
+tab in the one window that ran it, and nowhere else: it never leaves your
+Mac, and is not stored, logged, counted in usage data, written to a trace, or
+seen by Luke or a model. Stop, closing the tab, signing out, and quitting
+Luke each stop the command and the processes it started, though a process
+that put itself apart from them can outlive them; the checkout stays.
 
 **Your conversation with Luke.** Nothing on your Mac writes what you said or
 what Luke spoke to disk, and no record of what he did is kept there. While a
