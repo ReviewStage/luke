@@ -7,98 +7,111 @@ the old Factory's Talk → Build → Ship stations are not used.
 
 The design show is `docs/proposals/factory-campus/index.html`. It is one
 self-contained file that fetches nothing. Open it in a browser. It copies the
-window's tokens from `base.css`, `desktop.css` and the generated motion
-tokens, and lucide's glyphs, so the sidebar, toolbar, inspector pane, rows and
-buttons match the app. The campus itself is SVG drawn by the page's script.
+window's tokens and lucide's glyphs, so the shell, pane, rows and buttons
+match the app. The campus is SVG drawn by the page's script.
+
+## Third version: character first, cues quiet
+
+V2 drew every cue at once on identical blocks. V3 goes back to the first
+version's architecture:
+
+- a tower and a hall;
+- a warehouse;
+- a sawtooth works with silos and a stack;
+- a gabled workshop with a chimney;
+- a block that can go up under a crane;
+- a glass studio.
+
+These sit with trees and lamplit roads, at night or by day. The work shows in
+a few legible cues on that scene. Exact numbers wait in the inspector for a
+click, or for Luke to walk up.
 
 ## The data it draws, and nothing more
 
-The sample is shaped as the fields the window already holds:
+- **The plan list's `TaskSummary`:** name, repository, `createdAt`, and the
+  agents' summary:
+  - `total` and `working` counts;
+  - at most three named agents, each with model, effort, status and `at`;
+  - `pullRequestTotal`;
+  - at most three named pull requests, each with number, title, state,
+    one-word checks, additions and deletions.
+- **The Inbox's open items:** agent, title, `postedAt` and options.
+- **`callTaskId`.**
 
-- **The plan list's `TaskSummary`:** its name, repository and `createdAt`, and
-  its agents' summary. That summary holds `total` and `working` counts, at most
-  three named agents (model, effort, status, `at`), `pullRequestTotal`, and at
-  most three named pull requests (number, title, state, one-word checks,
-  additions, deletions).
-- **The Inbox's open items:** the agent that posted, the title, `postedAt`,
-  and the choice options.
-- **`callTaskId`:** the task on this Mac's call.
+The sample is the shared comparison work, with the same seven tasks. The
+illustrative details the gate needs are:
 
-The sample is the shared comparison work, with the same tasks and states. The
-details the new visuals need are illustrative additions:
-
-- pull requests on the two working tasks, so the gate shows checks failing
-  and checks running;
-- three named pull requests and a fourth unnamed one on Faster workspace
-  switching;
-- five agents on that task, two of them not named.
+- **Search ranking's** pull request has failing checks.
+- **Invite your teammates'** pull request has checks running.
+- **Fix reconnect handling's** pull request is ready.
+- **Keyboard shortcuts** has no pull request yet.
+- **Faster workspace switching** has five agents (three named) and four pull
+  requests (three named).
 
 ## What each thing means
 
 | On the campus | Read from | Kind |
 | --- | --- | --- |
 | A building | one listed task | data |
-| Its plot | the task's place in `createdAt` order, oldest at the back | derived each draw, never stored |
-| A floor | one agent; floors = `agents.total`, with no cap | data |
-| A floor's light | the named agent's `status`: blue running or starting, red failed, dim when its turn ended or it was stopped; orange when an open Inbox item is that agent's (`agentId`) | data |
-| A dashed floor | counted in `total` but not named in the summary | data: unknown, not zero |
-| A beacon, with a count past one | open Inbox items on the task | data |
+| Which plot, and so which silhouette | the task's place in `createdAt` order on a fixed master plan | derived each draw, never stored. The silhouette is art direction and means nothing. |
+| Lit windows | blue: an agent running; orange: an open Inbox item; red: a failed agent; green: this Mac's call; a few soft lights: nothing happening | data |
+| Smoke from a stack | an agent running | data |
+| A beacon | an open Inbox item | data |
 | Rings | `callTaskId` | data |
-| A single glass storey | a task with no agents yet | derived |
-| A crate | one named pull request | data |
-| Its size | additions + deletions on one shared scale: **volume** proportional to lines, so an edge grows with the cube root. The key labels this as not linear, with 50, 200 and 800-line references. | data, nonlinear scale |
-| Its green and red | the additions' and deletions' shares, split across the crate's width so the top and front both show it | data |
-| A grey dashed crate with "?" at a task's door | `pullRequestTotal` minus the named ones: state and size unknown, not zero, and counted in no total | data |
-| The gate yard's three bays | open pull requests grouped by `checks`: failing (red), running (amber, pulsing), passing (green, "ready to merge"). The ready bay stands nearest the gate. Within a bay, crates are placed by PR number. | data. This is not GitHub's merge queue and implies no order. |
-| The gate and its lowered barrier | merging happens on GitHub; the mockup offers no merge action | relationship |
-| The shipped yard and its totals | merged pull requests the listed tasks' summaries name, with their count and summed additions and deletions | data, labelled as a sample, not all-time |
+| A crane and scaffolding | an agent running and `pullRequestTotal` = 0 | derived |
+| A purple flag on a roof | every named pull request merged | derived |
+| A crate | one named pull request. **Volume** is additions + deletions on one shared scale, so an edge grows with ∛lines. The key labels this as not linear. Green and red are the shares, split across its width. | data |
+| A dashed "?" crate at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
+| The merge gate's yard | open pull requests in three lanes by `checks` (failing, running, ready nearest the gate), each lane lit at its head, placed by PR number | data. It is not GitHub's merge queue and implies no order. |
+| The gatehouse and its lowered barrier | merging happens on GitHub; there is no merge action | relationship |
+| The shipped lot past the gate | merged pull requests the summaries name | data, labelled as a sample, not all-time |
 | A dashed route from a task to its crates, while either is pointed at or open | which task the pull request belongs to | relationship |
-| The toolbar's "1 question · 1 ready to merge" | open Inbox items, and open pull requests with passing checks, named separately | data |
-| The sidebar's Inbox badge | open Inbox items only | data |
+| Inside a building, with the roof off | a desk per agent in `agents.total`, with no cap; dashed figures for agents not named | data |
+| Trees, lamps, roads, plaza | nothing | scenery |
 
-Animation runs only while something is happening: a beacon while a question
-waits, rings while a call is live, a pulse while checks run, and a breathing
-window while an agent runs. Every loop answers `--loop-motion`. The trees,
-lamps, carts, smoke, crane and flags of earlier drafts are gone. Shadows and
-the ground slab remain only as 3D shading.
+Exact numbers appear only on hover or selection:
+- `+a −d`, lines, checks and task in a crate's card;
+- the split bar and numbers in the inspector;
+- the gate's lanes;
+- the shipped total, `+517 −243` for four PRs.
 
-## What you can do in the show
+The toolbar names its two kinds of waiting separately ("1 question · 1 ready
+to merge"), and the Inbox badge counts Inbox items only.
 
-- **Point at a crate** to read its numbers: `+additions −deletions`, lines
-  changed, its state and its task. The keyboard reaches each crate too.
-- **Click a building or a crate**, or a task in the sidebar. A building's
-  floors spread apart so you can see each agent at its desk, a question over
-  the agent that asked it, and a dashed figure for each agent not named. The
-  inspector lists:
-  - the question and its options;
-  - every named agent, plus a "+N more" row;
-  - every named pull request, with its chip, its additions/deletions split
-    bar and its numbers, plus an unknown row.
-- **Answer the question.** That is the Inbox item's reply, which Luke already
-  has. The beacon goes out and that agent's floor turns blue.
-- Drag to pan, scroll to zoom, and turn the campus with ⟳ or R. Escape
-  closes. Switch between Night and Day in the header. The key folds away.
-- The URL takes `?theme=light`, `?open=<task id>` and `?rot=<1–3>`. Each value
-  is checked against the page's own, so a reviewer can link to one frame.
+## Luke, walking
+
+A small Luke stands on the campus. He is a UI affordance, not work data.
+
+- **Taking the keyboard:** a click on the campus, or Tab to it, gives it the
+  keyboard. The hint at the bottom says so.
+- **Walking:** the arrow keys walk him, relative to the screen, in every turned
+  view. He keeps within the campus and the shipped lot, and goes around
+  buildings, crates, trees, the gatehouse and the barrier.
+- **Walking up to something** opens the same inspector a click does, with no
+  camera jump:
+  - stepping onto a plot opens that task, and its roof lifts;
+  - stepping up to a crate opens its task with that PR marked;
+  - stepping into the gate's yard opens the gate;
+  - stepping into the lot opens Shipped.
+
+  Walking off closes what walking opened. A click selection stays until
+  another object is reached or Escape closes it. Each arrival is announced
+  once to screen readers; steps are not.
+- **Wandering:** left alone for about 2.6 seconds, he wanders the roads. He
+  never opens, closes or changes anything, and a key press takes over at once.
+- **When walking stops:** the keys only walk while the campus holds focus, not
+  on the map's controls, the pane or anything else. Tab always leaves. Held
+  keys stop on blur, on a move to a control, and when the page is hidden.
+- **Reduced motion:** wandering is off; walking still works.
+- **Nothing is kept:** his position and the camera are the window's alone.
 
 ## Limitations
 
-- **The summaries are bounded.** Only three agents and three pull requests per
-  task are named. The campus shows the rest as dashed floors and dashed crates
-  rather than leaving them out. A ready, failing or merged pull request beyond
-  the three can't be placed, so the bays and the shipped yard cover only the
-  named ones.
-- **Draft, closed and no-checks pull requests.** A draft or closed one isn't
-  waiting on a merge, so it would stay off the yards and show only in the
-  inspector. A "no checks" bay would appear only when such a pull request
-  exists. The sample has none of these.
-- **Height means agents, not effort.** A task with many agents is a tall
-  tower, uncapped, so a very large one would need the camera to pull back.
-- **Plots run out.** The district has eight plots, which this sample fills.
-  More tasks would need a rule for growing the grid, still worked out from
-  `createdAt` each time.
-- **Times shown** are only an agent's `at` and an Inbox item's `postedAt`.
-  Merge times, check counts, file counts and call length are not shown,
-  because the summaries don't carry them.
-- **Signs are placed for the default view.** In turned views they can crowd
-  one another.
+- **Only named PRs are placed.** At most three agents and three pull requests
+  per task are named, so the lanes and the lot cover only named ones. The rest
+  show as dashed figures and crates.
+- **Some PR states have no spot.** Draft, closed and no-checks pull requests
+  would show only in the inspector. The sample has none.
+- **The master plan has eight plots.** More tasks need a rule for growing it.
+- **Labels can crowd in turned views.** They're placed for the default view.
+- **Shared space.** The studio and the block's crane stand close to the gate.
