@@ -158,15 +158,19 @@ export function repositoryPageUrl(repository: string): string {
 }
 
 /**
- * The picture of a repository's owner on GitHub, an organization's logo or a
- * person's avatar, which is drawn wherever a repository is named or picked:
- * asked of github.com, which redirects to the picture's address, because the
- * picture host answers an organization's name with GitHub's default face.
- * Asked at twice the largest size it is drawn, for a Retina screen.
+ * The picture of a GitHub account by its login, an organization's logo or a
+ * person's avatar: asked of github.com, which redirects to the picture's
+ * address, because the picture host answers an organization's name with
+ * GitHub's default face. Asked at twice the largest size it is drawn, for a
+ * Retina screen.
  */
+export function githubAccountPictureUrl(login: string): string {
+  return `https://github.com/${encodeURIComponent(login)}.png?size=32`;
+}
+
+/** The picture of a repository's owner on GitHub, which is drawn wherever a repository is named or picked. */
 export function repositoryOwnerPictureUrl(repository: string): string {
-  const owner = repository.slice(0, repository.indexOf("/"));
-  return `https://github.com/${encodeURIComponent(owner)}.png?size=32`;
+  return githubAccountPictureUrl(repository.slice(0, repository.indexOf("/")));
 }
 
 /** What the New plan dialog says when the service answered no plan. */
