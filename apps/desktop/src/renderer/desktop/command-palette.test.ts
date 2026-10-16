@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -50,6 +52,9 @@ interface Sent {
   views: SettingsView[];
 }
 
+/** The window's own stylesheet, which says which part of a row gives way. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
+
 const roots: Root[] = [];
 
 beforeEach(installScrollIntoView);
@@ -59,6 +64,7 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 /** An agent's page, as far as it tells the window the workspace it read its agent into. */
@@ -925,6 +931,24 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
     `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
   ]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("an action's name keeps its width beside the task it acts on, and the task's name is what gives way", () => {
+  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  openPalette(ON_AGENT_TAB);
+  type("copy link");
+  const at = rows().indexOf(`Copy link to task · ${DOCUMENT_PLAN.name}`);
+  const row =
+    document.querySelectorAll(".menu-item")[at] ?? assert.fail("Copy link to task is listed");
+  const name = row.querySelector(".command-palette-name") ?? assert.fail("the row's name");
+  const detail = row.querySelector(".command-palette-detail") ?? assert.fail("the task it acts on");
+
+  assert.equal(getComputedStyle(name).flexShrink, "0", "the name keeps its width");
+  assert.deepEqual(
+    [getComputedStyle(detail).flexShrink, getComputedStyle(detail).minWidth],
+    ["1", "0px"],
+    "the task's name gives way",
+  );
 });
 
 test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {

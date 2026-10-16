@@ -343,6 +343,27 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
   assert.equal(section?.querySelector("svg"), null);
 });
 
+test("a refused read of the task list says so under Recent, with Retry, which asks for the list again", async () => {
+  let retries = 0;
+  const { page } = mount({
+    plans: [],
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    listFailed: true,
+    onRetryList: () => {
+      retries += 1;
+    },
+  });
+  await settle();
+
+  const recent = page.querySelector('section[aria-labelledby="home-recent"]');
+  const said = recent?.querySelector('[role="alert"]')?.textContent;
+  act(() => button(page, "Retry").click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.match(said ?? "", /^Your tasks could not be read\./u);
+  assert.equal(retries, 1);
+});
+
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
   const { page } = mount({
     plans: [],

@@ -1,6 +1,6 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { cssCustomProperties } from "@luke/ui";
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { useDisclosure } from "../use-disclosure";
@@ -35,6 +35,8 @@ const PICKER_SIDE = {
   BELOW: "below",
   ABOVE: "above",
 } as const;
+
+type PickerSide = (typeof PICKER_SIDE)[keyof typeof PICKER_SIDE];
 
 /** The gap the menu keeps from the chip and from the window's edge, which its placement subtracts from the room. */
 const MENU_GAP = 6;
@@ -93,6 +95,65 @@ function roomAround(chip: HTMLElement) {
   return { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
 }
 
+/** The attributes the box holding a chip and its menu wears, which say where the menu hangs. */
+interface PickerPlacementProps {
+  readonly "data-side": PickerSide;
+  readonly style: React.CSSProperties | undefined;
+}
+
+/**
+ * Where a chip's menu hangs as it opens, from the chip's edge `align`
+ * names, as the attributes the box holding the chip and the menu wears:
+ * `data-side`, the list's cap as `--settings-picker-list-max`, and the
+ * menu's widest as `--settings-picker-width-max`. Every chip whose menu
+ * drops from a form row, a Settings picker and the repository chip in a
+ * dialog or an editor, is placed by it, so none runs past the window's foot
+ * while there is room above, nor past its side.
+ */
+export function usePickerPlacement(
+  open: boolean,
+  chip: RefObject<HTMLElement | null>,
+  align: PickerAlign,
+): PickerPlacementProps {
+  const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
+
+  // The menu is placed from the chip's bounds on the frame it opens, before it is painted.
+  useLayoutEffect(() => {
+    if (!open || chip.current === null) return;
+    const bounds = chip.current.getBoundingClientRect();
+    const room = roomAround(chip.current);
+    // Note that the scale is read off the chip itself, because the page the
+    // desktop draws Settings in is zoomed and a computed `zoom` names only
+    // the element's own; a layout box with no height, as under a test, is one to one.
+    const scale = chip.current.offsetHeight > 0 ? bounds.height / chip.current.offsetHeight : 1;
+    setPlacement(
+      pickerPlacement({
+        chipTop: bounds.top,
+        chipBottom: bounds.bottom,
+        chipLeft: bounds.left,
+        chipRight: bounds.right,
+        roomTop: room.top,
+        roomBottom: room.bottom,
+        roomLeft: room.left,
+        roomRight: room.right,
+        align,
+        scale,
+      }),
+    );
+  }, [open, chip, align]);
+
+  return {
+    "data-side": placement?.side ?? PICKER_SIDE.BELOW,
+    style:
+      placement === undefined
+        ? undefined
+        : cssCustomProperties({
+            "--settings-picker-list-max": `${placement.listMax}px`,
+            "--settings-picker-width-max": `${placement.widthMax}px`,
+          }),
+  };
+}
+
 /** What a picker is handed: the value it names and the menu it drops. */
 interface PickerProps {
   /** The control's name for a reader: the row's own name, or a fuller one where that is too short. */
@@ -144,35 +205,10 @@ export function Picker({
 }: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
-  const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
   const menuId = useId();
   const row = useRef<HTMLSpanElement>(null);
   const chip = useRef<HTMLButtonElement>(null);
-
-  // The menu is placed from the chip's bounds on the frame it opens, before it is painted.
-  useLayoutEffect(() => {
-    if (!open || chip.current === null) return;
-    const bounds = chip.current.getBoundingClientRect();
-    const room = roomAround(chip.current);
-    // Note that the scale is read off the chip itself, because the page the
-    // desktop draws Settings in is zoomed and a computed `zoom` names only
-    // the element's own; a layout box with no height, as under a test, is one to one.
-    const scale = chip.current.offsetHeight > 0 ? bounds.height / chip.current.offsetHeight : 1;
-    setPlacement(
-      pickerPlacement({
-        chipTop: bounds.top,
-        chipBottom: bounds.bottom,
-        chipLeft: bounds.left,
-        chipRight: bounds.right,
-        roomTop: room.top,
-        roomBottom: room.bottom,
-        roomLeft: room.left,
-        roomRight: room.right,
-        align,
-        scale,
-      }),
-    );
-  }, [open, align]);
+  const placement = usePickerPlacement(open, chip, align);
 
   // Note that we hand focus back to the chip, as a native menu returns it to
   // its button, because closing takes the focused menu away with it.
@@ -182,20 +218,7 @@ export function Picker({
   };
 
   return (
-    <span
-      className="settings-picker"
-      ref={row}
-      data-side={placement?.side ?? PICKER_SIDE.BELOW}
-      data-align={align}
-      style={
-        placement === undefined
-          ? undefined
-          : cssCustomProperties({
-              "--settings-picker-list-max": `${placement.listMax}px`,
-              "--settings-picker-width-max": `${placement.widthMax}px`,
-            })
-      }
-    >
+    <span className="settings-picker" ref={row} {...placement} data-align={align}>
       <Chip
         ref={chip}
         look={CHIP_LOOK.FIELD}

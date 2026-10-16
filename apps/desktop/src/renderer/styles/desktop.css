@@ -3495,6 +3495,18 @@ ul.actor-stack {
   left: 0;
 }
 
+/* Wherever it stands, the menu is placed as a Settings picker's is
+   (`usePickerPlacement`): above the chip where the window leaves more room
+   there, its list capped to the room on the side it took. */
+.repository-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--space-4));
+}
+
+.repository-chip .plan-compose-menu-list {
+  max-height: min(288px, var(--settings-picker-list-max, 288px));
+}
+
 /* A harness's or a provider's mark keeps its box in a row however tight the
    row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
    traced ones (`@luke/ui`'s `ProviderMark`) do. */
@@ -6965,7 +6977,11 @@ button.automation-run:hover {
 /* An irreversible act asks the way every desktop app asks: the window dims
    behind a centred card. Over the menu and the window's drag strip alike, so
    it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. */
+   tokens, which reduced motion and a capture run already hold still. The
+   card is never taller than the window less its margins: its body (the
+   question, a list of choices, a note being written) is the part that gives
+   way and scrolls, so its title and its answers stay on screen however short
+   the window is. */
 .confirm-dialog-backdrop {
   position: fixed;
   z-index: var(--z-dialog);
@@ -6981,6 +6997,7 @@ button.automation-run:hover {
 .confirm-dialog {
   display: flex;
   width: min(400px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-20);
@@ -7006,7 +7023,9 @@ button.automation-run:hover {
 }
 
 .confirm-dialog-body {
+  min-height: 0;
   margin: 0;
+  overflow-y: auto;
   color: var(--text-secondary);
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -7168,9 +7187,12 @@ button.automation-run:hover {
   outline: none; /* no ring: the highlighted row marks it */
 }
 
+/* A row's name keeps its whole width, up to most of the row, and the detail
+   after it is what gives way: an action's name is short and says what the
+   row does, where its detail (the task it acts on) can run long. */
 .command-palette-name {
-  min-width: 0;
-  flex: 0 1 auto;
+  max-width: 70%;
+  flex: none;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -7301,12 +7323,14 @@ button.automation-run:hover {
 }
 
 /* The note grows with its words, up to where scrolling it is kinder than a
-   card the height of the window. No resize handle: the box is already sized
-   by what it holds. */
+   card the height of the window, and is the card's body: in a window too
+   short for the card it gives way, down to its least height, so the
+   screenshots, the signature, and the answers stay on screen. No resize
+   handle: the box is already sized by what it holds. */
 .feedback-dialog-message {
   width: 100%;
   min-height: 112px;
-  max-height: min(320px, 50vh);
+  max-height: 320px;
   padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
@@ -7679,7 +7703,9 @@ button.automation-run:hover {
 
 /* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
    a tile and two lines each, the chosen one ringed and one that cannot take
-   the plan dimmed, then what the move does in a well under them. */
+   the plan dimmed, then what the move does in a well under them. The rows
+   are the card's body, which scrolls where the window is too short for all
+   of them, padded by the ring's reach so a row's ring is never cut off. */
 .move-dialog {
   width: min(440px, 100%);
   gap: var(--space-12);
@@ -7687,7 +7713,13 @@ button.automation-run:hover {
 
 .move-list {
   display: grid;
+  min-height: 0;
   gap: var(--space-2);
+  margin: calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .move-row {
@@ -7736,18 +7768,20 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom, in the corner itself
-   whatever stands at the window's foot: a call bar, the side panel, or the
-   summary. The folded sidebar's call card keeps the other corner, and the
-   window is never narrow enough for the two to meet. Each rises in on the
-   spring and fades first on its way out; the stack itself takes no pointer,
-   so only a card with something to press stands in the way of what is under
-   it, and that card is always one the developer can dismiss. */
+   its bottom-right corner, newest at the bottom. Over a dock at the
+   window's foot under it (a plan's call bar, an agent's composer) the stack
+   stands just above that dock, the window's step clear of it, as the folded
+   sidebar's call card does in the other corner; the toasts measure the dock
+   (`--toast-dock`). The window is never narrow enough for the two to meet.
+   Each rises in on the spring and fades first on its way out; the stack
+   itself takes no pointer, so only a card with something to press stands in
+   the way of what is under it, and that card is always one the developer
+   can dismiss. */
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: var(--space-16);
+  bottom: max(var(--space-16), calc(var(--toast-dock, 0px) + var(--space-8)));
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
 }

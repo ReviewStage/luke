@@ -10,7 +10,7 @@ import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
-import { PICKER_ALIGN, type PickerAlign } from "../settings/picker-row";
+import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
 
@@ -37,6 +37,8 @@ import { useDisclosure } from "../use-disclosure";
  * are set, and a member is told to ask one. The list is read from the service when the chip mounts and again
  * whenever the window takes focus, so a developer back from connecting
  * GitHub in the browser sees the change on the next opening; nothing polls. The menu
+ * is placed as a Settings picker's is, below the chip or above it where the
+ * window leaves more room there, its list capped to that room. It
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
  * there, so it closes the menu and not the panel behind it.
  */
@@ -189,6 +191,7 @@ export function RepositoryChip(props: {
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
@@ -296,6 +299,7 @@ export function RepositoryChip(props: {
       className="repository-chip"
       data-place={props.place}
       data-align={props.align ?? PICKER_ALIGN.END}
+      {...placement}
       ref={chip}
     >
       {triggerDrawn ? (
