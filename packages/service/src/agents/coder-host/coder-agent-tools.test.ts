@@ -13,6 +13,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { createPlan } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { plan } from "@luke/database/schemas/plan";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -502,12 +503,7 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   );
   assert.equal(stored.planId, plans.billing);
   assert.equal(eve.sent.length, 1);
-  // The same call run again after its task moved to another workspace answers the agent it made.
-  await database.run(
-    Effect.flatMap(Database, (db) =>
-      db.update(plan).set({ organizationId: elsewhere }).where(eq(plan.id, plans.billing)),
-    ),
-  );
+  // The same call run again answers the agent it made, and starts nothing.
   const again = await call(
     CODER_TOOL.START_AGENT,
     { taskId: plans.billing, prompt: "Add the invoice export." },
@@ -515,6 +511,27 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   );
   assert.ok(isRecord(again.agent), JSON.stringify(again));
   assert.equal(again.agent.id, started.agent.id);
+  // Once its task has moved to another workspace, its agents with it as a move takes them, the call
+  // tells nothing of that agent and still starts none.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      Effect.andThen(
+        db.update(plan).set({ organizationId: elsewhere }).where(eq(plan.id, plans.billing)),
+        db
+          .update(codingAgent)
+          .set({ organizationId: elsewhere })
+          .where(eq(codingAgent.planId, plans.billing)),
+      ),
+    ),
+  );
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.START_AGENT,
+      { taskId: plans.billing, prompt: "Add the invoice export." },
+      "call-billing",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_SUCH_TASK },
+  );
   assert.equal(eve.sent.length, 1, "the call run again starts nothing");
 
   assert.deepEqual(

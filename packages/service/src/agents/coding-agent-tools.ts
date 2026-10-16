@@ -793,11 +793,16 @@ export function runStartAgent(
   const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   return orStoreRefusal(
     Effect.gen(function* () {
-      // Another task is started on only where it is one of the caller's own workspace; a call run
-      // again after its start landed answers the agent it made, wherever its task stands since.
+      // Another task is started on only where it is one of the caller's own workspace. A call run
+      // again after its start landed answers the agent it made while that agent is still of the
+      // caller's workspace, and is refused as naming none once its task has moved out of it, so a
+      // retry neither starts a second agent nor tells of one in a workspace the caller left behind.
       if (named !== undefined && named !== callerTask(caller)) {
         const made = yield* readCodingAgentByKey(callerUserId(caller), call.clientKey);
         if (Option.isSome(made)) {
+          const workspace = yield* callerWorkspace(caller);
+          const ours = Option.isSome(workspace) && made.value.organizationId === workspace.value;
+          if (!ours) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
           return {
             status: ACTION_RESULT_STATUS.ACCEPTED,
             agent: yield* startedReading(made.value, yield* offeredModels),
