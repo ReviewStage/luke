@@ -3,7 +3,7 @@ import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { DocumentIcon } from "@luke/ui";
-import { AppWindowIcon, HashIcon, InboxIcon } from "lucide-react";
+import { HashIcon, InboxIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref";
 import { AutomationDirectory, useAutomation } from "../automation-directory";
@@ -11,6 +11,7 @@ import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory";
 import { useAppState, useExperiment } from "../use-app-state";
 import { useMentionedReader } from "./mentioned-agent-card";
+import { PageCard } from "./page-card";
 import { usePlanMentions } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
@@ -23,8 +24,8 @@ import { useMinute } from "./task-time";
  * sidebar row and from a chip in an agent's words: a plan's is the plan's
  * card (`../desktop/task-card.tsx`), and a section's or a version's the
  * same card's head with the section's heading or the version under it in
- * the agents' stead; a page's is its title, its version, and when it last
- * moved; a person's is their card (`../actor-ref.tsx`); an Inbox item's is
+ * the agents' stead; a page's is its tab's, its title, its version, and
+ * when it last moved over a preview of it (`page-card.tsx`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
  * its question and that it waits on the team, and when it was asked; an
  * automation's is its card, the workspace's automations read as the card is
  * first hung where no directory around it reads them yet. Everything else
@@ -145,7 +146,7 @@ export function VersionChipCard({
   );
 }
 
-/** A page's card: its title, its version, and when it last moved, where the window holds the page; else `fallback`. */
+/** A page's card, its tab's, previewing it, where the window holds the page, one of the open plan's; else `fallback`. */
 export function PageChipCard({
   pageId,
   fallback,
@@ -153,19 +154,11 @@ export function PageChipCard({
   pageId: string;
   fallback: ReactNode;
 }): ReactNode {
-  const page = useAppState()?.tasks?.pages?.find((each) => each.id === pageId);
-  const now = useMinute();
-  if (page === undefined) return fallback;
-  return (
-    <HoverCard data-page-card="">
-      <CardHead
-        glyph={<AppWindowIcon aria-hidden="true" />}
-        name={page.title}
-        sub={versionWords(page.version)}
-        corner={<RelativeTime at={page.at} now={now} hint={false} />}
-      />
-    </HoverCard>
-  );
+  const tasks = useAppState()?.tasks;
+  const page = tasks?.pages?.find((each) => each.id === pageId);
+  const taskId = tasks?.activeTaskId;
+  if (page === undefined || taskId === undefined) return fallback;
+  return <PageCard taskId={taskId} page={page} />;
 }
 
 /** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */

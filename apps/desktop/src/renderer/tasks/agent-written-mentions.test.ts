@@ -2,11 +2,14 @@
 
 import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -20,7 +23,8 @@ import { OpenLinkProvider } from "./use-open-link";
  * page: a page it
  * showed, another agent, a section of its plan, and a file of its
  * repository, each as the chip of what it names, called by the name the
- * agent wrote, and a page's chip opens the page in the window. Synthetic
+ * agent wrote, and a page's chip opens the page in the window and hangs its
+ * tab's card, previewing it, where the page is the open plan's. Synthetic
  * workspace, task, page, and agent.
  */
 
@@ -108,4 +112,41 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   assert.deepEqual(opened, [
     { workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: TASK, pageId: PAGE } },
   ]);
+});
+
+test("a page's chip on the open plan hangs the page's tab's card, previewing its newest version", async () => {
+  const state = stateWith(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        activeTaskId: TASK,
+        pages: [{ id: PAGE, title: "Invite funnel", version: 2, at: 1_800_000_000_000 }],
+      },
+    },
+  );
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(state),
+    },
+  });
+  const container = drawn(REPLY, []);
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const page = container.querySelector<HTMLElement>('.mention-chip[data-kind="page"]');
+  assert.ok(page, "the page's chip");
+  act(() => {
+    page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-page-card]");
+  assert.ok(card, "the page's tab's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, "Invite funnel");
+  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 2");
+  assert.equal(
+    card.querySelector("iframe")?.getAttribute("src"),
+    pageFrameUrl({ taskId: TASK, pageId: PAGE, version: 2 }),
+  );
 });

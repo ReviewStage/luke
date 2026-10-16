@@ -43,7 +43,8 @@ import { useLinesLook } from "./file-tab";
  * The tab stays on the source or the page while its versions are stepped.
  */
 
-const PAGE_SANDBOX = "allow-scripts";
+/** What a frame drawing a page lets it do: run its own scripts, and nothing else. */
+export const PAGE_SANDBOX = "allow-scripts";
 
 /** What the tab shows: the page drawn, or its HTML as source. */
 const PAGE_VIEW = {

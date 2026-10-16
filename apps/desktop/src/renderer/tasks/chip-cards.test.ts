@@ -126,6 +126,7 @@ const STATE: AppStateSnapshot = (() => {
       ...IDLE_TASKS_VIEW,
       tasks: [PLAN],
       workspaces: [ACME, BETA],
+      activeTaskId: PLAN_ID,
       pages: [{ id: PAGE_ID, title: "Unfurl matrix", version: 3, at: AT }],
     },
     inbox: {
