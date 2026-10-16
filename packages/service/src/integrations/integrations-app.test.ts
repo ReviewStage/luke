@@ -41,6 +41,7 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
   deleteIntegrationAccount,
+  deleteIntegrationConnection,
   endIntegrationSignIn,
   expireIntegrationConnection,
   fillIntegrationLabel,
@@ -762,46 +763,42 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a disconnect that read an account replaced since under the same name leaves the replacement standing",
+    "a disconnect that read an account replaced since under the same name, even the first under the same subject, leaves the replacement standing and says so",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount("dee@replaced.example");
-        const under = (connectSubject: string, state: string) =>
+        const first = (state: string) =>
           Effect.andThen(
             beginIntegrationSignIn(
               userId,
-              { provider: NOTION, connectionName: "notion-2", connectSubject },
+              firstIntegrationAccount(userId, NOTION),
               state,
               Redacted.make("connect-verifier"),
             ),
-            completeIntegrationSignIn(userId, "notion-2", state),
+            completeIntegrationSignIn(userId, NOTION, state),
           );
-        yield* under("subject-read", `state-read-${userId}`);
+        yield* first(`state-read-${userId}`);
         const read = yield* readIntegrationConnections(userId);
-        // Another window disconnects it and adds another account under the same name after this disconnect read it.
-        yield* deleteIntegrationAccount({
-          userId,
-          connectionName: "notion-2",
-          connectSubject: "subject-read",
-        });
-        yield* under("subject-replacing", `state-replacing-${userId}`);
+        // Another window disconnects it and connects Notion again, under the same name and subject, after this disconnect read it.
+        yield* deleteIntegrationConnection(userId, NOTION);
+        yield* first(`state-replacing-${userId}`);
+        const replacing = yield* readIntegrationConnections(userId);
+        let reads = 0;
         const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, undefined, {
-          readConnections: () => Effect.succeed(read),
+          readConnections: () => {
+            reads += 1;
+            return Effect.succeed(reads === 1 ? read : replacing);
+          },
         });
 
-        yield* group.ask(
-          `/api/account/integrations/disconnect?provider=${NOTION}&connection=notion-2`,
-          {
-            method: "POST",
-            userId,
-          },
-        );
+        const answer = yield* group.ask(`/api/account/integrations/disconnect?provider=${NOTION}`, {
+          method: "POST",
+          userId,
+        });
+        assert.deepEqual(answer.body, { status: INTEGRATION_STATUS.CONNECTED });
         assert.deepEqual(
-          (yield* readIntegrationConnections(userId)).map((row) => [
-            row.connectionName,
-            row.connectSubject,
-          ]),
-          [["notion-2", "subject-replacing"]],
+          (yield* readIntegrationConnections(userId)).map((row) => row.id),
+          replacing.map((row) => row.id),
         );
       }),
   );

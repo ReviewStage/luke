@@ -433,36 +433,34 @@ export function deleteIntegrationConnection(
   return deleteRow({ userId, connectionName });
 }
 
-const SubjectAccountSchema = Schema.Struct({
+const HeldAccountSchema = Schema.Struct({
   userId: Schema.String,
   connectionName: Schema.String,
-  connectSubject: Schema.String,
+  id: Schema.String,
 });
 
 const deleteHeld = SqlSchema.findAll({
-  Request: SubjectAccountSchema,
+  Request: HeldAccountSchema,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ connectSubject, ...account }) =>
+  execute: ({ id, ...account }) =>
     Database.use((db) =>
       db
         .delete(integrationConnection)
-        .where(and(ofAccount(account), eq(integrationConnection.connectSubject, connectSubject)))
+        .where(and(ofAccount(account), eq(integrationConnection.id, id)))
         .returning({ id: integrationConnection.id }),
     ),
 });
 
 /**
- * Disconnects the one account read, under its subject, and answers whether
- * it was still there: an account added since under the same name stands.
+ * Disconnects the one account read, by its row's own id, and answers
+ * whether it was still there: an account added since under the same name
+ * stands, even a provider's first, whose subject is always the user's own.
  */
 export function deleteIntegrationAccount(
-  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "connectSubject">,
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
 ): IntegrationStoreEffect<boolean> {
-  const { userId, connectionName, connectSubject } = account;
-  return Effect.map(
-    deleteHeld({ userId, connectionName, connectSubject }),
-    (deleted) => deleted.length > 0,
-  );
+  const { userId, connectionName, id } = account;
+  return Effect.map(deleteHeld({ userId, connectionName, id }), (deleted) => deleted.length > 0);
 }
 
 const deleteUnfinished = SqlSchema.void({
