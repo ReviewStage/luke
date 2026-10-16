@@ -304,61 +304,15 @@
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A short set of values as one segmented control (`segmented.tsx`), in the
-   look the side panel's tabs have: the chosen segment filled, the rest quiet until
-   hovered. The row it stands in wraps, so a narrow page drops the control
-   under its label rather than clipping it or running it under the chip
-   column; still too wide for the row, it gives way to the row's width and
-   its segments wrap onto a second line inside the trough, so the last of
-   them never stands past the card's edge. */
+/* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
+   narrow page drops the control under its label rather than clipping it or
+   running it under the chip column. */
 .settings-row-wrapping {
   flex-wrap: wrap;
 }
 
 .settings-row-wrapping .settings-copy {
   flex: 1 1 200px;
-}
-
-.segmented {
-  display: inline-flex;
-  min-inline-size: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: var(--space-2);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-}
-
-.segment {
-  /* Note that a segment draws the ring inside itself, because its trough
-     leaves it no room for one outside. */
-  --focus-ring-offset: var(--focus-ring-inset);
-  height: calc(var(--control-height) - 2 * var(--space-2));
-  padding: 0 var(--space-12);
-  border-radius: calc(var(--control-radius) - var(--space-2));
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 560;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.segment:hover {
-  color: var(--text-primary);
-}
-
-.segment[aria-checked="true"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.segment:disabled {
-  opacity: 0.4;
 }
 
 /* The one green thing on the line, in the same palette a finished session
