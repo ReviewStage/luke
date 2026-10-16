@@ -907,7 +907,7 @@ function Answered({
       {pick === undefined ? null : (
         <span className="inbox-pick" data-inbox-pick="">
           <CheckIcon aria-hidden="true" />
-          {pick}
+          <span>{pick}</span>
         </span>
       )}
       {settled.words === undefined ? null : (

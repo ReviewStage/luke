@@ -4496,11 +4496,15 @@ button.integration-tool-head:hover,
 }
 
 /* What the developer picked leads their comment as a chip, a check and the
-   option's label, so the pick is said once. */
+   option's label, so the pick is said once. A label too long for the
+   comment, a path or an identifier, wraps anywhere inside the chip, as an
+   option's does, rather than running past the comment's clip; the check
+   stays on its first line. */
 .inbox-pick {
   display: inline-flex;
+  max-width: 100%;
   align-self: flex-start;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-4);
   padding: 1px var(--space-6);
   border-radius: 6px;
@@ -4510,7 +4514,14 @@ button.integration-tool-head:hover,
   font-weight: 500;
 }
 
+.inbox-pick > span,
+.inbox-offered > summary > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .inbox-pick svg {
+  margin-top: calc((1lh - 12px) / 2);
   width: 12px;
   height: 12px;
   flex: none;
@@ -4521,7 +4532,8 @@ button.integration-tool-head:hover,
    it is opened, on transform alone. */
 .inbox-offered > summary {
   display: inline-flex;
-  align-items: center;
+  max-width: 100%;
+  align-items: flex-start;
   gap: var(--space-6);
   border-radius: var(--control-radius);
   color: var(--text-secondary);
@@ -4538,6 +4550,7 @@ button.integration-tool-head:hover,
 }
 
 .inbox-offered > summary svg {
+  margin-top: calc((1lh - 14px) / 2);
   width: 14px;
   height: 14px;
   flex: none;
