@@ -41,6 +41,7 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
@@ -215,6 +216,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
   const words = brief.prompt ?? (ask.planId === null ? undefined : ask.note);
+  // What the words mention of the plan's pages and agents is read before the agent is made, so a
+  // read that fails leaves no agent its retry would find and never open a session for.
+  const reads =
+    words === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
@@ -246,12 +253,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           ? eveContent(
               brief.planSnapshot,
               [],
-              words === undefined ? undefined : mentionedContext(words, landing.plan),
+              words === undefined ? undefined : mentionedContext(words, landing.plan, reads),
             )
           : eveContent(
               brief.prompt,
               ask.attachments ?? [],
-              mentionedContext(brief.prompt, landing.plan),
+              mentionedContext(brief.prompt, landing.plan, reads),
             ),
     })
     .pipe(

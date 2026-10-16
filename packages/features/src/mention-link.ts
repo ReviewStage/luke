@@ -37,6 +37,10 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  *   workspace's slug reads well and is never trusted, so a slug spelled
  *   another way later breaks no link. The desktop's own scheme is the same
  *   address with `tryluke:` for `https:`, which reads as the same mention.
+ * - A page an agent showed on a plan is the plan's address with
+ *   `/page/<pageId>` after it, and one of the plan's coding agents with
+ *   `/agent/<agentId>`, the links the window already opens them by
+ *   (`luke-link.ts`): ids alone, never the page's title or the agent's.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -83,6 +87,8 @@ export const MENTION_KIND = {
   SERVER: "server",
   TOOL: "tool",
   LINK: "link",
+  PAGE: "page",
+  AGENT: "agent",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -108,6 +114,8 @@ const MENTION_SIGIL = "@";
 /** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
 const LINK = {
   PLAN_STEP: "plan",
+  PAGE_STEP: "page",
+  AGENT_STEP: "agent",
 } as const;
 
 /** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
@@ -197,6 +205,12 @@ const planIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_PLAN_ID_CHARS),
 );
 
+/** A page's or an agent's id as the service mints one, as a Luke link holds it: letters, digits, `_`, and `-`. */
+const thingIdSchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_PLAN_ID_CHARS),
+  EffectSchema.isPattern(/^[A-Za-z0-9_-]+$/u),
+);
+
 /** A path from the repository's root that stays inside it. */
 const pathSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
@@ -269,12 +283,31 @@ const mentionSchema = EffectSchema.Union([
       EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_URL_CHARS),
     ),
   }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.PAGE),
+    planId: planIdSchema,
+    pageId: thingIdSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.AGENT),
+    planId: planIdSchema,
+    agentId: thingIdSchema,
+  }),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
 
 /** A mention of the plan or one of its sections. */
-export type PlanMention = Extract<Mention, { readonly planId: string }>;
+export type PlanMention = Extract<
+  Mention,
+  { readonly kind: typeof MENTION_KIND.PLAN | typeof MENTION_KIND.SECTION }
+>;
+
+/** A mention of something the plan holds beside its words: a page an agent showed on it, or one of its coding agents. */
+export type TaskMention = Extract<
+  Mention,
+  { readonly kind: typeof MENTION_KIND.PAGE | typeof MENTION_KIND.AGENT }
+>;
 
 /** A mention of an MCP server or one of its tools. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
@@ -401,13 +434,23 @@ function legacyFields(url: URL) {
   }
 }
 
-/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`. */
+/** The fields a page's or an agent's address under its plan spells after the plan's id: `/page/<id>` or `/agent/<id>`, with no fragment. */
+function taskFields(planId: string | undefined, rest: readonly string[], hash: string) {
+  const [step, id, ...more] = rest;
+  if (id === undefined || more.length > 0 || hash !== "") return undefined;
+  if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, planId, pageId: decodedPart(id) };
+  if (step === LINK.AGENT_STEP)
+    return { kind: MENTION_KIND.AGENT, planId, agentId: decodedPart(id) };
+  return undefined;
+}
+
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it. */
 function planFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
   if (first !== "" || workspace === "" || step !== LINK.PLAN_STEP || id === undefined) {
     return undefined;
   }
-  if (rest.length > 0) return undefined;
+  if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
   const planId = decodedPart(id);
   if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.PLAN, planId };
   const anchor = decodedPart(url.hash.slice(1))?.toLowerCase();
@@ -674,6 +717,10 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}/${encodedPart(mention.tool)}`;
     case MENTION_KIND.LINK:
       return linkAddress(mention.url);
+    case MENTION_KIND.PAGE:
+      return `${planTarget(mention.planId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    case MENTION_KIND.AGENT:
+      return `${planTarget(mention.planId, place, "")}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
   }
 }
 
@@ -744,8 +791,12 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** What a bare link's chip names a plan by, since its address holds no name of the plan's. */
-const BARE_PLAN_NAME = "Plan";
+/** What a bare link's chip names a plan, a page, and an agent by, since its address holds no name of theirs. */
+const BARE_NAME = {
+  PLAN: "Plan",
+  PAGE: "Page",
+  AGENT: "Agent",
+} as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
 function linesName(path: string, lines: MentionLines | undefined): string {
@@ -762,7 +813,7 @@ function linesName(path: string, lines: MentionLines | undefined): string {
 function bareName(mention: Mention): string {
   switch (mention.kind) {
     case MENTION_KIND.PLAN:
-      return BARE_PLAN_NAME;
+      return BARE_NAME.PLAN;
     case MENTION_KIND.SECTION:
       return mention.anchor;
     case MENTION_KIND.FILE:
@@ -775,6 +826,10 @@ function bareName(mention: Mention): string {
       return mention.tool;
     case MENTION_KIND.LINK:
       return readableLink(mention.url);
+    case MENTION_KIND.PAGE:
+      return BARE_NAME.PAGE;
+    case MENTION_KIND.AGENT:
+      return BARE_NAME.AGENT;
   }
 }
 

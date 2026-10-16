@@ -12,8 +12,11 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
-import { FolderIcon, HashIcon } from "lucide-react";
+import { AppWindowIcon, FolderIcon, HashIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { LinkDrawer } from "../markdown-message";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
@@ -21,6 +24,7 @@ import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
+import { AgentMark } from "./tab-look";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -38,7 +42,12 @@ import { useOpenLink } from "./use-open-link";
  * place can open none. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark; a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. Its card, hung while the pointer rests
+ * browser, its card saying its address. A page an agent showed on a plan
+ * wears its tab's glyph, and one of a plan's coding agents its harness's
+ * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
+ * opens its tab through the window's opener for a Luke link, as a link
+ * copied to it does, and an agent hangs its tab's own card where the place
+ * has one. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
@@ -72,6 +81,14 @@ export interface MentionDoors {
   readonly onOpenPlan: (mention: PlanMention) => void;
   /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
+  /** One of the plan's agents as its chip wears it; none where the place knows the plan's agents not. */
+  readonly agentOf?: ((agentId: string) => MentionedAgentLook) | undefined;
+}
+
+/** An agent as its chip wears it: its tile, and the card its tab hangs. */
+interface MentionedAgentLook {
+  readonly actor: Actor;
+  readonly card: ReactNode;
 }
 
 /**
@@ -103,6 +120,12 @@ const GONE_WORDS = "No longer in the plan";
 /** What a server's card says of it. */
 const SERVER_WORDS = "An MCP server";
 
+/** What a page's card says of it. */
+const PAGE_WORDS = "A page on this task";
+
+/** What an agent's card says of it, where the place has no card of its tab. */
+const AGENT_WORDS = "A coding agent on this task";
+
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
@@ -111,9 +134,10 @@ function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
 }
 
-/** What a press on the chip does, or nothing where it opens nothing from here. */
+/** What a press on the chip does, or nothing where it opens nothing from here; `target` is the mention's link as written. */
 function pressOf(
   mention: Mention,
+  target: string,
   state: MentionState,
   doors: MentionDoors,
   openLink: (href: string) => void,
@@ -139,10 +163,20 @@ function pressOf(
             ? mention
             : { kind: MENTION_KIND.PLAN, planId: mention.planId },
         );
+    // A page or an agent opens its tab as its Luke link does, through the window's opener, under the workspace it was written in.
+    case MENTION_KIND.PAGE:
+    case MENTION_KIND.AGENT:
+      return () => openLink(target);
   }
 }
 
-function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
+function MentionGlyph({
+  mention,
+  doors,
+}: {
+  mention: Mention;
+  doors: MentionDoors;
+}): React.JSX.Element {
   switch (mention.kind) {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
@@ -156,6 +190,16 @@ function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
+    case MENTION_KIND.PAGE:
+      return <AppWindowIcon aria-hidden="true" />;
+    case MENTION_KIND.AGENT: {
+      const look = doors.agentOf?.(mention.agentId);
+      return look === undefined ? (
+        <AgentMark provider={undefined} />
+      ) : (
+        <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
+      );
+    }
   }
 }
 
@@ -166,6 +210,8 @@ function noteOf(mention: Mention, state: MentionState): string | undefined {
   if (mention.kind === MENTION_KIND.TOOL)
     return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
   if (mention.kind === MENTION_KIND.LINK) return mention.url;
+  if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
+  if (mention.kind === MENTION_KIND.AGENT) return AGENT_WORDS;
   return undefined;
 }
 
@@ -179,24 +225,29 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, or its glyph and whole name, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
 function MentionCard({
   mention,
   name,
   state,
+  doors,
 }: {
   mention: Mention;
   name: string;
   state: MentionState;
-}): React.JSX.Element {
+  doors: MentionDoors;
+}): ReactNode {
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
+  const tabCard =
+    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
+  if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state);
   return (
     <HoverCard data-mention-card="">
-      <CardHead glyph={<MentionGlyph mention={mention} />} name={whole} />
+      <CardHead glyph={<MentionGlyph mention={mention} doors={doors} />} name={whole} />
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
@@ -205,27 +256,33 @@ function MentionCard({
 /** A mention in words: its chip, a button that opens what it names where it can, hanging its card. */
 export function MentionChip({
   mention,
+  target,
   name,
   doors,
 }: {
   mention: Mention;
+  /** Its link's target as written, which names it. */
+  target: string;
   /** The name it was written with, without its `@`. */
   name: string;
   doors: MentionDoors;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const state = mentionState(mention, doors);
-  const press = pressOf(mention, state, doors, openLink);
+  const press = pressOf(mention, target, state, doors, openLink);
   const face = (
     <>
       <span className="mention-chip-glyph">
-        <MentionGlyph mention={mention} />
+        <MentionGlyph mention={mention} doors={doors} />
       </span>
       <span className="mention-chip-label">{name}</span>
     </>
   );
   return (
-    <Tooltip label={name} card={<MentionCard mention={mention} name={name} state={state} />}>
+    <Tooltip
+      label={name}
+      card={<MentionCard mention={mention} name={name} state={state} doors={doors} />}
+    >
       {press === undefined ? (
         <span className="mention-chip" data-kind={mention.kind} data-state={state}>
           {face}
@@ -254,7 +311,7 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label) => {
     const found = linkMention(label, href, doors.place.repository);
     if (found === undefined) return undefined;
-    return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+    return <MentionChip mention={found.mention} target={href} name={found.name} doors={doors} />;
   };
 }
 
@@ -276,5 +333,5 @@ export function MentionNodeChip({
 }): React.JSX.Element {
   const named = decodeMention(mention.target, doors.place.repository);
   if (named === undefined) return <>{`@${mention.name}`}</>;
-  return <MentionChip mention={named} name={mention.name} doors={doors} />;
+  return <MentionChip mention={named} target={mention.target} name={mention.name} doors={doors} />;
 }

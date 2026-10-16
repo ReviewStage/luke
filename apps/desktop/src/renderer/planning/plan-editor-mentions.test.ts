@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { Plan } from "@luke/features/plan-wire";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { act, createElement } from "react";
@@ -12,6 +13,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { PlanBody } from "./plan-body";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 
 /**
  * `@` in the plan's editor over the real editor bundle: the word typed
@@ -64,25 +66,26 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page drawn editable with its mentions, its editor opened on Rollout. */
-async function opened() {
+/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
+async function opened(page?: PlanMentionsValue) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const body = createElement(PlanBody, {
+    plan: PLAN,
+    live: false,
+    onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+    sectionLinks: {
+      workspace: "acme",
+      onOpen: () => undefined,
+      onOpenFile: () => undefined,
+      reveal: undefined,
+    },
+  });
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        plan: PLAN,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: {
-          workspace: "acme",
-          onOpen: () => undefined,
-          onOpenFile: () => undefined,
-          reveal: undefined,
-        },
-      }),
+      page === undefined ? body : createElement(PlanMentions, { value: page, children: body }),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -185,5 +188,43 @@ test("a heading just renamed is offered by its new words, before the editor hand
   assert.deepEqual(
     listed(plan.container).find(([group]) => group === "Plan"),
     ["Plan", ["Rollout plan"]],
+  );
+});
+
+test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    pages: [{ id: "page-1", title: "Invites by week" }],
+    agents: [
+      {
+        id: "agent-2",
+        name: "Wire the desktop",
+        actor: {
+          kind: ACTOR_KIND.AGENT,
+          name: "Wire the desktop",
+          provider: undefined,
+          state: ACTOR_STATE.REST,
+        },
+      },
+    ],
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).map(([group]) => group),
+    ["Plan", "Pages", "Agents"],
   );
 });

@@ -1195,6 +1195,7 @@ function AgentTabView({
           />
         ) : (
           <AgentComposer
+            agentId={agent.id}
             status={agent.status}
             composer={composer}
             model={model}

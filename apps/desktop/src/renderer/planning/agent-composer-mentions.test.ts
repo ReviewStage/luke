@@ -18,6 +18,7 @@ import {
 } from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
@@ -180,16 +181,38 @@ function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsVal
   };
 }
 
+/** The agent whose box is drawn. */
+const SELF_ID = "agent-1";
+
+/** A page an agent showed on the plan, and two of its agents, the box's own among them. */
+const PAGE = { id: "page-1", title: "Invites by week" };
+const STORE_AGENT = {
+  id: "agent-2",
+  name: "Wire the desktop",
+  actor: {
+    kind: ACTOR_KIND.AGENT,
+    name: "Wire the desktop",
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  },
+} as const;
+const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
+
+/** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
+function taskPage(opened: Mention[] = []): PlanMentionsValue {
+  return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
+}
+
 /** The box on the composer's own control, its sends answered by `sender`. */
 function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource }): ReactNode {
   const composer = useAgentComposer({
-    agentId: "agent-1",
+    agentId: SELF_ID,
     planId: PLAN_ID,
     messages: [],
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills });
+  return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
 
 /** The node drawn on a plan's page, or off any page where none is given; `redraw` draws it on the page given. */
@@ -531,5 +554,102 @@ test("off a plan's page a sent message's page of an integration's is still its c
   act(() => chip.click());
 
   assert.deepEqual(told.at(-1), { kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } });
+  assert.equal(carryingTarget(container), undefined);
+});
+
+/** The list's groups, each by its label with its rows' names. */
+function groupsListed(container: HTMLElement): [string | null, string[]][] {
+  return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
+    group.getAttribute("aria-label"),
+    [...group.querySelectorAll(".plan-compose-menu-name")].map((name) => name.textContent ?? ""),
+  ]);
+}
+
+test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, and not the agent whose box it is", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  const agentGlyph = container.querySelector('.mention-menu [aria-label="Agents"] .actor-mark');
+
+  assert.deepEqual(groupsListed(container), [
+    ["Plan", ["Goal", "Rollout", "Invitations"]],
+    ["Pages", ["Invites by week"]],
+    ["Agents", ["Wire the desktop"]],
+    ["MCP servers", ["Linear"]],
+  ]);
+  assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
+});
+
+test("a page picked from the @ list is drawn as its chip and sent as its link, which names the page by its id alone", async () => {
+  const { container, sent } = await box(taskPage());
+
+  typeInComposer(container, "Build @invites");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  const pageMention: Mention = { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: PAGE.id };
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Invites by week"],
+  );
+  assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
+  assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
+});
+
+test("another agent picked from the @ list is drawn as its chip and sent as its link, which names the agent by its id alone", async () => {
+  const { container, sent } = await box(taskPage());
+
+  typeInComposer(container, "Build on @wire");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(sent, [
+    "Build on [@Wire the desktop](https://tryluke.dev/acme/plan/pl_1/agent/agent-2)",
+  ]);
+});
+
+test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
+  const opened: ReadLink[] = [];
+  const page = mentionMarkdown(
+    { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: PAGE.id },
+    PAGE.title,
+    PLACE,
+  );
+  const agent = mentionMarkdown(
+    { kind: MENTION_KIND.AGENT, planId: PLAN_ID, agentId: STORE_AGENT.id },
+    STORE_AGENT.name,
+    PLACE,
+  );
+  const container = drawn(
+    createElement(
+      OpenLinkProvider,
+      { value: (link: ReadLink) => opened.push(link) },
+      createElement(TranscriptWords, { text: `Build ${page} on ${agent}.` }),
+    ),
+    taskPage(),
+  );
+
+  const chips = [...container.querySelectorAll<HTMLButtonElement>("button.mention-chip")];
+  for (const chip of chips) act(() => chip.click());
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    [PAGE.title, STORE_AGENT.name],
+  );
+  assert.deepEqual(opened, [
+    { workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: PLAN_ID, pageId: PAGE.id } },
+    {
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: STORE_AGENT.id },
+    },
+  ]);
   assert.equal(carryingTarget(container), undefined);
 });

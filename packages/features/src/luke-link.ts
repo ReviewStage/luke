@@ -9,7 +9,9 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * (`link-home.ts`), and the desktop is handed the same address in its own
  * scheme, as a plan's and a section's already are (`mention-link.ts`, which
  * still writes and reads those two, so a plan's link is spelled in one
- * place). Each step after the workspace says what kind of thing comes next,
+ * place, and writes a page's and an agent's under a plan as this module
+ * does, since a mention names them by these links too). Each step after the
+ * workspace says what kind of thing comes next,
  * and a list is plural where a thing is singular, as GitHub's `/pulls` and
  * `/pull/1` are:
  *
