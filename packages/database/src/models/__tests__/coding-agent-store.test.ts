@@ -528,7 +528,7 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
         const pullRequest = (number: number) => ({
           number,
           title: "Invite flow",
-          url: `https://github.com/acme/api/pull/${number}`,
+          url: `https://github.com/acme/relay/pull/${number}`,
           state: PULL_REQUEST_STATE.OPEN,
           checks: CHECK_SUMMARY.PASSING,
           additions: 1,
