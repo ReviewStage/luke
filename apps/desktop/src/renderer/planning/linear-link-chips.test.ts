@@ -187,15 +187,13 @@ test("where the workspace has no Linear connected, nothing is asked and the chip
   );
 });
 
-test("off a plan, as in the window's own Inbox, the issue is read through the account's one workspace with Linear connected", async () => {
+test("off a plan, as in the window's own Inbox, nothing is asked, since the words name no workspace to read through", async () => {
   const { container, asked } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR, false);
 
-  assert.deepEqual(chips(container), [["ENG-1 Start a plan from Linear", "In Progress"]]);
+  assert.deepEqual(chips(container), [["ENG-1/start-a-plan-from-linear", null]]);
   assert.deepEqual(
-    asked
-      .filter((each) => each.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES)
-      .map((each) => each.payload),
-    [{ workspaceId: "workspace-acme", identifier: "ENG-1" }],
+    asked.filter((each) => each.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES),
+    [],
   );
 });
 

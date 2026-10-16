@@ -10,9 +10,10 @@ import { useAppState } from "../use-app-state";
  * use-linear-issue.ts -- a Linear issue a link in Luke's words names, as its chip says it: its title and the state it stands in, read through the workspace's own Linear.
  *
  * The workspace is the one the words are of: the plan's, where they are a
- * plan's, else the one their mentions are written under, else, where the
- * words name neither, as the window's own Inbox draws an item's, the one
- * workspace of the account's that has Linear connected. The issue is read
+ * plan's, else the one their mentions are written under. Words that name
+ * neither, as the window's own Inbox draws an item's, read nothing, since
+ * an issue read through another workspace's Linear would be drawn in the
+ * wrong one. The issue is read
  * once per chip, by its identifier, through the workspace's grant on the
  * service, and only where that workspace has Linear connected, so a chip in
  * a workspace without it asks nothing. Until it answers, or where it never
@@ -27,19 +28,17 @@ export interface ChipWhere {
   readonly workspace: string;
 }
 
-/** The workspace the words a chip stands in are of: the plan's, else the one their mentions are written under, else the account's one with Linear connected. */
+/** The workspace the words a chip stands in are of: the plan's, else the one their mentions are written under; none where they name neither. */
 function wordsWorkspace(
   planning: PlanningView | undefined,
   where: ChipWhere,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
   const planWorkspaceId = planning?.plans.find((plan) => plan.id === where.planId)?.workspaceId;
-  const named =
+  return (
     workspaces.find((each) => each.id === planWorkspaceId) ??
-    workspaces.find((each) => each.slug === where.workspace);
-  if (named !== undefined) return named;
-  const connected = workspaces.filter((each) => each.linear?.active === true);
-  return connected.length === 1 ? connected[0] : undefined;
+    workspaces.find((each) => each.slug === where.workspace)
+  );
 }
 
 /** The issue `identifier` names, through the Linear of the workspace `where` stands in; none while unread, refused, unconnected, or with no identifier. */
