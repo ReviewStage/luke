@@ -39,6 +39,12 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
+import {
+  AgentPicturesProvider,
+  CallPictures,
+  ShownPictures,
+  useAgentPictureDoor,
+} from "./agent-pictures";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
@@ -285,17 +291,20 @@ function ToolCallView({
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   return (
-    <TranscriptTool
-      data-call-id={part.callId}
-      state={part.state}
-      kind={view.kind}
-      provider={view.provider}
-      subject={view.subject}
-      description={view.description}
-      input={view.input}
-      output={view.output}
-      errorText={part.errorText}
-    />
+    <>
+      <TranscriptTool
+        data-call-id={part.callId}
+        state={part.state}
+        kind={view.kind}
+        provider={view.provider}
+        subject={view.subject}
+        description={view.description}
+        input={view.input}
+        output={view.output}
+        errorText={part.errorText}
+      />
+      <CallPictures tool={part.tool} input={part.input} output={part.output} />
+    </>
   );
 }
 
@@ -484,6 +493,10 @@ function AgentPartView({
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL: {
+      // A set of pictures the agent showed, or is showing, is drawn as itself; one refused keeps its row, where its error is read.
+      if (part.tool === AGENT_TOOL.SHOW_IMAGE && part.state !== TOOL_STATE.OUTPUT_ERROR) {
+        return <ShownPictures input={part.input} output={part.output} />;
+      }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
       const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
@@ -1061,6 +1074,7 @@ function AgentTabView({
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
   const starterActor = usePerson(agent.startedBy);
+  const pictures = useAgentPictureDoor(agent.id);
   const { members } = useMemberDirectory();
   const origin = agentOrigin({
     agent,
@@ -1073,37 +1087,39 @@ function AgentTabView({
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
-        <AgentTranscriptView
-          messages={lines}
-          brief={agent.brief}
-          briefSender={starter === undefined ? undefined : starterActor}
-          origin={origin}
-          readerId={readerId}
-          delegation={{
-            models,
-            own: { model: agent.model, effort: agent.effort },
-            starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-            onOpen: onOpenSubagent,
-            onOpenTarget,
-            cards,
-            standings: transcript.subagents,
-          }}
-          reading={transcript.reading}
-          failed={transcript.failed}
-          working={working}
-          sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-          startedAt={startedAt}
-          ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-          endReason={endLineReason(transcript.failure, starter)}
-          onOpenApiKeys={onOpenApiKeys}
-          onRetry={transcript.onRetry}
-          footer={
-            showsPublishedRow(agent.status, published) ? (
-              <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-            ) : null
-          }
-          overComposer
-        />
+        <AgentPicturesProvider value={pictures}>
+          <AgentTranscriptView
+            messages={lines}
+            brief={agent.brief}
+            briefSender={starter === undefined ? undefined : starterActor}
+            origin={origin}
+            readerId={readerId}
+            delegation={{
+              models,
+              own: { model: agent.model, effort: agent.effort },
+              starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+              onOpen: onOpenSubagent,
+              onOpenTarget,
+              cards,
+              standings: transcript.subagents,
+            }}
+            reading={transcript.reading}
+            failed={transcript.failed}
+            working={working}
+            sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+            startedAt={startedAt}
+            ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+            endReason={endLineReason(transcript.failure, starter)}
+            onOpenApiKeys={onOpenApiKeys}
+            onRetry={transcript.onRetry}
+            footer={
+              showsPublishedRow(agent.status, published) ? (
+                <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+              ) : null
+            }
+            overComposer
+          />
+        </AgentPicturesProvider>
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
@@ -1297,6 +1313,7 @@ export function AgentSubagentTab({
   const owner =
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
+  const pictures = useAgentPictureDoor(agentId, callId);
   const { members } = useMemberDirectory();
   const macOwner = macOwnerOf(owner?.startedBy, members, control.me);
   // As an agent's: dated by the page it was read from, with the worker's own title.
@@ -1308,19 +1325,21 @@ export function AgentSubagentTab({
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
-        <AgentTranscriptView
-          messages={workerLines(task, transcript.messages)}
-          lead={WORKER_LEAD}
-          origin={sender === undefined ? undefined : { sender }}
-          delegation={{ models: control.models }}
-          reading={transcript.reading}
-          failed={transcript.failed}
-          working={agentStillWriting(status)}
-          sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-          startedAt={shown ? transcript.runStartedAt : undefined}
-          ended={endLine(status, transcript.failure)}
-          onRetry={transcript.onRetry}
-        />
+        <AgentPicturesProvider value={pictures}>
+          <AgentTranscriptView
+            messages={workerLines(task, transcript.messages)}
+            lead={WORKER_LEAD}
+            origin={sender === undefined ? undefined : { sender }}
+            delegation={{ models: control.models }}
+            reading={transcript.reading}
+            failed={transcript.failed}
+            working={agentStillWriting(status)}
+            sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+            startedAt={shown ? transcript.runStartedAt : undefined}
+            ended={endLine(status, transcript.failure)}
+            onRetry={transcript.onRetry}
+          />
+        </AgentPicturesProvider>
       </MacOwnerProvider>
     </section>
   );

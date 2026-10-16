@@ -58,6 +58,8 @@ export const CALL_KIND = {
   START_AGENT: "start-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
+  /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
+  SHOW_IMAGE: "show-image",
   OTHER: "other",
 } as const;
 
@@ -94,6 +96,7 @@ export const CALL_WORDS = {
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
+  [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
@@ -365,7 +368,8 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
  * and its words left out where they were said aloud.
  * A block the reading keeps out of the fold, as an agent's newest to-do
  * list is, is drawn right after the fold, ahead of the last words, so it
- * keeps its order against them.
+ * keeps its order against them; a finished turn with no last words folds
+ * its work all the same where it keeps one, which then ends the turn.
  */
 export function turnRows<B>(
   blocks: readonly B[],
@@ -382,9 +386,14 @@ export function turnRows<B>(
 ): readonly TurnRow<B>[] {
   const said = turn.said === true;
   const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
-  const last = said
+  const words = said
     ? blocks.length
     : blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
+  // Note that a finished turn with no last words still folds its work where it
+  // keeps a block out, because the block it keeps would otherwise stand inside
+  // a closed group of the calls beside it.
+  const keepsOne = keyed.some((each) => read.kept?.(each.block) === true);
+  const last = words < 0 && turn.done && keepsOne ? blocks.length : words;
   if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, said);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);

@@ -50,6 +50,7 @@ import {
   codingAgentModelsAnswerSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
+  codingAgentPictureParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
@@ -442,6 +443,7 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  CODING_AGENTS_PICTURE: "codingAgents.picture",
   /**
    * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
    * listed, started, named, and ended, its sandbox resumed on the
@@ -1258,6 +1260,13 @@ export const ACT = {
       isReadable(codingAgentInboxAttachmentViewSchema),
     ),
     refusal: "Could not read the inbox item's image on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PICTURE]: {
+    payload: actSchema(codingAgentPictureParamsSchema),
+    result: wireResult<CodingAgentInboxAttachmentView>(
+      isReadable(codingAgentInboxAttachmentViewSchema),
+    ),
+    refusal: "Could not read the agent's picture on this system.",
   },
   [ACT_KIND.TERMINAL_LIST]: {
     payload: actSchema(terminalAgentParamsSchema),

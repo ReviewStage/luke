@@ -256,6 +256,11 @@ function fixture() {
           asked.push(`attachment:${itemId}:${attachmentId}`);
           return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
         }),
+      codingAgentPicture: ({ agentId, pictureId, callId }) =>
+        Effect.sync(() => {
+          asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
+          return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -360,5 +365,39 @@ it.effect(
       });
       assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
       assert.deepEqual(asked, ["workspace agents workspace-1"]);
+    }),
+);
+
+it.effect(
+  "a panel's read of an agent's or a worker's picture reaches the host as asked, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const pictureId = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
+      const read = (callId?: string) =>
+        ({
+          kind: ACT_KIND.CODING_AGENTS_PICTURE,
+          payload: {
+            agentId: AGENT_ID,
+            pictureId,
+            ...(callId === undefined ? undefined : { callId }),
+          },
+        }) as const;
+
+      const agents = yield* router.performAct(read(), PANEL);
+      const workers = yield* router.performAct(read("call-worker"), PANEL);
+      const refused = yield* router.performAct(read(), VOICE);
+
+      const picture = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      assert.deepEqual(agents, { status: ACT_OUTCOME_STATUS.DONE, value: picture });
+      assert.deepEqual(workers, { status: ACT_OUTCOME_STATUS.DONE, value: picture });
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PICTURE].refusal,
+      });
+      assert.deepEqual(asked, [
+        `picture:${AGENT_ID}:${pictureId}:`,
+        `picture:${AGENT_ID}:${pictureId}:call-worker`,
+      ]);
     }),
 );

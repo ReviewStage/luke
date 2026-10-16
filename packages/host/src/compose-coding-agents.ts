@@ -25,6 +25,7 @@ import {
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
   codingAgentPageParamsSchema,
+  codingAgentPictureParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -104,6 +105,7 @@ export type CodingAgentClient = Pick<
   | "answerInbox"
   | "accountInbox"
   | "inboxAttachment"
+  | "agentPicture"
 >;
 
 export interface CodingAgentsDependencies {
@@ -397,6 +399,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "reading an inbox item's image names the item and the attachment",
         );
         const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
+        return carried<CodingAgentInboxAttachmentView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PICTURE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, pictureId, callId } = yield* read(
+          codingAgentPictureParamsSchema,
+          params,
+          "reading an agent's picture names the agent and the picture",
+        );
+        const answer = yield* asked(client.agentPicture(agentId, pictureId, callId));
         return carried<CodingAgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>

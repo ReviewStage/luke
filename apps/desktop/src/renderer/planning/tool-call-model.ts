@@ -117,6 +117,14 @@ function stringAt(value: WireValue | undefined, key: string): string | undefined
   return isRecord(value) && isWireString(value[key]) ? value[key] : undefined;
 }
 
+/** The files a `show_image` call named, in order, as its row's subject. */
+function shownPaths(input: WireValue | undefined): string {
+  const images = isRecord(input) && Array.isArray(input.images) ? input.images : [];
+  return images
+    .flatMap((image) => (isRecord(image) && isWireString(image.path) ? [image.path] : []))
+    .join(", ");
+}
+
 function isWireArray(value: WireValue): value is readonly WireValue[] {
   return Array.isArray(value);
 }
@@ -468,6 +476,13 @@ function knownToolView(
         kind: CALL_KIND.SHOW_PAGE,
         subject: stringAt(input, "title") ?? "",
         input: textBlock(stringAt(input, "path") ?? stringAt(input, "html") ?? ""),
+        output: output === undefined ? undefined : jsonBlock(output),
+      };
+    case AGENT_TOOL.SHOW_IMAGE:
+      return {
+        kind: CALL_KIND.SHOW_IMAGE,
+        subject: shownPaths(input),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : jsonBlock(output),
       };
     case AGENT_TOOL.POST_TO_INBOX:

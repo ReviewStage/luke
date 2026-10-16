@@ -15,6 +15,7 @@
     "./avatar-grant": "./src/avatar-grant.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
+    "./agent-pictures-model": "./src/agent-pictures-model.js",
     "./agent-tools": "./src/agent-tools.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
