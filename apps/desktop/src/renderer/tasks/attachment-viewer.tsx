@@ -191,7 +191,7 @@ export function AttachmentViewer({
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
-  const zoom = useImageZoom(file?.url ?? "");
+  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "");
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);

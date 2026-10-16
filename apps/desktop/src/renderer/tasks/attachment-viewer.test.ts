@@ -241,6 +241,15 @@ test("the zoom stays with the picture: moved along the files it keeps it, and an
   );
   viewer.show([FIRST, SECOND], 0);
   assert.equal(drawn(viewer.picture()).scale, 1, "another picture shown in its place opens fitted");
+  viewer.show([FIRST, { ...FIRST, name: "copy.png" }], 0);
+  viewer.picture();
+  viewer.key("=");
+  viewer.key("ArrowRight");
+  assert.equal(
+    drawn(viewer.picture()).scale,
+    1,
+    "a copy of the same bytes under its own name opens fitted",
+  );
 });
 
 test("a frame grown past the zoomed picture centres it again", () => {
@@ -265,4 +274,15 @@ test("a mouse counting its wheel in lines zooms by about as much as one counting
   viewer.key("0");
   viewer.fire(image, notch(-3, WheelEvent.DOM_DELTA_LINE));
   assert.equal(drawn(image).scale, byPixels);
+});
+
+test("a wheel counting pages moves a zoomed picture by the frame's own width across and height down", () => {
+  const viewer = opened();
+  const image = viewer.picture();
+  for (const _ of [1, 2, 3]) viewer.key("=");
+  const page = { bubbles: true, cancelable: true, deltaMode: WheelEvent.DOM_DELTA_PAGE };
+  viewer.fire(image, new WheelEvent("wheel", { ...page, deltaX: -1 }));
+  assert.equal(drawn(image).x, 800, "a page across is the frame's 800 wide");
+  viewer.fire(image, new WheelEvent("wheel", { ...page, deltaY: -0.5 }));
+  assert.equal(drawn(image).y, 250, "half a page down is half the frame's 500 tall");
 });

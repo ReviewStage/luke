@@ -53,9 +53,15 @@ const WHEEL_DELTA = {
 /** The CSS pixels a wheel's line stands for. */
 const WHEEL_LINE_PX = 16;
 
+/** The picture a view is of: its file's name and its address, since two files may hold the same bytes. */
+interface Subject {
+  readonly name: string;
+  readonly url: string;
+}
+
 /** The view of the picture `subject` names, and whether it glides to it from the last. */
 interface Shown {
-  readonly subject: string;
+  readonly subject: Subject;
   readonly view: ImageView;
   readonly glide: boolean;
 }
@@ -90,10 +96,10 @@ function measured(
   };
 }
 
-/** A wheel's delta in CSS pixels, whatever its `deltaMode` counts: a page is the frame's height. */
-function wheelPixels(event: WheelEvent, delta: number, frame: HTMLElement): number {
+/** A wheel's delta in CSS pixels, whatever its `deltaMode` counts: a page is the frame's own length along the delta's axis, `page`. */
+function wheelPixels(event: WheelEvent, delta: number, page: number): number {
   if (event.deltaMode === WHEEL_DELTA.LINE) return delta * WHEEL_LINE_PX;
-  if (event.deltaMode === WHEEL_DELTA.PAGE) return delta * frame.clientHeight;
+  if (event.deltaMode === WHEEL_DELTA.PAGE) return delta * page;
   return delta;
 }
 
@@ -109,16 +115,22 @@ function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoi
 }
 
 /**
- * The zoom of the picture `subject` names, fitted until a gesture says
+ * The zoom of the file named `name` at `url`, fitted until a gesture says
  * otherwise. Note that the zoom belongs to the picture rather than to its
  * place among the files, so another picture shown, however it came to be,
  * opens fitted, and the same picture moved along the files as an earlier one
  * lands keeps its zoom.
  */
-export function useImageZoom(subject: string): ImageZoom {
-  const [stored, setShown] = useState<Shown>({ subject, view: FITTED_VIEW, glide: false });
-  const shown: Shown =
-    stored.subject === subject ? stored : { subject, view: FITTED_VIEW, glide: false };
+export function useImageZoom(name: string, url: string): ImageZoom {
+  const [stored, setShown] = useState<Shown>({
+    subject: { name, url },
+    view: FITTED_VIEW,
+    glide: false,
+  });
+  const isShown = (subject: Subject) => subject.name === name && subject.url === url;
+  const shown: Shown = isShown(stored.subject)
+    ? stored
+    : { subject: { name, url }, view: FITTED_VIEW, glide: false };
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
   const press = useRef<Press | undefined>(undefined);
@@ -130,13 +142,14 @@ export function useImageZoom(subject: string): ImageZoom {
       const sizes = measured(frame.current, image.current);
       if (sizes === undefined) return;
       setShown((last) => {
-        const from = last.subject === subject ? last.view : FITTED_VIEW;
+        const same = last.subject.name === name && last.subject.url === url;
+        const from = same ? last.view : FITTED_VIEW;
         const view = next(from, sizes);
         // A change that moves nothing, a resize's or a scroll's on a fitted picture, draws nothing.
-        return last.subject === subject && sameView(view, from) ? last : { subject, view, glide };
+        return same && sameView(view, from) ? last : { subject: { name, url }, view, glide };
       });
     },
-    [subject],
+    [name, url],
   );
 
   // Note that the scroll is heard on the element itself rather than through
@@ -148,8 +161,8 @@ export function useImageZoom(subject: string): ImageZoom {
       if (element === null) return undefined;
       const wheel = (event: WheelEvent) => {
         const at = pointIn(element, event.clientX, event.clientY);
-        const dx = wheelPixels(event, event.deltaX, element);
-        const dy = wheelPixels(event, event.deltaY, element);
+        const dx = wheelPixels(event, event.deltaX, element.clientWidth);
+        const dy = wheelPixels(event, event.deltaY, element.clientHeight);
         if (event.ctrlKey) {
           event.preventDefault();
           change(false, (view, sizes) => zoomedByWheel(view, sizes, dy, at));
