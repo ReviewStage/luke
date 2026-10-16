@@ -20,3 +20,19 @@ test("a dotted tool name, as Y Combinator's server names its tools, is stored un
 test("a name shaped like a sentence is no remote tool's, and is left out", () => {
   assert.equal(storedRemoteCall("ycombinator__list my jobs", {}, "call_1"), undefined);
 });
+
+test("a call of an account past the provider's first is stored under the provider's fixed name, with the account it ran against", () => {
+  assert.deepEqual(storedRemoteCall("notion-2__notion-fetch", { id: "p1" }, "call_2"), {
+    name: "notion_remote",
+    input: {
+      remoteTool: "notion-fetch",
+      parentCallId: "call_2",
+      input: { id: "p1" },
+      connection: "notion-2",
+    },
+  });
+  assert.deepEqual(storedRemoteCall("notion__notion-fetch", {}, "call_3"), {
+    name: "notion_remote",
+    input: { remoteTool: "notion-fetch", parentCallId: "call_3", input: {} },
+  });
+});

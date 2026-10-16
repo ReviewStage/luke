@@ -13,7 +13,6 @@ import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -99,7 +98,7 @@ export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
-  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  readonly disabledServers?: readonly string[] | undefined;
   /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
   readonly rememberChoice?: boolean;
   /** The automation whose run starts the agent; none for a Start by hand. */

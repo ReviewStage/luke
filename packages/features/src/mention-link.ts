@@ -1,6 +1,8 @@
 import { Schema as EffectSchema, Option } from "effect";
 import {
   INTEGRATION_NAME,
+  integrationConnectionNameSchema,
+  integrationConnectionOf,
   integrationOfHost,
   integrationProviderSchema,
 } from "./integration-wire.js";
@@ -57,8 +59,12 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * and `luke://folder/<path>/`, stand in plans and messages already, so
  * they are read forever, as the same mention the settled form names. A
  * thing with no page of its own on the web keeps the `luke:` form, which
- * nothing outside the app opens: an MCP server, `luke://mcp/<provider>`,
- * and one of its tools, `luke://mcp/<provider>/<tool>`, the tool's own name
+ * nothing outside the app opens: an MCP server, `luke://mcp/<connection>`,
+ * and one of its tools, `luke://mcp/<connection>/<tool>`, where the
+ * connection is one account at the provider (`notion`, or `notion-2` for a
+ * second account, the first account's name being its provider's, so every
+ * address written before a second account was possible keeps its meaning),
+ * the tool's own name
  * as the server lists it.
  *
  * A page of one of the integrations, a Linear issue or a pull request, is
@@ -243,10 +249,13 @@ const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.SERVER),
     provider: integrationProviderSchema,
+    /** The account at the provider by its connection name, where it is not the provider's first. */
+    connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.TOOL),
     provider: integrationProviderSchema,
+    connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
     tool: EffectSchema.String.check(
       EffectSchema.isPattern(TOOL_NAME),
       EffectSchema.makeFilter((name) => !DOT_STEPS.has(name)),
@@ -351,6 +360,20 @@ function headingAnchor(heading: string): string {
   return heading.toLowerCase().replace(ANCHOR_DROPPED, "").replace(/ /gu, "-");
 }
 
+/**
+ * The server a `luke://mcp/` address's first segment names: a connection
+ * name, whose provider is the server's and which is kept where it names an
+ * account past the provider's first; any other segment is handed on as the
+ * provider for the schema to refuse.
+ */
+function serverOfSegment(segment: string) {
+  const account = integrationConnectionOf(segment);
+  if (account === undefined) return { provider: segment };
+  return account.place === 1
+    ? { provider: account.provider }
+    : { provider: account.provider, connection: segment };
+}
+
 /** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
 function legacyFields(url: URL) {
   switch (url.host) {
@@ -359,10 +382,11 @@ function legacyFields(url: URL) {
     case LEGACY.HOST[MENTION_KIND.FOLDER]:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(url.pathname) };
     case LEGACY.HOST[MENTION_KIND.SERVER]: {
-      const [provider, tool, ...rest] = url.pathname.replace(/^\//u, "").split("/");
+      const [segment, tool, ...rest] = url.pathname.replace(/^\//u, "").split("/");
       if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
-      if (tool === undefined) return { kind: MENTION_KIND.SERVER, provider };
-      return { kind: MENTION_KIND.TOOL, provider, tool: decodedPart(tool) };
+      const server = serverOfSegment(segment ?? "");
+      if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
+      return { kind: MENTION_KIND.TOOL, ...server, tool: decodedPart(tool) };
     }
     case LEGACY.HOST[MENTION_KIND.PLAN]: {
       const planId = decodedPart(url.pathname.replace(/^\//u, ""));
@@ -644,9 +668,9 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return planTarget(mention.planId, place, mention.anchor);
     // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
     case MENTION_KIND.SERVER:
-      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}`;
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}`;
     case MENTION_KIND.TOOL:
-      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}/${encodedPart(mention.tool)}`;
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}/${encodedPart(mention.tool)}`;
     case MENTION_KIND.LINK:
       return linkAddress(mention.url);
   }

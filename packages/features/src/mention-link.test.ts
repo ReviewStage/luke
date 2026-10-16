@@ -682,3 +682,26 @@ test("a plain place reads a link as markdown does: balanced parentheses and a ti
   assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)})`), "Report");
   assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)} "Notes")`), "Report");
 });
+
+test("a server or tool of an account past a provider's first names it by its connection, and the provider's own name still names the first", () => {
+  const personal = {
+    kind: MENTION_KIND.TOOL,
+    provider: INTEGRATION_PROVIDER.NOTION,
+    connection: "notion-2",
+    tool: "notion-search",
+  } as const;
+  assert.equal(encodeMention(personal, PLACE), "luke://mcp/notion-2/notion-search");
+  assert.deepEqual(decodeMention("luke://mcp/notion-2/notion-search", REPOSITORY), personal);
+  assert.deepEqual(decodeMention("luke://mcp/notion-2", REPOSITORY), {
+    kind: MENTION_KIND.SERVER,
+    provider: INTEGRATION_PROVIDER.NOTION,
+    connection: "notion-2",
+  });
+  assert.deepEqual(decodeMention("luke://mcp/notion", REPOSITORY), {
+    kind: MENTION_KIND.SERVER,
+    provider: INTEGRATION_PROVIDER.NOTION,
+  });
+  for (const target of ["luke://mcp/notion-1", "luke://mcp/jira-2", "luke://mcp/notion-02"]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});

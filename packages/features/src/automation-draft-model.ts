@@ -26,7 +26,6 @@ import {
   PULL_REQUEST_DEFAULT_MOMENTS,
   type PullRequestMoment,
 } from "./automation-wire.js";
-import type { IntegrationProvider } from "./integration-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 
 /**
@@ -106,8 +105,8 @@ export interface AutomationDraft {
   readonly choice: ModelChoice | null;
   /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
-  /** The owner's MCP servers a run's new agent is not handed, as the agent box's servers button switches them. */
-  readonly disabledServers: readonly IntegrationProvider[];
+  /** The owner's MCP servers a run's new agent is not handed, by connection name (`notion`, `notion-2`), as the agent box's servers button switches them. */
+  readonly disabledServers: readonly string[];
 }
 
 /** A GitHub trigger's settings as its editor holds them, each stated where the trigger leaves it to a default. */

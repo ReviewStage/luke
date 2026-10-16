@@ -529,7 +529,12 @@ memory for a short while, and sends it only to Linear's MCP server, never to
 your Mac, a model, or a sandbox. We keep only your connection's state
 (waiting for sign-in, connected, or expired), when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. The list of Linear's tools that menu
+one-time value that matches its return. Where you connect more than one
+account at one service, we also keep a name for each: the name the service
+gives that account's workspace when Vercel Connect hands us its token, or one
+you give it in Settings › Integrations. An agent handed more than one account
+at a service is told each one's name, so it can ask which you mean and say
+which it used. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are
 connected, Luke and the workers he hands work to can read and
 change whatever your Linear account can, through Linear's own MCP server,

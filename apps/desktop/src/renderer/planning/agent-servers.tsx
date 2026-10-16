@@ -90,9 +90,9 @@ import { Tooltip } from "../tooltip";
 /** The servers an agent is handed, as the button changes them. */
 export interface AgentServersControl {
   /** The servers switched off for this agent: the one on its way where one is, else the agent's. */
-  readonly disabled: readonly IntegrationProvider[];
+  readonly disabled: readonly string[];
   /** Switches the agent's servers, the whole list of those off. */
-  readonly onSwitch: (next: readonly IntegrationProvider[]) => void;
+  readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
 }

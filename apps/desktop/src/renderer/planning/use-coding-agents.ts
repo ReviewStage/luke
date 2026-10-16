@@ -15,7 +15,6 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -169,7 +168,7 @@ export interface CodingAgentsControl {
     prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
-    disabledServers?: readonly IntegrationProvider[],
+    disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -240,7 +239,7 @@ export interface AgentDraft {
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
-  readonly disabledServers: readonly IntegrationProvider[];
+  readonly disabledServers: readonly string[];
 }
 
 /** What a draft agent holds beside its words and files: its key, and what its chips chose. */
@@ -602,7 +601,7 @@ export function useCodingAgents(input: {
     prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
-    disabledServers: readonly IntegrationProvider[] = [],
+    disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
     if (planId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };

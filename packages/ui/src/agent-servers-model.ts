@@ -148,7 +148,7 @@ export function serverRows(input: {
   healthOf: (provider: IntegrationProvider) => ConnectionHealth;
   signInOf: (provider: IntegrationProvider) => SignIn | undefined;
   readFailed: boolean;
-  disabled: readonly IntegrationProvider[];
+  disabled: readonly string[];
 }): readonly ServerRow[] {
   const offered = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => input.statusOf(provider) !== INTEGRATION_STATUS.UNAVAILABLE,
@@ -253,7 +253,7 @@ export function searchServers(rows: readonly ServerRow[], query: string): Server
 /** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
 export function lapsedServer(input: {
   statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
-  disabled: readonly IntegrationProvider[];
+  disabled: readonly string[];
 }): IntegrationProvider | undefined {
   return INTEGRATION_PROVIDER_LIST.find(
     (provider) =>
@@ -261,13 +261,16 @@ export function lapsedServer(input: {
   );
 }
 
-/** The servers off once one is switched, in the provider list's order, each once. */
+/**
+ * The servers off once one is switched, each once: the connection switched
+ * off where it is now off, and every other one already off kept, an account
+ * this window draws no row of among them.
+ */
 export function switchedServers(
-  disabled: readonly IntegrationProvider[],
-  provider: IntegrationProvider,
+  disabled: readonly string[],
+  connection: string,
   on: boolean,
-): readonly IntegrationProvider[] {
-  return INTEGRATION_PROVIDER_LIST.filter((each) =>
-    each === provider ? !on : disabled.includes(each),
-  );
+): readonly string[] {
+  const others = disabled.filter((each) => each !== connection);
+  return on ? others : [...others, connection];
 }

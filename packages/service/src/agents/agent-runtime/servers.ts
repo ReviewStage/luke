@@ -19,6 +19,19 @@
  * handed, and eve tells the model at its next step when a connection came or
  * went.
  *
+ * A Luke account may hold more than one account at a provider (two Notion
+ * workspaces), and each is handed as a connection of its own, under the
+ * name its row goes by (`notion`, `notion-2`): every one standing connected
+ * or expired, and the bare provider for one with none, so its first call
+ * says how to connect it, as before. The switches and the mentions name
+ * connections, and a name stored before a second account was possible is
+ * the provider's own, which is its first account's. The accounts read are
+ * the caller's, the member acting in the conversation, as the grant each
+ * connection reads is (`../../integrations/integration-connection.ts`), so
+ * a mention of `notion-2` reaches the caller's own second account or none.
+ * A provider with more than one account handed tells the model which each
+ * is, by its label, and which is primary.
+ *
  * The read fails closed: a turn whose admission or row could not be read is
  * handed no server, so one the developer switched off never comes back on
  * through a passing store failure, and the turn carries on without it. A
@@ -35,8 +48,11 @@ import {
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
+  INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
+  integrationAccountLabel,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -47,15 +63,31 @@ import {
   accountIntegrationConnect,
   type IntegrationConnect,
 } from "../../integrations/integration-connect.js";
+import {
+  INTEGRATION_ROW_STATUS,
+  type IntegrationConnectionRow,
+  readIntegrationConnections,
+} from "../../integrations/integration-store.js";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
+
+/** One connection a turn is handed: one account at a provider, by the name it goes by. */
+interface HandedConnection {
+  readonly provider: IntegrationProvider;
+  /** eve's name for the connection, and the switch and mention that name it. */
+  readonly connectionName: string;
+  /** The account the connection is credentialed for, which eve keys its authorization state by. */
+  readonly instanceKey: string;
+  /** What the model is told of which account this is, beside the provider's own description, where the provider hands more than one. */
+  readonly accountNote?: string;
+}
 
 /** Which servers a turn is handed, under the account they are credentialed for, or none. */
 export type ServerStanding =
   | {
       readonly on: true;
       readonly account: string;
-      readonly providers: readonly IntegrationProvider[];
+      readonly connections: readonly HandedConnection[];
     }
   | { readonly on: false };
 
@@ -82,7 +114,7 @@ function takenMentions(
   policy: ConnectionPolicy,
   userId: string,
   conversationId: string,
-): Effect.Effect<readonly IntegrationProvider[], never, DatabaseServices> {
+): Effect.Effect<readonly string[], never, DatabaseServices> {
   if (policy !== CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS) return Effect.succeed([]);
   return takeCodingAgentMentionedServers(userId, conversationId).pipe(
     Effect.catchCause((cause) =>
@@ -94,6 +126,64 @@ function takenMentions(
       ),
     ),
   );
+}
+
+/** Whether a row stands for a grant an agent may be handed: connected, or expired so its call says to connect it again. */
+function handedRow(row: IntegrationConnectionRow): boolean {
+  return (
+    row.status === INTEGRATION_ROW_STATUS.CONNECTED || row.status === INTEGRATION_ROW_STATUS.EXPIRED
+  );
+}
+
+/**
+ * What the model is told of one account among its provider's others: its
+ * label, whether it is primary, and the others by label and connection
+ * name, so a write lands in the account meant and is said to have.
+ */
+function accountNote(
+  row: IntegrationConnectionRow,
+  primary: IntegrationConnectionRow | undefined,
+  others: readonly IntegrationConnectionRow[],
+): string {
+  const name = INTEGRATION_NAME[row.provider];
+  const label = (each: IntegrationConnectionRow) =>
+    integrationAccountLabel({ connection: each.connectionName, label: each.label });
+  const standing = row === primary ? ", their primary one: use it unless they name another" : "";
+  const elsewhere = others.map((each) => `"${label(each)}" as ${each.connectionName}`).join(", ");
+  return `This connection is the developer's "${label(row)}" ${name} account${standing}. They also connected ${elsewhere}. Say which account you read from or wrote to.`;
+}
+
+/**
+ * The connections the account's rows hand for one provider: each account
+ * standing connected or expired, with what the model is told of which it is
+ * where there is more than one, or the bare provider where none stands.
+ */
+function providerConnections(
+  provider: IntegrationProvider,
+  rows: readonly IntegrationConnectionRow[],
+  caller: string,
+): readonly HandedConnection[] {
+  const placeOf = (row: IntegrationConnectionRow) =>
+    integrationConnectionOf(row.connectionName)?.place ?? Number.POSITIVE_INFINITY;
+  const held = rows
+    .filter((row) => row.provider === provider && handedRow(row))
+    .toSorted((a, b) => placeOf(a) - placeOf(b));
+  if (held.length === 0) return [{ provider, connectionName: provider, instanceKey: caller }];
+  const primary = held.find((row) => row.primary) ?? held[0];
+  return held.map((row) => ({
+    provider,
+    connectionName: row.connectionName,
+    instanceKey: row.connectSubject,
+    ...(held.length > 1
+      ? {
+          accountNote: accountNote(
+            row,
+            primary,
+            held.filter((each) => each !== row),
+          ),
+        }
+      : undefined),
+  }));
 }
 
 /**
@@ -111,8 +201,10 @@ export function turnServers(
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) return SERVERS_OFF;
+    const { caller } = admitted.success;
     const { userId, conversationId } = admitted.success.target;
-    const connect = yield* accountIntegrationConnect(userId);
+    // The caller's own offer, as the accounts read and every token read are the caller's.
+    const connect = yield* accountIntegrationConnect(caller);
     const github = yield* githubOffered;
     // A provider the account's GitHub sign-in grants is offered wherever the GitHub App is.
     const offered = INTEGRATION_PROVIDER_LIST.filter((provider) =>
@@ -120,17 +212,20 @@ export function turnServers(
         ? github
         : connect[provider].configured,
     );
+    const rows = yield* readIntegrationConnections(caller);
+    const handed = offered.flatMap((provider) => providerConnections(provider, rows, caller));
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
-      return { on: true, account: userId, providers: offered } as const;
+      return { on: true, account: userId, connections: handed } as const;
     }
     const agent = yield* readCodingAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
     const mentioned = yield* takenMentions(policy, userId, conversationId);
-    const providers = offered.filter(
-      (provider) => !disabledServers.includes(provider) || mentioned.includes(provider),
+    const connections = handed.filter(
+      ({ connectionName }) =>
+        !disabledServers.includes(connectionName) || mentioned.includes(connectionName),
     );
-    return { on: true, account: userId, providers } as const;
+    return { on: true, account: userId, connections } as const;
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.as(

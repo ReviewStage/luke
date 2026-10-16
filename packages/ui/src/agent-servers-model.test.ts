@@ -17,6 +17,7 @@ import {
   searchServers,
   serverGroups,
   serverRows,
+  switchedServers,
 } from "./agent-servers-model.js";
 
 /**
@@ -224,4 +225,13 @@ test("a search finds a tool by the title its server gave it", () => {
     searchServers(rows, "ticket").tools.map((hit) => hit.tool.name),
     ["save_issue"],
   );
+});
+
+test("switching one server keeps every other one off, an account this window draws no row of among them", () => {
+  assert.deepEqual(switchedServers(["linear", "notion-2"], "slack", false), [
+    "linear",
+    "notion-2",
+    "slack",
+  ]);
+  assert.deepEqual(switchedServers(["linear", "notion-2"], "linear", true), ["notion-2"]);
 });

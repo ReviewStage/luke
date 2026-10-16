@@ -5,14 +5,16 @@
  * `connection_search` lists them and `connection_execute` runs one. A run of
  * a remote tool is also told as a call of its own, nested under the
  * `connection_execute` that made it and named `<connection>__<tool>`
- * (`linear__list_issues`), with its own result, before the wrapper's
+ * (`linear__list_issues`, `notion-2__notion-fetch` for a second Notion
+ * account), with its own result, before the wrapper's
  * result. The store writer holds every call of a row to a registered tool,
  * and a remote server names its tools itself, so a nested call of one
  * integration's tool is stored under that integration's one fixed name
  * (the wire's `INTEGRATION_REMOTE_TOOL`, `linear_remote` for Linear), whose
  * input is an envelope of the remote tool's name, the input eve validated
- * for it, and the call it ran under (`integrationRemoteCallSchema`), which
- * the desktop reads back to draw the row. Every name is registered in every
+ * for it, the call it ran under, and, for an account past the provider's
+ * first, which account it was (`integrationRemoteCallSchema`), which the
+ * desktop reads back to draw the row. Every name is registered in every
  * agent's tool set whatever any account's connections stand at, so a
  * transcript that used an integration reads back the same after a
  * Disconnect.
@@ -24,6 +26,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_REMOTE_TOOL,
   type IntegrationProvider,
+  integrationConnectionOf,
   integrationRemoteCallSchema,
 } from "@luke/features/integration-wire";
 import { WireValueSchema } from "@luke/wire";
@@ -67,18 +70,23 @@ export function isRemoteToolName(name: string): boolean {
   return name.includes(QUALIFIED_SEPARATOR);
 }
 
-/** The integration whose connection eve qualified a remote tool's name with, and the tool's own name. */
-function remoteToolOf(
-  toolName: string,
-): { readonly provider: IntegrationProvider; readonly remoteTool: string } | undefined {
+/** The integration and account whose connection eve qualified a remote tool's name with, and the tool's own name. */
+function remoteToolOf(toolName: string):
+  | {
+      readonly provider: IntegrationProvider;
+      readonly connection: string;
+      readonly place: number;
+      readonly remoteTool: string;
+    }
+  | undefined {
   const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
   if (separator < 0) return undefined;
   const connection = toolName.slice(0, separator);
-  // Note that a provider's value is its connection's name, which eve names it by (`agent-runtime/connections.ts`).
-  const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === connection);
+  // Note that a connection is named for its account, the first after its provider (`agent-runtime/connections.ts`).
+  const account = integrationConnectionOf(connection);
   const remoteTool = toolName.slice(separator + QUALIFIED_SEPARATOR.length);
-  if (provider === undefined || !isRemoteToolWord(remoteTool)) return undefined;
-  return { provider, remoteTool };
+  if (account === undefined || !isRemoteToolWord(remoteTool)) return undefined;
+  return { ...account, connection, remoteTool };
 }
 
 /**
@@ -98,6 +106,11 @@ export function storedRemoteCall(
   return {
     name: INTEGRATION_REMOTE_TOOL[remote.provider],
     // eve validated an object, so an empty one stands for an input it never had.
-    input: { remoteTool: remote.remoteTool, parentCallId, input: input ?? {} },
+    input: {
+      remoteTool: remote.remoteTool,
+      parentCallId,
+      input: input ?? {},
+      ...(remote.place > 1 ? { connection: remote.connection } : undefined),
+    },
   };
 }

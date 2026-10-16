@@ -1097,7 +1097,7 @@ test("another member's automation says which servers its creator switched off, o
     {
       ...SWEEP,
       mine: false,
-      action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] },
+      action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY, "notion-2"] },
     },
   ];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1105,7 +1105,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected servers, but Sentry switched off\./u,
+    /Its creator's connected servers, but Sentry, Notion \(account 2\) switched off\./u,
   );
   assert.equal(
     [...page.querySelectorAll("button")].find(
