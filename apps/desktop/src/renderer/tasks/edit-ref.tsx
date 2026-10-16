@@ -117,28 +117,40 @@ function PersonRef({
   place,
   sentence = false,
   possessive = false,
+  faceOnly = false,
 }: {
   actor: Actor;
   place: EditPlace;
   sentence?: boolean;
   possessive?: boolean;
+  faceOnly?: boolean;
 }): React.JSX.Element {
   const card =
     actor.kind === ACTOR_KIND.PERSON ? (
       <PersonCard actor={actor} latest={latestLine(actor, place, true)} />
     ) : undefined;
-  return <ActorRef actor={actor} card={card} sentence={sentence} possessive={possessive} />;
+  return (
+    <ActorRef
+      actor={actor}
+      card={card}
+      sentence={sentence}
+      possessive={possessive}
+      faceOnly={faceOnly}
+    />
+  );
 }
 
-/** The writer of an edit as one target in a line; nothing for the plan before history, which nobody wrote. */
+/** The writer of an edit as one target in a line, or their face alone; nothing for the plan before history, which nobody wrote. */
 function WriterRef({
   edit,
   place,
   sentence,
+  faceOnly,
 }: {
   edit: PlanLastEdit;
   place: EditPlace;
   sentence: boolean;
+  faceOnly: boolean;
 }): React.JSX.Element | null {
   const agent = agentOf(edit, place.agents);
   const actor = writerOf(edit, place);
@@ -147,13 +159,15 @@ function WriterRef({
     const card = (
       <LukeCard sub={lukeSub(edit, place)} latest={latestLine(LUKE_ACTOR, place, false)} />
     );
-    return <ActorRef actor={actor} card={card} />;
+    return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }
   if (actor.kind !== ACTOR_KIND.AGENT) {
-    return <PersonRef actor={actor} place={place} sentence={sentence} />;
+    return <PersonRef actor={actor} place={place} sentence={sentence} faceOnly={faceOnly} />;
   }
   // An agent the plan's list does not hold is named alone, with no card to read and no tab to open.
-  if (agent === undefined || place.agents === undefined) return <ActorRef actor={actor} />;
+  if (agent === undefined || place.agents === undefined) {
+    return <ActorRef actor={actor} faceOnly={faceOnly} />;
+  }
   const { control, onOpen } = place.agents;
   const subject = agentSubject(control, agent.id, NOTHING_HELD, false);
   return (
@@ -161,6 +175,7 @@ function WriterRef({
       actor={{ ...actor, name: subject.name }}
       card={<AgentCard subject={subject} models={control.models} />}
       onOpen={onOpen === undefined ? undefined : () => onOpen(agent.id)}
+      faceOnly={faceOnly}
     />
   );
 }
@@ -199,23 +214,28 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
  * Who wrote an edit, and on whose call where Luke wrote it on one: "[Luke]
  * Luke during [Charles] Charles Pan’s call", "[Luke] Luke during your call",
  * "[Charles] Charles Pan". `sentence` names the reader "you" inside a line
- * that leads with other words. Drawn inside an `.actor-line`, whose words
- * carry their own spaces. Nothing for the plan before history.
+ * that leads with other words. With `faceOnly` it is the writer's face
+ * alone, their name and whose call it was said in the card it hangs, for a
+ * section's byline, which keeps to a heading's end. Drawn inside an
+ * `.actor-line`, whose words carry their own spaces. Nothing for the plan
+ * before history.
  */
 export function EditedBy({
   edit,
   place,
   sentence = false,
+  faceOnly = false,
 }: {
   edit: PlanLastEdit;
   place: EditPlace;
   sentence?: boolean;
+  faceOnly?: boolean;
 }): React.JSX.Element | null {
   if (edit.actor === PLAN_ACTOR.EARLIER) return null;
   return (
     <>
-      <WriterRef edit={edit} place={place} sentence={sentence} />
-      {edit.duringCall ? <CallOwner edit={edit} place={place} /> : null}
+      <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />
+      {edit.duringCall && !faceOnly ? <CallOwner edit={edit} place={place} /> : null}
     </>
   );
 }

@@ -161,7 +161,7 @@ test("who last changed a picture's section is said in the viewer over the window
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
-    ["Luke · 2h ago"],
+    ["Luke 2h"],
     "only the section with a heading carries its line in the words",
   );
 
