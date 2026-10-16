@@ -97,7 +97,7 @@ const TITLE_ASKED = "Name the section.";
 const isSectionIcon = Schema.is(taskSectionIconSchema);
 
 /** A section's icon: its emoji, its glyph, or the hash every section without one wears. */
-export function SectionIcon({ icon }: { icon: TaskSectionIcon | undefined }): React.JSX.Element {
+function SectionIcon({ icon }: { icon: TaskSectionIcon | undefined }): React.JSX.Element {
   if (icon === undefined) return <HashIcon />;
   if (icon.kind === TASK_SECTION_ICON_KIND.EMOJI) {
     return (
