@@ -18,6 +18,7 @@
 
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
+import { PANE_FLOAT, type PaneFloat } from "./hover-pane";
 
 /** The storage keys the choices are kept under. */
 const SIDEBAR_COLLAPSED_KEY = "luke.sidebar-collapsed";
@@ -47,17 +48,10 @@ const SIDEBAR_COMPACT = {
   LEAVE: 1160,
 } as const;
 
-/** How the folded sidebar stands over the work. */
-export const SIDEBAR_OVERLAY = {
-  /** Away, off the window's left edge. */
-  CLOSED: "closed",
-  /** Peeked by the pointer at the window's left edge, and put away once it leaves the sidebar. */
-  PEEK: "peek",
-  /** Opened by its toggle, its chord, or a press in a peek, and put away by a choice in it, Escape, or a press outside. */
-  OPEN: "open",
-} as const;
+/** How the folded sidebar stands over the work: as every pane that floats does (`hover-pane.ts`). */
+export const SIDEBAR_OVERLAY = PANE_FLOAT;
 
-type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
+type SidebarOverlay = PaneFloat;
 
 const decodeWidth = Schema.decodeUnknownOption(Schema.FiniteFromString);
 

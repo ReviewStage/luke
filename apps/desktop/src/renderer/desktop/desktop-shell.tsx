@@ -32,6 +32,7 @@ import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { useFloatDismiss } from "./hover-pane";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { useSummaryPin } from "./plan-summary";
@@ -232,32 +233,6 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
- * Puts the floating sidebar away at a press anywhere outside it and its
- * toggle, answering the handler they take the press with. Note that the
- * press is heard at the document as it bubbles, after the sidebar's own
- * handlers, so one inside it, a menu or a dialog it opened included, since
- * React carries their presses through the sidebar, is marked before the
- * document asks.
- */
-function useOverlayDismiss(sidebar: SidebarCollapse): () => void {
-  const within = useRef(false);
-  const floating = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const { onOverlay } = sidebar;
-  useEffect(() => {
-    if (!floating) return;
-    const press = () => {
-      if (!within.current) onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      within.current = false;
-    };
-    document.addEventListener("pointerdown", press);
-    return () => document.removeEventListener("pointerdown", press);
-  }, [floating, onOverlay]);
-  return () => {
-    within.current = true;
-  };
-}
-
-/**
  * Whether the open plan's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
@@ -357,7 +332,7 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
-  const keepOverlay = useOverlayDismiss(sidebar);
+  const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
