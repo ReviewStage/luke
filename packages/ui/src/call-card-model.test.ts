@@ -4,7 +4,13 @@ import { LIVE_STATUS } from "@luke/live";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import { test } from "vitest";
-import { callBarPlanId, callCard, callCardShown, callTabVideoStatus } from "./call-card-model.js";
+import {
+  callBarPlanId,
+  callCard,
+  callCardShown,
+  callCardVideoStatus,
+  callTabVideoStatus,
+} from "./call-card-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -167,4 +173,21 @@ test("video the developer turned off stays offered to turn on again for as long 
   assert.equal(drawn(LISTENING, turnedOff), AVATAR_STATUS.OFF);
   assert.equal(drawn(LISTENING, AVATAR_OFF), AVATAR_STATUS.OFF);
   assert.equal(drawn(IDLE_VOICE_VIEW, turnedOff), undefined);
+});
+
+test("the call card draws the avatar while it stands, offers Video on once it is down, and is today's card with the experiment off", () => {
+  const drawn = (view: VoiceView, avatar: AvatarState, videoCalls = true) =>
+    callCardVideoStatus({ view, avatar, videoCalls });
+  assert.equal(drawn(LISTENING, { status: AVATAR_STATUS.LIVE }), AVATAR_STATUS.LIVE);
+  assert.equal(drawn(LISTENING, { status: AVATAR_STATUS.STARTING }), AVATAR_STATUS.STARTING);
+  // Down for any reason, the card falls back to itself with Video on beside the plan's name.
+  const failed = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.ERROR };
+  assert.equal(drawn(LISTENING, failed), AVATAR_STATUS.OFF);
+  assert.equal(drawn(LISTENING, AVATAR_OFF), AVATAR_STATUS.OFF);
+  // The experiment off is today's card, unless an avatar still stands to be taken down.
+  assert.equal(drawn(LISTENING, AVATAR_OFF, false), undefined);
+  assert.equal(drawn(LISTENING, failed, false), undefined);
+  assert.equal(drawn(LISTENING, { status: AVATAR_STATUS.LIVE }, false), AVATAR_STATUS.LIVE);
+  // No call, no video.
+  assert.equal(drawn(IDLE_VOICE_VIEW, { status: AVATAR_STATUS.LIVE }), undefined);
 });
