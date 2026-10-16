@@ -286,3 +286,11 @@ test("a wheel counting pages moves a zoomed picture by the frame's own width acr
   viewer.fire(image, new WheelEvent("wheel", { ...page, deltaY: -0.5 }));
   assert.equal(drawn(image).y, 250, "half a page down is half the frame's 500 tall");
 });
+
+test("the zoom buttons name the bare keys that do the same", () => {
+  opened();
+  const named = (label: string) =>
+    document.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-keyshortcuts");
+  assert.equal(named("Zoom in"), "=");
+  assert.equal(named("Zoom out"), "-");
+});

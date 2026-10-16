@@ -174,6 +174,8 @@ export const SHORTCUT_KEY = {
   // VS Code.
   PLUS: { accelerator: "Plus", glyph: "+", key: "+", code: "Equal", unshifted: "=", aria: "Plus" },
   MINUS: { accelerator: "-", glyph: "−", key: "-", code: "Minus" },
+  // A bare = is the picture viewer's own zoom in, the key + shares unshifted.
+  EQUALS: { accelerator: "=", glyph: "=", key: "=", code: "Equal" },
   UP: { accelerator: "Up", glyph: "↑", key: "ArrowUp", code: "ArrowUp" },
   DOWN: { accelerator: "Down", glyph: "↓", key: "ArrowDown", code: "ArrowDown" },
   LEFT: { accelerator: "Left", glyph: "←", key: "ArrowLeft", code: "ArrowLeft", editsText: true },

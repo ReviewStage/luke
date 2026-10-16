@@ -15,6 +15,7 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId } from "react";
+import { SHORTCUT_KEY, type ShortcutChord } from "#shared/shortcuts";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";
@@ -58,6 +59,12 @@ const VIEWER_LABEL = {
   CLOSE: "Close",
 } as const;
 
+/** The bare keys a picture's zoom buttons name in their hints, which `./use-image-zoom.ts` answers. */
+const ZOOM_CHORD = {
+  IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
+  OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
+} as const satisfies Record<string, ShortcutChord>;
+
 /** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
   readonly label: string;
@@ -97,18 +104,20 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** One of the header's icon buttons, its name its hint. */
+/** One of the header's icon buttons, its name its hint, beside the key that does the same where there is one. */
 function HeaderButton({
   label,
+  chord,
   onClick,
   children,
 }: {
   label: string;
+  chord?: ShortcutChord;
   onClick: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} chord={chord}>
       <button type="button" className="icon-button" aria-label={label} onClick={onClick}>
         {children}
       </button>
@@ -250,10 +259,18 @@ export function AttachmentViewer({
         {text === undefined ? null : <CopyTextButton text={text} />}
         {image ? (
           <>
-            <HeaderButton label={VIEWER_LABEL.ZOOM_OUT} onClick={() => zoom.step(-1)}>
+            <HeaderButton
+              label={VIEWER_LABEL.ZOOM_OUT}
+              chord={ZOOM_CHORD.OUT}
+              onClick={() => zoom.step(-1)}
+            >
               <ZoomOutIcon aria-hidden="true" />
             </HeaderButton>
-            <HeaderButton label={VIEWER_LABEL.ZOOM_IN} onClick={() => zoom.step(1)}>
+            <HeaderButton
+              label={VIEWER_LABEL.ZOOM_IN}
+              chord={ZOOM_CHORD.IN}
+              onClick={() => zoom.step(1)}
+            >
               <ZoomInIcon aria-hidden="true" />
             </HeaderButton>
           </>
