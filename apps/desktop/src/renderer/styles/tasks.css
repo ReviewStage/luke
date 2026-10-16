@@ -215,144 +215,6 @@
   color: var(--text-secondary);
 }
 
-/* Where the plan lives and who can edit it, over the "Edited by" line in its
-   muted voice (task-crumb.tsx). Its presses hang past the column's start by
-   their own inset, so the tile stands level with the words under it. */
-.task-crumb {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-6);
-  font-size: 12.5px;
-  color: var(--text-secondary);
-}
-
-.task-crumb-item,
-.task-crumb-people {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-2) var(--space-6);
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  white-space: nowrap;
-}
-
-.task-crumb > :first-child {
-  margin-left: calc(-1 * var(--space-6));
-}
-
-button.task-crumb-item:hover {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
-/* The repository drawn as the workspace before it is (task-crumb.tsx): its
-   owner's picture at the workspace tile's size, then its name cut short
-   rather than wrapped. It presses nowhere, so it wears no hover fill. */
-.task-crumb-repository :is(.repository-picture, .provider-mark) {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
-}
-
-.task-crumb-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The repository's card names its default branch beside a branch glyph. */
-.task-crumb-branch {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.task-crumb-branch > svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-
-.task-crumb-separator {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  opacity: 0.6;
-}
-
-/* The separator and the repository after it, which shrink and wrap as one. */
-.task-crumb-step {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* Who can edit keeps its words whole, so the names before it give way first. */
-.task-crumb-people {
-  flex: none;
-  margin-left: auto;
-  margin-right: calc(-1 * var(--space-6));
-  font-size: 12px;
-}
-
-.task-crumb-people > svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* The crumb's card lists everyone who can edit, a face, a name, and a role a row. */
-.task-crumb-people-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A member's row in the people card, a press opening their page, filled
-   under the pointer as a card's door is, bled past the list's edges so its
-   words keep their place. */
-.task-crumb-person-row {
-  display: flex;
-  width: calc(100% + 2 * var(--row-inset));
-  min-height: var(--menu-row-height);
-  align-items: center;
-  gap: var(--space-8);
-  margin-inline: calc(-1 * var(--row-inset));
-  padding: 0 var(--row-inset);
-  border: 0;
-  border-radius: var(--menu-row-radius);
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.task-crumb-person-row:is(:hover, :focus-visible) {
-  outline: none; /* no ring: the row's fill marks it, as a card's door does */
-  background: var(--raised-strong);
-}
-
-.task-crumb-person {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-crumb-role {
-  margin-left: auto;
-  color: var(--text-secondary);
-}
-
 /* Who last changed a section, and when: the writer's face and a few
    letters at the end of its heading's row, shown while the pointer or the
    keyboard is on the section. It fades on opacity alone, so nothing moves.
@@ -3374,16 +3236,36 @@ button.attached-file-face:hover img {
 
 .attachment-viewer[data-view="image"] .attachment-viewer-body {
   display: grid;
+  overflow: hidden;
   place-items: center;
   background: var(--section-fill);
 }
 
+/* The picture is zoomed by a transform over its fitted size
+   (use-image-zoom.ts), so the card keeps its size and the frame clips what
+   stands past it. A press zooms in where it is fitted; zoomed, it is held
+   and dragged, and a press puts it back. A step from a press or a key
+   glides; a pinch or a drag follows the fingers at once. */
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
   max-height: calc(100vh - 2 * var(--space-24) - 50px);
   object-fit: contain;
-  cursor: zoom-out;
+  cursor: zoom-in;
+  touch-action: none;
+  user-select: none;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"] {
+  cursor: grab;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"]:active {
+  cursor: grabbing;
+}
+
+.attachment-viewer-image[data-glide="true"] {
+  transition: transform var(--duration-quick) var(--motion-pane);
 }
 
 .attachment-viewer-lines {
