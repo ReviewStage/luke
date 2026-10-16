@@ -258,7 +258,17 @@ button.plan-crumb-item:hover {
   opacity: 0.6;
 }
 
+/* The separator and the repository after it, which shrink and wrap as one. */
+.plan-crumb-step {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Who can edit keeps its words whole, so the names before it give way first. */
 .plan-crumb-people {
+  flex: none;
   margin-left: auto;
   margin-right: calc(-1 * var(--space-6));
   font-size: 12px;
@@ -596,11 +606,17 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   gap: var(--space-6);
 }
 
+/* The title breaks inside a word only where the word is wider than the
+   column, so a narrow column never splits "teammates" for want of a few
+   pixels. Note that it outranks `.markdown p`, which breaks anywhere. */
+.plan-title .markdown-heading {
+  overflow-wrap: break-word;
+}
+
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .plan-title-text {
   caret-color: var(--accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
-  overflow-wrap: anywhere;
 }
 
 /* The section between an editor's words and what stands under them. */
@@ -1663,8 +1679,9 @@ button.file-ref:hover .file-ref-path {
 /* A transcript's table: no box, a hairline under each row, the header in
    the secondary colour at medium weight, the outer columns flush with the
    words around it. A table wider than the column scrolls sideways inside
-   its own box. A cell keeps the alignment its column's rule gave it, which
-   it carries as its own style. */
+   its own box, fading each edge it hides columns past as a Markdown table
+   does (markdown.css). A cell keeps the alignment its column's rule gave it,
+   which it carries as its own style. */
 .transcript-table {
   max-width: 100%;
   overflow-x: auto;

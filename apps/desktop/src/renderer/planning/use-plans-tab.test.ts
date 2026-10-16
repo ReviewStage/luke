@@ -1575,7 +1575,12 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
   assert.deepEqual(
     [
-      [...menu.querySelectorAll('[role="option"]')].map((row) => row.textContent),
+      // A row names the repository, then its owner after it.
+      [...menu.querySelectorAll('[role="option"]')].map((row) =>
+        [".plan-compose-menu-detail", ".plan-compose-menu-name"]
+          .map((part) => row.querySelector(part)?.textContent)
+          .join("/"),
+      ),
       [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
     ],
     [["acme/relay"], []],

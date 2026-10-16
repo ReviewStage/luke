@@ -121,6 +121,13 @@ function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
   return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
 }
 
+/** A repository's row words: its name, and its owner as the muted detail; a name with no owner is its label alone. */
+function ownerApart(fullName: string): Pick<MenuRow, "label" | "detail"> {
+  const slash = fullName.indexOf("/");
+  if (slash <= 0) return { label: fullName };
+  return { label: fullName.slice(slash + 1), detail: fullName.slice(0, slash) };
+}
+
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
 function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
   const wanted = repository.toLowerCase();
@@ -132,7 +139,10 @@ function listedIn(reached: readonly GitHubRepository[], repository: string): boo
  * reaches as the service ordered them, most recently updated first, each
  * once, every one under its owner's picture whether private or not. Once
  * the read has answered, a recent repository it does not list is left out,
- * because a plan started on it would be refused.
+ * because a plan started on it would be refused. A row names the repository
+ * first and its owner muted after it, since the owner is the part rows most
+ * often share, and a narrow menu cuts the end of a row; it is found by its
+ * whole `owner/name` all the same.
  */
 function repositoryRows(
   recent: readonly string[],
@@ -146,7 +156,8 @@ function repositoryRows(
   }
   return names.map((fullName) => ({
     id: fullName,
-    label: fullName,
+    ...ownerApart(fullName),
+    terms: [fullName],
     icon: (
       <RepositoryPicture
         repository={fullName}

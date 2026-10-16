@@ -20,6 +20,13 @@
   overflow-wrap: anywhere;
 }
 
+/* A tight list's item holds its words with no paragraph around them, so it
+   breaks a long path or identifier at the column's edge as a paragraph does,
+   rather than letting it run past the edge. */
+.markdown li {
+  overflow-wrap: anywhere;
+}
+
 .markdown-heading {
   font-weight: 680;
   letter-spacing: -0.01em;
@@ -131,7 +138,8 @@ blockquote.markdown-quote > * + * {
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's
-   alignment arrives as each cell's own inline style, from the delimiter row. */
+   alignment arrives as each cell's own inline style, from the delimiter row.
+   Its edges fade where it hides columns past them (`table-scroll-fade`). */
 .markdown table {
   display: block;
   max-width: 100%;
@@ -147,6 +155,71 @@ blockquote.markdown-quote > * + * {
   padding: 0.3em 0.7em 0.3em 0;
   border-bottom: 1px solid var(--markdown-edge);
   vertical-align: top;
+}
+
+/* A cell keeps each word whole, so a table too wide for the column scrolls
+   rather than splitting its words into letters. Note that it outranks
+   `.markdown p`, which an editor's cell holds its words in. */
+.markdown :is(th, td) > p {
+  overflow-wrap: normal;
+}
+
+/* A table that scrolls sideways fades each edge it hides columns past, as the
+   tab strip does, so a column cut at the edge reads as more to scroll to
+   rather than as words cut short. The fades ride the table's own scroll
+   timeline, which stands only while the table overflows: one that fits is
+   left whole without asking JavaScript. Each edge's fade rises over the first
+   `--scroll-fade` of scrolling toward it and falls over the last. */
+.markdown table,
+.transcript-table {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--table-fade-start),
+    #000 calc(100% - var(--table-fade-end)),
+    transparent
+  );
+  animation:
+    table-fade-start linear both,
+    table-fade-end linear both;
+  animation-timeline: scroll(self inline), scroll(self inline);
+  animation-range:
+    0 var(--scroll-fade),
+    calc(100% - var(--scroll-fade)) 100%;
+}
+
+@keyframes table-fade-start {
+  from {
+    --table-fade-start: 0px;
+  }
+
+  to {
+    --table-fade-start: var(--scroll-fade);
+  }
+}
+
+@keyframes table-fade-end {
+  from {
+    --table-fade-end: var(--scroll-fade);
+  }
+
+  to {
+    --table-fade-end: 0px;
+  }
+}
+
+/* Registered so a fade eases as a length, and stands at none on an edge
+   that hides nothing. */
+@property --table-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --table-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
 }
 
 .markdown th {

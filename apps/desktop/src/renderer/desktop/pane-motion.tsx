@@ -36,7 +36,7 @@ const PANE = ".side-panel";
 /** The pane that arrives and grows; one leaving runs its own exit and is left to it. */
 const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 
-/** The plan's summary, which is always drawn while the plan is, so it only ever moves, or arrives with the plan. */
+/** The plan's summary, drawn while the plan is wherever its column spares a rail, so it only ever moves, or arrives with the plan or the room. */
 const SUMMARY = ".plan-summary";
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
