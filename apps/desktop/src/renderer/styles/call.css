@@ -156,29 +156,17 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
-   the top of the call's Call tab, always at the 16:9 the avatar is rendered
-   in, on the card's ground, border, and corner, so the tile reads as the
-   call card grown into a picture. It keeps its height as the transcript
-   under it scrolls.
-
-   However wide the tab is drawn, the tile keeps to the transcript's own
-   column (`desktop.css`'s `[role="log"]` padding: the reading measure, or
-   the tab less its gutter where the tab is narrower), centred over it, so
-   the picture's edges line up with the lines under it. And it never takes
-   more than two fifths of the tab's height, narrowing to keep its 16:9
-   rather than cropping, so a wide, short tab still leaves the transcript
-   most of the room. It never narrows past the width its still frame and
-   Restart video need without meeting the corner's Video off, short of the
-   tab's own. The tab is the size container the height is read from. The
-   strip video off collapses the tile to is drawn at this same width, so
-   the toggle stays where it was. */
-.plan-call {
-  container: plan-call / size;
-}
-
+   the top of the call's Call tab, at the 16:9 the avatar is rendered in, on
+   the card's ground, border, and corner, so the tile reads as the call card
+   grown into a picture. It keeps its height as the transcript under it
+   scrolls. However wide the tab is, the tile keeps to the transcript's
+   column, centred over it, and no taller than about two fifths of the
+   window (70vh wide at 16:9), so a wide, short tab still leaves the
+   transcript room; 240px is as narrow as its still frame stays readable.
+   The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
-  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 40cqh * 16 / 9));
+  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 70vh));
   margin: var(--space-4) auto var(--space-8);
 }
 
@@ -249,8 +237,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 /* The strip the tile collapses to once the developer turns video off: one
-   line on the tile's ground, border, width, and margins, saying so beside
-   the button that turns it on again, so the call keeps its video's place
+   line on the tile's ground, border, and margins, saying so beside the
+   button that turns it on again, so the call keeps its video's place
    without a picture's height. */
 .call-video-strip {
   display: flex;
