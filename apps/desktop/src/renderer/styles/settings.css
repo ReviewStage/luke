@@ -524,6 +524,16 @@
   font-family: var(--font-mono);
 }
 
+/* Settings › Memory: each memory's words in full, in a row name's ink,
+   wrapping beside the row's ⋯ rather than running under it. */
+.memory-text {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* Settings › Workspace › Invitations: the invite form, an address field
    taking the row's room, then the role's chip and Invite, the field drawn
    as API keys' is. The chip is a field chip of one width, as every Settings

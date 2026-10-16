@@ -191,6 +191,25 @@ Settings can show and restore an earlier one. A new task's plan begins as a copy
 it; no model reads the template itself. Deleting your account removes it and
 its history.
 
+**What Luke remembers.** During a planning call, Luke's planning model may
+keep a fact or convention the call settled, such as how your team tests or
+ships, so later plans can recall it. Our service stores each one under the
+workspace the plan belongs to, as a short statement in the model's words,
+with who said it (the member on the call, or the member who last corrected
+it) and when, readable by our own operators like the conversation it came
+from; nothing asks you first. A memory is the workspace's shared knowledge:
+any member's later planning call there may read it, and Settings › Memory
+shows it to every member with your name on it. No plan in another workspace
+reads it. Luke refuses to keep words that look like a key, token, or
+password, and is told never to keep a remark personal to one member. In
+Settings › Memory you can forget a memory holding your words, and the
+workspace's owners and admins can forget any; forgetting deletes it at once,
+so no later call recalls it. Like a project's history, a memory outlives the
+person who said it: leaving a workspace, or deleting your account, leaves the
+memories you kept with the workspace, and once your account is gone they no
+longer carry your name. Deleting a plan does not remove a memory kept on its
+call, and a workspace's memories go when the workspace does.
+
 **Pinned repositories.** When you pin a repository in the sidebar, our
 service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
@@ -1066,8 +1085,8 @@ reports by Sentry.
   repositories, your tasks with their history, whiteboards, pages, coding
   agents, and inbox items and pictures, the conversation with its attached
   files, every call's record, the commands waiting for your Mac with the
-  record of when it last read, your own API keys, Luke's record of your
-  Linear, Notion, Sentry, and Slack connections, and everything earlier
+  record of when it last read, your own API keys, your name on the memories
+  Luke kept in your words (the memories themselves stay with their workspace), Luke's record of your Linear, Notion, Sentry, and Slack connections, and everything earlier
   versions left there — and asks PostHog to erase your usage data and
   recordings, which does not reach a recording never attached to your account.
   Luke stops recording for the rest of the session, and starts again the next

@@ -499,3 +499,22 @@ test("a pause names how long it waits, and its answer how long it waited or that
     text: "Stopped early: a message arrived.",
   });
 });
+
+test("a memory kept is named by its words, and a recall by nothing, since what it read is its answer", () => {
+  const kept = toolCallView({
+    tool: "remember",
+    input: { text: "Deployments go out from the release branch." },
+    output: { id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
+  });
+  const recalled = toolCallView({
+    tool: "recall",
+    input: { query: "deployments" },
+    output: { memories: [] },
+  });
+
+  assert.deepEqual(
+    [kept.kind, kept.subject],
+    [CALL_KIND.REMEMBER, "Deployments go out from the release branch."],
+  );
+  assert.deepEqual([recalled.kind, recalled.subject], [CALL_KIND.RECALL, ""]);
+});

@@ -177,6 +177,26 @@ test("Video calls is one switch, on the Experimental page, and not among the Voi
   );
 });
 
+/** The labels and pages `query` leads to, signed in or not. */
+function memoryFound(query: string, accountDrawn: boolean): readonly (readonly string[])[] {
+  const input: SettingsSearchInput = {
+    settings: settingsView(),
+    voiceControlsDrawn: false,
+    accountDrawn,
+  };
+  const found = searchSettings(settingsSearchEntries(input), query);
+  return (found?.groups ?? []).flatMap((group) =>
+    group.items.map((entry) => [entry.label, group.page]),
+  );
+}
+
+test("what Luke remembers is the account's on the service, so it is found on its page while one is signed in", () => {
+  for (const query of ["forget", "company brain"]) {
+    assert.deepEqual(memoryFound(query, true), [["Memory", SETTINGS_VIEW.MEMORY]], query);
+  }
+  assert.deepEqual(memoryFound("memory", false), [], "no memory without an account to hold it");
+});
+
 test("no two rows the search can land on wear the same id", () => {
   const ids = settingsSearchEntries({
     settings: settingsView(),

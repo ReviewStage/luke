@@ -202,6 +202,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // What Luke remembers, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MEMORY,
+          label: "Memory",
+          page: SETTINGS_VIEW.MEMORY,
+          haystack: ["Memory", "remember recall forget facts conventions company brain"],
+        }
+      : undefined,
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {

@@ -35,6 +35,9 @@ import {
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
+  type MemoriesAnswerView,
+  memoriesReadParamsSchema,
+  memoryForgetParamsSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -56,7 +59,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, its plan template, and the memories Luke kept, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -102,6 +105,8 @@ export type CodingAgentClient = Pick<
   | "readPlanTemplateRevisions"
   | "readPlanTemplateRevision"
   | "restorePlanTemplate"
+  | "readMemories"
+  | "forgetMemory"
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
@@ -222,6 +227,22 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.restorePlanTemplate(revision));
         return carried<PlanTemplateAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
+      Effect.gen(function* () {
+        const reading = yield* read(memoriesReadParamsSchema, params, "a read names a workspace");
+        const answer = yield* asked(client.readMemories(reading));
+        return carried<MemoriesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.MEMORIES_FORGET]: (params) =>
+      Effect.gen(function* () {
+        const forget = yield* read(
+          memoryForgetParamsSchema,
+          params,
+          "a forget names a workspace and a memory's id",
+        );
+        const answer = yield* asked(client.forgetMemory(forget));
+        return carried<MemoriesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {

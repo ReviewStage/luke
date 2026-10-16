@@ -15,12 +15,13 @@ import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountAppSeams } from "./account-app.js";
+import { forgetWorkspaceMemory, readWorkspaceMemories } from "./workspace-memories.js";
 
 /**
  * The account group's seams over this deployment's real database. The
  * analytics erasure key and project are read from `HostedEnvironment`
  * instead, once with the services rather than at each invocation.
- * `accounts/account-app.ts` describes the three endpoints; this is the one place
+ * `accounts/account-app.ts` describes the endpoints; this is the one place
  * that hands them a real user table and a real preferences store, so every
  * `api/account/**` function of the group builds it from the same wiring.
  *
@@ -45,5 +46,7 @@ export function accountAppSeams(): AccountAppSeams {
     listPlanTemplateRevisions: listTemplateRevisions,
     readPlanTemplateRevision: readTemplateRevision,
     restorePlanTemplate,
+    readMemories: readWorkspaceMemories,
+    forgetMemory: forgetWorkspaceMemory,
   };
 }

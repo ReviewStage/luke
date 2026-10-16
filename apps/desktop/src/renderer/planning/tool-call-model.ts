@@ -637,6 +637,10 @@ function planningToolView(
         output,
         stringAt(input, "prompt") === undefined ? "task" : "prompt",
       );
+    case AGENT_TOOL.RECALL:
+      return namedCall(CALL_KIND.RECALL, input, output, undefined);
+    case AGENT_TOOL.REMEMBER:
+      return namedCall(CALL_KIND.REMEMBER, input, output, "text");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:

@@ -29,6 +29,7 @@
     "./github-connection-wire": "./src/github-connection-wire.js",
     "./github-repositories-wire": "./src/github-repositories-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
+    "./memory-wire": "./src/memory-wire.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./linear-wire": "./src/linear-wire.js",
     "./link-home": "./src/link-home.js",

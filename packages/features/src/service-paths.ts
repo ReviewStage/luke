@@ -35,6 +35,11 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
   /**
+   * The memories Luke kept from the account's planning calls: read them
+   * (GET), or forget one by its id (DELETE). `memory-wire.ts` declares both.
+   */
+  ACCOUNT_MEMORIES: "/api/account/memories",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.

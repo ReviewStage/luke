@@ -31,6 +31,7 @@ import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { AGENT_CALLER } from "../coding-agent-tools.js";
+import { MEMORY_TOOL_NAMES } from "../memory-tools.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { turnKindOf } from "./auth.js";
@@ -216,6 +217,9 @@ function planningSkillMarkdown(skill: RepositorySkill): string {
   return `This skill is \`${skill.folder}/SKILL.md\` in the task's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
 }
 
+/** Why a subagent's call of the account's memory ran nothing. */
+const WORKER_REFUSAL = "Not run: the worker is not offered the account's memory.";
+
 /** Where a child's first task is read from: before every row of its conversation. */
 const FROM_THE_START: MessageCursor = { seq: 0, revision: 0 };
 
@@ -379,6 +383,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     runTool: (name, binding, input, context) =>
       Effect.gen(function* () {
+        // A worker's call is admitted through its root below, so the account's memory, which it
+        // is never offered, is refused here rather than read or written as the planning model's.
+        if (context.session.parent !== undefined && MEMORY_TOOL_NAMES.has(name)) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: WORKER_REFUSAL };
+        }
         // Admitted again as the call runs, not only as the tools were resolved:
         // a conversation that rotated to a newer session mid-turn refuses the
         // old session's calls here, so no effect lands without a turn record.
@@ -433,6 +442,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   writer: seams.writer(),
                   clientKey: context.callId,
                 },
+                // The plan's workspace, which the caller reaches or the plan would not have been found, and the caller: never what the model names.
+                memory: { workspaceId: plan.plan.workspaceId, userId: caller },
               },
           input,
         );

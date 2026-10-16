@@ -534,6 +534,16 @@ export function DocumentIcon(): React.JSX.Element {
   );
 }
 
+/** A lit bulb: what Luke remembers from the developer's planning calls. */
+export function MemoryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 3.6a5.4 5.4 0 0 0-3.2 9.8c.7.5 1.1 1.3 1.1 2.1v1.5h4.2v-1.5c0-.8.4-1.6 1.1-2.1A5.4 5.4 0 0 0 12 3.6Z" />
+      <path d="M9.9 19.6h4.2" />
+    </Glyph>
+  );
+}
+
 /** A folder with its tab: a repository whose owner's picture is not drawn. */
 export function FolderIcon(): React.JSX.Element {
   return (

@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "workspaceId"
+  ],
+  "additionalProperties": false
+}

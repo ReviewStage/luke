@@ -96,6 +96,9 @@ const openAccounts = Effect.gen(function* () {
     listPlanTemplateRevisions: listTemplateRevisions,
     readPlanTemplateRevision: readTemplateRevision,
     restorePlanTemplate,
+    // The memories' path is answered over a real dialect in `account-memories.test.ts`.
+    readMemories: () => Effect.die(new Error("this suite reads no memory")),
+    forgetMemory: () => Effect.die(new Error("this suite forgets no memory")),
   });
   return { owner, other, ask: (request: Request) => answer(app, request) };
 });

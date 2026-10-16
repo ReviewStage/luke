@@ -7,6 +7,7 @@ import {
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { hostTurnId, sentLineId } from "@luke/database/models/ids";
+import { listMemories } from "@luke/database/models/memory-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { openPlanConversation } from "@luke/database/models/plan-store";
@@ -59,6 +60,7 @@ import {
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
+import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
@@ -659,4 +661,99 @@ test("end_call is the one planning tool eve is told ends its turn, so the model 
     .filter((tool) => tool.endsTurn === true)
     .map((tool) => tool.name);
   assert.deepEqual(endings, [END_CALL_TOOL.name]);
+});
+
+/** The words of the memories a recall answered. */
+function recalledWords(answer: WireRecord): readonly unknown[] {
+  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.ok(Array.isArray(answer.memories));
+  return answer.memories.map((memory) => (isRecord(memory) ? memory.text : memory));
+}
+
+test("Luke remembers for the plan's workspace: a later plan in it recalls the memory, a plan in another workspace recalls nothing, and a workspace or account the call names is ignored", async () => {
+  const owner = await database.createUser();
+  const stranger = await database.createUser();
+  const fact = "Every hosted route is an Effect HttpRouter under server/routes.";
+  const plan = await planConversation(owner);
+  const elsewherePlan = await planConversation(stranger);
+  const remember = await callerOn(brainHost(seams), plan);
+
+  const kept = await remember(REMEMBER_TOOL.name, {
+    text: fact,
+    userId: stranger,
+    workspaceId: elsewherePlan.workspaceId,
+  });
+  const later = await callerOn(brainHost(seams), await planConversation(owner));
+  const elsewhere = await callerOn(brainHost(seams), elsewherePlan);
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(recalledWords(await later(RECALL_TOOL.name, { query: "hosted routes" })), [
+    fact,
+  ]);
+  assert.deepEqual(recalledWords(await elsewhere(RECALL_TOOL.name, {})), []);
+  assert.deepEqual(await database.run(listMemories(elsewherePlan.workspaceId)), []);
+});
+
+test("every member shares the workspace's memory: a teammate's call recalls what another member's call kept, and keeps its own as the words of the member speaking", async () => {
+  const opener = await database.createUser();
+  const member = await database.createUser();
+  const plan = await planConversation(opener);
+  await database.run(joinWorkspace(plan.workspaceId, member));
+  const openersFact = "Invites are sent from the notifications service.";
+  const membersFact = "Invite emails are rendered with React Email.";
+  const asOpener = await callerOn(brainHost(seams), plan);
+  await asOpener(REMEMBER_TOOL.name, { text: openersFact });
+
+  const asMember = await callerOn(brainHost(seams), plan, NO_GITHUB, [], member);
+  const recalled = await asMember(RECALL_TOOL.name, { query: "invites" });
+  await asMember(REMEMBER_TOOL.name, { text: membersFact });
+
+  assert.deepEqual(recalledWords(recalled), [openersFact]);
+  assert.deepEqual(
+    (await database.run(listMemories(plan.workspaceId))).map((kept) => [kept.text, kept.userId]),
+    [
+      [membersFact, member],
+      [openersFact, opener],
+    ],
+  );
+});
+
+test("a worker's call of the workspace's memory, which it is never offered, runs nothing", async () => {
+  const target = await planConversation();
+  const host = brainHost(seams);
+  const rootId = sessionId();
+  const auth = seat(target);
+  const starting = await database.run(host.admitStarting(auth, rootId));
+  if (Result.isFailure(starting)) return assert.fail(starting.failure);
+  assert.equal(await database.run(host.sessionStarted(starting.success, rootId)), true);
+  const turn = { id: "turn_0", sequence: 0 };
+  const binding = {
+    target,
+    turn: {
+      kind: BRAIN_HOST_TURN.TYPED,
+      trigger: BRAIN_TURN_TRIGGER.ASK,
+      turnId: hostTurnId(rootId, "turn_0"),
+    },
+  };
+  const workerCall = (name: string, input: WireRecord) => {
+    const context = toolContext(`${rootId}-child`, auth, name);
+    return database.run(
+      host
+        .runTool(name, binding, input, {
+          ...context,
+          session: {
+            ...context.session,
+            parent: { callId: "call-worker-1", rootSessionId: rootId, sessionId: rootId, turn },
+          },
+        })
+        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
+    );
+  };
+
+  const remembered = await workerCall(REMEMBER_TOOL.name, { text: "Workers keep nothing." });
+  const recalled = await workerCall(RECALL_TOOL.name, {});
+
+  assert.equal(remembered.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(await database.run(listMemories(target.workspaceId)), []);
 });

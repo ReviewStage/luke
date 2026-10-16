@@ -64,6 +64,7 @@ const DECLARED_TABLES = [
   "mac_command",
   "mac_command_listener",
   "member",
+  "memory",
   "messages",
   "oauth_access_token",
   "oauth_client",

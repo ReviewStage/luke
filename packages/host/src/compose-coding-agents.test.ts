@@ -21,6 +21,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { MemorySummary } from "@luke/features/memory-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -126,6 +127,17 @@ const KEPT: ProviderKeySummary = {
 
 const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
+
+const MEMORY: MemorySummary = {
+  id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+  text: "Deployments go out from the release branch.",
+  keptBy: { userId: "user-1", name: "Dean" },
+  forgettable: true,
+  createdAt: 1,
+  updatedAt: 2,
+};
+
+const WORKSPACE_ID = "workspace-1";
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -310,6 +322,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`restore:${revision.seq}`);
         return { template: "## Why\n", custom: true };
+      }),
+    readMemories: (reading) =>
+      Effect.sync(() => {
+        asked.push(`memories:${reading.workspaceId}`);
+        return { memories: [MEMORY] };
+      }),
+    forgetMemory: (forget) =>
+      Effect.sync(() => {
+        asked.push(`forget:${forget.workspaceId}:${forget.id}`);
+        return { memories: [] };
       }),
     transcribeDictation: (clip) =>
       Effect.sync(() => {
@@ -616,5 +638,39 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a workspace's memories are read and one is forgotten, each one ask of the service naming the workspace; a read naming no workspace or a forget naming no memory id is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const read = yield* call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: WORKSPACE_ID });
+      const forgotten = yield* call(GATEWAY_METHOD.MEMORIES_FORGET, {
+        workspaceId: WORKSPACE_ID,
+        id: MEMORY.id,
+      });
+      const refused = [
+        yield* Effect.flip(
+          call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
+        ),
+        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_READ, {})),
+      ];
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_READ, {
+        workspaceId: WORKSPACE_ID,
+      });
+
+      assert.deepEqual(read, { memories: [MEMORY] });
+      assert.deepEqual(forgotten, { memories: [] });
+      assert.deepEqual(
+        refused.map((refusal) => refusal._tag),
+        ["InvalidParamsRefusal", "InvalidParamsRefusal"],
+      );
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
+      assert.deepEqual(signedOut.asked, []);
     }),
 );

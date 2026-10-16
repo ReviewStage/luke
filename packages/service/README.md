@@ -1169,7 +1169,7 @@ and a reader that has heard some hears the rest and the end exactly once.
 ## The account group
 
 `src/accounts/account-app.ts` is the account route group: the signed-in desktop's
-own delete, preferences, and plan template endpoints, described as routes of the group's own
+own delete, preferences, plan template, and memory endpoints, described as routes of the group's own
 rather than carried as a passthrough, because each answers from this
 deployment's own database and none owns a contract of its own the way Better Auth does.
 Each endpoint resolves the bearer against the deployment's own account store
@@ -1177,7 +1177,7 @@ before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `src/accounts/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
-store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
+store, so `api/account/delete.ts`, `preferences.ts`, `plan-template.ts`, and `memories.ts` build
 the same group from the same wiring; the reads and the writes themselves are
 `packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the group as the effects they are rather than run at the seam, and
@@ -1235,6 +1235,53 @@ belong in that loop. It lives in `account_preference.plan_template`
 (migration 0087), and a write sets that column alone: `updated_at` stays
 the preferences part's own, so a row a template opened answers no snapshot.
 `src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
+
+The memories are the group's fourth path, `/api/account/memories`, and the
+review surface for what the planning model kept in a workspace: `GET
+?workspaceId=<workspace>` answers `{ memories }` to a member of it, each `{
+id, text, keptBy, forgettable, createdAt, updatedAt }`, most recently kept
+or corrected first, and `DELETE ?workspaceId=<workspace>&id=<memory>`
+forgets one for good and answers the memories as they then stand, whether
+or not the id named one (`@luke/features/memory-wire`). An account that is
+no member is answered `not-found`, and a forget the member may not make
+`not-permitted` (`src/accounts/workspace-memories.ts`). Nothing here writes
+a memory. `src/accounts/account-memories.test.ts` answers the path over a
+real dialect.
+
+### Workspace memory
+
+The `memory` table (`packages/database/src/schemas/memory.ts`) holds the
+facts and conventions the planning model kept from a workspace's planning
+calls, one row per memory, keyed by `organization_id` and cascading with the
+workspace. It is the workspace's, shared by every member, rather than a
+plan's, a repository's, or one member's, so every plan started in the
+workspace may recall it and no plan in another workspace does; a solo
+account's personal workspace holds what is in effect its own memory. Its
+`user_id` names the member whose words it holds: who kept it, or who last
+corrected it. The memory is the workspace's knowledge, as its git history
+is, so it outlives the member who said it: one who leaves the workspace
+leaves their memories with it, and deleting an account leaves them too, with
+`user_id` set null (as `plan_revision` keeps its writer), read as a former
+member, which only the workspace's owners and admins may then forget.
+The planning model writes it through the `remember` tool and searches it
+through `recall` (`src/agents/memory-tools.ts`, offered to the planner alone
+in the tool registry and refused to a `worker` subagent's session by the
+brain host), both acting in the workspace of the plan the call belongs to,
+which the caller reaches or the plan would not have been found, and keeping
+words as the member speaking; the model names neither.
+`packages/database/src/models/memory-store.ts` keeps a memory or corrects one
+in place under its id, under a lock on the workspace's own row, so the same
+words kept twice (a retried call, or two members settling the same fact)
+stand once, a correction leaves no older version beside the new one, and the
+bound of 200 memories of at most 400 characters per workspace is counted
+once. Every member's call may correct a memory, since the conversation wins;
+Settings lets the member whose words it holds, and the workspace's owners and
+admins, forget it, as a workspace automation is changed by its creator and
+its managers. Recall ranks the workspace's memories by how many of the
+query's words each holds, which the bound keeps a read of one workspace's
+rows; no index or embedding stands behind it. Words shaped like a credential
+are refused before the store is reached, and a store that cannot be reached
+answers the model that memory is unavailable rather than failing the turn.
 
 ## The coding-agent routes
 

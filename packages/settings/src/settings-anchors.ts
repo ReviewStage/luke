@@ -31,6 +31,7 @@ export const SETTINGS_SEARCH_ROW = {
   TALK_KEY: "talk-key",
   STOP_KEY: "stop-key",
   PLAN_TEMPLATE: "plan-template",
+  MEMORY: "memory",
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",
   CODING_AGENT_FAST: "coding-agent-fast",

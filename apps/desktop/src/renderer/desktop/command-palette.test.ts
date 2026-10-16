@@ -246,6 +246,7 @@ const SETTINGS_PAGES = [
   "Coding agents",
   "Integrations",
   "Plan template",
+  "Memory",
   "Voice",
   "Appearance",
   "Notifications",

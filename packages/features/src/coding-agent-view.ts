@@ -21,6 +21,7 @@ import {
   inboxAnswerSchema,
   inboxImageTypeSchema,
 } from "./inbox-wire.js";
+import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -62,6 +63,10 @@ import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
  * The account's plan template travels here too, since it is the account's
  * own on the service as the default and the keys are, and Settings asks for
  * all three the same way: the template read, and one kept or reset.
+ *
+ * A workspace's memories travel here too, on the same terms: what Luke kept
+ * from its members' planning calls, read for the workspace Settings shows,
+ * and one forgotten.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -144,6 +149,26 @@ export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
 export const planTemplateWriteParamsSchema = planTemplateWriteRequestSchema;
 
 export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
+
+/** A workspace's memories, as the window hears them read or one forgotten: the memories as they stand, or why there are none. */
+export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
+
+export type MemoriesAnswerView = typeof memoriesAnswerViewSchema.Type;
+
+/** Reading a workspace's memories, as the window asks it: the workspace Settings shows. */
+export const memoriesReadParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+export type MemoriesReadParams = typeof memoriesReadParamsSchema.Type;
+
+/** Forgetting a memory, as the window asks it: its workspace and the memory's id. */
+export const memoryForgetParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  id: memoryIdSchema,
+});
+
+export type MemoryForgetParams = typeof memoryForgetParamsSchema.Type;
 
 /** A page of the template's history, as the window asks it: the newest, or the one before a revision. */
 export const planTemplateRevisionsParamsSchema = EffectSchema.Struct({
