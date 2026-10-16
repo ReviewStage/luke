@@ -1178,7 +1178,7 @@ function AgentTabView({
       </footer>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
       {onUnarchive !== undefined || composer.closed !== undefined || composer.sending ? null : (
-        <ReplyToSelection scope={tab} onReply={composer.setReply} />
+        <ReplyToSelection scope={tab} onReply={composer.addReply} />
       )}
     </section>
   );

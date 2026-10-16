@@ -9,7 +9,7 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { withReply } from "@luke/ui/reply-quote";
+import { withReplies, withReplyAdded } from "@luke/ui/reply-quote";
 import { useEffect, useRef, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts";
 import {
@@ -37,13 +37,14 @@ import {
  * a send whose answer was lost reaches the agent once; editing the words
  * is a new message under a new key, so Retry goes with the edit, as it
  * does with a file put on or taken off. The files go with the words and
- * come back into the box with them, and so does a reply: the words picked
- * out of one of the agent's messages, which lead the message as a quote
- * (`@luke/ui/reply-quote`) and come back as the reply they were. A refusal
+ * come back into the box with them, and so do its replies: the words
+ * picked out of the agent's messages, which lead the message as quotes, in
+ * the order added (`@luke/ui/reply-quote`), and come back as the replies
+ * they were. A refusal
  * that is for good holds the box, disabled, with its reason under it.
  * Another agent's tab starts from nothing of this one's.
  *
- * The words, the reply, and the files not yet sent are the agent's draft, kept apart from
+ * The words, the replies, and the files not yet sent are the agent's draft, kept apart from
  * the tab (`../composer-drafts.ts`), so they wait while another tab or task is
  * open and come back as the tab does; a message that did not go comes back
  * into the agent's draft even once its tab is closed.
@@ -62,10 +63,12 @@ export interface AgentComposerControl {
   /** The words in the box. */
   draft: string;
   setDraft: (text: string) => void;
-  /** The words of the agent's the message replies to, quoted over the box; empty for none. */
-  reply: string;
-  /** Replies to other words of the agent's, or to none with an empty string. */
-  setReply: (reply: string) => void;
+  /** The words of the agent's the message replies to, each quoted over the box, in the order added. */
+  replies: readonly string[];
+  /** Replies to more of the agent's words, after those standing; nothing for words already among them. */
+  addReply: (reply: string) => void;
+  /** Takes one reply off, by its place. */
+  removeReply: (index: number) => void;
   /** The files that go with the words, in the order attached. */
   attachments: readonly CodingAgentAttachment[];
   /** Changes the files from those the box holds as the change lands, which a read that lands late needs. */
@@ -78,7 +81,7 @@ export interface AgentComposerControl {
   note: Failure | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
-  /** Sends the words in the box, trimmed, under the reply quoted, and its files under a fresh key; nothing on a box with no words or files, a send out, or a closed agent. */
+  /** Sends the words in the box, trimmed, under the replies quoted, and its files under a fresh key; nothing on a box with no words or files, a send out, or a closed agent. */
   send: () => void;
   /** Sends the words in the box again under the failed message's key, so a send whose answer was lost reaches the agent once. */
   retry: () => void;
@@ -123,7 +126,7 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Whether a draft holds neither words, a reply, nor files. */
 function holdsNothing(draft: Draft): boolean {
-  return draft.text === "" && draft.reply === "" && draft.attachments.length === 0;
+  return draft.text === "" && draft.replies.length === 0 && draft.attachments.length === 0;
 }
 
 export function useAgentComposer(input: {
@@ -166,11 +169,11 @@ export function useAgentComposer(input: {
     known: ReadonlySet<string> = knownDeveloperRows(messages),
   ) => {
     const words = kept.draft.text.trim();
-    const { attachments, reply } = kept.draft;
+    const { attachments, replies } = kept.draft;
     if (!hasWordsOrFiles(words, attachments) || held.sending || held.closed !== undefined) return;
     // Note that a reply goes only with words or files, because a quote alone asks the agent
     // nothing, and that the message is trimmed as the service keeps it, so its row reads it back.
-    const text = withReply(reply, words, CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS).trim();
+    const text = withReplies(replies, words, CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS).trim();
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
     const line: SentLine = { id, text, attachments, known };
     const { update } = kept;
@@ -198,7 +201,7 @@ export function useAgentComposer(input: {
           }
           // The words come back into the agent's draft where it holds nothing newer, and the line out of the transcript.
           update((now) =>
-            holdsNothing(now) ? { ...EMPTY_DRAFT, text: words, reply, attachments } : now,
+            holdsNothing(now) ? { ...EMPTY_DRAFT, text: words, replies, attachments } : now,
           );
           setHeld((was) => ({
             ...was,
@@ -221,11 +224,16 @@ export function useAgentComposer(input: {
       if (text !== kept.draft.text) setHeld((was) => ({ ...was, failed: undefined }));
       kept.update((was) => ({ ...was, text }));
     },
-    reply: kept.draft.reply,
-    // Note that another reply lets Retry go as well, since the message is another.
-    setReply: (reply) => {
-      if (reply !== kept.draft.reply) setHeld((was) => ({ ...was, failed: undefined }));
-      kept.update((was) => ({ ...was, reply }));
+    replies: kept.draft.replies,
+    // Note that a reply put on or taken off lets Retry go as well, since the message is another.
+    addReply: (reply) => {
+      if (withReplyAdded(kept.draft.replies, reply) === kept.draft.replies) return;
+      setHeld((was) => ({ ...was, failed: undefined }));
+      kept.update((was) => ({ ...was, replies: withReplyAdded(was.replies, reply) }));
+    },
+    removeReply: (index) => {
+      setHeld((was) => ({ ...was, failed: undefined }));
+      kept.update((was) => ({ ...was, replies: was.replies.filter((_, at) => at !== index) }));
     },
     attachments: kept.draft.attachments,
     // Note that a file put on or taken off lets Retry go too, since the message is another.

@@ -36,7 +36,7 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 /**
  * Words selected in an agent's message, answered from its box: Reply stands
  * over a selection inside the agent's words and nowhere else, not over its
- * thoughts or the developer's words, a press quotes
+ * thoughts or the developer's words, each press stacks one more quote
  * them over the box and hands it the caret, the message sent opens on them
  * as a Markdown quote, a message that did not go brings the reply back
  * apart from its words, and the reply's way off takes it off; and on the
@@ -112,7 +112,7 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
     }),
     createElement("p", null, DEVELOPER_WORDS),
     createElement(AgentComposer, { ...QUIET_COMPOSER, composer }),
-    createElement(ReplyToSelection, { scope: tab, onReply: composer.setReply }),
+    createElement(ReplyToSelection, { scope: tab, onReply: composer.addReply }),
   );
 }
 
@@ -156,30 +156,50 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
       [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
         (each) => each.textContent === "Reply",
       ),
-    /** The words quoted over the box; nothing where it holds no reply. */
-    quoted: () => container.querySelector(".agent-composer-reply-words")?.textContent,
+    /** The words quoted over the box, in order. */
+    quoted: () =>
+      [...container.querySelectorAll(".agent-composer-reply-words")].map(
+        (each) => each.textContent,
+      ),
+    /** Presses Reply where it stands. */
+    pressReply: async () => {
+      const reply = [
+        ...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button"),
+      ].find((each) => each.textContent === "Reply");
+      assert.ok(reply, "Reply stands over the selection");
+      act(() => reply.click());
+      await settle();
+    },
   };
 }
 
-test("words selected in the agent's message are quoted over the box by Reply, and the message sent opens on them as a quote", async () => {
+test("words selected in the agent's message stack as quotes over the box, and the message sent opens on them in that order", async () => {
   const tab = await mounted();
   composerEditor(tab.container).blur();
 
   tab.select(AGENT_WORDS, "Option B", "review.");
-  const reply = tab.reply();
-  assert.ok(reply, "Reply stands over the selection");
-  act(() => reply.click());
-  await settle();
-
-  assert.equal(tab.quoted(), "Option B waits for review.");
+  await tab.pressReply();
+  assert.deepEqual(tab.quoted(), ["Option B waits for review."]);
   assert.equal(tab.reply() === undefined, true, "Reply goes once pressed");
   assert.equal(document.activeElement, composerEditor(tab.container), "the box takes the caret");
 
-  typeInComposer(tab.container, "Why wait?");
+  tab.select(AGENT_WORDS, "Option A", "today.");
+  await tab.pressReply();
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  await tab.pressReply();
+  assert.deepEqual(
+    tab.quoted(),
+    ["Option B waits for review.", "Option A ships today."],
+    "a second Reply stacks under the first, and the same words are quoted once",
+  );
+
+  typeInComposer(tab.container, "Which is safer?");
   pressInComposer(tab.container, "Enter");
   await settle();
-  assert.deepEqual(tab.sent, ["> Option B waits for review.\n\nWhy wait?"]);
-  assert.equal(tab.quoted(), undefined, "the reply goes with the message");
+  assert.deepEqual(tab.sent, [
+    "> Option B waits for review.\n\n> Option A ships today.\n\nWhich is safer?",
+  ]);
+  assert.deepEqual(tab.quoted(), [], "the replies go with the message");
 });
 
 test("a selection outside the agent's words, in its thought or the developer's words, is offered no Reply", async () => {
@@ -190,15 +210,14 @@ test("a selection outside the agent's words, in its thought or the developer's w
   assert.equal(tab.reply() === undefined, true);
 });
 
-test("a reply alone sends nothing, a message that did not go brings it back apart from its words, and its way off takes it off", async () => {
+test("replies alone send nothing, a message that did not go brings them back apart from its words, and each one's way off takes it off", async () => {
   const tab = await mounted(() =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
   );
   tab.select(AGENT_WORDS, "Option A", "today.");
-  const reply = tab.reply();
-  assert.ok(reply);
-  act(() => reply.click());
-  await settle();
+  await tab.pressReply();
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  await tab.pressReply();
   pressInComposer(tab.container, "Enter");
   await settle();
   assert.deepEqual(tab.sent, [], "a quote alone asks the agent nothing");
@@ -207,7 +226,7 @@ test("a reply alone sends nothing, a message that did not go brings it back apar
   pressInComposer(tab.container, "Enter");
   await settle();
   assert.equal(composerEditor(tab.container).textContent, "Ship it");
-  assert.equal(tab.quoted(), "Option A ships today.");
+  assert.deepEqual(tab.quoted(), ["Option A ships today.", "Option B waits for review."]);
 
   const remove = tab.container.querySelector<HTMLButtonElement>(
     'button[aria-label="Remove reply"]',
@@ -215,10 +234,13 @@ test("a reply alone sends nothing, a message that did not go brings it back apar
   assert.ok(remove);
   act(() => remove.click());
   await settle();
-  assert.equal(tab.quoted(), undefined);
+  assert.deepEqual(tab.quoted(), ["Option B waits for review."], "its own way off takes one off");
   pressInComposer(tab.container, "Enter");
   await settle();
-  assert.deepEqual(tab.sent, ["> Option A ships today.\n\nShip it", "Ship it"]);
+  assert.deepEqual(tab.sent, [
+    "> Option A ships today.\n\n> Option B waits for review.\n\nShip it",
+    "> Option B waits for review.\n\nShip it",
+  ]);
 });
 
 /** An agent of the developer's, handed a prompt and answered with one turn. */

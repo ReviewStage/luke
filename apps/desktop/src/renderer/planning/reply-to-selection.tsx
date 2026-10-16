@@ -15,8 +15,9 @@ import { Tooltip } from "../tooltip";
  * of one of its messages, which wears `REPLY_SCOPE`, never a call's output
  * or a thought beside it, stands Reply over it once
  * the pointer or the keys let it go, and a press hands the words to the
- * agent's box (`use-agent-composer.ts`'s `setReply`), which quotes them
- * (`ComposerReply`) and sends them as a Markdown quote leading the words
+ * agent's box (`use-agent-composer.ts`'s `addReply`), which quotes them
+ * (`ComposerReplies`) under any replies already standing, and sends each
+ * as a Markdown quote leading the words, in the order added
  * (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
  * the transcript, so the log's own clipping never cuts it, follows the
  * selection as the log scrolls, and goes as the selection does. Note that
@@ -33,6 +34,7 @@ const SCOPE_SELECTOR = `[${REPLY_SCOPE}]`;
 const REPLY_WORDS = {
   REPLY: "Reply",
   REMOVE: "Remove reply",
+  LIST: "Replies",
 } as const;
 
 /** How far the press stands off the selection, and the least room it keeps from the window's sides. */
@@ -142,31 +144,35 @@ export function ReplyToSelection({
   );
 }
 
-/** The reply over the message box: the agent's words it answers, quoted, and the press that takes it off; nothing without one. */
-export function ComposerReply({
-  reply,
+/** The replies over the message box: each of the agent's words they answer, quoted, in the order added, with the press that takes it off; nothing without one. */
+export function ComposerReplies({
+  replies,
   onRemove,
 }: {
-  reply: string;
-  /** Takes the reply off; none while the box is held, when it stays. */
-  onRemove: (() => void) | undefined;
+  replies: readonly string[];
+  /** Takes one reply off, by its place; none while the box is held, when they stay. */
+  onRemove: ((index: number) => void) | undefined;
 }): ReactNode {
-  if (reply === "") return null;
+  if (replies.length === 0) return null;
   return (
-    <div className="agent-composer-reply">
-      <CornerDownRightIcon aria-hidden="true" className="agent-composer-reply-glyph" />
-      <blockquote className="agent-composer-reply-words">{reply}</blockquote>
-      <Tooltip label={REPLY_WORDS.REMOVE}>
-        <button
-          type="button"
-          className="icon-button agent-composer-reply-remove"
-          aria-label={REPLY_WORDS.REMOVE}
-          disabled={onRemove === undefined}
-          onClick={onRemove}
-        >
-          <XIcon aria-hidden="true" />
-        </button>
-      </Tooltip>
-    </div>
+    <ul className="agent-composer-replies" aria-label={REPLY_WORDS.LIST}>
+      {replies.map((reply, index) => (
+        <li key={reply} className="agent-composer-reply">
+          <CornerDownRightIcon aria-hidden="true" className="agent-composer-reply-glyph" />
+          <blockquote className="agent-composer-reply-words">{reply}</blockquote>
+          <Tooltip label={REPLY_WORDS.REMOVE}>
+            <button
+              type="button"
+              className="icon-button agent-composer-reply-remove"
+              aria-label={REPLY_WORDS.REMOVE}
+              disabled={onRemove === undefined}
+              onClick={() => onRemove?.(index)}
+            >
+              <XIcon aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </li>
+      ))}
+    </ul>
   );
 }

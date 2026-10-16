@@ -828,7 +828,7 @@ test("files attached in this window stay as its draft when another window lets t
   assert.deepEqual([box().draft, box().attachments], ["", [notes]]);
 });
 
-test("a reply waiting over an agent's box outlasts a reload, alone or with the words under it", async () => {
+test("replies waiting over an agent's box outlast a reload, alone or with the words under them", async () => {
   let composer: AgentComposerControl | undefined;
   function Box(): null {
     useDraftsOwner(DEAN);
@@ -850,11 +850,18 @@ test("a reply waiting over an agent's box outlasts a reload, alone or with the w
   };
 
   let box = await open();
-  act(() => box().setReply("Invites expire after a week."));
+  act(() => box().addReply("Invites expire after a week."));
+  act(() => box().addReply("Admins can resend."));
   box = await open();
-  assert.deepEqual([box().reply, box().draft], ["Invites expire after a week.", ""]);
+  assert.deepEqual(
+    [box().replies, box().draft],
+    [["Invites expire after a week.", "Admins can resend."], ""],
+  );
 
   act(() => box().setDraft("Make it a month"));
   box = await open();
-  assert.deepEqual([box().reply, box().draft], ["Invites expire after a week.", "Make it a month"]);
+  assert.deepEqual(
+    [box().replies, box().draft],
+    [["Invites expire after a week.", "Admins can resend."], "Make it a month"],
+  );
 });

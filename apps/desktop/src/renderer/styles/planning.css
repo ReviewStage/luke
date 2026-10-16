@@ -2125,14 +2125,22 @@ button.skill-chip:hover,
 }
 
 /* The words of the agent's a message replies to (`reply-to-selection.tsx`):
-   quoted at the card's top, over its files, three lines at most, with the
-   press that takes them off at the row's end. */
+   quoted at the card's top, over its files, one row each in the order
+   added, three lines at most, with the press that takes it off at the
+   row's end. */
+.agent-composer-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 -10px;
+  padding: 12px 8px 0 15px;
+  list-style: none;
+}
+
 .agent-composer-reply {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: -10px;
-  padding: 12px 8px 0 15px;
   color: var(--text-secondary);
 }
 

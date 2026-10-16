@@ -78,8 +78,9 @@ export function DraftAgentTab({
     draft: draft.prompt,
     setDraft: (prompt) => control.onDraftChange({ prompt }),
     // Note that a draft agent has no message yet to reply to.
-    reply: "",
-    setReply: () => undefined,
+    replies: [],
+    addReply: () => undefined,
+    removeReply: () => undefined,
     attachments: draft.attachments,
     setAttachments: control.onDraftAttachments,
     sending: sending || control.start.busy,
