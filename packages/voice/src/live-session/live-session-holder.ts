@@ -14,6 +14,7 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -145,6 +146,8 @@ export interface LiveSessionHolderOptions {
   createId: () => string;
   /** Whether a call is to open with Luke's avatar, read as each session comes to stand. */
   videoOnCall?: Effect.Effect<boolean>;
+  /** The avatar a start asks for, read afresh as the call opens with video and as it restarts; the default where none is given. */
+  videoAvatar?: Effect.Effect<VideoAvatar>;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
@@ -269,6 +272,8 @@ export class LiveSessionHolder {
   #avatarRequest: string | undefined;
   /** How many times the standing call's avatar was asked for again after a close this side did not start. */
   #avatarRestarts = 0;
+  /** The restart `closed` has queued while it reads the chosen avatar, which any stop or start meanwhile withdraws. */
+  #avatarRestartPending: object | undefined;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -471,7 +476,9 @@ export class LiveSessionHolder {
         this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
       }
       this.#options.onSessionCreated?.();
-      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) this.startAvatar();
+      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) {
+        this.startAvatar(yield* this.#chosenAvatar());
+      }
       return createdOf(opened);
     });
   }
@@ -675,16 +682,18 @@ export class LiveSessionHolder {
    * session the plan's concurrency pays for. A start still unanswered is
    * superseded, since its answer may have been lost with a connection, and
    * the service closes whatever the earlier ask put up. An avatar that ended
-   * may be asked for again, and draws a grant of its own.
+   * may be asked for again, and draws a grant of its own. The avatar asked
+   * for is the one the developer chose, as the caller read it.
    */
-  startAvatar(): boolean {
+  startAvatar(avatar: VideoAvatar): boolean {
     const session = this.#held;
     if (!session || session.ended) return false;
     const start = session.opened.startAvatar;
     if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
     const requestId = this.#options.createId();
     this.#avatarRequest = requestId;
-    start(requestId);
+    this.#avatarRestartPending = undefined;
+    start(requestId, avatar);
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
       this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
     }
@@ -719,6 +728,9 @@ export class LiveSessionHolder {
    * whether there was an avatar asked for or up to take down.
    */
   stopAvatar(reason: AvatarStopReason): boolean {
+    // Note that a stop withdraws a queued restart even with nothing up,
+    // because video turned off while a restart is pending must stay off.
+    this.#avatarRestartPending = undefined;
     const session = this.#held;
     if (!session || session.ended) return false;
     const stop = session.opened.stopAvatar;
@@ -734,16 +746,32 @@ export class LiveSessionHolder {
    * did not close it: Keyframe closed the room, or the session failed. The
    * service is told so, which closes its row and lets a start be asked
    * again, and the avatar is asked for once more on each call before it is
-   * left ended, where the tile offers to restart it. Answers whether it was
-   * asked for again.
+   * left ended, where the tile offers to restart it. Answers whether it is
+   * to be asked for again. The avatar is read afresh first, so a choice made
+   * while the last one stood is the one the restart asks for; a stop or a
+   * start asked for meanwhile, or the call's end, leaves the restart unasked.
    */
   closed(reason: AvatarStopReason): boolean {
+    const session = this.#held;
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.GRANTED || !this.stopAvatar(reason)) {
       return false;
     }
     if (this.#avatarRestarts >= AVATAR_RESTARTS_PER_CALL) return false;
     this.#avatarRestarts += 1;
-    return this.startAvatar();
+    const pending = {};
+    this.#avatarRestartPending = pending;
+    this.#start(
+      Effect.map(this.#chosenAvatar(), (avatar) => {
+        if (this.#avatarRestartPending !== pending || this.#held !== session) return;
+        this.startAvatar(avatar);
+      }),
+    );
+    return true;
+  }
+
+  /** The avatar the developer chose, as it stands now. */
+  #chosenAvatar(): Effect.Effect<VideoAvatar> {
+    return this.#options.videoAvatar ?? Effect.succeed(VIDEO_AVATAR.DEFAULT);
   }
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */

@@ -16,6 +16,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
+import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_CLIENT_EVENT, LIVE_DEFAULTS, LIVE_SERVER_EVENT, LIVE_VOICE } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { asc, eq } from "drizzle-orm";
@@ -32,7 +33,13 @@ import {
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
 import { callAvatar } from "./avatar.js";
-import { type AvatarGrant, KEYFRAME_FAILURE, Keyframe, KeyframeError } from "./keyframe.js";
+import {
+  type AvatarGrant,
+  KEYFRAME_FAILURE,
+  KEYFRAME_STOCK_PERSONA_ID,
+  Keyframe,
+  KeyframeError,
+} from "./keyframe.js";
 import { LOG_EVENT, type LogEntry } from "./log.js";
 import { createLiveUpstream } from "./openai.js";
 import { sweepVoiceOrphans, VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
@@ -73,11 +80,13 @@ const GRANT: AvatarGrant = {
 
 /** A Keyframe answering each mint with the next scripted answer, a grant once the script runs out. */
 function scriptedKeyframe(script: Array<Effect.Effect<AvatarGrant, KeyframeError>> = []) {
-  const minted = { count: 0 };
+  const personas: string[] = [];
+  const minted = { count: 0, personas };
   const layer = Layer.succeed(Keyframe, {
-    createSession: () =>
+    createSession: (personaId) =>
       Effect.suspend(() => {
         minted.count += 1;
+        minted.personas.push(personaId);
         return script.shift() ?? Effect.succeed(GRANT);
       }),
   });
@@ -233,6 +242,35 @@ it.effect(
       );
       await hangUp(context, session);
       assert.equal(JSON.stringify(context.log).includes(PARTICIPANT_TOKEN), false);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a start naming a stock avatar mints Keyframe's persona for it and keeps it on the row, and one naming the default or none mints the deployment's",
+  () =>
+    Effect.promise(async () => {
+      const keyframe = scriptedKeyframe();
+      const context = await stand(keyframe.layer);
+      const session = await openSession(context);
+
+      const asks = [
+        { requestId: "request-celia", avatar: VIDEO_AVATAR.CELIA },
+        { requestId: "request-default", avatar: VIDEO_AVATAR.DEFAULT },
+        { requestId: "request-none" },
+      ];
+      for (const ask of asks) {
+        await send(session.desktop.socket, { type: VOICE_SERVICE_FRAME.AVATAR_START, ...ask });
+        const started = avatarStartedFrameFromWire(record(await session.desktop.next()));
+        assert.equal(started?.requestId, ask.requestId);
+      }
+      const celia = KEYFRAME_STOCK_PERSONA_ID[VIDEO_AVATAR.CELIA];
+      assert.deepEqual(keyframe.minted.personas, [celia, PERSONA_ID, PERSONA_ID]);
+      assert.deepEqual(
+        (await avatarRows(session.voiceSessionId)).map((row) => row.personaId),
+        [celia, PERSONA_ID, PERSONA_ID],
+      );
+      await hangUp(context, session);
       await context.stop();
     }),
 );

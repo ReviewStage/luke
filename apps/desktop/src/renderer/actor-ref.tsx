@@ -75,7 +75,7 @@ export const ACTOR_SIZE = {
   PAGE: "page",
 } as const;
 
-type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
+export type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
 /** How many CSS pixels across each size draws its disc, which `desktop.css`'s `--actor-size` says for the same size. */
 export const ACTOR_PIXELS = {
@@ -261,6 +261,39 @@ export function ActorMark({
       aria-hidden="true"
     >
       <Face actor={actor} size={size} />
+    </span>
+  );
+}
+
+/**
+ * A face that is no actor's, drawn as a person's is: its picture on a circle
+ * once it loads, and the first letter of its name on the hue read off `id`
+ * until then and where it fails or there is none. For a picker whose options
+ * have faces, such as the avatars Luke appears as on video, so its rows and
+ * chip read as the window's other faces do. Hidden from a screen reader, as
+ * every mark is, since its name stands beside it.
+ */
+export function PictureMark({
+  id,
+  name,
+  pictureUrl,
+  size = ACTOR_SIZE.INLINE,
+}: {
+  /** What the hue is read off: the option's own token. */
+  id: string;
+  /** Whose letter stands until the picture loads. */
+  name: string;
+  pictureUrl: string | undefined;
+  size?: ActorSize;
+}): React.JSX.Element {
+  return (
+    <span className="actor-mark" data-kind={ACTOR_KIND.PERSON} data-size={size} aria-hidden="true">
+      <PictureFace
+        id={id}
+        pictureUrl={pictureUrl}
+        size={size}
+        stand={{ letter: identityLetter(name) }}
+      />
     </span>
   );
 }

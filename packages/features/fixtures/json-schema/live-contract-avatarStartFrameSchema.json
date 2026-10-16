@@ -10,6 +10,20 @@
     "requestId": {
       "type": "string",
       "maxLength": 64
+    },
+    "avatar": {
+      "type": "string",
+      "enum": [
+        "default",
+        "atlas",
+        "caspian",
+        "cassidy",
+        "celia",
+        "cosmo",
+        "lyra",
+        "orion",
+        "selene"
+      ]
     }
   },
   "required": [
