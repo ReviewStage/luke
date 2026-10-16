@@ -306,7 +306,9 @@
    with nothing to scroll never fades, because its timeline never becomes
    active. The two depths are composed into one mask, rather than each edge
    animating a mask of its own, because the second animation's mask would
-   replace the first's.
+   replace the first's. They are named by start and end rather than top and
+   bottom, because a table that scrolls sideways (markdown.css) eases the
+   same two depths on its inline timeline into a mask running to the right.
 
    It is a mask, not a gradient in a ground colour, so its black is an
    alpha: content dissolves into whatever ground the scroller stands on, in
@@ -316,13 +318,13 @@
    pads further keeps its own. A band stuck inside the scroller that must
    stand whole, a call's checkpoint, sets `--fade-inset-top` to its height,
    and the fade starts beneath it; it pads its scroll past both. */
-@property --fade-top {
+@property --fade-start {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
 }
 
-@property --fade-bottom {
+@property --fade-end {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
@@ -348,13 +350,13 @@
     to bottom,
     #000 var(--fade-inset-top),
     transparent var(--fade-inset-top),
-    #000 calc(var(--fade-inset-top) + var(--fade-top)),
-    #000 calc(100% - var(--fade-bottom)),
+    #000 calc(var(--fade-inset-top) + var(--fade-start)),
+    #000 calc(100% - var(--fade-end)),
     transparent
   );
   scroll-padding-top: var(--scroll-fade);
   mask-image: var(--scroll-fade-mask);
-  animation-name: scroll-fade-rise, scroll-fade-lift;
+  animation-name: scroll-fade-start, scroll-fade-end;
   animation-timing-function: linear;
   animation-fill-mode: both;
   animation-timeline: scroll(self block), scroll(self block);
@@ -368,26 +370,26 @@
 }
 
 .scroll-fade-top {
-  animation-name: scroll-fade-rise, none;
+  animation-name: scroll-fade-start, none;
 }
 
-@keyframes scroll-fade-rise {
+@keyframes scroll-fade-start {
   from {
-    --fade-top: 0px;
+    --fade-start: 0px;
   }
 
   to {
-    --fade-top: var(--scroll-fade);
+    --fade-start: var(--scroll-fade);
   }
 }
 
-@keyframes scroll-fade-lift {
+@keyframes scroll-fade-end {
   from {
-    --fade-bottom: var(--scroll-fade);
+    --fade-end: var(--scroll-fade);
   }
 
   to {
-    --fade-bottom: 0px;
+    --fade-end: 0px;
   }
 }
 

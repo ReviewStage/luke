@@ -280,6 +280,8 @@ test("a column with room for the rail draws it, and one widened to that room dra
   assert.equal(column.rail(), null);
   column.widen(480);
   assert.equal(column.rail()?.getAttribute("data-mode"), "rail");
+});
+
 test("the pinned summary's rows fade under the toolbar above it and over the call bar below it, rather than being sliced at either", () => {
   const { page } = mount("plan");
   const sheets = layFades();

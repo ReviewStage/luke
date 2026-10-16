@@ -269,7 +269,8 @@ test("a table, in the plan or in an agent's transcript, fades the edges it hides
     const style = getComputedStyle(table);
     assert.equal(style.overflowX, "auto");
     assert.match(style.getPropertyValue("animation-timeline"), /^scroll\(self inline\)/u);
-    assert.match(style.getPropertyValue("mask-image"), /--table-fade-end/u);
+    assert.match(style.getPropertyValue("mask-image"), /--fade-end/u);
+    assert.equal(style.getPropertyValue("animation-name"), "scroll-fade-start, scroll-fade-end");
   }
   act(() => transcriptRoot.unmount());
 });

@@ -20,8 +20,8 @@ export const FADE_SHEET = { FADE: "base.css", LOGS: "planning.css" } as const;
 export type FadeSheet = (typeof FADE_SHEET)[keyof typeof FADE_SHEET];
 
 /** The keyframes that ease a scroller's top fade in, and its foot's out (base.css). */
-const RISE = "scroll-fade-rise";
-const LIFT = "scroll-fade-lift";
+const RISE = "scroll-fade-start";
+const LIFT = "scroll-fade-end";
 
 export type FadedEdges = {
   /** Content scrolled up past its top edge dissolves there. */
