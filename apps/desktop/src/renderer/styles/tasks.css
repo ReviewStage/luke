@@ -2745,7 +2745,7 @@ button.skill-chip:hover,
 /* Too narrow for the model's words: the chip draws its harness's mark
    alone, where it has one, its label and hint still naming the choice. */
 @container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) {
+  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
     padding: 0 var(--space-8);
   }
 
@@ -2753,7 +2753,10 @@ button.skill-chip:hover,
     display: block;
   }
 
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) :is(.model-label, .settings-chevron) {
+  .agent-composer
+    .agent-model-chip
+    .luke-chip:has(.harness-mark)
+    :is(.model-label, .settings-chevron) {
     display: none;
   }
 }

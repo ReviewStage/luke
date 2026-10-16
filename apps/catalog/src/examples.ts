@@ -1,5 +1,6 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CHIPS_EXAMPLE } from "./examples/chips";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -23,4 +24,5 @@ export const EXAMPLES: readonly Example[] = [
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
   BUTTONS_EXAMPLE,
+  CHIPS_EXAMPLE,
 ];
