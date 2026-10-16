@@ -333,7 +333,7 @@ test("an agent whose turn failed waits first in Build wearing the failed mark an
   assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2507"]);
 });
 
-test("what merged in the last day stands in Ship, the latest first, counted in the summary, and more than Ship lists is counted after its rows", () => {
+test("what merged in the last day stands in Ship, every one of it and the latest first, and is counted in the summary", () => {
   const shipped = (n: number, name: string, ago: number) =>
     plan(10 + n, name, ago, {
       agents: {
@@ -362,11 +362,9 @@ test("what merged in the last day stands in Ship, the latest first, counted in t
     "#2602 merged · Shipped 2",
     "#2603 merged · Shipped 3",
     "#2604 merged · Shipped 4",
+    "#2605 merged · Shipped 5",
   ]);
-  assert.equal(
-    page.querySelector('section[data-step="ship"] .factory-more')?.textContent,
-    "1 more",
-  );
+  assert.equal(page.querySelector(".factory-more"), null);
   assert.equal(
     page.querySelector(".factory-summary")?.textContent,
     "Nothing needs you·0 agents working·5 shipped today",
