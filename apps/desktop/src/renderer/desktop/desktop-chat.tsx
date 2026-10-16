@@ -1,9 +1,4 @@
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
-import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
-import { useMemo } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { useAppCommand } from "../app-commands";
-import { EmptyState } from "../empty-state";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -11,7 +6,12 @@ import {
   chatNames,
   chatRail,
   FOR_YOU,
-} from "../planning/chat-model";
+} from "@luke/ui/chat-model";
+import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
+import { useMemo } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
+import { EmptyState } from "../empty-state";
 import { ChatPane, MemberMark } from "../planning/chat-pane";
 import { useMinute } from "../planning/plan-time";
 import { useOpenLink } from "../planning/use-open-link";

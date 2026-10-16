@@ -18,6 +18,7 @@
     "./theme.css": "./src/theme.css",
     "./search-tokens": "./src/search-tokens.js",
     "./chat-mention": "./src/chat-mention.js",
+    "./chat-model": "./src/chat-model.js",
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",

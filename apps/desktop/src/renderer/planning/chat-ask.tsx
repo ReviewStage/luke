@@ -10,11 +10,11 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import type { InboxReadResponse } from "@luke/features/inbox-wire";
+import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { ArrowUpIcon, CheckIcon } from "lucide-react";
 import { useState } from "react";
 import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
-import type { ChatAskAnswer } from "./chat-model";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, FormFields } from "./inbox-pane";
 

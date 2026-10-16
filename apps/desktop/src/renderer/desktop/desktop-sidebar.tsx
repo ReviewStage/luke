@@ -17,6 +17,7 @@ import {
   UnpinIcon,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { forYou } from "@luke/ui/chat-model";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
@@ -47,7 +48,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { forYou } from "../planning/chat-model";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { LinearIssuePicker } from "../planning/linear-issue-picker";
 import { useMinute } from "../planning/plan-time";

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -18,7 +19,6 @@ import {
   stagedAnswer,
   stagedPost,
 } from "../planning/chat-fixture";
-import { type ChatPlace, FOR_YOU } from "../planning/chat-model";
 import { DesktopChat } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */

@@ -9,6 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ProviderMark } from "@luke/ui";
+import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -23,7 +24,6 @@ import { planCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { fixtureChat } from "./chat-fixture";
-import { CHAT_PLACE, type ChatPlace, chatNames } from "./chat-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**

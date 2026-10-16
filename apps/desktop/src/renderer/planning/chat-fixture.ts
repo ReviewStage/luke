@@ -16,7 +16,7 @@ import {
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import type { ChatAskAnswer, ChatPost } from "./chat-model";
+import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
 import { FIXTURE_PLAN_ID } from "./planning-fixture";
 
 /**

@@ -18,7 +18,7 @@ import {
   chatWho,
   FOR_YOU_REASON,
   forYou,
-} from "./chat-model";
+} from "./chat-model.js";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const AGENT = "00000000-0000-4000-8000-0000000000a2";

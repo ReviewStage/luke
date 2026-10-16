@@ -28,6 +28,13 @@ import {
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
 import {
+  CHAT_PLACE,
+  type ChatAskAnswer,
+  type ChatPlace,
+  type ChatPost,
+  FOR_YOU,
+} from "@luke/ui/chat-model";
+import {
   isAgentTab,
   isChangesTab,
   isDraftTab,
@@ -103,13 +110,6 @@ import {
 } from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
-import {
-  CHAT_PLACE,
-  type ChatAskAnswer,
-  type ChatPlace,
-  type ChatPost,
-  FOR_YOU,
-} from "./chat-model";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,

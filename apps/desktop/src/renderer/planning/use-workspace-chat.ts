@@ -12,8 +12,8 @@ import {
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
 } from "@luke/features/coding-agent-view";
+import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatAskAnswer, ChatPost } from "./chat-model";
 import { messageFailureWords } from "./coding-agent-model";
 
 /**

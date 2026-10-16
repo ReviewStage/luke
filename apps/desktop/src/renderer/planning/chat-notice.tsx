@@ -1,7 +1,13 @@
 import { CHANNEL_KIND, CHAT_BLOCK, type ChatAnswer, knownBlock } from "@luke/features/chat-wire";
 import { ChevronRightIcon } from "@luke/ui";
+import {
+  CHAT_PLACE,
+  type ChatNames,
+  type ChatPlace,
+  channelLabel,
+  chatWho,
+} from "@luke/ui/chat-model";
 import type { ChatNoticeMetadata } from "@luke/wire";
-import { CHAT_PLACE, type ChatNames, type ChatPlace, channelLabel, chatWho } from "./chat-model";
 import { MemberMark } from "./chat-pane";
 import { RelativeTime } from "./relative-time";
 import { TranscriptWords } from "./transcript-blocks";

@@ -10,9 +10,6 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { ChatTarget } from "@luke/ui/chat-mention";
-import { useState } from "react";
-import { AskCard } from "./chat-ask";
-import { ChatComposer } from "./chat-composer";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
@@ -29,7 +26,10 @@ import {
   forYou,
   placeChannel,
   postTarget,
-} from "./chat-model";
+} from "@luke/ui/chat-model";
+import { useState } from "react";
+import { AskCard } from "./chat-ask";
+import { ChatComposer } from "./chat-composer";
 import { LinkBlock } from "./inbox-pane";
 import { RelativeTime } from "./relative-time";
 import { AgentGlyph } from "./tab-look";
