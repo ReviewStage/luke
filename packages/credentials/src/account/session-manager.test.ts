@@ -317,6 +317,38 @@ it.effect(
     }),
 );
 
+it.effect("a sign-in cancelled while a refused renewal's sign-out settles opens no browser", () =>
+  Effect.gen(function* () {
+    const refusing = refreshingClient(() =>
+      Promise.resolve(
+        jsonResponse(
+          { error: "invalid_grant", error_description: "Refresh token was revoked" },
+          400,
+        ),
+      ),
+    );
+    const released = yield* Deferred.make<void>();
+    const subject = yield* manager({
+      stored: STORED,
+      refresh: (token) => refusing.refresh(token),
+      stopCapabilities: Deferred.await(released),
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    yield* subject.instance.renewOnce();
+
+    const signingIn = yield* Effect.forkChild(
+      subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+    );
+    yield* Effect.yieldNow;
+    subject.instance.cancelSignIn();
+    yield* Deferred.succeed(released, undefined);
+
+    assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_OUT);
+    assert.deepEqual(subject.authorizations, []);
+    assert.deepEqual(subject.opened, []);
+  }),
+);
+
 /** The hand-off page the sign-in sent the browser on to, read off its redirect. */
 function handOffPage(response: Response): URL {
   assert.equal(response.status, 303);

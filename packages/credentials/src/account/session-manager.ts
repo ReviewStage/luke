@@ -176,6 +176,8 @@ export class AccountSessionManager {
   #cancelSession: (() => void) | undefined;
   /** The sign-out a refused renewal started, which `refresh` and a sign-in wait on and no renewal does. */
   #signingOut: Fiber.Fiber<AccountSnapshot> | undefined;
+  /** How many cancels were pressed while a sign-in waited on `#signingOut`. */
+  #waitCancels = 0;
 
   private constructor(
     options: AccountSessionManagerOptions,
@@ -358,7 +360,17 @@ export class AccountSessionManager {
         // Note that a sign-out a refused renewal started is let finish first,
         // because its capability stop and cleared account would otherwise
         // land over the session this sign-in starts.
-        if (this.#signingOut) yield* restore(Fiber.await(this.#signingOut));
+        if (this.#signingOut) {
+          // A cancel pressed during the wait withdraws every press waiting.
+          const cancels = this.#waitCancels;
+          const cancel = () => {
+            this.#waitCancels += 1;
+          };
+          this.#cancelSignIn = cancel;
+          yield* restore(Fiber.await(this.#signingOut));
+          this.#dropCancel(cancel);
+          if (this.#waitCancels !== cancels) return this.#account;
+        }
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
