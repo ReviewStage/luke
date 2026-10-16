@@ -341,6 +341,22 @@ const CHANGED_CLASS = "plan-changed";
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
+/** The class of the column the title and the text stand in. */
+const BODY_CLASS = "plan-body";
+
+/**
+ * Whether a click in the document's scroller landed on its empty room: the
+ * scroller itself, or the column around the title, rather than on anything
+ * drawn in it, and with no selection made by the press.
+ */
+function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
+  const { target, currentTarget } = event;
+  const selection = window.getSelection();
+  if (selection !== null && !selection.isCollapsed) return false;
+  if (target === currentTarget) return true;
+  return target instanceof Element && target.classList.contains(BODY_CLASS);
+}
+
 function opened(plan: Task): Chase {
   const { body } = plan.document;
   return {
@@ -624,7 +640,9 @@ function DocumentUnit({
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the plan's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. With `page` the document is drawn as a Settings page,
+ * drawn read-only. An editable plan with no text yet opens it, the caret at
+ * its start, from a click anywhere on the panel's empty room, since it has no
+ * section to click into. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
@@ -825,6 +843,9 @@ export function PlanBody({
       <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
   const titled = editable && onRename !== undefined;
+  // An editable plan with no text yet has no section to click into, so a
+  // click on the panel's empty room opens the text with the caret at its start.
+  const blank = editable && editing.editor === undefined && plan.document.body.trim() === "";
   const titleMenu =
     linked === undefined || page !== undefined ? null : (
       <TitleMenu
@@ -838,11 +859,23 @@ export function PlanBody({
     );
   return (
     <PlanPictures planId={plan.id} text={plan.document.body}>
-      <div ref={scroller} className="plan-document-scroll scroll-fade">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the click is the pointer's way into an empty plan; the keyboard's is the title's Return or ↓. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard reaches the text through the title, which Tab enters. */}
+      <div
+        ref={scroller}
+        className="plan-document-scroll scroll-fade"
+        onClick={
+          blank
+            ? (event) => {
+                if (landsOnEmptyRoom(event)) editing.open();
+              }
+            : undefined
+        }
+      >
         {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />
-        <div className="plan-body">
+        <div className={BODY_CLASS}>
           {titled ? (
             attributed(
               // Keyed by the plan, so words typed for one are saved to it as another opens.
