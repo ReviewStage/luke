@@ -117,7 +117,6 @@ const OVERVIEW: CodingAgentOverview = {
       state: REVIEW_STATE.CHANGES_REQUESTED,
       html: '<p dir="auto">Rename the flag.</p>',
       body: "",
-      cut: false,
       at: 2_000,
       url: `${PAGE}#pullrequestreview-1`,
     },
@@ -125,12 +124,12 @@ const OVERVIEW: CodingAgentOverview = {
       kind: CONVERSATION_ENTRY.COMMENT,
       by: CHARLES_ON_GITHUB,
       html: null,
-      body: "Also, a very **long** note",
-      cut: true,
+      body: "Also, a **plain** note GitHub sent no rendering of",
       at: 3_000,
       url: `${PAGE}#issuecomment-2`,
     },
   ],
+  earlier: 0,
 };
 
 let root: Root | undefined;
@@ -331,14 +330,25 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   assert.match(entries[0]?.textContent ?? "", /Rename the flag\./u);
   assert.equal(
     entries[1]?.querySelector('[data-streamdown="strong"]')?.textContent,
-    "long",
-    "a comment too long for its rendering stands as its words",
+    "plain",
+    "a comment GitHub sent no rendering of stands as its markdown",
   );
-  const more =
-    entries[1]?.querySelector<HTMLButtonElement>(".pull-request-more") ??
-    assert.fail("a cut comment sends the reader to GitHub");
-  await act(async () => more.click());
-  assert.deepEqual(opened, [`${PAGE}#issuecomment-2`]);
+  assert.equal(tab.querySelector(".pull-request-earlier"), null, "nothing was left on GitHub");
+});
+
+test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
+  const tab = await draw(
+    controlAnswering(() => Promise.resolve({ pullRequest: { ...OVERVIEW, earlier: 3 } })),
+  );
+  const conversation =
+    tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
+  assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5");
+  const earlier =
+    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier") ??
+    assert.fail("the earlier entries are counted");
+  assert.equal(earlier.textContent, "3 earlier comments on GitHub");
+  await act(async () => earlier.click());
+  assert.deepEqual(opened, [PAGE]);
 });
 
 test("the switch shows the files, read only once shown, and back on the overview draws it as it was, reading neither again", async () => {

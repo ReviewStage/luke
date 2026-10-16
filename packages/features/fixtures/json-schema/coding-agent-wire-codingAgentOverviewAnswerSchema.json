@@ -27,7 +27,7 @@
             },
             "html": {
               "type": "string",
-              "maxLength": 200000
+              "maxLength": 3000000
             },
             "cut": {
               "type": "boolean"
@@ -276,7 +276,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 16000
+                        "maxLength": 3000000
                       },
                       {
                         "type": "null"
@@ -285,10 +285,7 @@
                   },
                   "body": {
                     "type": "string",
-                    "maxLength": 8000
-                  },
-                  "cut": {
-                    "type": "boolean"
+                    "maxLength": 3000000
                   },
                   "at": {
                     "type": "number",
@@ -303,13 +300,16 @@
                   "by",
                   "html",
                   "body",
-                  "cut",
                   "at",
                   "url"
                 ],
                 "additionalProperties": false
               },
               "maxItems": 100
+            },
+            "earlier": {
+              "type": "number",
+              "minimum": 0
             }
           },
           "required": [
@@ -326,7 +326,8 @@
             "merge",
             "checks",
             "reviewers",
-            "conversation"
+            "conversation",
+            "earlier"
           ],
           "additionalProperties": false
         },

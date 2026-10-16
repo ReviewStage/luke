@@ -757,16 +757,17 @@ export interface GitHubOverview {
   readonly author: GitHubAccount | undefined;
   readonly reviewers: readonly GitHubReviewer[];
   readonly conversation: readonly GitHubConversationEntry[];
+  /** How many earlier entries the bounds left on GitHub. */
+  readonly earlier: number;
 }
 
 /** One entry of a pull request's conversation, its author as GitHub names them. */
-export interface GitHubConversationEntry {
+interface GitHubConversationEntry {
   readonly kind: (typeof CONVERSATION_ENTRY)[keyof typeof CONVERSATION_ENTRY];
   readonly account: GitHubAccount;
   readonly state: ReviewState | undefined;
   readonly html: string | null;
   readonly body: string;
-  readonly cut: boolean;
   readonly at: number;
   readonly url: string;
 }
@@ -875,42 +876,70 @@ function readListed<A>(
   );
 }
 
-/** An entry's words as a read carries them: GitHub's rendering, or the markdown and whether it was cut to fit. */
+/** An entry's words as a read carries them, whole: GitHub's rendering, or the markdown where GitHub sent none. */
 interface EntryWords {
   readonly html: string | null;
   readonly body: string;
-  readonly cut: boolean;
   /** Whether the entry said anything at all. */
   readonly said: boolean;
 }
 
-/**
- * An entry's words: GitHub's rendering where it sent one within its bound,
- * else the markdown cut to its own bound, and whether it was.
- */
+/** An entry's words, whole: GitHub's rendering where it sent one, else the markdown. */
 function wordsOf(body: string | null | undefined, html: string | null | undefined): EntryWords {
   const words = body?.trim() ?? "";
   const rendered = html?.trim() ?? "";
-  if (rendered !== "" && rendered.length <= OVERVIEW_BOUNDS.MAX_ENTRY_HTML_CHARS) {
-    return { html: rendered, body: "", cut: false, said: words !== "" };
+  return rendered === ""
+    ? { html: null, body: words, said: words !== "" }
+    : { html: rendered, body: "", said: words !== "" };
+}
+
+/** How many characters of words an entry carries. */
+function charsOf(entry: GitHubConversationEntry): number {
+  return (entry.html ?? entry.body).length;
+}
+
+/** The conversation as a read carries it: its newest entries that fit, oldest first, and how many earlier ones were left. */
+interface KeptConversation {
+  readonly conversation: readonly GitHubConversationEntry[];
+  readonly earlier: number;
+}
+
+/**
+ * The newest entries, whole, while they fit both bounds, the count and the
+ * characters `room` leaves, and how many earlier ones were left on GitHub.
+ * Note that an entry that does not fit ends the run rather than being
+ * passed over, so what is drawn is always every entry since some moment.
+ */
+function newestThatFit(
+  entries: readonly GitHubConversationEntry[],
+  room: number,
+): KeptConversation {
+  const kept: GitHubConversationEntry[] = [];
+  let left = room;
+  for (let at = entries.length - 1; at >= 0; at -= 1) {
+    const entry = entries[at];
+    if (entry === undefined || kept.length === OVERVIEW_BOUNDS.MAX_ENTRIES) break;
+    if (charsOf(entry) > left) break;
+    left -= charsOf(entry);
+    kept.push(entry);
   }
-  const cut = words.length > OVERVIEW_BOUNDS.MAX_ENTRY_CHARS;
-  const kept = cut ? words.slice(0, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS) : words;
-  return { html: null, body: kept, cut, said: words !== "" };
+  return { conversation: kept.reverse(), earlier: entries.length - kept.length };
 }
 
 /**
  * The conversation: every comment that says something and every review
- * that decides or says something, in time order, the newest kept up to the
- * bound. A review that only commented and said nothing is the wrapper
- * GitHub makes for comments on lines, which this read does not list, and a
- * draft review is its author's alone, so neither is an entry.
+ * that decides or says something, in time order, the newest kept whole
+ * while they fit the room the description leaves (`newestThatFit`). A
+ * review that only commented and said nothing is the wrapper GitHub makes
+ * for comments on lines, which this read does not list, and a draft review
+ * is its author's alone, so neither is an entry.
  */
 function conversationOf(
   comments: typeof IssueCommentsSchema.Type,
   reviews: typeof ReviewsSchema.Type,
   pageUrl: string,
-): readonly GitHubConversationEntry[] {
+  room: number,
+): KeptConversation {
   const said = comments.flatMap((comment): GitHubConversationEntry[] => {
     const { said, ...words } = wordsOf(comment.body, comment.body_html);
     if (comment.user === null || !said) return [];
@@ -941,13 +970,16 @@ function conversationOf(
       },
     ];
   });
-  return [...said, ...reviewed].sort((a, b) => a.at - b.at).slice(-OVERVIEW_BOUNDS.MAX_ENTRIES);
+  return newestThatFit(
+    [...said, ...reviewed].sort((a, b) => a.at - b.at),
+    room,
+  );
 }
 
-/** The description as GitHub renders it, or none, with `cut`, where it runs past its bound. */
+/** The description whole as GitHub renders it, or none, with `cut`, where it alone runs past the answer's bound. */
 function descriptionOf(html: string | null | undefined): { html: string; cut: boolean } {
   const rendered = html?.trim() ?? "";
-  return rendered.length > OVERVIEW_BOUNDS.MAX_BODY_HTML_CHARS
+  return rendered.length > OVERVIEW_BOUNDS.MAX_WORDS_CHARS
     ? { html: "", cut: true }
     : { html: rendered, cut: false };
 }
@@ -983,9 +1015,10 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     { concurrency: "unbounded" },
   );
   const pullRequest = pullRequestOf(pull);
+  const description = descriptionOf(pull.body_html);
   return Option.some({
     pullRequest,
-    ...descriptionOf(pull.body_html),
+    ...description,
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
     createdAt: timeOf(pull.created_at) ?? 0,
@@ -994,6 +1027,11 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     checks,
     author: pull.user === null ? undefined : accountOf(pull.user),
     reviewers: reviewersOf(reviews, (pull.requested_reviewers ?? []).map(accountOf)),
-    conversation: conversationOf(comments, reviews, pullRequest.url),
+    ...conversationOf(
+      comments,
+      reviews,
+      pullRequest.url,
+      OVERVIEW_BOUNDS.MAX_WORDS_CHARS - description.html.length,
+    ),
   });
 });

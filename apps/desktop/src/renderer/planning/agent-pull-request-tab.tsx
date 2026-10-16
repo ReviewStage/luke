@@ -102,7 +102,8 @@ const PULL_REQUEST_WORDS = {
   LONG_DESCRIPTION: "This description is too long to show here. Read it on GitHub",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
-  CUT: "Read the rest on GitHub",
+  /** What the conversation says of the earlier entries a read left on GitHub, by how many. */
+  earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
 } as const;
 
 /** A read that threw rather than answered, drawn as any other failed read. */
@@ -478,7 +479,6 @@ function EntryCard({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const openLink = useOpenLink();
   return (
     <li className="pull-request-entry">
       <span className="changes-comment-head">
@@ -487,11 +487,6 @@ function EntryCard({
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
-      {entry.cut ? (
-        <button type="button" className="pull-request-more" onClick={() => openLink(entry.url)}>
-          {PULL_REQUEST_WORDS.CUT}
-        </button>
-      ) : null}
     </li>
   );
 }
@@ -509,7 +504,7 @@ function PullRequestPage({
   const now = useMinute();
   const openLink = useOpenLink();
   const picture = usePictureDrawer(agentId);
-  const { author, reviewers, conversation, mergedAt } = pullRequest;
+  const { author, reviewers, conversation, earlier, mergedAt } = pullRequest;
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
@@ -559,12 +554,24 @@ function PullRequestPage({
       </Section>
       <Section
         title="Conversation"
-        count={conversation.length === 0 ? undefined : conversation.length}
+        count={earlier + conversation.length === 0 ? undefined : earlier + conversation.length}
       >
+        {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
+        {earlier === 0 ? null : (
+          <button
+            type="button"
+            className="pull-request-more pull-request-earlier"
+            onClick={() => openLink(pullRequest.url)}
+          >
+            {PULL_REQUEST_WORDS.earlier(earlier)}
+          </button>
+        )}
         {conversation.length === 0 ? (
-          <p className="pull-request-quiet pull-request-none">
-            {PULL_REQUEST_WORDS.NO_CONVERSATION}
-          </p>
+          earlier === 0 ? (
+            <p className="pull-request-quiet pull-request-none">
+              {PULL_REQUEST_WORDS.NO_CONVERSATION}
+            </p>
+          ) : null
         ) : (
           <ol className="pull-request-conversation">
             {conversation.map((entry) => (

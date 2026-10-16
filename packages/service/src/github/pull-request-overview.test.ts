@@ -124,7 +124,11 @@ function repository(answers: {
       return runs instanceof Response ? runs : Response.json({ check_runs: runs });
     }
     if (pathname === `${COMMIT}/status`) return Response.json({ statuses: answers.statuses ?? [] });
-    if (pathname === COMMENTS) return Response.json(answers.comments ?? []);
+    if (pathname === COMMENTS) {
+      // GitHub pages a listing a hundred to a page.
+      const page = Number(new URL(sent.url).searchParams.get("page") ?? "1");
+      return Response.json((answers.comments ?? []).slice((page - 1) * 100, page * 100));
+    }
     if (pathname === `${PULL}/reviews`) return Response.json(answers.reviews ?? []);
     return undefined;
   };
@@ -272,7 +276,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             state: REVIEW_STATE.CHANGES_REQUESTED,
             html: '<p dir="auto">Rename the flag.</p>',
             body: "",
-            cut: false,
             at: Date.parse("2026-10-15T09:45:00Z"),
             url: `${PAGE}#pullrequestreview-4`,
           },
@@ -281,7 +284,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             by: asCharles,
             html: '<p dir="auto">Why twice before?</p>',
             body: "",
-            cut: false,
             at: Date.parse("2026-10-15T10:00:00Z"),
             url: `${PAGE}#issuecomment-1`,
           },
@@ -291,7 +293,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             state: REVIEW_STATE.APPROVED,
             html: null,
             body: "",
-            cut: false,
             at: Date.parse("2026-10-15T11:00:00Z"),
             url: `${PAGE}#pullrequestreview-3`,
           },
@@ -300,11 +301,11 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
   );
 
   it.effect(
-    "a merged pull request says when, one GitHub has not yet worked out reads as unknown, a description or comment whose rendering runs past its bound says so, and checks the App may not read are listed as none",
+    "a merged pull request says when, one GitHub has not yet worked out reads as unknown, a long comment stands whole, and checks the App may not read are listed as none",
     () =>
       Effect.gen(function* () {
         const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
-        const long = "x".repeat(OVERVIEW_BOUNDS.MAX_ENTRY_CHARS + 10);
+        const long = `<p>${"x".repeat(40_000)}</p>`;
         const overview = yield* overviewOf(
           workspace,
           repository({
@@ -313,15 +314,15 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
               merged: true,
               merged_at: "2026-10-16T12:00:00Z",
               mergeable_state: "unknown",
-              body: "A long description.",
-              body_html: `<p>${"x".repeat(OVERVIEW_BOUNDS.MAX_BODY_HTML_CHARS)}</p>`,
+              body: null,
+              body_html: null,
             }),
             checkRuns: Response.json({ message: "Resource not accessible" }, { status: 403 }),
             comments: [
               {
                 user: CHARLES,
-                body: long,
-                body_html: `<p>${"x".repeat(OVERVIEW_BOUNDS.MAX_ENTRY_HTML_CHARS)}</p>`,
+                body: "x".repeat(40_000),
+                body_html: long,
                 created_at: "2026-10-15T10:00:00Z",
                 html_url: `${PAGE}#issuecomment-1`,
               },
@@ -333,16 +334,77 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.equal(overview.state, PULL_REQUEST_STATE.MERGED);
         assert.equal(overview.mergedAt, Date.parse("2026-10-16T12:00:00Z"));
         assert.equal(overview.merge, MERGE_STATE.UNKNOWN);
-        assert.equal(overview.html, "");
-        assert.equal(overview.cut, true, "a description too long to carry says so");
+        assert.deepEqual([overview.html, overview.cut], ["", false], "no description is no cut");
         assert.deepEqual(overview.checks, []);
         assert.equal(
           overview.conversation[0]?.html,
-          null,
-          "a rendering past its bound gives way to the words",
+          long,
+          "a long comment stands whole, never cut",
         );
-        assert.equal(overview.conversation[0]?.cut, true);
-        assert.equal(overview.conversation[0]?.body.length, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS);
+        assert.equal(overview.earlier, 0);
+      }),
+  );
+
+  it.effect(
+    "the newest entries are kept whole while they fit the room the description leaves, at most a hundred, and the earlier ones are counted",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const comment = (at: number, html: string) => ({
+          user: CHARLES,
+          body: "words",
+          body_html: html,
+          created_at: new Date(Date.parse("2026-10-15T10:00:00Z") + at * 60_000).toISOString(),
+          html_url: `${PAGE}#issuecomment-${at}`,
+        });
+        // The description leaves room for the two newest comments and not the one before them.
+        const third = OVERVIEW_BOUNDS.MAX_WORDS_CHARS / 3;
+        const filled = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull({ body_html: "d".repeat(third) }),
+            comments: [
+              comment(1, "small"),
+              comment(2, "a".repeat(third + 100)),
+              comment(3, "small"),
+              comment(4, "b".repeat(third - 10)),
+            ],
+          }),
+        );
+        assert.ok(filled !== undefined);
+        assert.equal(filled.html.length, third, "the description stands whole");
+        assert.deepEqual(
+          filled.conversation.map((entry) => entry.url),
+          [`${PAGE}#issuecomment-3`, `${PAGE}#issuecomment-4`],
+          "an entry that does not fit ends the run, so a smaller one before it is not drawn alone",
+        );
+        assert.equal(filled.earlier, 2);
+
+        const many = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            comments: Array.from({ length: OVERVIEW_BOUNDS.MAX_ENTRIES + 5 }, (_, at) =>
+              comment(at, "<p>hi</p>"),
+            ),
+          }),
+        );
+        assert.ok(many !== undefined);
+        assert.equal(many.conversation.length, OVERVIEW_BOUNDS.MAX_ENTRIES);
+        assert.equal(many.conversation[0]?.url, `${PAGE}#issuecomment-5`, "the newest are kept");
+        assert.equal(many.earlier, 5);
+
+        const huge = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull({ body_html: "d".repeat(OVERVIEW_BOUNDS.MAX_WORDS_CHARS + 1) }),
+          }),
+        );
+        assert.deepEqual(
+          [huge?.html, huge?.cut],
+          ["", true],
+          "a description alone past the bound says so",
+        );
       }),
   );
 

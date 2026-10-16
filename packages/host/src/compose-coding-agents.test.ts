@@ -131,6 +131,7 @@ const OVERVIEW = {
     checks: [],
     reviewers: [],
     conversation: [],
+    earlier: 0,
   },
 };
 

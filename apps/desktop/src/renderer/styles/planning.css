@@ -1896,6 +1896,12 @@ button.pull-request-check:hover {
   white-space: nowrap;
 }
 
+/* The earlier entries a read left on GitHub, counted where they would stand. */
+.pull-request-earlier {
+  margin: 0 0 var(--space-8);
+  padding-inline: var(--row-inset);
+}
+
 .pull-request-more {
   align-self: flex-start;
   padding: 0;
