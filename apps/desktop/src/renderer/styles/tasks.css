@@ -2141,6 +2141,24 @@ button.file-ref:hover .file-ref-path {
   white-space: nowrap;
 }
 
+/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot): how long
+   it worked, then its Copy and Copy link to the right of it, as a sent
+   message's line holds them under its bubble. Note that the room above is
+   the row's rather than the worked line's, because the buttons are taller
+   than the words and centring them would push the words down. */
+.agent-turn-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin-top: var(--space-4);
+}
+
+.agent-turn-foot > [data-worked] {
+  min-width: 0;
+  margin-top: 0;
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */
