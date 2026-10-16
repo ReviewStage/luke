@@ -15,7 +15,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
 import { DesktopTasks } from "../desktop/desktop-tasks";
 import { MAIN_TAB, type MainTab } from "./use-main-tabs";
@@ -166,12 +166,7 @@ function mount(input: {
     }),
   });
   act(() =>
-    root.render(
-      onRegistry(
-        registry,
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
-    ),
+    root.render(onRegistry(registry, createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))),
   );
   return {
     /** Every tab the side panel was asked to show, in order. */

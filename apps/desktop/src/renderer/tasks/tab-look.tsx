@@ -24,7 +24,7 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Board, Code, or Call. */
+  /** One of the side panel's fixed kinds: Summary, Board, Code, or Call. */
   PANEL: "panel",
   PLAN: "plan",
   INBOX: "inbox",

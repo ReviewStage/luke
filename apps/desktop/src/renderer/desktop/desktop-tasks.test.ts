@@ -32,7 +32,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
 import "../file-tree/index";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopTasks } from "./desktop-tasks";
 
 const TASK: Task = {
@@ -60,7 +60,6 @@ test("a task the service will not hand the reader, as a link to another workspac
   act(() =>
     root.render(
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks: tasksControl({
           page: TASKS_PAGE.DOCUMENT,
@@ -88,7 +87,6 @@ test("a task the service will not hand the reader, as a link to another workspac
 test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       tasks: tasksControl({
         page: TASKS_PAGE.DOCUMENT,
@@ -161,7 +159,6 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
       onRegistry(
         AtomRegistry.make(),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
           tasks: tasksControl({
@@ -251,7 +248,6 @@ async function narrowTaskInbox(
       onRegistry(
         AtomRegistry.make(),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
           tasks: tasksControl({
@@ -559,7 +555,6 @@ test("the crumb's workspace opens that workspace's home page, the window switchi
         onRegistry(
           AtomRegistry.make(),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -611,7 +606,6 @@ test("the crumb says the task's repository as the sidebar does: its name alone, 
         onRegistry(
           AtomRegistry.make(),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,

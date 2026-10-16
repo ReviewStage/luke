@@ -19,7 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import type { SidePanelTab } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
@@ -128,7 +128,6 @@ async function mount(input: {
       onRegistry(
         AtomRegistry.make(),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
           tasks: control,

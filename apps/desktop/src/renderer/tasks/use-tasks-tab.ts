@@ -758,7 +758,7 @@ function secondCallQuestion(taskName: string): DialogQuestion {
   };
 }
 
-/** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
+/** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too, and the Summary, which says so where the plan holds nothing yet, every plan holds. */
 function taskHolds(
   view: Pick<TasksView, "board" | "shownCode" | "conversation">,
   transcript: TranscriptRegion,
@@ -766,6 +766,7 @@ function taskHolds(
   const { board, shownCode, conversation } = view;
   const work = conversation?.messages;
   return {
+    [SIDE_PANEL_TAB.SUMMARY]: true,
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
         ? undefined

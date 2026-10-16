@@ -34,7 +34,6 @@ import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
-import { useSummaryPin } from "./task-summary";
 import { useWindowTitle } from "./window-title";
 
 /**
@@ -291,9 +290,7 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the plan's page (`use-task-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or the plan's summary pinned
- * or folded to its rail, by a press or by its column's room
- * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
+ * opening, shutting, or growing the side panel, glides the work beside them (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
  * press outside it and its toggle. Back and forward ride the left column's title-bar row,
@@ -330,8 +327,6 @@ export function DesktopShell({
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
-  // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
-  const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // Factory switched off while it stands, here or on another Mac, gives the plan's place back.
@@ -505,7 +500,6 @@ export function DesktopShell({
               tasks={tasks}
               looks={looks}
               captions={captionsInColumn ? captionStrip : undefined}
-              summary={summary}
               accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
             />
           )}
@@ -545,7 +539,6 @@ export function DesktopShell({
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: tasks.sidePanel.open,
           panelFullScreen: tasks.sidePanel.fullScreen,
-          summaryPinned: summary.pinned && summary.wide,
         }}
       />
     </div>

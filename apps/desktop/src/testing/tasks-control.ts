@@ -6,7 +6,6 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import type { SummaryPin } from "../renderer/desktop/task-summary";
 import type { CodingAgentsControl } from "../renderer/tasks/use-coding-agents";
 import { MAIN_TAB } from "../renderer/tasks/use-main-tabs";
 import { HISTORY_READ } from "../renderer/tasks/use-plan-history";
@@ -27,14 +26,6 @@ const ignore = () => undefined;
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
-
-/** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
-export const UNPINNED_SUMMARY: SummaryPin = {
-  pinned: false,
-  onToggle: ignore,
-  wide: true,
-  onMeasured: ignore,
-};
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
 function versionHistoryControl(

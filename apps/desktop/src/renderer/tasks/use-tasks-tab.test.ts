@@ -604,11 +604,17 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
   const file = { file: CODE.ref.path };
-  // The code shown on the plan stands its Code tab first.
+  // The code shown on the plan stands its Code tab first after the Summary, which every plan holds.
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose(SIDE_PANEL_TAB.CALL));
   act(() => panel().onOpenFile(CODE.ref));
-  const strip = [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL, file];
+  const strip = [
+    SIDE_PANEL_TAB.SUMMARY,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CALL,
+    file,
+  ];
   assert.deepEqual(panel().strip, strip);
   assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, { agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
@@ -617,11 +623,20 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL]);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.SUMMARY,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CALL,
+  ]);
   assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL, file]);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.SUMMARY,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CALL,
+    file,
+  ]);
   assert.deepEqual(panel().tab, file);
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range]),
@@ -654,7 +669,7 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
 
   tab.stand({ tasks: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.SUMMARY, SIDE_PANEL_TAB.BOARD]);
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -924,7 +939,11 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
     reopen = tab.control().onReopenClosedTab;
   }
   assert.equal(reopened, 20);
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.CODE], "the Board, closed first, is not kept");
+  assert.deepEqual(
+    panel().tabs,
+    [SIDE_PANEL_TAB.SUMMARY, SIDE_PANEL_TAB.CODE],
+    "the Board, closed first, is not kept",
+  );
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {

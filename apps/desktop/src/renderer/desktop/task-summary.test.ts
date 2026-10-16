@@ -10,33 +10,26 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { LinkWorkspaceProvider } from "../copy-link-item";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import type { HeldTranscripts } from "./strip-tabs";
-import {
-  SummaryButton,
-  type SummaryLayout,
-  summaryHolds,
-  TaskSummary,
-  useSummaryLayout,
-  useSummaryPin,
-} from "./task-summary";
+import { TaskSummary } from "./task-summary";
 
 /**
  * task-summary.test.ts -- the summary's pull request row hangs the Changes
  * card, whose agent opens through the door the plan hands it, the one that
  * gives the plan's column the keys, and whose card previews the running
- * agent's latest step while the plan's column shows that agent. A column too
- * narrow to spare the rail draws none, and the toolbar's button hangs the
- * card in its place. A plan with nothing to list draws neither the summary
- * nor its button. Synthetic agents and pull requests throughout.
+ * agent's latest step while the plan's column shows that agent. Drawn in the
+ * side panel's Summary tab, it lists the panel's other kinds and never
+ * itself, and a plan with nothing to list says so. Synthetic agents and pull
+ * requests throughout.
  */
 
 const RUN_STARTED = 5_000;
@@ -87,17 +80,6 @@ const HELD: HeldTranscripts = {
   workers: new Map(),
 };
 
-/** The summary pinned beside the document, its card hung by nothing. */
-const PINNED: SummaryLayout = {
-  mode: "column",
-  holds: true,
-  wide: true,
-  card: undefined,
-  onToggle: () => undefined,
-  onExpand: () => undefined,
-  onDismiss: () => undefined,
-};
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -136,8 +118,6 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
           { value: linkWorkspace },
           createElement(TaskSummary, {
             tasks: tasks,
-            layout: PINNED,
-            cardId: "summary-card",
             inbox: { open: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
@@ -227,75 +207,28 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 /** What the plan's own inbox holds in these tests: nothing. */
 const NO_INBOX = { open: [], settled: [] };
 
-/** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function PlanColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
-  const pin = useSummaryPin(true);
-  const [column, setColumn] = useState<HTMLElement | null>(null);
-  const layout = useSummaryLayout(pin, column, false, summaryHolds(plans, NO_INBOX));
-  return createElement(
-    "div",
-    { ref: setColumn },
-    createElement(SummaryButton, { layout, cardId: "summary-card" }),
-    createElement(TaskSummary, {
-      tasks: plans,
-      layout,
-      cardId: "summary-card",
-      inbox: NO_INBOX,
-      held: HELD,
-      repository: "acme/relay",
-      onOpenAgent: () => undefined,
-    }),
-  );
-}
-
-/** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
-function columnAt(width: number, plans: TasksControl = tasksControl()) {
-  const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
-  measured.mockReturnValue(DOMRect.fromRect({ width }));
+/** The Summary tab's content for `plans`, drawn alone. */
+function drawSummary(plans: TasksControl): HTMLElement {
   const page = document.body.appendChild(document.createElement("div"));
   root = createRoot(page);
-  const draw = (shown: TasksControl) =>
-    act(() =>
-      root?.render(onRegistry(AtomRegistry.make(), createElement(PlanColumn, { plans: shown }))),
-    );
-  draw(plans);
-  return {
-    page,
-    rail: () => page.querySelector('aside[aria-label="Summary"]'),
-    toggle: () => page.querySelector('button[aria-label$="summary"]'),
-    redraw: draw,
-    widen: (to: number) => {
-      measured.mockReturnValue(DOMRect.fromRect({ width: to }));
-      act(() => relayout());
-    },
-  };
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskSummary, {
+          tasks: plans,
+          inbox: NO_INBOX,
+          held: HELD,
+          repository: "acme/relay",
+          onOpenAgent: () => undefined,
+        }),
+      ),
+    ),
+  );
+  return page;
 }
 
-test("a column too narrow to spare the rail draws none, and the toolbar's button hangs the whole summary as a card in its place", () => {
-  const column = columnAt(280);
-  assert.equal(column.rail(), null);
-
-  const toggle =
-    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
-    assert.fail("the toolbar's button stands");
-  act(() => toggle.click());
-  const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
-  assert.ok(card, "the card hangs");
-  assert.ok(card.querySelectorAll(".task-summary-row").length > 0, "the card lists the summary");
-});
-
-test("a column with room for the rail draws it, and one widened to that room draws it again", () => {
-  assert.equal(columnAt(600).rail()?.getAttribute("data-mode"), "rail");
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const column = columnAt(423);
-  assert.equal(column.rail(), null);
-  column.widen(480);
-  assert.equal(column.rail()?.getAttribute("data-mode"), "rail");
-});
-
-test("the pinned summary's rows fade under the toolbar above it and over the call bar below it, rather than being sliced at either", () => {
+test("the summary's rows fade under the panel's bar above them and at the panel's foot, rather than being sliced at either", () => {
   const { page } = mount("plan");
   const sheets = layFades();
   try {
@@ -306,20 +239,44 @@ test("the pinned summary's rows fade under the toolbar above it and over the cal
   }
 });
 
-test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {
+test("the Summary tab lists the panel's other kinds, never itself, and each opens its tab in the panel", () => {
+  const chosen: unknown[] = [];
+  const base = tasksControl();
+  const plans = tasksControl({
+    sidePanel: {
+      ...base.sidePanel,
+      used: [SIDE_PANEL_TAB.SUMMARY, SIDE_PANEL_TAB.BOARD],
+      onChoose: (tab) => chosen.push(tab),
+    },
+  });
+  const page = drawSummary(plans);
+  const rows = [...page.querySelectorAll<HTMLButtonElement>(".task-summary-row")];
+  const labels = rows.map((row) => row.textContent);
+  assert.deepEqual(labels, ["Board"]);
+  act(() => rows[0]?.click());
+  assert.deepEqual(chosen, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("a plan with nothing yet to list says so in the Summary tab, and lists its first row once it holds one", () => {
   const listed = tasksControl();
   const bare = tasksControl({ sidePanel: { ...listed.sidePanel, used: [] } });
-  for (const width of [1200, 600, 280]) {
-    const column = columnAt(width, bare);
-    assert.equal(column.rail(), null, `no summary at ${width}px`);
-    assert.equal(column.toggle(), null, `no toolbar button at ${width}px`);
-    act(() => root?.unmount());
-    document.body.innerHTML = "";
-    vi.restoreAllMocks();
-  }
+  const page = drawSummary(bare);
+  assert.equal(page.querySelector(".task-summary"), null);
+  assert.match(page.textContent ?? "", /Nothing on this plan yet\./u);
 
-  const column = columnAt(1200, bare);
-  column.redraw(listed);
-  assert.equal(column.rail()?.getAttribute("data-mode"), "column");
-  assert.ok(column.toggle(), "the toolbar's button stands");
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskSummary, {
+          tasks: listed,
+          inbox: NO_INBOX,
+          held: HELD,
+          repository: "acme/relay",
+          onOpenAgent: () => undefined,
+        }),
+      ),
+    ),
+  );
+  assert.ok(page.querySelectorAll(".task-summary-row").length > 0, "the summary lists its rows");
 });

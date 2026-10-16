@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { MemberDirectory } from "../member-directory";
 import { OpenPersonProvider } from "../person-door";
@@ -137,7 +137,6 @@ function mount(element: ReactElement): HTMLElement {
 function mountToolbar(tasks: TasksControl): HTMLButtonElement {
   const container = mount(
     createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       tasks,
     }),
@@ -350,7 +349,6 @@ test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () =
   const drawn = (tab: MainTab) => {
     const container = mount(
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks: sharedTab(DEAN.userId, tab),
       }),

@@ -557,6 +557,20 @@ export function BoardIcon(): React.JSX.Element {
   );
 }
 
+/** Three lines, each led by a dot: the plan's summary, everything it holds at a glance. */
+export function SummaryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M9.4 6.4h11" />
+      <path d="M9.4 12h11" />
+      <path d="M9.4 17.6h11" />
+      <path d="M4.4 6.4h.01" />
+      <path d="M4.4 12h.01" />
+      <path d="M4.4 17.6h.01" />
+    </Glyph>
+  );
+}
+
 /** Points down into a menu: the half of a split button that opens its choices. */
 export function ChevronDownIcon(): React.JSX.Element {
   return (
