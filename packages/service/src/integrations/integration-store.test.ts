@@ -9,6 +9,7 @@ import { noNetwork } from "../testing/no-network.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
+  deleteIntegrationAccount,
   deleteIntegrationConnection,
   endIntegrationSignIn,
   expireIntegrationConnection,
@@ -322,6 +323,36 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         yield* under("subject-new", `state-new-${userId}`);
         yield* fillIntegrationLabel(old, "Acme");
         assert.equal((yield* readIntegrationConnection(userId, "notion-2"))?.label, undefined);
+      }),
+  );
+
+  it.effect(
+    "a disconnect of the account read deletes only that account, never one that replaced it under the same name",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const under = (connectSubject: string, state: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              userId,
+              { provider: NOTION, connectionName: "notion-2", connectSubject },
+              state,
+              Redacted.make("verifier"),
+            ),
+            completeIntegrationSignIn(userId, "notion-2", state),
+          );
+        yield* under("subject-read", `state-read-${userId}`);
+        const read = yield* readIntegrationConnection(userId, "notion-2");
+        assert.ok(read !== undefined);
+        // Disconnected and replaced by another account under the same name after it was read.
+        yield* deleteIntegrationConnection(userId, "notion-2");
+        yield* under("subject-replacing", `state-replacing-${userId}`);
+
+        assert.equal(yield* deleteIntegrationAccount(read), false);
+        assert.equal(
+          (yield* readIntegrationConnection(userId, "notion-2"))?.connectSubject,
+          "subject-replacing",
+        );
       }),
   );
 });

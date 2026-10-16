@@ -1411,3 +1411,42 @@ test("a failure an older read was told never comes back over a sign-in a newer r
   await focusWindow();
   assert.deepEqual(granolaRow(page).buttons, ["Connect"]);
 });
+
+test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  addable = [notion];
+  accounts = [
+    {
+      provider: notion,
+      connection: "notion",
+      label: "Acme",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const acme =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    ) ?? assert.fail("Notion has a row");
+  await choose(acme, "Add another account");
+  const added =
+    [...page.querySelectorAll(".settings-row")].find(
+      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    ) ?? assert.fail("the account added has a row");
+
+  sent = [];
+  act(() =>
+    (
+      [...added.querySelectorAll("button")].find((button) => button.textContent === "Reopen") ??
+      assert.fail("no Reopen")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT)
+      .map((request) => request.payload),
+    [{ provider: notion, connection: "notion-3" }],
+  );
+});

@@ -40,7 +40,7 @@ import { CONNECT_SIGN_IN_RESULT, type ConnectSignInResult } from "./integration-
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
-  deleteIntegrationConnection,
+  deleteIntegrationAccount,
   endIntegrationSignIn,
   expireIntegrationConnection,
   fillIntegrationLabel,
@@ -163,7 +163,7 @@ const standing = (
         beginSignIn: beginIntegrationSignIn,
         completeSignIn: completeIntegrationSignIn,
         endSignIn: endIntegrationSignIn,
-        deleteConnection: deleteIntegrationConnection,
+        deleteAccount: deleteIntegrationAccount,
         fillLabel: fillIntegrationLabel,
         renameConnection: renameIntegrationConnection,
         mintState: mintIntegrationState,
@@ -758,6 +758,51 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         }
 
         assert.deepEqual((yield* connect("&add=true")).body, UNAVAILABLE_REFUSAL.body);
+      }),
+  );
+
+  it.effect(
+    "a disconnect that read an account replaced since under the same name leaves the replacement standing",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount("dee@replaced.example");
+        const under = (connectSubject: string, state: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              userId,
+              { provider: NOTION, connectionName: "notion-2", connectSubject },
+              state,
+              Redacted.make("connect-verifier"),
+            ),
+            completeIntegrationSignIn(userId, "notion-2", state),
+          );
+        yield* under("subject-read", `state-read-${userId}`);
+        const read = yield* readIntegrationConnections(userId);
+        // Another window disconnects it and adds another account under the same name after this disconnect read it.
+        yield* deleteIntegrationAccount({
+          userId,
+          connectionName: "notion-2",
+          connectSubject: "subject-read",
+        });
+        yield* under("subject-replacing", `state-replacing-${userId}`);
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, undefined, {
+          readConnections: () => Effect.succeed(read),
+        });
+
+        yield* group.ask(
+          `/api/account/integrations/disconnect?provider=${NOTION}&connection=notion-2`,
+          {
+            method: "POST",
+            userId,
+          },
+        );
+        assert.deepEqual(
+          (yield* readIntegrationConnections(userId)).map((row) => [
+            row.connectionName,
+            row.connectSubject,
+          ]),
+          [["notion-2", "subject-replacing"]],
+        );
       }),
   );
 

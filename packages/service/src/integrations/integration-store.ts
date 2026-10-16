@@ -433,6 +433,38 @@ export function deleteIntegrationConnection(
   return deleteRow({ userId, connectionName });
 }
 
+const SubjectAccountSchema = Schema.Struct({
+  userId: Schema.String,
+  connectionName: Schema.String,
+  connectSubject: Schema.String,
+});
+
+const deleteHeld = SqlSchema.findAll({
+  Request: SubjectAccountSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ connectSubject, ...account }) =>
+    Database.use((db) =>
+      db
+        .delete(integrationConnection)
+        .where(and(ofAccount(account), eq(integrationConnection.connectSubject, connectSubject)))
+        .returning({ id: integrationConnection.id }),
+    ),
+});
+
+/**
+ * Disconnects the one account read, under its subject, and answers whether
+ * it was still there: an account added since under the same name stands.
+ */
+export function deleteIntegrationAccount(
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "connectSubject">,
+): IntegrationStoreEffect<boolean> {
+  const { userId, connectionName, connectSubject } = account;
+  return Effect.map(
+    deleteHeld({ userId, connectionName, connectSubject }),
+    (deleted) => deleted.length > 0,
+  );
+}
+
 const deleteUnfinished = SqlSchema.void({
   Request: CompleteSchema,
   execute: ({ state, ...account }) =>
