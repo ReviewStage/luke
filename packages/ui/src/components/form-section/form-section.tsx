@@ -4,9 +4,10 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 /**
  * form-section.tsx -- a form of fields: its heading and what it is for above them, what went wrong with the whole under them, and its actions at the end.
  *
- * The section is the `<form>` itself, so an Enter in one of its text fields
- * and a press of its `submit` button reach `onSubmit` alike, and the page
- * never reloads. It owns everything between its parts: the field gap between
+ * The section is the `<form>` itself, so a press of its `submit` button
+ * reaches `onSubmit` and the page never reloads. An Enter in a text field
+ * submits as the browser's implicit submission does: through the form's
+ * `submit` button, or, where it has none, only when it holds one text field. It owns everything between its parts: the field gap between
  * one field (`FormField`) and the next, the room under its heading, and the
  * actions' line, which ends at the section's end edge with the control gap
  * between each button and wraps when they do not fit, so a caller sets no
@@ -39,7 +40,7 @@ export function FormSection({
   error?: ReactNode;
   /** Its buttons, at the end of its last line, a submit among them. */
   actions?: ReactNode;
-  /** What a submit does: an Enter in a text field or a press of a `submit` button. */
+  /** What a submit does: a press of a `submit` button, or an Enter the browser submits on. */
   onSubmit: () => void;
   /** The fields, a field's gap apart. */
   children: ReactNode;
@@ -83,7 +84,7 @@ export function FormSection({
       <p className="luke-form-section-error" id={errorId} aria-live="polite">
         {failed ? error : null}
       </p>
-      {actions === undefined ? null : <div className="luke-form-section-actions">{actions}</div>}
+      {said(actions) ? <div className="luke-form-section-actions">{actions}</div> : null}
     </form>
   );
 }

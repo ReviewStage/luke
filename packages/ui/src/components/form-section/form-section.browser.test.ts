@@ -171,3 +171,18 @@ test("a form with no heading or words is no landmark and is described by nothing
   expect(container.querySelector("form")?.hasAttribute("aria-describedby")).toBe(false);
   expect(await accessibilityViolations(container)).toEqual([]);
 });
+
+test("a form whose actions are nothing draws no actions line under its fields", async () => {
+  const { container } = await mount(
+    createElement(FormSection, {
+      onSubmit: () => {},
+      actions: null,
+      children: createElement(FormField, {
+        label: "Name",
+        children: (control) =>
+          createElement(TextField, { field: control, value: "", onChange: () => {} }),
+      }),
+    }),
+  );
+  expect(box(container, "form").bottom).toBe(box(container, ".luke-field").bottom);
+});
