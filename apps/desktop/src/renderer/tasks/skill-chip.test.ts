@@ -122,6 +122,22 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
   assert.equal(words.textContent, "Cut it with /release now", "the words are left as they were");
 });
 
+test("a skill's chip in the composer hangs the skill's card, what it is for under its name, as a sent chip's does", async () => {
+  const { container } = await mounted(
+    createElement(Composer, { words: "Cut it with /release now" }),
+  );
+  const chip = container.querySelector(".agent-composer-input .skill-chip");
+  assert.ok(chip, "the chosen skill is drawn as a chip");
+
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const card = document.querySelector<HTMLElement>(".tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".card-note")?.textContent, RELEASE.description);
+});
+
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {
   const { container, opened } = await mounted(
     createElement(SentWords, { text: "Cut it with /release now." }),

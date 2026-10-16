@@ -270,7 +270,10 @@ function More({ total, shown }: { total: number; shown: number }): React.JSX.Ele
  * long ago it was updated at the head's right; its repository under the
  * name, and, where others share its workspace and the list names its
  * creator, who created it; then its agents and its pull requests, a few rows each
- * (`CARD_ROWS`), each list counting the rest the plan holds.
+ * (`CARD_ROWS`), each list counting the rest the task holds. A card hung
+ * from a place within the task, a section or a version a chip names
+ * (`../tasks/chip-cards.tsx`), says that place on its own line in their
+ * stead.
  */
 export function TaskCard({
   task,
@@ -282,8 +285,11 @@ export function TaskCard({
   stranded,
   shared,
   readerId,
+  focus,
 }: {
   task: TaskSummary;
+  /** The place within the task the card is hung for, its glyph and its words, said under the head in the agents' and pull requests' stead. */
+  focus?: { readonly glyph: React.ReactNode; readonly words: React.ReactNode } | undefined;
   /**
    * Whether others share the task's workspace, where the card says who
    * created it; unknown, it is whether the members read around the card
@@ -332,7 +338,16 @@ export function TaskCard({
           </span>
         </span>
       )}
-      {agents === undefined || agentRows.length === 0 ? null : (
+      {focus === undefined ? null : (
+        <>
+          <CardRule />
+          <span className="task-card-line" data-task-card-focus="">
+            <span className="task-card-glyph">{focus.glyph}</span>
+            <span className="task-card-label">{focus.words}</span>
+          </span>
+        </>
+      )}
+      {focus !== undefined || agents === undefined || agentRows.length === 0 ? null : (
         <>
           <CardRule />
           <ul className="task-card-rows" aria-label="Agents">
@@ -348,7 +363,7 @@ export function TaskCard({
           </ul>
         </>
       )}
-      {agents === undefined || pullRequestRows.length === 0 ? null : (
+      {focus !== undefined || agents === undefined || pullRequestRows.length === 0 ? null : (
         <>
           <CardRule />
           <ul className="task-card-rows" aria-label="Pull requests">
@@ -385,10 +400,12 @@ export function taskCardOf(
   tasks: Pick<TasksControl, "agents" | "repositories" | "onShowAgent" | "me" | "workspaces">,
   task: TaskSummary,
   now: number,
+  focus?: React.ComponentProps<typeof TaskCard>["focus"],
 ): React.JSX.Element {
   return (
     <TaskCard
       task={task}
+      focus={focus}
       stranded={strandedHome(tasks, task)}
       shared={sharedWorkspace(tasks, task)}
       readerId={tasks.me}

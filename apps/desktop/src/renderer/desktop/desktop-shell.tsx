@@ -15,6 +15,7 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
+import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
@@ -34,6 +35,7 @@ import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
+import { taskCardOf } from "./task-card";
 import { useSummaryPin } from "./task-summary";
 import { useWindowTitle } from "./window-title";
 
@@ -371,6 +373,21 @@ export function DesktopShell({
     () => ({ models: tasks.agents.models, me: tasks.me }),
     [tasks.agents.models, tasks.me],
   );
+  // A chip naming a task hangs the task's card, as its sidebar row does.
+  const chipCards = {
+    taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
+      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
+      if (task === undefined) return undefined;
+      // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
+      const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+      const card = taskCardOf(tasks, task, now, focus);
+      return home === undefined ? (
+        card
+      ) : (
+        <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
+      );
+    },
+  };
   if (gated) {
     return (
       <div className="desktop-onboarding">
@@ -411,17 +428,19 @@ export function DesktopShell({
   if (tasks.history.open) {
     return (
       <div className="desktop-shell">
-        {/* A chip in a version's words names an agent's model and starter as the plan's own words do. */}
+        {/* A chip in a version's words hangs the cards the plan's own words do. */}
         <MentionedAgents value={mentionedAgents}>
-          <DesktopVersionHistory
-            sidebar={sidebar}
-            history={history}
-            subject={taskVersionSubject(tasks)}
-            account={account}
-            call={call}
-            onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
-            onRestored={history.onLeaveVersionHistory}
-          />
+          <ChipCards value={chipCards}>
+            <DesktopVersionHistory
+              sidebar={sidebar}
+              history={history}
+              subject={taskVersionSubject(tasks)}
+              account={account}
+              call={call}
+              onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
+              onRestored={history.onLeaveVersionHistory}
+            />
+          </ChipCards>
         </MentionedAgents>
         <CaptionStrip {...captions} />
         {newTaskDialog}
@@ -469,46 +488,53 @@ export function DesktopShell({
       <main className="desktop-main">
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
-          {inboxOpen ? (
-            <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
-              <DesktopInbox tasks={tasks} />
-            </PageFind>
-          ) : pageAgent !== undefined ? (
-            // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-            <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
-          ) : pagePerson !== undefined ? (
-            // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-            <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={tasks.shown}>
-              <PersonPage
+          <ChipCards value={chipCards}>
+            {inboxOpen ? (
+              <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
+                <DesktopInbox tasks={tasks} />
+              </PageFind>
+            ) : pageAgent !== undefined ? (
+              // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+              <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
+            ) : pagePerson !== undefined ? (
+              // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+              <PageFind
+                key={pagePerson}
+                page={FIND_PAGE.PERSON}
+                at={pagePerson}
+                active={tasks.shown}
+              >
+                <PersonPage
+                  tasks={tasks}
+                  userId={pagePerson}
+                  name={tasks.personView.name}
+                  staged={sidebar.staged}
+                />
+              </PageFind>
+            ) : factoryOpen ? (
+              <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
+                <DesktopFactory tasks={tasks} />
+              </PageFind>
+            ) : automationsOpen ? (
+              <PageFind
+                page={FIND_PAGE.AUTOMATIONS}
+                at={automationsPlaceKey(tasks.automationsView.place)}
+                active={tasks.shown}
+              >
+                <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
+                  <AutomationsPage tasks={tasks} />
+                </Suspense>
+              </PageFind>
+            ) : (
+              <DesktopTasks
                 tasks={tasks}
-                userId={pagePerson}
-                name={tasks.personView.name}
-                staged={sidebar.staged}
+                looks={looks}
+                captions={captionsInColumn ? captionStrip : undefined}
+                summary={summary}
+                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
-            </PageFind>
-          ) : factoryOpen ? (
-            <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
-              <DesktopFactory tasks={tasks} />
-            </PageFind>
-          ) : automationsOpen ? (
-            <PageFind
-              page={FIND_PAGE.AUTOMATIONS}
-              at={automationsPlaceKey(tasks.automationsView.place)}
-              active={tasks.shown}
-            >
-              <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
-                <AutomationsPage tasks={tasks} />
-              </Suspense>
-            </PageFind>
-          ) : (
-            <DesktopTasks
-              tasks={tasks}
-              looks={looks}
-              captions={captionsInColumn ? captionStrip : undefined}
-              summary={summary}
-              accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-            />
-          )}
+            )}
+          </ChipCards>
         </MentionedAgents>
       </main>
       {captionsInColumn ? null : captionStrip}

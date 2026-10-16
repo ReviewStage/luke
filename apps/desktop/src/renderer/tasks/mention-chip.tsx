@@ -36,6 +36,15 @@ import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { LinkDrawer } from "../markdown-message";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
+import {
+  AutomationChipCard,
+  InboxItemChipCard,
+  PageChipCard,
+  PersonChipCard,
+  SectionChipCard,
+  TaskChipCard,
+  VersionChipCard,
+} from "./chip-cards";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
@@ -153,6 +162,9 @@ export function retargetedMention(
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
 
+/** Where a file or a folder no lines pin is read: the head of its repository's default branch, as its link names it. */
+const DEFAULT_BRANCH_WORDS = "On the default branch";
+
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
 
@@ -262,6 +274,11 @@ function noteOf(mention: Mention, state: MentionState, planId: string): string |
   return undefined;
 }
 
+/** What a file's or a folder's card says of where it is read with no lines pinned: the repository's default branch, where a repository names it. */
+function branchNote(repository: string | undefined): string | undefined {
+  return repository === undefined ? undefined : DEFAULT_BRANCH_WORDS;
+}
+
 /** What a file's card says of the lines a mention pins: where they run, and the commit they were read at. */
 function linesNote(lines: MentionLines | undefined): string | undefined {
   if (lines === undefined) return undefined;
@@ -290,8 +307,15 @@ function MentionCard({
     planId: doors.taskId,
     workspace: doors.place.workspace,
   });
+  const repository = doors.place.repository ?? undefined;
   if (mention.kind === MENTION_KIND.FILE) {
-    return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
+    return (
+      <FileCard
+        path={mention.path}
+        repository={repository}
+        note={linesNote(mention.lines) ?? branchNote(repository)}
+      />
+    );
   }
   if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
     return (
@@ -315,7 +339,11 @@ function MentionCard({
       <CardHead
         glyph={<MentionGlyph mention={mention} doors={doors} standing={standing} />}
         name={standing?.title ?? whole}
+        sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
       />
+      {mention.kind === MENTION_KIND.FOLDER ? (
+        <OptionalNote words={branchNote(repository)} />
+      ) : null}
       {standing === undefined ? null : (
         <CardNote>
           {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
@@ -324,17 +352,41 @@ function MentionCard({
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
-  // Any other agent hangs its tab's card all the same, read as the card is hung, its own card standing in until then.
-  if (mention.kind !== MENTION_KIND.AGENT) return card;
-  return (
-    <MentionedAgentCard
-      agentId={mention.agentId}
-      taskId={mention.taskId}
-      name={name}
-      workspaceId={workspaceId}
-      fallback={card}
-    />
-  );
+  // A plan, a section, a page, or an agent hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
+  switch (mention.kind) {
+    case MENTION_KIND.TASK:
+      return <TaskChipCard taskId={mention.taskId} fallback={card} />;
+    case MENTION_KIND.SECTION:
+      return (
+        <SectionChipCard
+          taskId={mention.taskId}
+          anchor={mention.anchor}
+          name={name}
+          gone={state === MENTION_STATE.GONE ? GONE_WORDS : undefined}
+          fallback={card}
+        />
+      );
+    case MENTION_KIND.PAGE:
+      return <PageChipCard pageId={mention.pageId} fallback={card} />;
+    // Any other agent hangs its tab's card all the same, read as the card is hung.
+    case MENTION_KIND.AGENT:
+      return (
+        <MentionedAgentCard
+          agentId={mention.agentId}
+          taskId={mention.taskId}
+          name={name}
+          workspaceId={workspaceId}
+          fallback={card}
+        />
+      );
+    default:
+      return card;
+  }
+}
+
+/** A card's note, where there are words for one. */
+function OptionalNote({ words }: { words: string | undefined }): ReactNode {
+  return words === undefined ? null : <CardNote>{words}</CardNote>;
 }
 
 /**
@@ -476,10 +528,13 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
 function PlaceChip({
   href,
   place,
+  workspace,
   label,
 }: {
   href: string;
   place: LinkPlace;
+  /** The slug of the workspace the link was written under. */
+  workspace: string;
   /** The words it was labelled with, without an `@`; none where it was written bare. */
   label: string | undefined;
 }): React.JSX.Element {
@@ -487,12 +542,13 @@ function PlaceChip({
   const known = useKnownNames("automationId" in place ? place.automationId : undefined);
   const { name, under } = placeChipLook(place, label, known);
   const glyph = <PlaceGlyph kind={place.kind} />;
-  const card = (
+  const own = (
     <HoverCard data-mention-card="">
       <CardHead glyph={glyph} name={name} />
       {under === undefined ? null : <CardNote>{`In ${under}`}</CardNote>}
     </HoverCard>
   );
+  const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;
   return (
     <Tooltip label={name} card={card}>
       <button
@@ -511,6 +567,78 @@ function PlaceChip({
     </Tooltip>
   );
 }
+
+/**
+ * The card a place in Luke hangs, as the window hangs it wherever it names
+ * the place: a plan's, a section's, a version's, a page's, an agent's, a
+ * member's, an Inbox item's, or an automation's; `fallback`, the chip's
+ * glyph and name, for any other, and where the window holds none.
+ */
+function PlaceCard({
+  place,
+  workspace,
+  name,
+  fallback,
+}: {
+  place: LinkPlace;
+  workspace: string;
+  name: string;
+  fallback: ReactNode;
+}): ReactNode {
+  const workspaceId = useWordsWorkspaceId({
+    planId: "planId" in place ? (place.planId ?? NO_PLAN_ID) : NO_PLAN_ID,
+    workspace,
+  });
+  switch (place.kind) {
+    case LINK_PLACE.TASK:
+      return <TaskChipCard taskId={place.planId} fallback={fallback} />;
+    case LINK_PLACE.SECTION:
+      return (
+        <SectionChipCard
+          taskId={place.planId}
+          anchor={place.anchor}
+          name={name}
+          gone={undefined}
+          fallback={fallback}
+        />
+      );
+    case LINK_PLACE.VERSION:
+      return (
+        <VersionChipCard taskId={place.planId} revision={place.revision} fallback={fallback} />
+      );
+    case LINK_PLACE.PAGE:
+      return <PageChipCard pageId={place.pageId} fallback={fallback} />;
+    case LINK_PLACE.AGENT:
+      return (
+        <MentionedAgentCard
+          agentId={place.agentId}
+          taskId={place.planId}
+          name={name}
+          workspaceId={workspaceId}
+          fallback={fallback}
+        />
+      );
+    case LINK_PLACE.PERSON:
+      return <PersonChipCard userId={place.userId} workspace={workspace} fallback={fallback} />;
+    case LINK_PLACE.INBOX_ITEM:
+      return <InboxItemChipCard itemId={place.itemId} fallback={fallback} />;
+    case LINK_PLACE.AUTOMATION:
+    case LINK_PLACE.AUTOMATION_RUN:
+      return (
+        <AutomationChipCard
+          automationId={place.automationId}
+          workspace={workspace}
+          wordsWorkspaceId={workspaceId}
+          fallback={fallback}
+        />
+      );
+    default:
+      return fallback;
+  }
+}
+
+/** The plan of a place that names none, which no plan's id spells. */
+const NO_PLAN_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
@@ -545,6 +673,7 @@ export function linkChip(
     <PlaceChip
       href={href}
       place={read.place}
+      workspace={read.workspace}
       label={bare ? undefined : mentionName(label.trim())}
     />
   );

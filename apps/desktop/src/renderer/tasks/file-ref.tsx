@@ -69,19 +69,22 @@ export function newestFileNote(
 /**
  * A file's card, its tab's and every place naming it, drawn from the parts
  * every hover card is (`hover-card.tsx`): the file's type icon and its
- * whole path, and under them Luke's note on its lines, where the place
- * knows one.
+ * whole path, its repository under the path where the place names one, and
+ * under them Luke's note on its lines, where the place knows one.
  */
 export function FileCard({
   path,
+  repository,
   note,
 }: {
   path: string;
+  /** The repository the file is of, under its path, where the place names one. */
+  repository?: string | undefined;
   note: string | undefined;
 }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="" data-file-card="">
-      <CardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} />
+      <CardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
