@@ -103,6 +103,9 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
   /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
   author: EffectSchema.optionalKey(EffectSchema.String),
+  /** Their avatar, where GitHub's avatar host serves it, and whether they are an App's bot. */
+  authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
   additions: EffectSchema.optionalKey(countedNumber),
   deletions: EffectSchema.optionalKey(countedNumber),
   /** How many files it changes. */
@@ -161,6 +164,9 @@ export const githubIssueSummarySchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
   /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
   author: EffectSchema.optionalKey(EffectSchema.String),
+  /** Their avatar, where GitHub's avatar host serves it, and whether they are an App's bot. */
+  authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type GitHubIssueSummary = typeof githubIssueSummarySchema.Type;

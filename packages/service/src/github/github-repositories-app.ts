@@ -228,6 +228,8 @@ const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
     changedFiles: pull.changedFiles,
     headRef: pull.headRef,
     ...(pull.author === undefined ? undefined : { author: pull.author }),
+    ...(pull.authorAvatarUrl === undefined ? undefined : { authorAvatarUrl: pull.authorAvatarUrl }),
+    ...(pull.authorBot === undefined ? undefined : { authorBot: pull.authorBot }),
     ...(pull.openedAt === undefined ? undefined : { openedAt: pull.openedAt }),
     ...(pull.mergedAt === undefined ? undefined : { mergedAt: pull.mergedAt }),
     ...(pull.closedAt === undefined ? undefined : { closedAt: pull.closedAt }),

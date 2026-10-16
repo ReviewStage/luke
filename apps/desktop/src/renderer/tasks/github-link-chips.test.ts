@@ -28,7 +28,9 @@ import { TranscriptWords } from "./transcript-blocks";
  * pull request's lines added and removed in place of its address. Each is read by repository and number through
  * the plan's workspace, nothing is asked where that workspace has no active
  * installation, and one the App answers nothing for stays as its address
- * says. Synthetic workspace, plan, pull requests, and issues.
+ * says. A card names who opened it by their face, a pull request's by
+ * its avatar, with how long ago it moved, its size, branches, labels, and
+ * counts. Synthetic workspace, plan, pull requests, and issues.
  */
 
 const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -36,6 +38,7 @@ const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
 const UNREACHED = "https://github.com/acme/secret/pull/7";
 const OLDER_SERVICE = "https://github.com/acme/relay/pull/44";
+const AVATAR = "https://avatars.githubusercontent.com/u/583231?v=4";
 const MANY_LABELS = "https://github.com/acme/relay/pull/45";
 const OPEN_ISSUE = "https://github.com/acme/relay/issues/7";
 const SHELVED_ISSUE = "https://github.com/acme/relay/issues/9";
@@ -79,6 +82,8 @@ const RELAY_PULLS = new Map([
       url: MERGED,
       state: PULL_REQUEST_STATE.MERGED,
       author: "octo-dev",
+      authorAvatarUrl: AVATAR,
+      authorBot: false,
       additions: 120,
       deletions: 30,
       changedFiles: 4,
@@ -316,11 +321,39 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map((note) => note.textContent);
+  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
   return notes;
+}
+
+/** A card's note as a reader hears it: its words without what is hidden from them, a face's letter and a glyph, and each count apart. */
+function readable(note: Element): string | null {
+  const counts = [...note.querySelectorAll(".card-count")];
+  if (counts.length > 0) return counts.map((count) => count.textContent).join(" · ");
+  const words = note.cloneNode(true);
+  if (!(words instanceof Element)) return note.textContent;
+  for (const hidden of words.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return words.textContent;
+}
+
+/** The face each card's opener wears: the kind of actor it is, and the avatar it is drawn with where one is. */
+function openerFace(chip: Element | undefined): [string | undefined, string | null | undefined] {
+  assert.ok(chip, "the link is drawn as its chip");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const mark = card?.querySelector<HTMLElement>(".card-note .actor-mark");
+  const face: [string | undefined, string | null | undefined] = [
+    mark?.dataset.kind,
+    mark?.querySelector("img")?.getAttribute("src"),
+  ];
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  return face;
 }
 
 test("a pull request's and an issue's cards say who opened them, as the workspace's GitHub App answers it, and a pull request's the lines it adds and removes, in place of their address; one GitHub names no author of names no one, and one the App does not reach still says its address", async () => {
@@ -339,6 +372,16 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev"]);
   assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned"]);
   assert.deepEqual(cardNotes(unreached), [UNREACHED]);
+  assert.deepEqual(
+    openerFace(pullRequest),
+    ["github", `${AVATAR}&s=32`],
+    "the pull request's opener wears their GitHub avatar",
+  );
+  assert.deepEqual(
+    openerFace(opened),
+    ["github", undefined],
+    "an opener the service named no avatar of wears their letter",
+  );
 });
 
 /** Each label a chip's card names: its name, and the colour its dot is painted, where GitHub's colour is six hex digits. */
