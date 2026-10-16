@@ -4,6 +4,7 @@ import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
@@ -33,4 +34,5 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_FIELDS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  SEGMENTED_EXAMPLE,
 ];
