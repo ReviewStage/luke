@@ -161,6 +161,12 @@ its number, title, page, and state (`src/github/pull-requests.ts`), on a
 token minted for that one repository; a repository the installation does not
 reach and a number it holds no pull request under both answer
 `{ pullRequest: null }`.
+`GET /api/github/repositories/issue` reads one issue the same way
+(`src/github/issues.ts`), its state `open`, `closed`, or `not-planned`, on a
+token minted for that one repository with `issues: read` alone; an
+installation that does not grant the App issues mints nothing and answers
+`{ issue: null }`, as an unreached repository, a pull request's number, a
+missing number, and a repository with its issues turned off do.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.

@@ -109,6 +109,8 @@ import {
   type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksIssueAnswer,
+  type TasksIssueParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
   type TasksMessagesParams,
@@ -163,6 +165,7 @@ import {
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
+  tasksIssueAnswerSchema,
   tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
@@ -354,6 +357,8 @@ export interface HostOperator {
   tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
   /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
+  /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
+  tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -983,6 +988,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksIssue: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          number: params.number,
+        }),
+        (answer): TasksIssueAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksIssueAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),

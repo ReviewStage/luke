@@ -1,5 +1,9 @@
 import type { PullRequestState } from "@luke/features/coding-agent-wire";
-import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
+import {
+  type IssueState,
+  issueAddressOf,
+  pullRequestAddressOf,
+} from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
 import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
@@ -11,7 +15,7 @@ import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /**
- * use-link-standing.ts -- a Linear issue or a GitHub pull request a link in Luke's words names, as its chip says it: its key, its title, and where it stands, read through the workspace's own connection.
+ * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one their mentions are written under. Words that name
@@ -19,8 +23,8 @@ import { useAppState } from "../use-app-state";
  * page read through another workspace's connection would be drawn in the
  * wrong one. A Linear issue is
  * read by its identifier through the workspace's Linear grant, and a pull
- * request by its repository and number through the workspace's GitHub App,
- * both on the service, once per chip, and only where that workspace has the
+ * request or a GitHub issue by its repository and number through the
+ * workspace's GitHub App, each on the service, once per chip, and only where that workspace has the
  * connection, so a chip in a workspace without it asks nothing. Until it
  * answers, or where it never does, a repository the App does not reach
  * among them, the chip says what the address says, as it always has, and an
@@ -34,12 +38,13 @@ export interface ChipWhere {
   readonly workspace: string;
 }
 
-/** A provider's page as its provider answered for it: its key, `ENG-123` or `relay#42`, its title, the state it stands in, and a pull request's own state for its mark. */
+/** A provider's page as its provider answered for it: its key, `ENG-123` or `relay#42`, its title, the state it stands in, and a pull request's or a GitHub issue's own state for its mark. */
 export interface LinkStanding {
   readonly key: string;
   readonly title: string;
   readonly state: string | undefined;
   readonly pullRequest: { readonly number: number; readonly state: PullRequestState } | undefined;
+  readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
 }
 
 /** A pull request's state in words, as its chip says it. */
@@ -50,30 +55,56 @@ const PULL_REQUEST_WORDS = {
   closed: "Closed",
 } as const satisfies Record<PullRequestState, string>;
 
-/** What a link mention asks its provider: a Linear issue by identifier, a pull request by repository and number; nothing for any other mention. */
+/** A GitHub issue's state in words, as its chip says it. */
+const ISSUE_WORDS = {
+  open: "Open",
+  closed: "Closed",
+  "not-planned": "Not planned",
+} as const satisfies Record<IssueState, string>;
+
+/** The numbered pages of GitHub's a link may name. */
+const GITHUB_PAGE = { PULL_REQUEST: "pull-request", ISSUE: "issue" } as const;
+
+type GitHubPage = (typeof GITHUB_PAGE)[keyof typeof GITHUB_PAGE];
+
+/** What a link mention asks its provider: a Linear issue by identifier, a pull request or a GitHub issue by repository and number; nothing for any other mention. */
 type Asked =
   | { readonly provider: typeof INTEGRATION_PROVIDER.LINEAR; readonly identifier: string }
   | {
       readonly provider: typeof INTEGRATION_PROVIDER.GITHUB;
+      readonly page: GitHubPage;
       readonly repository: string;
       readonly number: number;
     };
 
-/** What a mention asks its provider for, where it is a link to a Linear issue or a pull request. */
+/** What a GitHub link asks for: the pull request or the issue its address names, if either. */
+function githubAskedOf(url: string): Asked | undefined {
+  const pullRequest = pullRequestAddressOf(url);
+  if (pullRequest !== undefined) {
+    return {
+      provider: INTEGRATION_PROVIDER.GITHUB,
+      page: GITHUB_PAGE.PULL_REQUEST,
+      ...pullRequest,
+    };
+  }
+  const issue = issueAddressOf(url);
+  return issue === undefined
+    ? undefined
+    : { provider: INTEGRATION_PROVIDER.GITHUB, page: GITHUB_PAGE.ISSUE, ...issue };
+}
+
+/** What a mention asks its provider for, where it is a link to a Linear issue, a pull request, or a GitHub issue. */
 function askedOf(mention: Mention): Asked | undefined {
   if (mention.kind !== MENTION_KIND.LINK) return undefined;
   if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
     const identifier = linearIssueIdentifierOf(mention.url);
     return identifier === undefined ? undefined : { provider: mention.provider, identifier };
   }
-  if (mention.provider === INTEGRATION_PROVIDER.GITHUB) {
-    const address = pullRequestAddressOf(mention.url);
-    return address === undefined ? undefined : { provider: mention.provider, ...address };
-  }
+  if (mention.provider === INTEGRATION_PROVIDER.GITHUB) return githubAskedOf(mention.url);
   return undefined;
 }
 
-/** The key a chip names an asked page by: the issue's identifier, or the repository's name and the pull request's number. */
+/** The key a chip names an asked page by: the Linear issue's identifier, or the repository's name and the pull request's or the issue's number. */
 function keyOf(asked: Asked): string {
   return asked.provider === INTEGRATION_PROVIDER.LINEAR
     ? asked.identifier
@@ -89,12 +120,13 @@ function sameAsked(first: Asked, second: Asked): boolean {
   }
   return (
     second.provider === INTEGRATION_PROVIDER.GITHUB &&
+    first.page === second.page &&
     first.repository === second.repository &&
     first.number === second.number
   );
 }
 
-/** The provider's answer for an ask, through the workspace's connection: a Linear issue by identifier, a pull request by repository and number; none where it holds none. */
+/** The provider's answer for an ask, through the workspace's connection: a Linear issue by identifier, a pull request or a GitHub issue by repository and number; none where it holds none. */
 function readStanding(
   act: ReturnType<typeof useAct>["act"],
   workspaceId: string,
@@ -108,7 +140,21 @@ function readStanding(
     }).then(([issue]) =>
       issue === undefined
         ? undefined
-        : { key, title: issue.title, state: issue.state, pullRequest: undefined },
+        : { key, title: issue.title, state: issue.state, pullRequest: undefined, issue: undefined },
+    );
+  }
+  const numbered = { workspaceId, repository: asked.repository, number: asked.number };
+  if (asked.page === GITHUB_PAGE.ISSUE) {
+    return act(ACT_KIND.TASKS_ISSUE, numbered).then((issue) =>
+      issue === null
+        ? undefined
+        : {
+            key,
+            title: issue.title,
+            state: ISSUE_WORDS[issue.state],
+            pullRequest: undefined,
+            issue: { number: issue.number, state: issue.state },
+          },
     );
   }
   return act(ACT_KIND.TASKS_PULL_REQUEST, {
@@ -123,6 +169,7 @@ function readStanding(
           title: pullRequest.title,
           state: PULL_REQUEST_WORDS[pullRequest.state],
           pullRequest: { number: pullRequest.number, state: pullRequest.state },
+          issue: undefined,
         },
   );
 }
@@ -159,14 +206,15 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
   }>();
   // Note that the read stands on what it asks, field by field, so a chip redrawn asks no more.
   const identifier = asked?.provider === INTEGRATION_PROVIDER.LINEAR ? asked.identifier : undefined;
+  const page = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.page : undefined;
   const repository = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.repository : undefined;
   const number = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.number : undefined;
   useEffect(() => {
     const ask: Asked | undefined =
       identifier !== undefined
         ? { provider: INTEGRATION_PROVIDER.LINEAR, identifier }
-        : repository !== undefined && number !== undefined
-          ? { provider: INTEGRATION_PROVIDER.GITHUB, repository, number }
+        : page !== undefined && repository !== undefined && number !== undefined
+          ? { provider: INTEGRATION_PROVIDER.GITHUB, page, repository, number }
           : undefined;
     if (ask === undefined || workspaceId === undefined || !connected) return;
     let live = true;
@@ -180,7 +228,7 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     return () => {
       live = false;
     };
-  }, [act, identifier, repository, number, workspaceId, connected]);
+  }, [act, identifier, page, repository, number, workspaceId, connected]);
   // Note that an answer stands only for the workspace and the connection it was read through, so a disconnect or another workspace drops it at once.
   const current =
     connected &&

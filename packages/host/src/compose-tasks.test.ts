@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryIssueAnswer,
   type GitHubRepositoryPullRequestAnswer,
   type TaskCallResult,
   VOICE_SERVICE_FRAME,
@@ -22,6 +23,7 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
@@ -147,6 +149,8 @@ interface FakeService extends TasksClient {
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
+  /** What the service answers for a repository's issues, kept as its pull requests are. */
+  issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -265,6 +269,7 @@ function fakeService(tasks: Task[]): FakeService {
     skills: {},
     places: {},
     pullRequests: {},
+    issues: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -585,6 +590,8 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
     readRepositoryPullRequest: (place, number) =>
       Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
+    readRepositoryIssue: (place, number) =>
+      Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -2222,6 +2229,49 @@ it.effect("behind a closed account gate a pull request's read does not reach the
       { failure: TASK_CALL_FAILURE.UNANSWERED },
     );
   }),
+);
+
+it.effect(
+  "an issue is read by its workspace, its repository, and its number, none is answered as none, a service that did not answer as unanswered, a number off the wire is refused before the service, and behind a closed gate nothing reaches it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const notPlanned: GitHubRepositoryIssueAnswer = {
+        issue: {
+          number: 7,
+          title: "Invitations expire too soon",
+          url: "https://github.com/acme/relay/issues/7",
+          state: ISSUE_STATE.NOT_PLANNED,
+        },
+      };
+      service.issues[ACME.id] = {
+        "acme/relay": new Map([
+          [7, notPlanned],
+          [8, { issue: null }],
+        ]),
+      };
+      const open = yield* subject(service);
+      const shut = yield* subject(service, { signedIn: false });
+      const asked = (call: typeof open.call, number: number) =>
+        call(GATEWAY_METHOD.TASKS_ISSUE, {
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          number,
+        });
+
+      const read = yield* asked(open.call, 7);
+      const none = yield* asked(open.call, 8);
+      const unanswered = yield* asked(open.call, 9);
+      const offTheWire = yield* Effect.exit(asked(open.call, 0));
+      const gated = yield* asked(shut.call, 7);
+
+      assert.deepEqual(read, notPlanned);
+      assert.deepEqual(none, { issue: null });
+      assert.deepEqual(unanswered, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.ok(Exit.isFailure(offTheWire), "an issue is numbered from one");
+      assert.deepEqual(gated, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.equal(open.told.length, 0, "an issue is never told in the view");
+    }),
 );
 
 it.effect("the repository chip's read names the workspace it is for to the service", () =>

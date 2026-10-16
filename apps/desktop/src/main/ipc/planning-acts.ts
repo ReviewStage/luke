@@ -11,6 +11,8 @@ import {
   type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksIssueAnswer,
+  type TasksIssueParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
   type TasksMessagesParams,
@@ -106,6 +108,7 @@ export interface PlanningActsDependencies {
     tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
+    tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
     tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
@@ -193,6 +196,7 @@ type PlanningActKind =
   | typeof ACT_KIND.TASKS_TREE
   | typeof ACT_KIND.TASKS_SKILLS
   | typeof ACT_KIND.TASKS_PULL_REQUEST
+  | typeof ACT_KIND.TASKS_ISSUE
   | typeof ACT_KIND.TASKS_COLOUR_CODE
   | typeof ACT_KIND.TASKS_REVISIONS
   | typeof ACT_KIND.TASKS_REVISION
@@ -452,6 +456,15 @@ export function planningActRows(
         "pullRequest" in answer
           ? Effect.succeed(answer.pullRequest)
           : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.TASKS_PULL_REQUEST].refusal })),
+      );
+    },
+    // Likewise an issue: a service that did not answer is refused, never read as no issue.
+    [ACT_KIND.TASKS_ISSUE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_ISSUE, sender);
+      return Effect.flatMap(host.tasksIssue(params), (answer) =>
+        "issue" in answer
+          ? Effect.succeed(answer.issue)
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.TASKS_ISSUE].refusal })),
       );
     },
     [ACT_KIND.TASKS_COLOUR_CODE]: ({ language, code }, sender) => {

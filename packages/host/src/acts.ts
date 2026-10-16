@@ -104,6 +104,7 @@ import {
   planningPullRequestSchema,
   type TasksEditAnswer,
   type TasksFileAnswer,
+  type TasksIssue,
   type TasksMoveAnswer,
   type TasksPageSourceAnswer,
   type TasksPictureAnswer,
@@ -122,6 +123,8 @@ import {
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
   tasksFileParamsSchema,
+  tasksIssueParamsSchema,
+  tasksIssueSchema,
   tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
   tasksMoveAnswerSchema,
@@ -324,6 +327,8 @@ export const ACT_KIND = {
   TASKS_SKILLS: "planning.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_PULL_REQUEST: "planning.pullRequest",
+  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_ISSUE: "tasks.issue",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   TASKS_COLOUR_CODE: "tasks.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -1005,6 +1010,11 @@ export const ACT = {
     payload: actSchema(planningPullRequestParamsSchema),
     result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
     refusal: "Could not read that pull request on this system.",
+  },
+  [ACT_KIND.TASKS_ISSUE]: {
+    payload: actSchema(tasksIssueParamsSchema),
+    result: wireResult<TasksIssue>(isReadable(tasksIssueSchema)),
+    refusal: "Could not read that issue on this system.",
   },
   [ACT_KIND.TASKS_COLOUR_CODE]: {
     payload: record({

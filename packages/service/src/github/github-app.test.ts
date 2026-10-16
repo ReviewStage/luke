@@ -105,6 +105,7 @@ it.effect(
         accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
         repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED,
         ciReadable: false,
+        issuesReadable: false,
         suspended: false,
       });
       assert.equal(Option.isNone(missing), true);

@@ -3512,6 +3512,27 @@ button.agent-ref:hover .agent-ref-name {
   color: var(--danger);
 }
 
+/* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
+   success green, closed as done in the merged purple, and closed as not
+   planned in the muted ink. */
+.issue-mark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.issue-mark[data-issue-state="open"] {
+  color: var(--state-complete);
+}
+
+.issue-mark[data-issue-state="closed"] {
+  color: var(--state-merged);
+}
+
+.issue-mark[data-issue-state="not-planned"] {
+  color: var(--text-tertiary);
+}
+
 .agent-published-chip[data-pull-request-state] {
   border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
   background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);

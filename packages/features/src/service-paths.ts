@@ -120,6 +120,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_PULL_REQUEST: "/api/github/repositories/pull-request",
   /**
+   * One issue of a repository a workspace's installation reaches, as GitHub
+   * holds it now (GET), named as `GITHUB_REPOSITORY_PULL_REQUEST` names a
+   * pull request, for a link to it to draw its title and where it stands;
+   * the answer is `github-repositories-wire.ts`'s, null where there is none
+   * to draw.
+   */
+  GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
@@ -405,6 +413,13 @@ export function repositoryPullRequestPath(place: RepositoryPlace, number: number
   const query = repositoryPlaceQuery(place);
   query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
+}
+
+/** One issue of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
+export function repositoryIssuePath(place: RepositoryPlace, number: number): string {
+  const query = repositoryPlaceQuery(place);
+  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

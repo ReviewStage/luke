@@ -18,8 +18,10 @@ import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.j
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
+  type GitHubRepositoryIssueAnswer,
   type GitHubRepositoryPullRequestAnswer,
   githubRepositoriesAnswerSchema,
+  githubRepositoryIssueAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
 import { imageBodyOf } from "./image-body.js";
@@ -46,6 +48,7 @@ import {
   planRevisionPath,
   planRevisionsPath,
   type RepositoryPlace,
+  repositoryIssuePath,
   repositoryPullRequestPath,
   repositorySkillsPath,
   repositoryTreePath,
@@ -487,6 +490,17 @@ export class HostedTaskClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
       githubRepositoryPullRequestAnswerSchema,
+    );
+  }
+
+  /** One issue of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
+  readRepositoryIssue(
+    place: RepositoryPlace,
+    number: number,
+  ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositoryIssuePath(place, number) },
+      githubRepositoryIssueAnswerSchema,
     );
   }
 
