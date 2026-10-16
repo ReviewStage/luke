@@ -27,7 +27,7 @@ import {
   type IntegrationProvider,
   integrationProviderSchema,
 } from "@luke/features/integration-wire";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
@@ -289,8 +289,8 @@ const updateConnected = SqlSchema.findAll({
           state: null,
           stateIssuedAt: null,
           connectVerifier: null,
-          // A label the account already carries, the developer's own among them, is kept over the grant's.
-          label: sql`coalesce(${integrationConnection.label}, ${label})`,
+          // A label the account already carries, the developer's own among them, is kept over the grant's; an empty one, which a grant that named nothing left, is not.
+          label: sql`coalesce(nullif(${integrationConnection.label}, ''), ${label})`,
           connectedAt: at,
           updatedAt: at,
         })
@@ -339,6 +339,50 @@ const updateLabel = SqlSchema.findAll({
         .returning({ userId: integrationConnection.userId }),
     ),
 });
+
+const FillSchema = Schema.Struct({
+  userId: Schema.String,
+  connectionName: Schema.String,
+  connectSubject: Schema.String,
+  label: Schema.String,
+  at: Schema.Date,
+});
+
+const updateUnlabelled = SqlSchema.void({
+  Request: FillSchema,
+  execute: ({ at, label, connectSubject, ...account }) =>
+    Database.use((db) =>
+      db
+        .update(integrationConnection)
+        .set({ label, updatedAt: at })
+        .where(
+          and(
+            ofAccount(account),
+            eq(integrationConnection.connectSubject, connectSubject),
+            isNull(integrationConnection.label),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Labels one account that carries no label yet with its name at the
+ * provider as Connect's grant read it, or with an empty label where the
+ * grant named nothing, which marks it read so its grant is never asked
+ * again for a name; a label the account carries, the developer's own among
+ * them, stands. Only the account under the subject the name was read for
+ * takes it, so one disconnected and replaced under the same name meanwhile
+ * never wears its predecessor's.
+ */
+export function fillIntegrationLabel(
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "connectSubject">,
+  label: string,
+): IntegrationStoreEffect<void> {
+  const { userId, connectionName, connectSubject } = account;
+  return Effect.flatMap(DateTime.nowAsDate, (at) =>
+    updateUnlabelled({ userId, connectionName, connectSubject, label, at }),
+  );
+}
 
 /** Names one account as the developer calls it; answers whether the account held such a row. */
 export function renameIntegrationConnection(

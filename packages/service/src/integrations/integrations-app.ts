@@ -221,7 +221,8 @@ function accountOf(row: IntegrationConnectionRow, status: IntegrationStatus): In
   return {
     provider: row.provider,
     connection: row.connectionName,
-    ...(row.label !== undefined ? { label: row.label } : undefined),
+    // An empty label marks an account whose grant named nothing, which is called by its place.
+    ...(row.label !== undefined && row.label !== "" ? { label: row.label } : undefined),
     status,
   };
 }
@@ -263,6 +264,8 @@ export interface IntegrationsAppSeams {
     state: string,
   ) => IntegrationStoreEffect<void>;
   deleteConnection: (userId: string, connectionName: string) => IntegrationStoreEffect<void>;
+  /** Labels an account that carries no label yet, once, with what its grant named or an empty label for nothing; only the account under that grant's subject. */
+  fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
   /** Names one account; answers whether the account held it. */
   renameConnection: (
     userId: string,
@@ -367,7 +370,11 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   connector: ConnectorService,
   row: IntegrationConnectionRow,
   state: string,
-): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<
+  { readonly completed: boolean; readonly accountName?: string },
+  HostedRefusal,
+  DatabaseServices
+> {
   const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: true }));
   if (Result.isFailure(issued)) {
     if (issued.failure.reason !== INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
@@ -376,11 +383,13 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
         issued.failure.message,
       );
     }
-    return false;
+    return { completed: false };
   }
-  return yield* hostedStoreOrUnavailable(
-    seams.completeSignIn(row.userId, row.connectionName, state, issued.success.accountName),
+  const { accountName } = issued.success;
+  const completed = yield* hostedStoreOrUnavailable(
+    seams.completeSignIn(row.userId, row.connectionName, state, accountName),
   );
+  return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
 
 /** Why a sign-in ended without a grant, as the statuses read answers it: the provider aside. */
@@ -420,6 +429,8 @@ const connectSignInFailure = /* @__PURE__ */ Effect.fnUntraced(function* (
 interface Standing {
   readonly status: IntegrationStatus;
   readonly failure?: SignInFailure;
+  /** The account's name at the provider a sign-in this read settled was granted with, where its grant named one. */
+  readonly accountName?: string;
 }
 
 /** Where a row stands once its sign-in is over without a grant: expired where it was, else disconnected. */
@@ -448,13 +459,43 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   // A first sign-in that ran out of time never connected anything.
   if (underWay === undefined) return { status: standingWithoutSignIn(row) };
   // Note that a sign-in under way stands pending even over an expired row, because the window waits on its end either way.
-  if (yield* settledSignIn(seams, connector, row, underWay)) {
-    return { status: INTEGRATION_STATUS.CONNECTED };
+  const settled = yield* settledSignIn(seams, connector, row, underWay);
+  if (settled.completed) {
+    return {
+      status: INTEGRATION_STATUS.CONNECTED,
+      ...(settled.accountName !== undefined ? { accountName: settled.accountName } : undefined),
+    };
   }
   const failure = yield* connectSignInFailure(connector, row);
   if (failure === undefined) return { status: INTEGRATION_STATUS.PENDING };
   yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, underWay));
   return { status: standingWithoutSignIn(row), failure };
+});
+
+/**
+ * A connected account as the statuses read answers it, labelled once from
+ * its grant where it carries no label: an account connected before labels
+ * were kept, or one whose sign-in's grant named nothing then. Its name at
+ * the provider is read from Connect's grant fields, the same ones a
+ * sign-in's are, and stored; a grant that names nothing is stored as an
+ * empty label, so it is asked once and the account is called by its place;
+ * a grant that could not be read, or an account whose reconnect is under
+ * way, is left for the next read.
+ */
+const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  connector: ConnectorService,
+  row: IntegrationConnectionRow,
+  status: IntegrationStatus,
+): Effect.fn.Return<IntegrationConnectionRow, HostedRefusal, DatabaseServices> {
+  if (row.label !== undefined || status !== INTEGRATION_STATUS.CONNECTED) return row;
+  // Note that a reconnect under way is left alone, because the grant it ends with names the account, not the one it replaces.
+  if (row.state !== undefined && signInStands(seams, row.stateIssuedAt)) return row;
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
+  if (Result.isFailure(issued)) return row;
+  const label = issued.success.accountName ?? "";
+  yield* hostedStoreOrUnavailable(seams.fillLabel(row, label));
+  return { ...row, label };
 });
 
 /** Where one provider stands for the statuses read: its first account's word, its accounts, and why each sign-in this read ended failed. */
@@ -478,7 +519,15 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices> {
   const held = providerRows(rows, provider);
   const settled = yield* Effect.forEach(held, (row) =>
-    Effect.map(standingStatus(seams, connector, row), (standing) => ({ row, standing })),
+    Effect.gen(function* () {
+      const standing = yield* standingStatus(seams, connector, row);
+      // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
+      const settled =
+        standing.accountName !== undefined && (row.label === undefined || row.label === "")
+          ? { ...row, label: standing.accountName }
+          : row;
+      return { row: yield* labelledRow(seams, connector, settled, standing.status), standing };
+    }),
   );
   const first = settled.find(({ row }) => row.connectionName === provider);
   return {

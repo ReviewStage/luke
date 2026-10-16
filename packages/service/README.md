@@ -520,7 +520,11 @@ name stored before a second account was possible keeps naming the first.
 A row also keeps a `label`, the account's name at the provider where
 Connect's grant carries one shaped like no credential, or the developer's
 own; it is an identity at the provider, never a credential, answered to the
-desktop and to no log line, span, counted event, or fixture. No account at
+desktop and to no log line, span, counted event, or fixture. An account
+that carries no label, one connected before labels were kept among them,
+is read for one from its grant's fields at the next statuses read, once: a
+grant that names nothing leaves an empty label, and the account is called
+by its place ("Account 2"). No account at
 a provider is primary: the agents are told each by its label, and to ask
 which one where the developer has not said.
 A provider offers more than one account where its catalog entry names a
