@@ -18,6 +18,7 @@ import { CodingAgentsPage } from "./coding-agents-page";
 import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
+import { MemorySection } from "./memory-page";
 import { NotificationsSection } from "./notifications-section";
 import { WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
@@ -147,6 +148,14 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.MEMORY ? (
+        <MemorySection
+          signedIn={signedIn}
+          workspace={workspace ? shownWorkspace(workspace) : undefined}
+          readerId={signedIn ? account.id : undefined}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE ? (

@@ -9,6 +9,7 @@ import {
   DocumentIcon,
   KeyboardIcon,
   LaptopIcon,
+  MemoryIcon,
   PlugIcon,
   SpeakerIcon,
   TerminalIcon,
@@ -40,6 +41,7 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.CODING_AGENTS]: { title: "Coding agents", icon: <TerminalIcon /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
+  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <MemoryIcon /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
   [SETTINGS_VIEW.NOTIFICATIONS]: {

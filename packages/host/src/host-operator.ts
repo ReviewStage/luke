@@ -67,6 +67,10 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
+  memoriesAnswerViewSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -518,6 +522,10 @@ export interface HostOperator {
   ): Effect.Effect<PlanTemplateRevisionAnswerView>;
   /** One revision of the template put back as the template; the template as kept, or why it is unchanged. */
   planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
+  /** The memories Luke kept from a workspace's planning calls; or why there are none. */
+  memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
+  /** One memory forgotten for good; the memories as they then stand, or why they are unchanged. */
+  memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
     params: DictationTranscribeParams,
@@ -1479,6 +1487,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: params.seq }),
         codingAgentAnswer(planTemplateAnswerViewSchema),
+      ),
+    memoriesRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
+        codingAgentAnswer(memoriesAnswerViewSchema),
+      ),
+    memoryForget: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MEMORIES_FORGET, {
+          workspaceId: params.workspaceId,
+          id: params.id,
+        }),
+        codingAgentAnswer(memoriesAnswerViewSchema),
       ),
     dictationTranscribe: (params) =>
       Effect.map(

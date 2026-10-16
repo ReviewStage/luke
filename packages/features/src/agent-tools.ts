@@ -26,6 +26,9 @@ export const AGENT_TOOL = {
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
+  // The planning model's memory of its workspace.
+  RECALL: "recall",
+  REMEMBER: "remember",
   END_CALL: "end_call",
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",

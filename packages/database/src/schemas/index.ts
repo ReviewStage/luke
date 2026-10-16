@@ -14,6 +14,7 @@ export * from "./inbox.js";
 export * from "./inbox-attachment.js";
 export * from "./integration.js";
 export * from "./mac-command.js";
+export * from "./memory.js";
 export * from "./personal-workspace.js";
 export * from "./plan.js";
 export * from "./plan-attachment.js";

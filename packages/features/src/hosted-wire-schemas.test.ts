@@ -19,6 +19,7 @@ import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
+import * as memoryWire from "./memory-wire.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
 import * as planAttachmentWire from "./plan-attachment-wire.js";
@@ -125,6 +126,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planTemplateRevisionsAnswerViewSchema: codingAgentView.planTemplateRevisionsAnswerViewSchema,
     planTemplateRevisionParamsSchema: codingAgentView.planTemplateRevisionParamsSchema,
     planTemplateRevisionAnswerViewSchema: codingAgentView.planTemplateRevisionAnswerViewSchema,
+    memoriesAnswerViewSchema: codingAgentView.memoriesAnswerViewSchema,
+    memoriesReadParamsSchema: codingAgentView.memoriesReadParamsSchema,
+    memoryForgetParamsSchema: codingAgentView.memoryForgetParamsSchema,
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
@@ -225,6 +229,11 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
+  "memory-wire": {
+    memoryIdSchema: memoryWire.memoryIdSchema,
+    memorySummarySchema: memoryWire.memorySummarySchema,
+    memoriesAnswerSchema: memoryWire.memoriesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof memoryWire>,
   "models-wire": {
     contextWindowsSchema: modelsWire.contextWindowsSchema,
     catalogModelSchema: modelsWire.catalogModelSchema,

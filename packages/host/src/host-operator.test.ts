@@ -86,3 +86,41 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a read travels to the host naming its workspace and a forget its workspace and id, and the host's memories read with a key a newer host added dropped",
+  () =>
+    Effect.gen(function* () {
+      const requests: RecordedCall[] = [];
+      const memory = {
+        id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+        text: "Deployments go out from the release branch.",
+        keptBy: { userId: "user-1", name: "Dean" },
+        forgettable: false,
+        createdAt: 1,
+        updatedAt: 2,
+      };
+      const workspaceId = "workspace-1";
+      const client: GatewayClient = {
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            return { ok: true, result: carried({ memories: [{ ...memory, pinned: true }] }) };
+          }),
+        on: () => () => undefined,
+      };
+      const operator = operatorOver(client);
+
+      const read = yield* operator.memoriesRead({ workspaceId });
+      yield* operator.memoryForget({ workspaceId, id: memory.id });
+
+      assert.deepEqual(read, { memories: [memory] });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.MEMORIES_READ, { workspaceId }],
+          [GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId, id: memory.id }],
+        ],
+      );
+    }),
+);

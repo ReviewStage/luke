@@ -34,6 +34,9 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -75,6 +78,7 @@ import {
   inboxAnswerSchema,
   inboxImageTypeSchema,
 } from "./inbox-wire.js";
+import { MEMORY_QUERY, memoriesAnswerSchema } from "./memory-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
@@ -133,7 +137,8 @@ import {
  * their own that outlasts that hold; every other call keeps the account
  * call's usual one. The account's plan
  * template is read and written here too, as Settings asks for it beside
- * the default and the keys.
+ * the default and the keys, and so are the memories Luke kept: read, and
+ * one forgotten.
  */
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
@@ -373,6 +378,38 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.POST, path: planTemplateRestorePath(params.seq) }),
       (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    );
+  }
+
+  /** The memories Luke kept from a workspace's planning calls, most recently kept first. */
+  readMemories(
+    params: MemoriesReadParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({ [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES}?${query}`,
+      }),
+      (answer) => readAnswer(answer, memoriesAnswerSchema, {}),
+    );
+  }
+
+  /** One memory forgotten for good, answering the memories as they then stand. */
+  forgetMemory(
+    params: MemoryForgetParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    // The id rides in the query, since a DELETE carries no body.
+    const query = new URLSearchParams({
+      [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId,
+      [MEMORY_QUERY.ID]: params.id,
+    });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.DELETE,
+        path: `${HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES}?${query}`,
+      }),
+      (answer) => readAnswer(answer, memoriesAnswerSchema, {}),
     );
   }
 

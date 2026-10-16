@@ -7,6 +7,7 @@ import type {
 import type { PlanStoreFailure } from "@luke/database/models/plan-store";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { contextWindowSchema } from "@luke/features/coding-agent-wire";
+import { MEMORY_QUERY } from "@luke/features/memory-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
@@ -53,10 +54,11 @@ import { readIntegrationConnections } from "../integrations/integration-store.js
 import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { WORKSPACE_MEMORY, type WorkspaceMemoryAnswer } from "./workspace-memories.js";
 
 /**
- * The account group: the signed-in desktop's own delete, preferences, and
- * plan template endpoints. Each resolves the same bearer against the
+ * The account group: the signed-in desktop's own delete, preferences, plan
+ * template, and memory endpoints. Each resolves the same bearer against the
  * deployment's own account store before touching anything, and answers
  * nothing about any account but the one the bearer names — root AGENTS.md
  * pins that no credential or account secret ever travels in an answer, so
@@ -82,6 +84,15 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * Every write that changes it is kept as a revision, which its history
  * reads a page at a time and one at a time, and which a restore puts back
  * as a revision of its own, all under the bearer's account alone.
+ *
+ * The memories are a workspace's, what the planning model kept from its
+ * members' calls (`agents/memory-tools.ts`); this group only reads them and
+ * forgets one for a member of the workspace the query names, so Settings is
+ * where members see and take back what Luke kept (`workspace-memories.ts`
+ * holds who may forget which). An account that is no member is answered
+ * not found, and a forget the member may not make, not permitted. A forget
+ * answers the memories as they then stand, whether or not the id named one,
+ * so a forget retried after it landed answers the same.
  */
 
 const ACCOUNT_PATH = {
@@ -94,6 +105,8 @@ const ACCOUNT_PATH = {
   PLAN_TEMPLATE_REVISION: "/api/account/plan-template/revision",
   /** POST restores one revision as the template; the rewrite moves the path's number into the `seq` query. */
   PLAN_TEMPLATE_RESTORE: "/api/account/plan-template/restore",
+  /** GET reads the named workspace's memories; DELETE forgets the one the `id` query names. */
+  MEMORIES: "/api/account/memories",
 } as const;
 
 /** The queries naming a revision of the template: the one an older page is read before, and the one a path names. */
@@ -109,6 +122,7 @@ const HTTP_METHOD = {
   GET: "GET",
   POST: "POST",
   PUT: "PUT",
+  DELETE: "DELETE",
 } as const;
 
 export interface AccountAppSeams extends EveReach {
@@ -146,6 +160,14 @@ export interface AccountAppSeams extends EveReach {
     userId: string,
     seq: number,
   ) => AccountSeamEffect<Option.Option<string | null>>;
+  /** The workspace's memories to a member of it, most recently kept or corrected first. */
+  readMemories: (userId: string, workspaceId: string) => AccountSeamEffect<WorkspaceMemoryAnswer>;
+  /** Forgets one of the workspace's memories where the member may, and answers its memories as they then stand. */
+  forgetMemory: (
+    userId: string,
+    workspaceId: string,
+    id: string,
+  ) => AccountSeamEffect<WorkspaceMemoryAnswer>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -495,6 +517,55 @@ const planTemplateRestoreEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateR
   },
 );
 
+/** A member's read or forget as the route answers it: the memories, or the refusal it came to. */
+function memoriesAnswer(
+  answer: WorkspaceMemoryAnswer,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal> {
+  switch (answer.kind) {
+    case WORKSPACE_MEMORY.NOT_MEMBER:
+      return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    case WORKSPACE_MEMORY.NOT_PERMITTED:
+      return Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+    case WORKSPACE_MEMORY.READ:
+      return Effect.succeed(
+        hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { memories: answer.memories }),
+      );
+  }
+}
+
+/**
+ * GET answers the memories of the workspace the query names, to a member of
+ * it; DELETE forgets the one the query's id names and answers what then
+ * stands. A request naming no workspace, or a DELETE naming no id, is refused.
+ */
+const accountMemoriesEndpoint = /* @__PURE__ */ Effect.fn("web/accountMemoriesEndpoint")(function* (
+  seams: AccountAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  DatabaseServices | HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.DELETE) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* resolvedUserId(seams);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const query = new URL(request.url).searchParams;
+  const workspaceId = query.get(MEMORY_QUERY.WORKSPACE_ID) ?? "";
+  if (workspaceId.length === 0) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  if (incoming.method === HTTP_METHOD.GET) {
+    return yield* memoriesAnswer(
+      yield* hostedStoreOrUnavailable(seams.readMemories(userId, workspaceId)),
+    );
+  }
+  const id = query.get(MEMORY_QUERY.ID) ?? "";
+  if (id.length === 0) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return yield* memoriesAnswer(
+    yield* hostedStoreOrUnavailable(seams.forgetMemory(userId, workspaceId, id)),
+  );
+});
+
 /**
  * An endpoint's refusal carried back onto the answer channel. A refusal is
  * failed with rather than returned, so an endpoint's steps read as the early
@@ -544,6 +615,7 @@ export function accountApp(
       ACCOUNT_PATH.PLAN_TEMPLATE_RESTORE,
       refusing(planTemplateRestoreEndpoint(seams)),
     ),
+    HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.MEMORIES, refusing(accountMemoriesEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

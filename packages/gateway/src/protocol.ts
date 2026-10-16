@@ -163,6 +163,10 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_REVISION: "planTemplate.revision",
   /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
+  /** The memories Luke kept from the account's planning calls, read from the service now. */
+  MEMORIES_READ: "memories.read",
+  /** One memory forgotten on the service for good; the memories as they then stand. */
+  MEMORIES_FORGET: "memories.forget",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */

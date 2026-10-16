@@ -48,6 +48,17 @@ const STARTED: CodingAgentAgentAnswer = {
     turnId: null,
   },
 };
+const MEMORY = {
+  id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+  text: "Deployments go out from the release branch.",
+  keptBy: { userId: "user-1", name: "Dean" },
+  forgettable: true,
+  createdAt: 1,
+  updatedAt: 2,
+};
+
+const MEMORY_WORKSPACE_ID = "workspace-1";
+
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
   agentId: AGENT_ID,
@@ -245,6 +256,16 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`restore:${seq}`);
           return { template: "## Why\n", custom: true };
         }),
+      memoriesRead: ({ workspaceId }) =>
+        Effect.sync(() => {
+          asked.push(`memories:${workspaceId}`);
+          return { memories: [MEMORY] };
+        }),
+      memoryForget: ({ workspaceId, id }) =>
+        Effect.sync(() => {
+          asked.push(`forget:${workspaceId}:${id}`);
+          return { memories: [] };
+        }),
       dictationTranscribe: ({ audio, keywords }) =>
         Effect.sync(() => {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
@@ -389,6 +410,50 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel reads a workspace's memories and forgets one through the host; the voice window cannot, and a forget naming no memory id reaches nothing",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const read = {
+        kind: ACT_KIND.MEMORIES_READ,
+        payload: { workspaceId: MEMORY_WORKSPACE_ID },
+      } as const;
+      const forget = {
+        kind: ACT_KIND.MEMORIES_FORGET,
+        payload: { workspaceId: MEMORY_WORKSPACE_ID, id: MEMORY.id },
+      } as const;
+
+      const answered = yield* router.performAct(read, PANEL);
+      const forgotten = yield* router.performAct(forget, PANEL);
+      const refused = [
+        yield* router.performAct(read, VOICE),
+        yield* router.performAct(forget, VOICE),
+        yield* router.performAct(
+          {
+            kind: ACT_KIND.MEMORIES_FORGET,
+            payload: { workspaceId: MEMORY_WORKSPACE_ID, id: "not-a-memory" },
+          },
+          PANEL,
+        ),
+      ];
+
+      assert.deepEqual(answered, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { memories: [MEMORY] },
+      });
+      assert.deepEqual(forgotten, { status: ACT_OUTCOME_STATUS.DONE, value: { memories: [] } });
+      assert.deepEqual(asked, [
+        `memories:${MEMORY_WORKSPACE_ID}`,
+        `forget:${MEMORY_WORKSPACE_ID}:${MEMORY.id}`,
+      ]);
+      assert.deepEqual(
+        refused.map((outcome) => outcome.status),
+        [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
+      );
     }),
 );
 

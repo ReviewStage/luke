@@ -31,6 +31,9 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -63,7 +66,8 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
  * host once and is noted nowhere. The account's plan template is asked here
- * too, from Settings › Plan template, and is noted nowhere either.
+ * too, from Settings › Plan template, and is noted nowhere either, and so
+ * are the memories Luke kept, read and one forgotten from Settings › Memory.
  *
  * So does a clip dictated into an agent's or a new plan's box: only a panel
  * records one, and it passes through to the host once and is noted nowhere.
@@ -109,6 +113,8 @@ export interface CodingAgentActsDependencies {
       params: PlanTemplateRevisionParams,
     ): Effect.Effect<PlanTemplateRevisionAnswerView>;
     planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
+    memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
+    memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
@@ -168,6 +174,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_REVISIONS
   | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
   | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
+  | typeof ACT_KIND.MEMORIES_READ
+  | typeof ACT_KIND.MEMORIES_FORGET
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
@@ -324,6 +332,14 @@ export function codingAgentActRows(
     [ACT_KIND.PLAN_TEMPLATE_RESTORE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_RESTORE, sender);
       return host.planTemplateRestore(params);
+    },
+    [ACT_KIND.MEMORIES_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.MEMORIES_READ, sender);
+      return host.memoriesRead(params);
+    },
+    [ACT_KIND.MEMORIES_FORGET]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.MEMORIES_FORGET, sender);
+      return host.memoryForget(params);
     },
     [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);

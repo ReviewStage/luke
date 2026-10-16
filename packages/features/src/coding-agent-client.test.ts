@@ -190,6 +190,50 @@ it.effect(
 );
 
 it.effect(
+  "reads a workspace's memories and forgets one, each naming its workspace and the memory in the query, answering the memories as they then stand",
+  () =>
+    Effect.gen(function* () {
+      const memory = {
+        id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+        text: "Deployments go out from the release branch.",
+        keptBy: { userId: "user-1", name: "Dean" },
+        forgettable: true,
+        createdAt: 1,
+        updatedAt: 2,
+      };
+      const workspaceId = "workspace-1";
+      const api = fakeCloudApi({
+        "GET /api/account/memories": { answer: () => ({ memories: [memory] }) },
+        "DELETE /api/account/memories": { answer: () => ({ memories: [] }) },
+      });
+      const failing = fakeCloudApi({
+        "GET /api/account/memories": {
+          answer: () => ({ error: HOSTED_API_ERROR.UNAVAILABLE }),
+          status: HTTP_STATUS.SERVER_ERROR,
+        },
+      });
+
+      const read = yield* Effect.provide(client().readMemories({ workspaceId }), api.layer);
+      const forgotten = yield* Effect.provide(
+        client().forgetMemory({ workspaceId, id: memory.id }),
+        api.layer,
+      );
+      const failed = yield* Effect.provide(client().readMemories({ workspaceId }), failing.layer);
+
+      assert.deepEqual(read, { memories: [memory] });
+      assert.deepEqual(forgotten, { memories: [] });
+      assert.deepEqual(failed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((sent) => sent.url),
+        [
+          `https://tryluke.dev/api/account/memories?workspaceId=${workspaceId}`,
+          `https://tryluke.dev/api/account/memories?workspaceId=${workspaceId}&id=${memory.id}`,
+        ],
+      );
+    }),
+);
+
+it.effect(
   "reads one agent as its own page by its id, an agent with no plan among them, and one the account does not reach as not found",
   () =>
     Effect.gen(function* () {

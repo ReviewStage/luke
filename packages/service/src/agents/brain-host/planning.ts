@@ -57,6 +57,13 @@ import {
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
+  type MemoryCall,
+  RECALL_TOOL,
+  REMEMBER_TOOL,
+  runRecall,
+  runRemember,
+} from "../memory-tools.js";
+import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,
   runReadWebPage,
@@ -212,6 +219,12 @@ Each call starts a worker on a subagent task, and the worker knows nothing of th
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
+### Memory
+
+You remember across the plans of this plan's workspace, whatever the repository, and every member of the workspace shares that memory: what you keep on this call, Luke recalls on a teammate's call too. Call recall once the task comes into focus, with a few words for the area at hand, and again when the conversation moves to an area you have not searched. Treat what it answers as prior context about how the developer works, never as rules: what the developer says in this call wins, and a memory they contradict is corrected rather than argued for.
+
+Call remember, without asking and without saying so, the moment the call settles a fact or convention a later plan would want: a decision the developer made about how they build, test, or ship, a constraint they stated, or a fact you confirmed in the code that a later plan would otherwise rediscover. Keep each one a short self-contained statement. Keep only what helps the team. Never keep a guess, an option still being weighed, brainstorming, this plan's own task detail, a remark personal to one member, or anything holding a credential, key, token, or password. When the developer corrects something a memory says, call remember with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When remember or recall answers that memory is unavailable, carry on without it and never mention it.
+
 ### Coding agents
 
 Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
@@ -244,6 +257,8 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, and who started it, so an agent can be started on another task by its taskId.
+- recall searches the facts and conventions you remembered from this workspace's earlier calls, any member's.
+- remember quietly keeps a settled fact or convention for the workspace's later plans, or corrects one recall answered.
 - end_call ends the voice call once the developer asks you to end it or has clearly said they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"), even right after another request such as starting a coding agent. Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 ## Return the result
@@ -268,6 +283,7 @@ export const PLANNING_EXPLORE_ASK =
   "links to through the Linear connection where you need it, and explore the code it concerns. " +
   "The issue is context, not a request to change it: change nothing in Linear unless the " +
   "developer asks. Hand anything broader to the worker. " +
+  "Call recall with no query for what you remembered from this workspace's earlier calls. " +
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
@@ -425,6 +441,8 @@ export interface PlanningCall {
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
+  /** The plan's workspace, whose shared memory the call reads and writes, and the member it acts for. */
+  readonly memory: MemoryCall;
 }
 
 /** One tool a planning turn is offered: its declaration, and the call it carries under the plan the conversation belongs to. */
@@ -460,7 +478,8 @@ type PlanningToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
  * writes an interactive page for the side panel, the coding agents' tool
  * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
- * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
+ * (`coding-agent-tools.ts`); `recall` and `remember` search and keep the
+ * plan's workspace's shared memory, as the words of the member speaking (`memory-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image
  * (`planningModelOutput`).
@@ -536,6 +555,14 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...RECALL_TOOL,
+    run: (call, input) => runRecall(call.memory, input),
+  },
+  {
+    ...REMEMBER_TOOL,
+    run: (call, input) => runRemember(call.memory, input),
   },
   {
     ...END_CALL_TOOL,
