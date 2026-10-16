@@ -22,6 +22,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { describeWire } from "@luke/wire/effect";
@@ -65,6 +66,7 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
+import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
  * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
@@ -356,7 +358,8 @@ export const LIST_AGENTS_TOOL = {
     "completed, failed, cancelled), its repository and the branch its sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id, name, and whether archived; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
-    `archived, the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
+    "archived, and its mention, the `[@title](link)` to name it by in your words, " +
+    `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
     "for only your task's agents, or a taskId for another task's. Call it to find the agent you " +
     "or the developer mean.",
   inputSchema: AGENT_LIST_INPUT,
@@ -392,7 +395,7 @@ export const START_AGENT_TOOL = {
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. It runs on the " +
     "model and effort named, or on the member's default with neither. Answers `accepted` with " +
-    "the agent's id, model, the model's name to say it by, effort, and status once its session " +
+    "the agent's id, model, the model's name to say it by, effort, status, and mention once its session " +
     "is open, or `rejected` and why nothing was started; a rejected model or effort lists the " +
     "choices.",
   inputSchema: START_AGENT_INPUT,
@@ -448,8 +451,9 @@ export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
     "List the open tasks of your workspace, started by any member: each with its id, its name, " +
-    "the repository its agents work in (null for none yet), who started it, and whether it is " +
-    `the task you work on, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "the repository its agents work in (null for none yet), who started it, whether it is " +
+    "the task you work on, and its mention, the `[@name](link)` to name it by in your words, " +
+    `the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
     "nextOffset where more stand. Narrow it by words of a task's name with nameContains. Call it " +
     `to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to ` +
     `narrow ${AGENT_TOOL.LIST_AGENTS} to one.`,
@@ -547,6 +551,8 @@ interface AgentReading {
   readonly repository: string;
   readonly branch: string | null;
   readonly activity: string | null;
+  /** The agent's mention, `[@title](link)`, as the caller writes it to name the agent in its words. */
+  readonly mention: string;
 }
 
 /** The newest journals of an agent's conversation, read under the member who started it, oldest first; none where the page does not read. */
@@ -595,6 +601,7 @@ const readAgent = (
     readonly failureReason: CodingAgentFailure | undefined;
   },
   offered: readonly OfferedModel[],
+  workspace: string,
 ): Effect.Effect<AgentReading, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [newest] = yield* journalsOf(agent, 1);
@@ -617,6 +624,7 @@ const readAgent = (
       repository: agent.repository,
       branch: agent.branch,
       activity: activity ?? null,
+      mention: agentMention(agent, workspace),
     };
   });
 
@@ -659,7 +667,11 @@ const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
     if (Option.isNone(found)) return Option.none();
     const agent = found.value;
     const task = yield* agentTaskOf(userId, agent);
-    return Option.some({ agent, task: taskReading(task, callerTask(caller)) });
+    return Option.some({
+      agent,
+      task: taskReading(task, callerTask(caller)),
+      workspaceId: workspace.value,
+    });
   });
 
 /** Whether the task named is one of the caller's workspace, as its member reads both now. */
@@ -701,6 +713,16 @@ function agentName(agent: CodingAgent): string {
   return agent.title ?? agent.model;
 }
 
+/** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
+function agentMention(agent: CodingAgent, workspace: string): string {
+  const task = agent.taskId === null ? undefined : { taskId: agent.taskId };
+  return writtenMention(
+    { kind: MENTION_KIND.AGENT, ...task, agentId: agent.id },
+    agentName(agent),
+    workspace,
+  );
+}
+
 /** How a coding agent names itself to another: its title, its id to answer it by, and its repository. */
 function agentIntroduction(agent: CodingAgent): string {
   return `"${agentName(agent)}" (agent id ${agent.id}), working in ${agent.repository}`;
@@ -729,14 +751,19 @@ const startedReading = (
   offered: readonly OfferedModel[],
   ownTask: string | null,
 ) =>
-  Effect.map(standingsOf([agent]), (standing) => ({
-    id: agent.id,
-    model: agent.model,
-    modelName: modelLabel(agent.model, offered),
-    effort: agent.effort,
-    status: standing(agent).status,
-    onYourTask: agent.taskId !== null && agent.taskId === ownTask,
-  }));
+  Effect.gen(function* () {
+    const standing = yield* standingsOf([agent]);
+    const workspace = yield* workspaceStepOf(agent.userId, agent.organizationId);
+    return {
+      id: agent.id,
+      model: agent.model,
+      modelName: modelLabel(agent.model, offered),
+      effort: agent.effort,
+      status: standing(agent).status,
+      onYourTask: agent.taskId !== null && agent.taskId === ownTask,
+      mention: agentMention(agent, workspace),
+    };
+  });
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
 const orStoreRefusal = <R>(
@@ -775,8 +802,9 @@ export function runListAgents(
       });
       const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
+      const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
       const readings = yield* Effect.forEach(agents, (agent) =>
-        readAgent(agent, taskReading(taskOf(agent), ownTask), standing(agent), offered),
+        readAgent(agent, taskReading(taskOf(agent), ownTask), standing(agent), offered, step),
       );
       return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readings.map(readingRecord) };
     }),
@@ -796,9 +824,10 @@ export function runReadAgent(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent, task } = found.value;
+      const { agent, task, workspaceId } = found.value;
       const standing = yield* standingsOf([agent]);
-      const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels);
+      const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
+      const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels, step);
       const published = yield* publishedOf(callerUserId(call.caller), agent);
       const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
@@ -1077,12 +1106,14 @@ export function runListTasks(
           plan.workspaceId === workspace.value &&
           (words === undefined || plan.name.toLowerCase().includes(words)),
       );
+      const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
       const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((plan) => ({
         id: plan.id,
         name: plan.name,
         repository: plan.repository ?? null,
         startedBy: plan.createdBy?.name ?? null,
         isYourTask: plan.id === ownTask,
+        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: plan.id }, plan.name, step),
       }));
       const next = offset + TASKS_LIST_LIMIT;
       return {

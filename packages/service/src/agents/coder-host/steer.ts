@@ -12,6 +12,7 @@ import {
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result } from "effect";
@@ -45,7 +46,9 @@ import { codingAgentStatusOf } from "./status.js";
  * own first write takes the lock, and an eve that did not take the message
  * leaves no row behind. Files the developer attached go with the words,
  * to eve and onto the row (`attached-files.ts`), and so does what the words
- * mention of the plan, as it stands now (`mentioned-context.ts`); the writer fences the write against the caller
+ * mention of the plan, as it stands now (`mentioned-context.ts`), and a
+ * server it mentions is handed to the agent's next turn, unless the words
+ * are another coding agent's, which hand none; the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
@@ -175,12 +178,12 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.
   const services = yield* Effect.context<DatabaseServices>();
-  const dispatch = dispatchMentioningServers(
-    userId,
-    agent.id,
-    mentionedServers(line.text, task?.task.repository ?? null),
-    handOver,
-  ).pipe(
+  // Note that another coding agent's line hands no server, because which servers an agent is handed is its developer's to switch, never another agent's.
+  const servers =
+    line.sender.kind === MESSAGE_SENDER.AGENT
+      ? []
+      : mentionedServers(line.text, task?.task.repository ?? null);
+  const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(
