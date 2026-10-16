@@ -34,7 +34,7 @@ import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { Tooltip } from "./tooltip";
 
 /**
- * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile.
+ * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
  *
  * A person's circle holds their sign-in picture once it loads, and the first
  * letter of their name on the hue read off their id until then and where it
@@ -47,8 +47,8 @@ import { Tooltip } from "./tooltip";
  * his face in his own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its clock,
  * each its glyph alone on the ground beneath it, as a tab's is. In a
- * facepile (`ActorStack`) each stands on one solid neutral tile instead,
- * so the face it overlaps never shows through it. A disc is one size per place
+ * facepile (`ActorStack`) whose faces overlap each stands on one solid
+ * neutral tile instead, so the face it overlaps never shows through it. A disc is one size per place
  * (`ACTOR_SIZE`), so a byline, a facepile, and a list row read level
  * whoever is in them. Named in a line, an actor is its mark and its name as
  * one target that hangs its card (`ActorRef`); a press opens what has a
@@ -529,13 +529,21 @@ function faceName(actor: Actor, face: StackFace): string {
   return face.says === undefined ? name : `${name} · ${face.says}`;
 }
 
-/** One face of a facepile that hangs its card: the actor's mark, its badge, named to a screen reader by its name and what it says. */
-function CardedFace({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
+/** One face of a facepile that hangs its card: the actor's mark, tiled where the pile overlaps it, its badge, named to a screen reader by its name and what it says. */
+function CardedFace({
+  actor,
+  face,
+  tiled,
+}: {
+  actor: Actor;
+  face: StackFace;
+  tiled: boolean;
+}): React.JSX.Element {
   const name = faceName(actor, face);
   return (
     <Tooltip label={name} card={face.card ?? actorCard(actor)}>
       <li className="actor-stack-face" aria-label={name}>
-        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled />
+        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} />
         {face.badge === undefined ? null : (
           <span className="actor-stack-badge" aria-hidden="true">
             {face.badge}
@@ -584,9 +592,19 @@ function MoreFaces({
 }
 
 /**
+ * Whether a pile's faces overlap, and so tile their squares: two or more
+ * drawn, none wearing a badge. Note that a lone face overlaps nothing, and a
+ * pile whose faces wear badges stands them apart (`desktop.css`), so their
+ * squares stand bare as they do in a line.
+ */
+function overlaps(drawn: number, faces: readonly StackFace[] | undefined): boolean {
+  return drawn > 1 && !(faces ?? []).slice(0, drawn).some((face) => face.badge !== undefined);
+}
+
+/**
  * Many actors as a facepile: the first `drawn`, each cut from the ground
- * behind it by a ring of that ground, a square on its solid tile, then how
- * many more where `counted`;
+ * behind it by a ring of that ground, a square on its solid tile where the
+ * faces overlap, then how many more where `counted`;
  * a place whose words beside the pile already count them, "5 can edit",
  * draws no pill. Handed `faces`, one for each actor, each face hangs its
  * card, the actor's own where the face names none, wears its badge, and is
@@ -610,12 +628,14 @@ export function ActorStack({
 }): React.JSX.Element {
   const rest = counted ? actors.length - drawn : 0;
   const more = rest > 0 ? <span className="actor-stack-more">{`+${rest}`}</span> : null;
+  const shown = actors.slice(0, drawn);
+  const tiled = overlaps(shown.length, faces);
   if (faces === undefined) {
     return (
       <span className="actor-stack" aria-hidden="true">
-        {actors.slice(0, drawn).map((actor, index) => (
+        {shown.map((actor, index) => (
           // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
-          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} tiled />
+          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} />
         ))}
         {more}
       </span>
@@ -623,9 +643,9 @@ export function ActorStack({
   }
   return (
     <ul className="actor-stack" aria-label={label}>
-      {actors.slice(0, drawn).map((actor, index) => (
+      {shown.map((actor, index) => (
         // Note that a pile's order is its place's own and never moves under it, so a face is keyed by where it stands.
-        <CardedFace key={index} actor={actor} face={faces[index] ?? {}} />
+        <CardedFace key={index} actor={actor} face={faces[index] ?? {}} tiled={tiled} />
       ))}
       {rest > 0 ? (
         <MoreFaces actors={actors.slice(drawn)} faces={faces.slice(drawn)} more={`+${rest}`} />
