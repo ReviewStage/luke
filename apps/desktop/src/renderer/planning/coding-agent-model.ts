@@ -39,7 +39,13 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
+import {
+  ROW_PART,
+  type RowReading,
+  TURN_ROW,
+  type TurnRow,
+  turnRows,
+} from "@luke/features/turn-rows";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -918,6 +924,8 @@ export const AGENT_PART = {
   STEP_START: "step-start",
   /** A part of a kind this build does not draw, which is skipped rather than refused. */
   OTHER: "other",
+  /** One of the developer's lines that reached the turn while it ran, drawn among the turn's parts where it arrived; never a part a message stores. */
+  ARRIVED: "arrived",
 } as const;
 
 /** How the SDK spells a tool part's type: the tool's name behind this prefix. */
@@ -940,7 +948,8 @@ export type AgentPart =
       readonly errorText: string | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
-  | { readonly kind: typeof AGENT_PART.OTHER };
+  | { readonly kind: typeof AGENT_PART.OTHER }
+  | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: CodingAgentMessage };
 
 function toolState(value: WireValue | undefined): ToolState {
   // SAFETY: membership in the set built from TOOL_STATE's values is what the union names.
@@ -1064,9 +1073,13 @@ export function dockedTodos(
 
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
-  key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
+  key: (part, index) => {
+    if (part.kind === AGENT_PART.TOOL) return part.callId;
+    return part.kind === AGENT_PART.ARRIVED ? part.line.id : String(index);
+  },
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
+    if (part.kind === AGENT_PART.ARRIVED) return ROW_PART.ARRIVED;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
@@ -1088,6 +1101,8 @@ interface AgentTurnPlace {
   readonly workers?: ReadonlyMap<string, ToolState>;
   /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
   readonly said?: boolean;
+  /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
+  readonly arrived?: readonly CodingAgentMessage[];
 }
 
 /** The `connection_execute` calls among the parts that an integration's own call ran under, by their ids. */
@@ -1155,14 +1170,32 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
  * parallel calls of one step are meant to be. Note that such a wrapper is
  * left out, because the call it ran is the same call told twice, and that
  * one with no such call, or one that failed, keeps its row, because its row
- * is where it, or its error, is read.
+ * is where it, or its error, is read. Each line that reached the turn
+ * while it ran stands ahead of the first step after the steps it arrived
+ * after, or at the end where that step has not begun.
  */
-function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
+function drawnParts(
+  message: CodingAgentMessage,
+  arrived: readonly CodingAgentMessage[] = [],
+): readonly AgentPart[] {
   const parts = agentParts(message);
   const ran = runConnectionCalls(parts);
   const drawn: AgentPart[] = [];
+  const waiting = arrived.toSorted((a, b) => afterStepOf(a) - afterStepOf(b));
+  let begun = 0;
+  const arrive = (steps: number) => {
+    while (waiting[0] !== undefined && afterStepOf(waiting[0]) <= steps) {
+      const line = waiting.shift();
+      if (line !== undefined) drawn.push({ kind: AGENT_PART.ARRIVED, line });
+    }
+  };
   for (const part of parts) {
-    if (part.kind === AGENT_PART.STEP_START || part.kind === AGENT_PART.OTHER) continue;
+    if (part.kind === AGENT_PART.STEP_START) {
+      arrive(begun);
+      begun += 1;
+      continue;
+    }
+    if (part.kind === AGENT_PART.OTHER) continue;
     if (
       part.kind === AGENT_PART.TOOL &&
       part.tool === CONNECTION_TOOL.EXECUTE &&
@@ -1183,7 +1216,13 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
       drawn.push(part);
     }
   }
+  arrive(Number.POSITIVE_INFINITY);
   return drawn;
+}
+
+/** The steps of its turn a line arrived after; none for a line no turn took in under way. */
+function afterStepOf(line: CodingAgentMessage): number {
+  return line.arrivedIn?.afterStep ?? 0;
 }
 
 /**
@@ -1196,14 +1235,16 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
  * standing is never folded away, and so does every set of pictures the
- * agent showed, which is its answer as much as its words are.
+ * agent showed, which is its answer as much as its words are. A line that
+ * reached the turn while it ran (`arrived`) stands among its parts where it
+ * arrived, splitting the fold of a finished turn around it.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
+  { newestTodos, workers = NO_WORKERS, said = false, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
-  const parts = drawnParts(message);
+  const parts = drawnParts(message, arrived);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
@@ -1221,6 +1262,59 @@ export function agentRows(
     done: !moving,
     said,
   });
+}
+
+/** One of a transcript's rows as the tab draws it, with the developer's lines that reached it while its turn ran. */
+export interface PlacedMessage {
+  readonly message: CodingAgentMessage;
+  /** The lines its turn took in under way (`arrivedIn`), oldest first; none on any row but a turn's journal. */
+  readonly arrived: readonly CodingAgentMessage[];
+}
+
+/**
+ * A transcript's rows with each line that reached a turn under way moved
+ * into that turn's journal, which draws it where it arrived, out of the
+ * order the service keeps, where the journal closed behind it. A line whose
+ * journal is not among the rows, as when its page is still to land, stands
+ * where the order puts it, as every line does from a service older than it.
+ */
+export function placedMessages(messages: readonly CodingAgentMessage[]): readonly PlacedMessage[] {
+  const journals = new Set(
+    messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
+  );
+  const arrived = new Map<string, CodingAgentMessage[]>();
+  for (const message of messages) {
+    const journal = message.arrivedIn?.journalId;
+    if (journal === undefined || !journals.has(journal)) continue;
+    arrived.set(journal, [...(arrived.get(journal) ?? []), message]);
+  }
+  return messages.flatMap((message) => {
+    const journal = message.arrivedIn?.journalId;
+    if (journal !== undefined && journals.has(journal)) return [];
+    return [{ message, arrived: arrived.get(message.id) ?? [] }];
+  });
+}
+
+/** A stretch of a turn's rows as the tab draws it: the turn's own rows, or a line that reached it while it ran, which stands between them as the developer's own message. */
+export type TurnStretch =
+  | { readonly line: CodingAgentMessage; readonly rows?: undefined }
+  | { readonly line?: undefined; readonly rows: readonly TurnRow<AgentPart>[] };
+
+/** A turn's rows cut at every line that reached it while it ran, so the tab draws each line as a message of its own between the turn's work before and after it. */
+export function turnStretches(rows: readonly TurnRow<AgentPart>[]): readonly TurnStretch[] {
+  const stretches: TurnStretch[] = [];
+  let run: TurnRow<AgentPart>[] = [];
+  for (const row of rows) {
+    if (row.kind !== TURN_ROW.BLOCK || row.block.kind !== AGENT_PART.ARRIVED) {
+      run.push(row);
+      continue;
+    }
+    if (run.length > 0) stretches.push({ rows: run });
+    run = [];
+    stretches.push({ line: row.block.line });
+  }
+  if (run.length > 0 || stretches.length === 0) stretches.push({ rows: run });
+  return stretches;
 }
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */

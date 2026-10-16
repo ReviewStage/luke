@@ -436,7 +436,9 @@ export interface StoreWriter {
    * the turn alone; a longer run is steers eve folded into one step's input.
    * Each row takes the turn in place at a bumped revision, so a device
    * reading from its revision sees the line again where it stands, now the
-   * turn's. Answers the rows taken, or none where no such run awaits, which
+   * turn's, and keeps how many of the turn's steps had begun before it, so
+   * a line that steered a turn under way is drawn among its work where it
+   * arrived rather than ahead of the turn. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -1952,12 +1954,13 @@ const findAwaitingLines = SqlSchema.findAll({
     ),
 });
 
-/** A line taken by the turn that received it: the turn on the row in place, its revision moved. */
+/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved. */
 const giveLineToTurn = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
     turnId: Schema.String,
+    takenAfterStep: Schema.NullOr(Schema.Int),
   }),
   execute: (row) => {
     const bumped = bumpedRevision(row.conversationId);
@@ -1965,11 +1968,28 @@ const giveLineToTurn = SqlSchema.void({
       db
         .with(bumped)
         .update(messages)
-        .set({ turnId: row.turnId, revision: landedRevision(bumped) })
+        .set({
+          turnId: row.turnId,
+          takenAfterStep: row.takenAfterStep,
+          revision: landedRevision(bumped),
+        })
         .where(eq(messages.id, row.id)),
     );
   },
 });
+
+/**
+ * The steps a turn's journal has begun, which a line the turn takes now
+ * arrived after; none where no journal stands yet, as for the line that
+ * opened the turn. Note that eve hands a steer to the step it is about to
+ * start, so the boundaries already standing are the steps before it.
+ */
+const stepsBegun = (context: WriterContext, turnId: string): Write<number | null> =>
+  Effect.map(messageByClientId(context, turnId), (journal) => {
+    if (Option.isNone(journal)) return null;
+    const steps = journal.value.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START);
+    return steps.length === 0 ? null : steps.length;
+  });
 
 /**
  * The oldest run of consecutive awaiting lines whose parts, joined as eve
@@ -2058,11 +2078,13 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
   const run = coalescedRun(awaiting, take.text);
+  const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({
       id: line.id,
       conversationId: context.target.conversationId,
       turnId: take.turnId,
+      takenAfterStep,
     });
   }
   return Result.succeed(run.map((line) => line.id));

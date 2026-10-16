@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_AUTHOR,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -14,7 +16,7 @@ import {
   TURN_STATUS,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Clock, DateTime, Effect, Option } from "effect";
+import { Clock, DateTime, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
@@ -27,6 +29,7 @@ import {
   archiveCodingAgent,
   archiveUnmovedCodingAgent,
   delegationsOf,
+  linePlacesOf,
   lineSendersOf,
   listCodingAgentsOnPullRequest,
   listPlanlessCodingAgents,
@@ -54,6 +57,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * with no plan, which its workspace's members reach and no one else does,
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
+ * And where in a turn under way each line arrived, as the turn took it in.
  * And who an agent writes as on GitHub, settled once by its first session.
  * And an agent's pin, which is its reader's own, as a plan's is.
  *
@@ -204,6 +208,86 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           kind: MESSAGE_SENDER.MEMBER,
           member: undefined,
         });
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's line places", (it) => {
+  it.effect(
+    "a line a turn took in after its second step reads as arriving after that step of the turn's journal, the line that opened the turn names no place, and another account reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        /** A line sent and then taken in by the turn, answering its row's id. */
+        const taken = (text: string) =>
+          Effect.gen(function* () {
+            const sender: LineSender = { kind: MESSAGE_SENDER.GITHUB, login: "octocat" };
+            yield* writer.writeAwaitingLine(
+              target,
+              { text, clientKey: text, sender },
+              Effect.succeed(true),
+            );
+            assert.deepEqual(
+              Result.map(
+                yield* writer.takeAwaitingLine(target, { text, turnId }),
+                (ids) => ids.length,
+              ),
+              Result.succeed(1),
+            );
+            const read = yield* readMessageByClientId(
+              owner,
+              target.conversationId,
+              {},
+              sentLineId(text),
+            );
+            assert.ok(read.ok);
+            return read.value[0]?.id ?? "";
+          });
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          ...turn,
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: 0,
+        });
+        const opening = yield* taken("Fix the tile.");
+        for (const step of [1, 2]) {
+          yield* writer.consume(target, {
+            ...turn,
+            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            sequence: step + 1,
+            step,
+          });
+        }
+        const reviewed = yield* taken("@octocat reviewed your pull request #12.");
+        const journal = yield* readMessageByClientId(owner, target.conversationId, {}, turnId);
+        assert.ok(journal.ok);
+
+        const places = yield* linePlacesOf(target, [opening, reviewed]);
+        assert.deepEqual(
+          [opening, reviewed].map((id) => places.get(id)),
+          [undefined, { journalId: journal.value[0]?.id, afterStep: 2 }],
+        );
+        assert.equal(
+          (yield* linePlacesOf({ userId: other, conversationId: target.conversationId }, [
+            reviewed,
+          ])).size,
+          0,
+        );
       }),
   );
 });

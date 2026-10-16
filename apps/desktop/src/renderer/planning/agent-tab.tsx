@@ -67,9 +67,11 @@ import {
   macOwnerOf,
   messageWords,
   newestTodos,
+  placedMessages,
   settledPlanEdits,
   showsPublishedRow,
   teammateStarter,
+  turnStretches,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -530,6 +532,8 @@ function AgentPartView({
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
+    // A line that reached the turn is drawn as the developer's own message between the turn's stretches (`turnStretches`), never inside one.
+    case AGENT_PART.ARRIVED:
       return null;
   }
 }
@@ -772,11 +776,22 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
+export interface ArrivedLine {
+  readonly message: CodingAgentMessage;
+  readonly sender: Actor | undefined;
+}
+
+/** No line reached the turn while it ran. */
+const NO_ARRIVED: readonly ArrivedLine[] = [];
+
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
  * agent's own turns, with a copy of its words under it where it has any,
  * ending once it has finished on how long it worked and when it ended.
+ * A line that reached a turn while it ran is drawn inside it, as its own
+ * bubble between the work before it and the work after it.
  */
 export function AgentMessage({
   message,
@@ -789,6 +804,7 @@ export function AgentMessage({
   said = false,
   sender,
   origin,
+  arrived = NO_ARRIVED,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -806,6 +822,8 @@ export function AgentMessage({
   said?: boolean;
   /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
   sender?: Actor | undefined;
+  /** The developer's lines that reached this turn while it ran (`placedMessages`), each drawn where it arrived. */
+  arrived?: readonly ArrivedLine[];
 }): ReactNode {
   const words = messageWords(message);
   if (plan) {
@@ -852,26 +870,52 @@ export function AgentMessage({
         models={delegation?.models}
       />
     );
-  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
-  return (
-    <Message from={message.role} data-message-id={message.id}>
-      {named}
-      <MessageContent>
-        <TranscriptRows
-          rows={agentRows(message, moving, {
-            newestTodos: todos.kept,
-            workers,
-            said,
-          })}
-          trailer={said ? workedFor : undefined}
-        >
-          {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
-        </TranscriptRows>
-      </MessageContent>
-      {said ? null : workedFor}
-      {words === "" || said ? null : <CopyMessageAction words={words} messageId={message.id} />}
-    </Message>
+  const stretches = turnStretches(
+    agentRows(message, moving, {
+      newestTodos: todos.kept,
+      workers,
+      said,
+      arrived: arrived.map((line) => line.message),
+    }),
   );
+  const last = stretches.findLastIndex((stretch) => stretch.line === undefined);
+  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
+  return stretches.map((stretch, index) => {
+    if (stretch.line !== undefined) {
+      const line = stretch.line;
+      return (
+        <AgentMessage
+          key={line.id}
+          message={line}
+          plan={false}
+          lead={lead}
+          moving={false}
+          delegation={delegation}
+          sender={arrived.find((each) => each.message.id === line.id)?.sender}
+        />
+      );
+    }
+    // Note that only the turn's first stretch carries its id and its sender, because a link to the turn brings its start into view.
+    const ends = index === last;
+    return (
+      <Message
+        key={index === 0 ? message.id : (stretch.rows[0]?.key ?? message.id)}
+        from={message.role}
+        data-message-id={index === 0 ? message.id : undefined}
+      >
+        {index === 0 ? named : null}
+        <MessageContent>
+          <TranscriptRows rows={stretch.rows} trailer={said && ends ? workedFor : undefined}>
+            {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
+          </TranscriptRows>
+        </MessageContent>
+        {said || !ends ? null : workedFor}
+        {words === "" || said || !ends ? null : (
+          <CopyMessageAction words={words} messageId={message.id} />
+        )}
+      </Message>
+    );
+  });
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
@@ -945,6 +989,8 @@ function AgentTranscriptView({
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
+    // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
+    const placed = placedMessages(messages);
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
@@ -953,13 +999,13 @@ function AgentTranscriptView({
             overComposer ? "agent-log-over-composer pt-(--section-gap)" : "pt-(--section-gap)"
           }
         >
-          {messages.map((message, index) => (
+          {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
                 message={message}
                 plan={message === plan}
                 lead={lead}
-                moving={working && index === messages.length - 1}
+                moving={working && index === placed.length - 1}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
@@ -969,6 +1015,10 @@ function AgentTranscriptView({
                     ? briefSender
                     : lineSender(message.sentBy, readerId, members, former)
                 }
+                arrived={arrived.map((line) => ({
+                  message: line,
+                  sender: lineSender(line.sentBy, readerId, members, former),
+                }))}
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
