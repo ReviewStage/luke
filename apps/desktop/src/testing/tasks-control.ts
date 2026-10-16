@@ -201,6 +201,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
+      onSetOpen: ignore,
       onToggleFullScreen: ignore,
       onNewTab: ignore,
       onNewTabAnswered: ignore,

@@ -1853,7 +1853,12 @@ export function useTasksTab(input: {
 
   // A started plan becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
-  // it gives way. It starts in the chosen workspace; with none listed the
+  // it gives way. It opens with the side panel hidden, since it has nothing
+  // in it yet. Note that the panel is hidden as the start is sent, while the
+  // modal dialog stands over it, because the host turns to the new plan
+  // before the start answers, and a hide on the answer would close a panel
+  // opened on the new plan since; a refusal shows it again as it stood.
+  // It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
@@ -1867,8 +1872,14 @@ export function useTasksTab(input: {
     workspaceId: string | undefined,
     planning: boolean,
     linearIssueId?: string,
-  ): Promise<string | undefined> =>
-    act(ACT_KIND.TASKS_START, {
+  ): Promise<string | undefined> => {
+    const panelWasOpen = sidePanel.open;
+    sidePanel.onSetOpen(false);
+    const refusedWith = (note: string): string => {
+      if (panelWasOpen) sidePanel.onSetOpen(true);
+      return note;
+    };
+    return act(ACT_KIND.TASKS_START, {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
@@ -1876,7 +1887,7 @@ export function useTasksTab(input: {
       ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return startFailureNote(answer.failure);
+        if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
         setNewTaskAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
@@ -1886,8 +1897,9 @@ export function useTasksTab(input: {
         }
         return undefined;
       },
-      (refused: Error) => refused.message,
+      (refused: Error) => refusedWith(refused.message),
     );
+  };
 
   // A plan started from a Linear issue is named by its title, cut to a
   // name's bound, and starts where the dialog would have: the listed

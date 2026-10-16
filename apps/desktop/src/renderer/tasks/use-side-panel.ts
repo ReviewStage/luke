@@ -38,7 +38,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * right that the developer opens and closes, as every devtool window's
  * secondary sidebar does. What opens it on its own is Luke drawing on a
  * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
- * does; a subagent's tab opened from an agent's transcript opens it too. Not to be confused with "the
+ * does; a subagent's tab opened from an agent's transcript opens it too. A
+ * task just started opens with it hidden, whatever the task before it showed
+ * (`use-tasks-tab.ts`), since a new task has nothing in it yet. Not to be confused with "the
  * panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
@@ -492,6 +494,8 @@ export interface SidePanelControl {
   width: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
+  /** Shows or hides the panel as asked, as a task being started does; hiding it leaves full screen too. */
+  onSetOpen: (open: boolean) => void;
   onToggleFullScreen: () => void;
   /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -1501,6 +1505,15 @@ export function useSidePanel(
     setFullScreen(false);
     setNewTabAsked(false);
   }, [update]);
+  const onSetOpen = useCallback(
+    (open: boolean) => {
+      update((held) => (held.open === open ? held : { ...held, open }));
+      if (open) return;
+      setFullScreen(false);
+      setNewTabAsked(false);
+    },
+    [update],
+  );
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
@@ -1660,6 +1673,7 @@ export function useSidePanel(
     fullScreen: state.open && fullScreen,
     newTabAsked: state.open && newTabAsked,
     onToggle,
+    onSetOpen,
     onToggleFullScreen,
     onNewTab,
     onNewTabAnswered,
