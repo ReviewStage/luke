@@ -35,10 +35,7 @@
 # deployed tree is the one already deployed, whatever the commits between.
 # Every doubt builds: a branch with no deployment yet, a commit that cannot
 # be fetched, or a diff that errors exits 1. Note that the script sets no
-# `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`, and
-# that the fetch is bounded by git's own low-speed limit rather than
-# coreutils' `timeout`, which macOS lacks, so the release's checks on a Mac
-# run the script as Vercel's Linux build does.
+# `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`.
 
 DEPLOYED_PATHS=(
     :/apps/web
@@ -61,14 +58,28 @@ if [[ ${1:-} == --paths ]]; then
     exit 0
 fi
 
+# Fetches the commit `$1` from origin within thirty seconds, by a watchdog of
+# the shell's own rather than coreutils' `timeout`, which macOS lacks. Note
+# that neither the fetch nor the watchdog writes to the step's output, because
+# a remote helper the kill leaves running, or the watchdog's `sleep`, would
+# otherwise hold the pipe Vercel reads open after the verdict.
+fetch_previous() {
+    GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1 &
+    local fetching=$!
+    (sleep 30 && kill "$fetching") >/dev/null 2>&1 &
+    local watchdog=$!
+    wait "$fetching"
+    local fetched=$?
+    kill "$watchdog" 2>/dev/null
+    return "$fetched"
+}
+
 previous=${VERCEL_GIT_PREVIOUS_SHA:-}
 if [[ -z $previous ]]; then
     printf 'vercel-ignore: building (no deployment of this branch has succeeded yet)\n'
     exit 1
 fi
-if ! git cat-file -e "$previous^{commit}" 2>/dev/null &&
-    ! GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
-        fetch --quiet --depth=1 origin "$previous" 2>/dev/null; then
+if ! git cat-file -e "$previous^{commit}" 2>/dev/null && ! fetch_previous "$previous"; then
     printf 'vercel-ignore: building (the last deployment, %s, could not be fetched)\n' "$previous"
     exit 1
 fi
