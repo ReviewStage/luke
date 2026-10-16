@@ -193,6 +193,11 @@ test("the chosen tab, pinned at the strip's start after a scroll, dragged along 
   vi.spyOn(chosen, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: 0, width: TAB_WIDTH, height: 30 }),
   );
+  // jsdom captures no pointer; the drag asks the strip to, as the window's would.
+  Object.assign(strip, {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+  });
   const grip = chosen.querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("it is a tab");
   const at = (type: string, x: number) =>
     new PointerEvent(type, { bubbles: true, button: 0, clientX: x, pointerId: 1 });
