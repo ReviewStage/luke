@@ -24,7 +24,7 @@ import {
 import { CloseIcon, SearchIcon } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
@@ -421,10 +421,16 @@ export function landOnSettingsRow(id: string): () => void {
  * height whatever is typed, so neither the list under it nor the page beside
  * it moves as the query changes.
  *
- * Escape unwinds one layer at a time, the way it does everywhere else in the
- * window: a held query is cleared first, and only an empty field lets go of
- * the caret — both stopped here, so neither press falls through and turns the
- * page or the tab behind the field. Return opens the first result, so a
+ * Settings opens with the caret here, so the first keys typed search. A caret
+ * the window already put somewhere, a row a link or the palette landed on,
+ * keeps it. That caret is not counted as a search opened, because nobody
+ * asked for it, and it holds no layer of its own: Escape in the field it left
+ * untouched leaves Settings in one press, as it would with the caret nowhere.
+ *
+ * Otherwise Escape unwinds one layer at a time, the way it does everywhere
+ * else in the window: a held query is cleared first, and only an empty field
+ * lets go of the caret — both stopped here, so neither press falls through
+ * and turns the page or the tab behind the field. Return opens the first result, so a
  * query someone is sure of needs no pointer. Command-F lands here unless the
  * page beside it has a search of its own, as Integrations does, which is
  * the nearer question; the chord is printed in whichever field it lands in.
@@ -443,9 +449,31 @@ export function SettingsSearchField({
   find?: boolean;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
+  // Whether the caret stands where Settings put it as it opened, untouched since.
+  const placed = useRef(false);
   useAppCommand(
     APP_COMMAND.FIND,
-    find ? () => focusSearchField(SETTINGS_SEARCH_INPUT_ID) : undefined,
+    find
+      ? () => {
+          placed.current = false;
+          focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+        }
+      : undefined,
+  );
+  useEffect(
+    () =>
+      focusSeek({
+        find: () => field.current,
+        act: (input) => {
+          // Note that a caret already in the window keeps it, because a link
+          // or a palette result that landed on a row put it there on purpose.
+          const held = document.activeElement;
+          if (held !== null && held !== document.body) return;
+          placed.current = true;
+          input.focus({ preventScroll: true });
+        },
+      }),
+    [],
   );
   return (
     <search className="settings-search">
@@ -463,13 +491,23 @@ export function SettingsSearchField({
           autoComplete="off"
           spellCheck={false}
           value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
+          onChange={(event) => {
+            placed.current = false;
+            onQueryChange(event.target.value);
+          }}
           onFocus={() => {
+            if (placed.current) return;
             window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
               search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
             });
           }}
+          onBlur={() => {
+            placed.current = false;
+          }}
           onKeyDown={(event) => {
+            // The caret Settings placed on its own holds no layer, so its
+            // Escape falls through to the window and leaves Settings.
+            if (event.key === "Escape" && placed.current && query.length === 0) return;
             // Note that an Escape is stopped even mid-composition, because the
             // input method spends that press dismissing its candidates, and
             // the window's own Escape would turn the page behind the field.
