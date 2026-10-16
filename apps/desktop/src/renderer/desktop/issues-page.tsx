@@ -217,10 +217,20 @@ function DetailPage({
       }
       return false;
     });
-  if (issue === undefined) {
-    const failure = read !== undefined && "failure" in read ? read.failure : undefined;
+  // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
+  const listedElsewhere =
+    issue !== undefined &&
+    plans.workspace !== undefined &&
+    issue.workspaceId !== plans.workspace.id;
+  if (issue === undefined || listedElsewhere) {
+    const failure = listedElsewhere
+      ? ISSUE_CALL_FAILURE.NOT_FOUND
+      : read !== undefined && "failure" in read
+        ? read.failure
+        : undefined;
     return <DetailFrame failure={failure} onRetry={reload} onBack={onBack} />;
   }
+
   return (
     <IssueDetail
       issue={issue}

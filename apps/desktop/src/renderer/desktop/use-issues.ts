@@ -150,11 +150,13 @@ export function useIssue(
     act(ACT_KIND.ISSUES_READ, { issueId }).then(taken, () => taken(UNANSWERED));
   }, [act, issueId]);
   useEffect(reload, [reload]);
+  // Note that only the newest change's answer is drawn, so an older one answered after it puts back nothing it changed.
   const change = useCallback(
     (params: IssueChange) => {
       generation.current += 1;
+      const asked = generation.current;
       return changeListed({ issueId, change: params }).then((answer) => {
-        if ("issue" in answer) setHeld({ issueId, read: answer });
+        if ("issue" in answer && asked === generation.current) setHeld({ issueId, read: answer });
         return answer;
       });
     },

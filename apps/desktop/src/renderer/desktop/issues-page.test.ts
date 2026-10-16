@@ -67,6 +67,8 @@ let closed = 0;
 let reads: string[] = [];
 /** Every change asked, as the act carried it. */
 let changes: unknown[] = [];
+/** The changes held unanswered, each answered by its resolver, where changes are held at all. */
+let heldChanges: (() => void)[] | undefined;
 
 beforeEach(() => {
   installScrollIntoView();
@@ -79,6 +81,7 @@ beforeEach(() => {
   closed = 0;
   reads = [];
   changes = [];
+  heldChanges = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -128,7 +131,10 @@ beforeEach(() => {
             updatedAt: was.updatedAt + 1,
           };
           standing = standing.map((each) => (each.id === issueId ? changed : each));
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } });
+          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+          const held = heldChanges;
+          if (held === undefined) return Promise.resolve(done);
+          return new Promise((resolve) => held.push(() => resolve(done)));
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
@@ -496,4 +502,32 @@ test("while a filing is out the title's field takes no typing, so the title it e
   assert.ok(lockedWhileOut, "the field takes no typing while the filing is out");
   assert.equal(field.readOnly, false);
   assert.equal(field.value, "");
+});
+
+test("an issue's page whose workspace is no longer the one listed says the issue is not in this workspace", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+  await settle();
+
+  assert.equal(page.querySelector("[aria-label='Issue title']"), null);
+  assert.match(page.textContent ?? "", /not in this workspace/u);
+});
+
+test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  pick(page, "Status", "Done");
+  pick(page, "Priority", "Urgent");
+  act(() => held[1]?.());
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(picked(page, "Status"), "Done");
+  assert.equal(picked(page, "Priority"), "Urgent");
 });
