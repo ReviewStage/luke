@@ -1248,6 +1248,11 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       const account = rowNamed(group, name);
       assert.equal(account.classList.contains("settings-row-nested"), true, `${name} is inset`);
       assert.equal(account.querySelector(".workspace-tile")?.textContent, "A", `${name}'s tile`);
+      assert.equal(
+        account.querySelector<HTMLImageElement>(".workspace-tile-picture")?.getAttribute("src"),
+        `https://github.com/${name}.png?size=32`,
+        `${name}'s picture is its own on GitHub`,
+      );
       assert.deepEqual(rowButtons(account), [], `${name} offers nothing to press`);
     }
     for (const root of roots.splice(0)) act(() => root.unmount());

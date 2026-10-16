@@ -18,6 +18,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
@@ -68,7 +69,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
- * inset under GitHub's row with its letter's tile, Connected or suspended;
+ * inset under GitHub's row with its picture on GitHub, Connected or suspended;
  * an owner or an admin connects the first with Connect, and once one is,
  * Manage on GitHub opens the one GitHub page that both adds an account and
  * chooses an account's repositories, where which accounts and repositories
@@ -986,16 +987,23 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
 
 /**
  * One connected account's row, inset under GitHub's so it reads as one of
- * GitHub's accounts rather than an integration of its own: its login's
- * letter on a tile, its login, and under it Connected, or that GitHub
- * suspended or removed its installation. The tile is a workspace's, keyed
- * by the login, since the desktop is told no account's picture.
+ * GitHub's accounts rather than an integration of its own: its picture on
+ * GitHub, an organization's logo or a person's avatar, its login, and under
+ * it Connected, or that GitHub suspended or removed its installation. The
+ * tile is a workspace's, keyed by the login, so the login's letter stands
+ * until the picture loads and wherever it fails to.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
     <div className="settings-row settings-row-nested">
       <span className="settings-row-mark">
-        <WorkspaceTile workspace={{ id: `github:${connection.login}`, name: connection.login }} />
+        <WorkspaceTile
+          workspace={{
+            id: `github:${connection.login}`,
+            name: connection.login,
+            pictureUrl: githubAccountPictureUrl(connection.login),
+          }}
+        />
       </span>
       <RowCopy
         name={connection.login}
