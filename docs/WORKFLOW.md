@@ -13,7 +13,9 @@
    hosted-service change the Mac talks to, run `./scripts/run.sh --preview`
    against the PR's Vercel Preview before merging; a push that changes nothing
    the services build from (`scripts/vercel-ignore.sh --paths`) builds no
-   Preview, and `run.sh --preview` finds the nearest one that did. CI's jobs are Linux only;
+   Preview, and `run.sh --preview` finds the nearest one that did. A Preview run is
+   an instance of its own beside the running Luke Dev, with its own sign-in
+   (`CONTRIBUTING.md`'s "Running more than one Luke Dev"). CI's jobs are Linux only;
    the release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the
    only Mac gate, so do not wait for a macOS check and do not read a green PR
    as covering the Mac.
