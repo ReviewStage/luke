@@ -27,6 +27,14 @@
             },
             "author": {
               "type": "string"
+            },
+            "additions": {
+              "type": "number",
+              "minimum": 0
+            },
+            "deletions": {
+              "type": "number",
+              "minimum": 0
             }
           },
           "required": [

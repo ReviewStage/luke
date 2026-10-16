@@ -37,6 +37,7 @@ import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
+import { LinesChanged } from "./agent-published";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -80,8 +81,10 @@ import { useOpenLink } from "./use-open-link";
  * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
  * and a bare one is called by its key and title, as
  * the workspace's own Linear or GitHub App answers them on the service
- * (`use-link-standing.ts`). A page an agent showed on a plan
- * wears its tab's glyph, and one of a plan's coding agents its harness's
+ * (`use-link-standing.ts`); its card then says its key and state, and a
+ * pull request's the lines it adds and removes, in its address's place,
+ * which it says only while its provider has answered nothing. A page an
+ * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
@@ -278,10 +281,15 @@ function MentionGlyph({
   }
 }
 
-/** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
-function noteOf(mention: Mention, state: MentionState, planId: string): string | undefined {
+/** What a chip's card says of what it names, beside its name, where the name alone does not say it: a link's address only while its provider has answered nothing, since its key and state say it then. */
+function noteOf(
+  mention: Mention,
+  state: MentionState,
+  planId: string,
+  standing: LinkStanding | undefined,
+): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
-  if (mention.kind === MENTION_KIND.LINK) return mention.url;
+  if (mention.kind === MENTION_KIND.LINK) return standing === undefined ? mention.url : undefined;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
   if (mention.kind === MENTION_KIND.AGENT) {
     if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
@@ -305,7 +313,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, a provider's page's key and state with a pull request's lines, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -352,7 +360,8 @@ function MentionCard({
       : undefined;
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state, doors.taskId);
+  const note = noteOf(mention, state, doors.taskId, standing);
+  const lines = standing?.pullRequest?.lines;
   const card = (
     <HoverCard data-mention-card="">
       <CardHead
@@ -366,6 +375,12 @@ function MentionCard({
       {standing === undefined ? null : (
         <CardNote>
           {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
+          {lines === undefined ? null : (
+            <>
+              {" · "}
+              <LinesChanged additions={lines.additions} deletions={lines.deletions} />
+            </>
+          )}
         </CardNote>
       )}
       <OptionalNote words={standing?.byline} />
