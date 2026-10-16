@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCreateParams,
@@ -324,7 +326,20 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
+
+/** The window's own stylesheet, which says how tall a row's field stands. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
+
+/** How tall the field stands as the window's stylesheet draws it. */
+function heightOf(field: Element | null): string {
+  assert.ok(field, "the field stands");
+  if (document.head.querySelector("style") === null) {
+    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  }
+  return getComputedStyle(field).getPropertyValue("height");
+}
 
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
@@ -379,6 +394,15 @@ function rowOf(page: HTMLElement, name: string): Element {
   assert.ok(row, `no row for ${name}`);
   return row;
 }
+
+test("a schedule's time and a custom schedule's cron stand at the height of the pickers beside them", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  assert.equal(heightOf(page.querySelector("input[aria-label='Time']")), "var(--control-height)");
+  pick(page, "Repeats", "Custom");
+  assert.equal(heightOf(page.querySelector("input[aria-label='Cron']")), "var(--control-height)");
+});
 
 test("the listed workspace's automations stand before the personal ones, under a heading each, every row naming its owner", async () => {
   const page = mount();
