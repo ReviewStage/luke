@@ -1283,21 +1283,21 @@ function pillOver(element: Element): string | undefined {
   return pill;
 }
 
-test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each raising its words in its pill, and leaves the draft's state to Save", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
   const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
+  // Note that the fold itself is the shared button's style query, which jsdom
+  // cannot answer, so what is read here is the toolbar telling it to fold.
   const acts = () =>
     ["Automations", "Send feedback", "Run now"].map((name) => {
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
-      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
       return {
         name,
-        drawn: shown(words),
-        labelled: press.getAttribute("aria-label"),
+        folded: getComputedStyle(press).getPropertyValue("--luke-fold").trim() === "folded",
         pill: pillOver(press),
       };
     });
@@ -1307,9 +1307,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
-      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
-      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+      { name: "Automations", folded: true, pill: "Automations" },
+      { name: "Send feedback", folded: true, pill: "Send feedback" },
+      { name: "Run now", folded: true, pill: "Run now" },
     ]);
     assert.equal(shown(status), false);
   } finally {
@@ -1319,9 +1319,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: true, labelled: null, pill: undefined },
-      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
-      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+      { name: "Automations", folded: false, pill: undefined },
+      { name: "Send feedback", folded: false, pill: undefined },
+      { name: "Run now", folded: false, pill: undefined },
     ]);
     assert.equal(shown(status), true);
   } finally {
@@ -1363,28 +1363,20 @@ test("the Owner menu is as wide as its widest owner's name, within the room the 
   }
 });
 
-test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+test("a Run now still out is named by what it is doing and refuses another press", async () => {
   mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   runHeld = true;
-  const narrow = layContainersAt({ "automation-toolbar": 570 });
-  try {
-    act(() => relayout());
-    const run = button("Run now");
-    act(() => run.click());
-    await settle();
+  const run = button("Run now");
+  act(() => run.click());
+  await settle();
+  act(() => run.click());
+  await settle();
 
-    assert.deepEqual(
-      {
-        pressable: !run.disabled,
-        ring: run.querySelector('.luke-spinner[role="status"]') !== null,
-        glyph: run.querySelector("svg.lucide-play") !== null,
-      },
-      { pressable: false, ring: true, glyph: false },
-    );
-  } finally {
-    narrow.remove();
-  }
+  assert.deepEqual(
+    { name: run.getAttribute("aria-label"), busy: run.getAttribute("aria-busy"), runsAsked },
+    { name: "Running", busy: "true", runsAsked: [SWEEP.id] },
+  );
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {

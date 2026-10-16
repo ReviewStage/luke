@@ -62,7 +62,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { BUTTON_VARIANT, EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
@@ -641,7 +641,7 @@ function EditorToolbar({
       <div className="automation-toolbar">
         <div className="desktop-toolbar-heading">
           <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
@@ -655,16 +655,11 @@ function EditorToolbar({
           {automation === undefined ? null : (
             <FoldingButton
               label="Run now"
-              glyph={<PlayIcon />}
+              icon={<PlayIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
               busy={running ? "Running" : undefined}
-              className="toolbar-button bordered-button"
-              disabled={running}
               onClick={onRunNow}
-            >
-              <BusyLabel busy={running} label="Running">
-                Run now
-              </BusyLabel>
-            </FoldingButton>
+            />
           )}
           <button
             type="button"

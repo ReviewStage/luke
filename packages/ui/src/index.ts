@@ -2,6 +2,7 @@ export * from "./cn.js";
 export * from "./components/button/button.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
+export * from "./components/folding-button/folding-button.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/hover-card/hover-card.js";
 export * from "./components/layout/layout.js";

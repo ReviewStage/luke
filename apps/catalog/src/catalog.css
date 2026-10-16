@@ -283,3 +283,25 @@ body {
 .catalog-hinted {
   display: inline-flex;
 }
+
+/* A toolbar folding its buttons, as an app's container query does. */
+.catalog-folded {
+  --luke-fold: folded;
+}
+
+/* A toolbar whose corner resizes it, folding its buttons below 360px. */
+.catalog-folding-toolbar {
+  overflow: hidden;
+  width: 480px;
+  max-width: 100%;
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  resize: horizontal;
+  container: catalog-folding-toolbar / inline-size;
+}
+
+@container catalog-folding-toolbar (width < 360px) {
+  .catalog-folding-toolbar > * {
+    --luke-fold: folded;
+  }
+}
