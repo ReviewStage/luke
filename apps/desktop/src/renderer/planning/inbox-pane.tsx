@@ -67,6 +67,7 @@ import {
   type InboxDraft,
   type InboxHolder,
   inboxReply,
+  itemWorkspaceId,
   pressesOf,
   proposedOptions,
   SETTLED_BY,
@@ -81,6 +82,7 @@ import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { WordsWorkspace } from "./use-link-standing";
 import { opensAsLink } from "./use-open-link";
 import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
@@ -91,7 +93,8 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * one more exchange with its agent: the agent's message
  * (`ai-elements/message.tsx`), its mark, name, and when it asked, then the
  * item's title and the blocks of context the agent wrote, Markdown as the
- * transcript draws it, a link as the transcript draws one, opened in the
+ * transcript draws it, its links read under the item's own workspace, its
+ * plan's or its agent's, a link as the transcript draws one, opened in the
  * browser where it is a web page, code as the Code tab draws a card
  * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
  * through the File tab's own read and opened there in the File tab, and an
@@ -1080,6 +1083,8 @@ export function InboxPane({
   };
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
+  // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
+  const workspaceId = itemWorkspaceId(holder, item.agentId);
   return (
     <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
@@ -1109,34 +1114,36 @@ export function InboxPane({
           data-item-id={item.id}
           ref={board}
         >
-          <Message from="assistant">
-            <Byline by={by} did="asked" at={item.postedAt} now={now} />
-            <MessageContent className="inbox-indent">
-              <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
-                {cardTitle(item.title)}
-              </h3>
-              <Blocks
-                item={item}
-                images={control.images}
-                onImage={control.onImage}
-                onRetryImage={control.onRetryImage}
-                openLink={doors.openLink}
-                code={doors.code}
-              />
-              {open ? (
-                <ResponseControls
+          <WordsWorkspace value={workspaceId}>
+            <Message from="assistant">
+              <Byline by={by} did="asked" at={item.postedAt} now={now} />
+              <MessageContent className="inbox-indent">
+                <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
+                  {cardTitle(item.title)}
+                </h3>
+                <Blocks
                   item={item}
-                  draft={draft}
-                  disabled={control.sending.has(item.id)}
-                  onDraft={(next) => control.onDraft(item, next)}
+                  images={control.images}
+                  onImage={control.onImage}
+                  onRetryImage={control.onRetryImage}
+                  openLink={doors.openLink}
+                  code={doors.code}
                 />
-              ) : (
-                <Proposal item={item} />
-              )}
-            </MessageContent>
-          </Message>
-          <Answered item={item} by={by} now={now} />
-          <Withdrawn item={item} by={by} now={now} />
+                {open ? (
+                  <ResponseControls
+                    item={item}
+                    draft={draft}
+                    disabled={control.sending.has(item.id)}
+                    onDraft={(next) => control.onDraft(item, next)}
+                  />
+                ) : (
+                  <Proposal item={item} />
+                )}
+              </MessageContent>
+            </Message>
+            <Answered item={item} by={by} now={now} />
+            <Withdrawn item={item} by={by} now={now} />
+          </WordsWorkspace>
           {control.failed ? (
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}

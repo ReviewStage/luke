@@ -10,7 +10,7 @@ import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
@@ -18,10 +18,12 @@ import { useAppState } from "../use-app-state";
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
- * plan's, else the one their mentions are written under. Words that name
- * neither, as the window's own Inbox draws an item's, read nothing, since a
- * page read through another workspace's connection would be drawn in the
- * wrong one. A Linear issue is
+ * plan's, else the one the place drawing them names, as the window's Inbox
+ * names an item's own, its plan's or its agent's (`WordsWorkspace`), else the
+ * one their mentions are written under.
+ * Words that name neither, as an Inbox item whose workspace the service did
+ * not name, read nothing, since a page read through another workspace's
+ * connection would be drawn in the wrong one. A Linear issue is
  * read by its identifier through the workspace's Linear grant, and a pull
  * request or a GitHub issue by its repository and number through the
  * workspace's GitHub App, each on the service, once per chip, and only where that workspace has the
@@ -37,6 +39,18 @@ export interface ChipWhere {
   readonly planId: string;
   readonly workspace: string;
 }
+
+/**
+ * The workspace words drawn off a plan's page are of, where the place
+ * drawing them knows it, as the window's Inbox knows an item's: by its id,
+ * since a workspace an older service answered may have no slug. None where
+ * it does not know it, so a link there reads nothing rather than another
+ * workspace's.
+ */
+const WordsWorkspaceContext = createContext<string | undefined>(undefined);
+
+/** Hands the words under it the workspace they are of, by its id. */
+export const WordsWorkspace = WordsWorkspaceContext.Provider;
 
 /** A provider's page as its provider answered for it: its key, `ENG-123` or `relay#42`, its title, the state it stands in, and a pull request's or a GitHub issue's own state for its mark. */
 export interface LinkStanding {
@@ -182,12 +196,17 @@ function connectedFor(asked: Asked, workspace: Workspace | undefined): boolean {
     : workspace.github?.active === true;
 }
 
-/** The workspace the words a chip stands in are of: the plan's, else the one their mentions are written under; none where they name neither. */
-function wordsWorkspace(planning: TasksView | undefined, where: ChipWhere): Workspace | undefined {
+/** The workspace the words a chip stands in are of: the plan's, else the one the place drawing them names, else the one their mentions are written under; none where they name none. */
+function wordsWorkspace(
+  planning: TasksView | undefined,
+  where: ChipWhere,
+  namedId: string | undefined,
+): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
   const planWorkspaceId = planning?.tasks.find((plan) => plan.id === where.planId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === planWorkspaceId) ??
+    workspaces.find((each) => each.id === namedId) ??
     workspaces.find((each) => each.slug === where.workspace)
   );
 }
@@ -196,7 +215,7 @@ function wordsWorkspace(planning: TasksView | undefined, where: ChipWhere): Work
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
   const { act } = useAct();
   const asked = askedOf(mention);
-  const workspace = wordsWorkspace(useAppState()?.tasks, where);
+  const workspace = wordsWorkspace(useAppState()?.tasks, where, useContext(WordsWorkspaceContext));
   const workspaceId = workspace?.id;
   const connected = asked !== undefined && connectedFor(asked, workspace);
   const [read, setRead] = useState<{
