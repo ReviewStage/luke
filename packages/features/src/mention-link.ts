@@ -840,6 +840,11 @@ function isBareLabel(label: string, target: string): boolean {
   return spelled !== undefined && spelled.href === parsedUrl(target)?.href;
 }
 
+/** Whether a link in written words is bare: its label, trimmed, is its target spelled out, so what it is called is the drawer's to say. */
+export function isBareLink(label: string, target: string): boolean {
+  return isBareLabel(label.trim(), target);
+}
+
 /**
  * Whether a link's target may name a mention for some plan, so a reader
  * who does not yet know the plan's repository knows to read it again when

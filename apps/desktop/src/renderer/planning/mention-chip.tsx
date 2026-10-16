@@ -1,20 +1,41 @@
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
   encodeMention,
+  isBareLink,
   linkMention,
   MENTION_KIND,
   type Mention,
   type MentionLines,
   type MentionPlace,
+  mentionName,
   type PlanMention,
   pastedLinkMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { DocumentIcon, ProviderMark } from "@luke/ui";
+import { placeChipLook } from "@luke/features/place-chip-model";
+import {
+  CallIcon,
+  CodingAgentsIcon,
+  DocumentIcon,
+  GearIcon,
+  ProviderMark,
+  UserIcon,
+} from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
-import { AppWindowIcon, FolderIcon, HashIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  BotIcon,
+  FactoryIcon,
+  FileDiffIcon,
+  FolderIcon,
+  HashIcon,
+  InboxIcon,
+  MessageSquareIcon,
+  ZapIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
@@ -25,6 +46,7 @@ import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { AgentMark } from "./tab-look";
+import { useKnownNames } from "./use-known-names";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -47,7 +69,14 @@ import { useOpenLink } from "./use-open-link";
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
- * has one. Its card, hung while the pointer rests
+ * has one. A link to any other place in Luke, a member, an Inbox item, an
+ * automation, an agent's message (`@luke/features/luke-link`), is drawn as
+ * the same chip, wearing the place's glyph and named as the window already
+ * knows it (`@luke/features/place-chip-model`): the words it was labelled
+ * with, else the place's own name, else its kind; and a bare plan's, page's,
+ * or agent's link is called by the task's, the page's, or the agent's own
+ * name where the window holds it, rather than by its kind. A press opens the
+ * place as any Luke link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
@@ -253,12 +282,33 @@ function MentionCard({
   );
 }
 
+/** What a chip calls a mention: the name it was written with, unless it was written as its bare address and the window holds the name of the plan, the page, or the agent it names. */
+function bareName(
+  mention: Mention,
+  written: string,
+  bare: boolean,
+  known: ReturnType<typeof useKnownNames>,
+): string {
+  if (!bare) return written;
+  switch (mention.kind) {
+    case MENTION_KIND.PLAN:
+      return known.plans.get(mention.planId) ?? written;
+    case MENTION_KIND.PAGE:
+      return known.pages.get(mention.pageId) ?? written;
+    case MENTION_KIND.AGENT:
+      return known.agents.get(mention.agentId) ?? written;
+    default:
+      return written;
+  }
+}
+
 /** A mention in words: its chip, a button that opens what it names where it can, hanging its card. */
-export function MentionChip({
+function MentionChip({
   mention,
   target,
-  name,
+  name: written,
   doors,
+  bare = false,
 }: {
   mention: Mention;
   /** Its link's target as written, which names it. */
@@ -266,8 +316,12 @@ export function MentionChip({
   /** The name it was written with, without its `@`. */
   name: string;
   doors: MentionDoors;
+  /** Whether it was written as its bare address, so a plan, a page, or an agent is called by its own name where the window holds it. */
+  bare?: boolean;
 }): React.JSX.Element {
   const openLink = useOpenLink();
+  const known = useKnownNames();
+  const name = bareName(mention, written, bare, known);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const face = (
@@ -306,13 +360,129 @@ export function MentionChip({
   );
 }
 
-/** What draws a link in Markdown as its mention's chip through the doors given, where its target names a mention (`linkMention`); a link where it names none. */
+/** The glyph a place in Luke wears, the one its tab or its row in the window wears. */
+function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
+  switch (kind) {
+    case LINK_PLACE.TASK:
+    case LINK_PLACE.VERSION:
+    case LINK_PLACE.TURN:
+      return <DocumentIcon />;
+    case LINK_PLACE.SECTION:
+      return <HashIcon aria-hidden="true" />;
+    case LINK_PLACE.PAGE:
+      return <AppWindowIcon aria-hidden="true" />;
+    case LINK_PLACE.CALL:
+      return <CallIcon />;
+    case LINK_PLACE.AGENT:
+      return <CodingAgentsIcon />;
+    case LINK_PLACE.WORKER:
+      return <BotIcon aria-hidden="true" />;
+    case LINK_PLACE.CHANGES:
+      return <FileDiffIcon aria-hidden="true" />;
+    case LINK_PLACE.MESSAGE:
+      return <MessageSquareIcon aria-hidden="true" />;
+    case LINK_PLACE.INBOX:
+    case LINK_PLACE.INBOX_ITEM:
+      return <InboxIcon aria-hidden="true" />;
+    case LINK_PLACE.AUTOMATIONS:
+    case LINK_PLACE.AUTOMATION:
+    case LINK_PLACE.AUTOMATION_RUN:
+      return <ZapIcon aria-hidden="true" />;
+    case LINK_PLACE.FACTORY:
+      return <FactoryIcon aria-hidden="true" />;
+    case LINK_PLACE.SETTINGS:
+      return <GearIcon />;
+    case LINK_PLACE.PERSON:
+      return <UserIcon />;
+  }
+}
+
+/**
+ * A link to a place in Luke that no mention names, an agent's or a page's
+ * say: its chip, the place's glyph and its name as the window knows it
+ * (`placeChipLook`), a button that opens the place in the window, hanging a
+ * card naming it and the task it stands under.
+ */
+function PlaceChip({
+  href,
+  place,
+  label,
+}: {
+  href: string;
+  place: LinkPlace;
+  /** The words it was labelled with, without an `@`; none where it was written bare. */
+  label: string | undefined;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const known = useKnownNames("automationId" in place ? place.automationId : undefined);
+  const { name, under } = placeChipLook(place, label, known);
+  const glyph = <PlaceGlyph kind={place.kind} />;
+  const card = (
+    <HoverCard data-mention-card="">
+      <CardHead glyph={glyph} name={name} />
+      {under === undefined ? null : <CardNote>{`In ${under}`}</CardNote>}
+    </HoverCard>
+  );
+  return (
+    <Tooltip label={name} card={card}>
+      <button
+        type="button"
+        className="mention-chip"
+        data-kind={MENTION_KIND_PLACE}
+        onClick={(event) => {
+          // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
+          event.stopPropagation();
+          openLink(href);
+        }}
+      >
+        <span className="mention-chip-glyph">{glyph}</span>
+        <span className="mention-chip-label">{name}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
+const MENTION_KIND_PLACE = "place";
+
+/**
+ * A link in words as its chip, through the doors given: a mention's where
+ * its target names one (`linkMention`), a place's in Luke where it is a
+ * Luke link no mention names (`readLink`); nothing where it is neither, and
+ * it stays a link.
+ */
+export function linkChip(
+  href: string,
+  label: string,
+  doors: MentionDoors,
+): React.JSX.Element | undefined {
+  const bare = isBareLink(label, href);
+  const found = linkMention(label, href, doors.place.repository);
+  if (found !== undefined) {
+    return (
+      <MentionChip
+        mention={found.mention}
+        target={href}
+        name={found.name}
+        doors={doors}
+        bare={bare}
+      />
+    );
+  }
+  const read = readLink(href);
+  if (read === undefined) return undefined;
+  return (
+    <PlaceChip
+      href={href}
+      place={read.place}
+      label={bare ? undefined : mentionName(label.trim())}
+    />
+  );
+}
+
+/** What draws a link in Markdown as its chip through the doors given (`linkChip`); a link where it names nothing. */
 export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
-  return (href, label) => {
-    const found = linkMention(label, href, doors.place.repository);
-    if (found === undefined) return undefined;
-    return <MentionChip mention={found.mention} target={href} name={found.name} doors={doors} />;
-  };
+  return (href, label) => linkChip(href, label, doors);
 }
 
 /** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */

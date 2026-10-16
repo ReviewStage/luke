@@ -40,6 +40,7 @@
     "./models-wire": "./src/models-wire.js",
     "./page-wire": "./src/page-wire.js",
     "./picture-wire": "./src/picture-wire.js",
+    "./place-chip-model": "./src/place-chip-model.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./plan-attachment-wire": "./src/plan-attachment-wire.js",
     "./plan-document": "./src/plan-document.js",

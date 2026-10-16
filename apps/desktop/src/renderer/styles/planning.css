@@ -388,10 +388,11 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
    its name, struck through, on an outline alone. Its name sits on the
    line's baseline, and the pill stands proud of the name's own line on
    padding its margins take back, so a line holding a chip is no taller
-   than a line of words. */
+   than a line of words. A chip is never wider than its column, so a long
+   name in a narrow one is cut rather than scrolled. */
 .mention-chip {
   display: inline-flex;
-  max-width: 240px;
+  max-width: min(240px, 100%);
   align-items: center;
   gap: var(--space-4);
   margin-block: -0.075em;
