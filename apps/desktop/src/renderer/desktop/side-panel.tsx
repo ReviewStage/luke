@@ -1176,9 +1176,12 @@ function TabContent({
   onRevealed,
   onCloseTab,
   shellsList,
+  summary,
 }: {
   tab: SidePanelTab;
   taskId: string;
+  /** The plan's summary, which its Summary tab draws (`task-summary.tsx`); none where the panel offers no such tab. */
+  summary: React.JSX.Element | undefined;
   /** The plan's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
   board: Board | undefined;
@@ -1356,6 +1359,9 @@ function TabContent({
     );
   }
   switch (tab) {
+    // Note that only a plan's panel offers the Summary, and it hands the panel the plan's.
+    case SIDE_PANEL_TAB.SUMMARY:
+      return summary ?? <SpinnerRegion label="Loading summary" />;
     case SIDE_PANEL_TAB.BOARD:
       // An archived plan's board only shows, as its agents only read.
       return (
@@ -1615,6 +1621,7 @@ export function SidePanel({
   onOpenTarget,
   cards,
   banner,
+  summary,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1648,6 +1655,8 @@ export function SidePanel({
   cards: TaskCards;
   /** The plan's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
   banner?: React.ReactNode;
+  /** The plan's summary, which its Summary tab draws; none where the panel offers no such tab. */
+  summary?: React.JSX.Element;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1845,6 +1854,7 @@ export function SidePanel({
               onRevealed={revealed}
               onCloseTab={panel.onClose}
               shellsList={shellsList}
+              summary={summary}
             />
           </FindScope>
         )}

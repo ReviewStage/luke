@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { tasksControl } from "#testing/tasks-control";
 import { DesktopTasks } from "../desktop/desktop-tasks";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 import { NO_LOOKS } from "./use-task-looks";
@@ -91,10 +91,7 @@ function mount(
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
+      onRegistry(AtomRegistry.make(), createElement(DesktopTasks, { looks: NO_LOOKS, tasks })),
     ),
   );
   return container;

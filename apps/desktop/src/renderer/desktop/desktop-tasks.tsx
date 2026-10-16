@@ -8,7 +8,7 @@ import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -79,13 +79,7 @@ import { useTabViews } from "./strip-tabs";
 import { TaskActions } from "./task-actions";
 import { taskCardOf } from "./task-card";
 import { useTaskRename } from "./task-name-field";
-import {
-  SummaryButton,
-  type SummaryPin,
-  summaryHolds,
-  TaskSummary,
-  useSummaryLayout,
-} from "./task-summary";
+import { TaskSummary } from "./task-summary";
 
 /**
  * The work column while Plans is chosen: the open plan's column, its
@@ -100,9 +94,9 @@ import {
  * the repository chip only while the plan has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The column's summary stands at its right, under the toolbar and over the
- * call bar, listing what both "+" menus open, with its button last in the
- * toolbar, after the ⋯ menu (`task-summary.tsx`).
+ * The plan's summary, listing what both "+" menus open, is the side
+ * panel's Summary tab (`task-summary.tsx`), so the column holds what it
+ * shows alone.
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
@@ -331,12 +325,10 @@ function PlanDocument({
   tasks,
   looks,
   captions,
-  summary,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
   captions: React.ReactNode;
-  summary: SummaryPin;
 }): React.JSX.Element {
   const { region } = tasks;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
@@ -351,14 +343,6 @@ function PlanDocument({
     agents: tasks.agents,
   });
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
-  const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(
-    summary,
-    column,
-    tasks.sidePanel.fullScreen,
-    summaryHolds(tasks, inbox.board),
-  );
-  const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -614,7 +598,7 @@ function PlanDocument({
               {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-              <div ref={setColumn} className="desktop-task-main" hidden={sidePanel.fullScreen}>
+              <div className="desktop-task-main" hidden={sidePanel.fullScreen}>
                 <Toolbar
                   heading={
                     <MainTabStrip
@@ -683,13 +667,10 @@ function PlanDocument({
                       />
                     </span>
                   </Fragment>
-                  <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                 </Toolbar>
                 {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                 {sidePanel.fullScreen ? null : stranded.banner}
-                {/* The summary stands beside what the column shows, under the
-            toolbar and over the call bar, which both span the column. */}
                 <div className="desktop-plan-body">
                   <FindScope
                     className="desktop-task-column"
@@ -788,15 +769,6 @@ function PlanDocument({
                       />
                     )}
                   </FindScope>
-                  <TaskSummary
-                    tasks={tasks}
-                    layout={summaryLayout}
-                    cardId={summaryCard}
-                    inbox={inbox.board}
-                    held={views.held}
-                    repository={task.repository}
-                    onOpenAgent={(agent) => openColumnTab({ agent })}
-                  />
                 </div>
                 {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}
@@ -837,6 +809,15 @@ function PlanDocument({
                   onOpenTarget={openTarget}
                   cards={cards}
                   banner={stranded.banner}
+                  summary={
+                    <TaskSummary
+                      tasks={tasks}
+                      inbox={inbox.board}
+                      held={views.held}
+                      repository={task.repository}
+                      onOpenAgent={(agent) => openColumnTab({ agent })}
+                    />
+                  }
                 />
               ) : null}
               {stranded.dialog}
@@ -852,7 +833,6 @@ export function DesktopTasks({
   tasks,
   looks,
   captions,
-  summary,
   accountName,
 }: {
   tasks: TasksControl;
@@ -862,8 +842,6 @@ export function DesktopTasks({
   looks: TaskLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
-  /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
-  summary: SummaryPin;
 }): React.JSX.Element {
   // The second call's question stands over either page: a Talk press on a
   // plan's page asks it, and so does a plan started from the New plan dialog.
@@ -879,7 +857,7 @@ export function DesktopTasks({
           // so its tab stands on this plan though Luke never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
-          <PlanDocument tasks={tasks} looks={looks} captions={captions} summary={summary} />
+          <PlanDocument tasks={tasks} looks={looks} captions={captions} />
           {secondCall}
         </SkillFiles>
       );

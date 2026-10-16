@@ -88,7 +88,27 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
   // Another plan, its agents unread, never draws it, nor shows it chosen.
   second.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.SUMMARY);
+});
+
+test("the Summary leads a plan's strip and is the tab it opens on, a record kept before it was a tab included", () => {
+  const first = launch({ task: TASK, taskAgents: [] });
+  assert.deepEqual(first.control().strip, SIDE_PANEL_TABS);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.SUMMARY);
+  first.quit();
+
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ open: true, tabs: ["call", "board", "code"], width: 400 }),
+  );
+  const second = launch({ task: TASK, taskAgents: [] });
+  assert.deepEqual(second.control().strip, [
+    SIDE_PANEL_TAB.SUMMARY,
+    SIDE_PANEL_TAB.CALL,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+  ]);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.SUMMARY);
 });
 
 test("a record kept before tasks had their name holds each task's choices under plans and its pins' task under plan, and a launch still opens on both", () => {
@@ -142,22 +162,22 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   // Another plan never draws it, its agents read or not.
   first.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "terminal" in tab));
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.SUMMARY);
   first.render({ task: OTHER_TASK, taskAgents: [] });
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.SUMMARY);
 
   // Back on its plan it stands as it was; closed, the tab viewed before it is chosen.
   first.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
   act(() => first.control().onClose({ terminal: AGENT }));
   assert.deepEqual(first.control().terminals, []);
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.SUMMARY);
   act(() => first.control().onChoose({ terminal: OTHER_AGENT }));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().terminals, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.SUMMARY);
 });
 
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {

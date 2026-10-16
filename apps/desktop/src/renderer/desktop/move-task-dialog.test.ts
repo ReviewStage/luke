@@ -13,7 +13,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { ellipsized } from "#testing/action-label";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
@@ -138,9 +138,7 @@ function openMenu(tasks: TasksControl): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
-  );
+  act(() => root.render(createElement(DesktopTasks, { looks: NO_LOOKS, tasks })));
   const more =
     container.querySelector<HTMLButtonElement>('[aria-label="Task actions"]') ??
     assert.fail("the toolbar draws the plan's ⋯");
@@ -295,9 +293,7 @@ function openTask(tasks: TasksControl): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
-  );
+  act(() => root.render(createElement(DesktopTasks, { looks: NO_LOOKS, tasks })));
   return container;
 }
 

@@ -26,7 +26,7 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { useDraftsOwner } from "./composer-drafts";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { DesktopTasks } from "./desktop/desktop-tasks";
@@ -184,7 +184,6 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
             createElement(SignedIn, { account }),
             createElement("ul", null, rows),
             createElement(DesktopTasks, {
-              summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
               tasks: plans,
             }),
@@ -524,7 +523,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { looks: NO_LOOKS, tasks: plans }),
         ),
       ),
     ),
@@ -672,7 +671,7 @@ async function inboxOn(item: InboxItem) {
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { looks: NO_LOOKS, tasks: plans }),
         ),
       ),
     ),

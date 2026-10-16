@@ -2180,7 +2180,7 @@ ul.actor-stack {
    more of itself, Sign out's red hover or a muted call's tint, still wins. A
    button whose menu is open keeps its hover for as long as the menu stands,
    and a toggle (`aria-pressed`) is drawn on in the same fill for as long as
-   it is on: the summary's pin, the Inbox's Needs you, the file tree's
+   it is on: the Inbox's Needs you, the file tree's
    filter, the panel's full screen. */
 :is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
 :is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]),
@@ -3032,7 +3032,7 @@ ul.actor-stack {
 }
 
 /* The document's column answers its own width (`@container plan-document`
-   below), the room the summary's rail leaves it included. */
+   below). */
 .desktop-document {
   container: plan-document / inline-size;
   display: flex;
@@ -3290,14 +3290,13 @@ ul.actor-stack {
 
 /* The call bar ------------------------------------------------------------- */
 
-/* It answers the column's width, so a narrow column gives the call bar and
-   the captions above it the room the summary's rail reserves. */
+/* It answers the column's width, so a narrow column lets the captions above
+   it span the column. */
 .desktop-call-bar {
   container: plan-call-bar / inline-size;
   position: relative;
   flex: 0 0 auto;
-  padding: var(--space-12) calc(var(--page-inset) + var(--summary-room)) var(--space-12)
-    var(--page-inset);
+  padding: var(--space-12) var(--page-inset);
   border-top: 1px solid var(--hairline);
   background: var(--desktop-well);
 }
@@ -3314,19 +3313,13 @@ ul.actor-stack {
    column. */
 .desktop-call-bar .voice-caption {
   bottom: calc(100% + var(--space-12));
-  left: calc(50% - var(--summary-room) / 2);
-  width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
+  left: 50%;
+  width: min(var(--caption-width-max), 100% - 2 * var(--page-inset));
 }
 
-/* Too narrow a column to keep the rail's room: the bar, which stands under
-   the rail rather than beside it, runs to the page's inset at its right,
-   and the captions span the column to its insets, centred on it, their
-   volume hint wrapping rather than cut. */
+/* Too narrow a column: the captions span the column to its insets, centred
+   on it, their volume hint wrapping rather than cut. */
 @container plan-call-bar (max-width: 359px) {
-  .desktop-call-bar > .call-bar {
-    margin-right: calc(-1 * var(--summary-room));
-  }
-
   .desktop-call-bar .voice-caption {
     left: 50%;
     width: calc(100% - 2 * var(--column-inset));
@@ -3794,7 +3787,7 @@ ul.actor-stack {
   }
 }
 
-:is(.menu-surface, .task-summary-card)[data-leaving="true"],
+.menu-surface[data-leaving="true"],
 :is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
   pointer-events: none;
   animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
@@ -6072,29 +6065,8 @@ button.automation-run:hover {
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
 
-/* What the column shows, beside the plan's summary: under the toolbar and
-   over the call bar, which both span the column. The room the summary takes
-   is said once here, so the call bar's row below centres on the room the
-   document above it is centred in. */
-.desktop-task-main {
-  --summary-width: 240px;
-  /* The rail stands its controls a column's inset in from its edges, so at
-     the window's right edge its glyphs stand on one line with the side
-     panel's toggle above it, as far in from that edge, and beside an open
-     panel on one line with the toolbar's last button, as far in from the
-     panel's. */
-  --summary-rail-width: calc(var(--control-height) + 2 * var(--column-inset));
-  --summary-room: 0px;
-}
-
-.desktop-task-main:has(> .desktop-plan-body > .task-summary[data-mode="column"]) {
-  --summary-room: var(--summary-width);
-}
-
-.desktop-task-main:has(> .desktop-plan-body > .task-summary[data-mode="rail"]) {
-  --summary-room: var(--summary-rail-width);
-}
-
+/* What the column shows: under the toolbar and over the call bar, which both
+   span the column. */
 .desktop-plan-body {
   position: relative;
   display: flex;
@@ -6110,31 +6082,17 @@ button.automation-run:hover {
   flex-direction: column;
 }
 
-/* Pinned, it stands as Cursor's does: no border and no fill of its own, on
-   the column's ground, its rows a sidebar's in miniature under quiet
-   headings, the first of them level with its chevron. */
+/* The side panel's Summary tab: no border and no fill of its own, on the
+   panel's ground, its rows a sidebar's in miniature under quiet headings. */
 .task-summary {
   display: flex;
   box-sizing: border-box;
-  width: var(--summary-width);
-  flex: none;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--section-gap);
   padding: var(--column-inset);
   overflow-y: auto;
-  background: var(--desktop-ground);
-}
-
-/* Collapsed, the panel's kinds alone in a rail under the chevron that
-   expands it, one glyph after the next at one even step. */
-.task-summary[data-mode="rail"],
-.task-summary[data-mode="rail"] > .task-summary-rows {
-  align-items: center;
-  gap: var(--list-gap);
-}
-
-.task-summary[data-mode="rail"] {
-  width: var(--summary-rail-width);
 }
 
 /* Needs you's glyph is the Inbox's own, wearing the rows' blue dot at its
@@ -6159,111 +6117,6 @@ button.automation-run:hover {
     transparent calc(3.7 * var(--needs-you-unit)) calc(5.6 * var(--needs-you-unit)),
     #000 calc(5.6 * var(--needs-you-unit))
   );
-}
-
-/* Expanded where it cannot be pinned, the whole summary stands in a card
-   over the rail's own footprint, its top and right edges the rail's, or the
-   column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
-   as a menu is, and its chevron, shown while the pointer is on it, stands
-   on the very spot of the rail's: as far in from the card's outer edges as
-   the rail's padding, less the card's border. Its first line is that
-   chevron's height, so the heading on it stands level with it, as the
-   pinned summary's does. */
-.task-summary-card {
-  --card-edge: 1px;
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  right: 0;
-  display: flex;
-  box-sizing: border-box;
-  width: var(--summary-width);
-  max-height: 100%;
-  flex-direction: column;
-  gap: var(--section-gap);
-  padding: calc(var(--column-inset) - var(--card-edge)) var(--menu-inset) var(--space-12);
-  overflow-y: auto;
-  border: var(--card-edge) solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-popover);
-  box-shadow: 0 16px 40px var(--shadow);
-  outline: none; /* no ring: a card holding focus for its controls */
-  transform-origin: top right;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    summary-card-grow var(--duration-fast) var(--spring-fast) both;
-}
-
-/* The pinned summary's chevron and the card's stand on the rail's own, and
-   show while the pointer is on the summary, and the pinned one while the keys
-   are in it too. The pinned one stands where the rail's does, in the
-   summary's padding, and stays there as the summary scrolls: it takes no
-   room of its own, so the first heading stands level with it, and stands on
-   the summary's ground, so a row scrolled under it never shows through. The
-   card's is in from the card's outer edges as far as the rail's padding,
-   less the card's border. */
-.task-summary[data-mode="column"] > .task-summary-chevron,
-.task-summary-collapse {
-  opacity: 0;
-  transition:
-    opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.task-summary[data-mode="column"] > .task-summary-chevron {
-  --button-ground: var(--desktop-ground);
-  position: sticky;
-  z-index: 1;
-  /* Held off the scroller's edge by the keyboard ring's reach, so its ring
-     stands whole once the column is scrolled under it. */
-  top: var(--focus-ring-reach);
-  flex: none;
-  align-self: flex-end;
-  margin-bottom: calc(-1 * (var(--control-height) + var(--section-gap)));
-  background-color: var(--button-ground);
-}
-
-.task-summary-collapse {
-  position: absolute;
-  top: calc(var(--column-inset) - var(--card-edge));
-  right: calc(var(--column-inset) - var(--card-edge));
-}
-
-/* While the chevron is drawn, the summary's fade keeps the chevron's own
-   spot whole, a second mask layer over the fade's, because a mask fades
-   every box inside the scroller and the chevron stands at its faded top. */
-.task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) {
-  mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
-  mask-position:
-    0 0,
-    right var(--column-inset) top var(--focus-ring-reach);
-  mask-size:
-    100% 100%,
-    var(--control-height) var(--control-height);
-  mask-repeat: no-repeat;
-}
-
-.task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .task-summary-chevron,
-.task-summary-card:hover .task-summary-collapse,
-.task-summary-collapse:focus-visible {
-  opacity: 1;
-}
-
-.task-summary[data-mode="column"] > .task-summary-section:first-of-type > .section-heading,
-.task-summary-card > .task-summary-section:first-of-type > .section-heading {
-  display: flex;
-  min-height: var(--control-height);
-  align-items: center;
-  margin-bottom: 0;
-}
-
-/* It grows out of the rail it stands over rather than dropping as a menu
-   does, so its chevron never leaves the spot it shares with the rail's. */
-@keyframes summary-card-grow {
-  from {
-    transform: scale(0.97);
-  }
 }
 
 .task-summary-rows {

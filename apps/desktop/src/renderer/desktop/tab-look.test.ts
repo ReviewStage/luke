@@ -17,7 +17,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
@@ -169,10 +169,7 @@ function mount(): HTMLElement {
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
+      onRegistry(AtomRegistry.make(), createElement(DesktopTasks, { looks: NO_LOOKS, tasks })),
     ),
   );
   return container;

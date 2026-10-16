@@ -10,7 +10,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { NO_LOOKS } from "../tasks/use-task-looks";
 import { DesktopTasks } from "./desktop-tasks";
@@ -80,7 +80,6 @@ function drawnAt(width: number, agents: Partial<CodingAgentsControl> = {}): HTML
       onRegistry(
         AtomRegistry.make(),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           captions: undefined,
           tasks: control,

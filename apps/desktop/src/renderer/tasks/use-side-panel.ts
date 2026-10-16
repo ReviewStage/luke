@@ -1,5 +1,5 @@
 import type { CodeRef } from "@luke/features/task-wire";
-import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
+import { BoardIcon, CallIcon, CodeIcon, SummaryIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -34,7 +34,7 @@ import { MAIN_TAB } from "./use-main-tabs";
  * The plan's column holds the plan's document and its coding agents
  * (`use-main-tabs.ts`); what supports them (the whiteboard, the code Luke
  * has on screen, and the plan's calls with what Luke's planning model
- * wrote and ran on them) stands in a panel at the window's
+ * wrote and ran on them), with the plan's summary of all of it, stands in a panel at the window's
  * right that the developer opens and closes, as every devtool window's
  * secondary sidebar does. What opens it on its own is Luke drawing on a
  * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
@@ -43,7 +43,8 @@ import { MAIN_TAB } from "./use-main-tabs";
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
  * board holds something, Luke showed code on it, a call on it has a line,
- * or Luke's planning model took a turn on it. So a new plan has no tab,
+ * or Luke's planning model took a turn on it, and the Summary from the
+ * first, every plan holding it. So a new plan has the Summary alone,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. The developer's own choices lie
  * over that, per plan: a tab they open from the "+" stands on that plan
@@ -52,14 +53,14 @@ import { MAIN_TAB } from "./use-main-tabs";
  * window's rather than any plan's, so a chosen tab the open plan does not
  * have reads as the first it does.
  *
- * The three fixed kinds are a constant. A subagent's tab, opened from its
+ * The four fixed kinds are a constant. A subagent's tab, opened from its
  * call in the Call tab, from the "+", or from a delegation's row in an
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. An agent's Changes tab, opened from the
  * Changes chip at its tab's foot, the "+", the plan's summary, or ⌘K, is
- * the one kind besides the fixed three kept as they are: one per agent,
+ * the one kind besides the fixed four kept as they are: one per agent,
  * since each agent works in a sandbox and a pull request of its own, it is
  * opened on the plan it was opened on and held to that plan's agents, and
  * it is kept with the plan's other choices, so it stands, and stands
@@ -139,8 +140,14 @@ import { MAIN_TAB } from "./use-main-tabs";
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
+/**
+ * The panel's kinds of tab, the fixed four. A kind is one entry here, one row
+ * below, and one case where the panel draws it. The Summary leads them, and
+ * every plan holds it (`taskHolds`), so it is the tab a plan's panel opens on
+ * until another is chosen.
+ */
 export const SIDE_PANEL_TAB = {
+  SUMMARY: "summary",
   BOARD: "board",
   CODE: "code",
   CALL: "call",
@@ -219,6 +226,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
+  [SIDE_PANEL_TAB.SUMMARY]: { label: "Summary", icon: SummaryIcon },
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", icon: CodeIcon },
   [SIDE_PANEL_TAB.CALL]: { label: "Call", icon: CallIcon },
@@ -1220,7 +1228,13 @@ function settled(state: SidePanelState): HeldState {
   const { tab, pins } = state;
   return {
     ...state,
-    tabs: [...new Set([...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    // A kind the kept order never held, as the Summary was once no tab, leads it.
+    tabs: [
+      ...new Set([
+        ...SIDE_PANEL_TABS.filter((kind) => !state.tabs.includes(kind)),
+        ...state.tabs.filter(current),
+      ]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
