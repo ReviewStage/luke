@@ -361,14 +361,17 @@ export class AccountSessionManager {
         // because its capability stop and cleared account would otherwise
         // land over the session this sign-in starts.
         if (this.#signingOut) {
-          // A cancel pressed during the wait withdraws every press waiting.
+          // A cancel pressed during the wait withdraws every press waiting,
+          // and still reaches a consent already standing, a sign-in again's.
           const cancels = this.#waitCancels;
+          const standing = this.#cancelSignIn;
           const cancel = () => {
             this.#waitCancels += 1;
+            standing?.();
           };
           this.#cancelSignIn = cancel;
           yield* restore(Fiber.await(this.#signingOut));
-          this.#dropCancel(cancel);
+          if (this.#cancelSignIn === cancel) this.#cancelSignIn = standing;
           if (this.#waitCancels !== cancels) return this.#account;
         }
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;

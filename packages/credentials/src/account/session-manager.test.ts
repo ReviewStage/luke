@@ -349,6 +349,42 @@ it.effect("a sign-in cancelled while a refused renewal's sign-out settles opens 
   }),
 );
 
+it.effect(
+  "a cancel pressed while a sign-in waits on the sign-out also ends a sign-in again already open",
+  () =>
+    Effect.gen(function* () {
+      const refusing = refreshingClient(() =>
+        Promise.resolve(
+          jsonResponse(
+            { error: "invalid_grant", error_description: "Refresh token was revoked" },
+            400,
+          ),
+        ),
+      );
+      const released = yield* Deferred.make<void>();
+      const subject = yield* manager({
+        stored: STORED,
+        refresh: (token) => refusing.refresh(token),
+        stopCapabilities: Deferred.await(released),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const again = yield* Effect.forkChild(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB));
+      yield* Effect.promise(() => armed(subject.authorizations));
+      yield* subject.instance.renewOnce();
+
+      const signingIn = yield* Effect.forkChild(
+        subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+      );
+      yield* Effect.yieldNow;
+      subject.instance.cancelSignIn();
+      yield* Deferred.succeed(released, undefined);
+
+      assert.equal(yield* Fiber.join(again), false);
+      assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_OUT);
+      assert.equal(subject.authorizations.length, 1);
+    }),
+);
+
 /** The hand-off page the sign-in sent the browser on to, read off its redirect. */
 function handOffPage(response: Response): URL {
   assert.equal(response.status, 303);
