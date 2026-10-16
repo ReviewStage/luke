@@ -396,7 +396,7 @@ it.effect(
       );
       for (const [error, failure] of [
         [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
-        [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED],
+        [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED],
       ] as const) {
         const refusing = fakeCloudApi({
           "POST /api/workspaces/chat": {

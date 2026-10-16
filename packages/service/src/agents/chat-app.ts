@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   answerAsk,
   type ChatMemberRow,
@@ -28,7 +29,7 @@ import {
   mentionedHandles,
   replyRefusal,
 } from "@luke/features/chat-wire";
-import { workspaceIdSchema } from "@luke/features/plan-wire";
+import { workspaceIdSchema } from "@luke/features/task-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result, Schema } from "effect";
@@ -81,7 +82,8 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * ask of the person's own; and how far the person has read. The workspace
  * is named in the query as the members read names it. The bearer is
  * resolved before any row is touched, a workspace the account is not in
- * answers as one that names nothing, and a notice reaches an agent through
+ * answers as one that names nothing, as does every workspace for an
+ * account that has not turned on the Chat experiment (`EXPERIMENT.CHAT`), and a notice reaches an agent through
  * eve as the deployment acting for whoever started the agent, as the
  * planner's message to an agent does, since a person may tell an agent a
  * teammate started.
@@ -146,13 +148,20 @@ const workspaceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return workspace.success;
 });
 
-/** The bearer's account, or the invalid-token refusal. */
+/**
+ * The bearer's account, or the invalid-token refusal; an account that has
+ * not turned on the Chat experiment is answered as one in no workspace,
+ * because Chat is off for it.
+ */
 const accountOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatAppSeams,
   request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
+): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
   const account = yield* seams.resolveUserId(request);
   if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  if (!(yield* hostedStoreOrUnavailable(chatEnabledFor(account.value)))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
   return account.value;
 });
 

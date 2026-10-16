@@ -5104,6 +5104,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 });
 
+/** Turns the Chat experiment on or off for the account, as Settings › Experimental does. */
+const chooseChat = (userId: string, on: boolean) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: on } });
+
 it.layer(getTestDB())("a person's chat from the window", (it) => {
   /**
    * The owner's plan with one agent on it, its session claimed so a notice
@@ -5112,9 +5116,10 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
    */
   const openWindowChat = (eve = fakeEve()) =>
     Effect.gen(function* () {
-      const opened = yield* openPlan({ eve });
-      const workspace = opened.plan.workspaceId;
-      const started = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
+      const opened = yield* openTask({ eve });
+      yield* chooseChat(opened.owner, true);
+      const workspace = opened.task.workspaceId;
+      const started = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
       const sessionId = eve.opened[0]?.sessionId ?? "";
       assert.equal(
         yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
@@ -5126,7 +5131,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           agentId: started.agent.id,
         }),
       );
-      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.plan.id));
+      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.task.id));
       const at = (bearer: string | undefined, method: string, body?: WireBoundaryInput) => {
         const url = new URL(CHAT, ORIGIN);
         url.searchParams.set("workspaceId", workspace);
@@ -5230,9 +5235,16 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         // Told again, the repeat finds the first notice still outstanding and steers nothing more.
         assert.deepEqual(again.receipt, { told: [], held: ["agent-1"], left: [], unresolved: [] });
         assert.equal(eve.sent.length, 1);
-        // A teammate's DM reaches the agent as the member who started it, whoever posts.
+        // A teammate's DM reaches the agent as the member who started it, whoever posts,
+        // once the teammate has turned Chat on: until then their write is to no workspace.
         yield* joinWorkspace(chat.workspace, chat.other);
         yield* unreadFor(chat.owner, chat.workspace, chat.agent.id);
+        const chatOff = { text: "Before Chat.", to: "@agent-1", clientKey: randomUUID() };
+        assert.deepEqual(
+          yield* chat.write(chatOff, chat.other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* chooseChat(chat.other, true);
         const fromTeammate = yield* chat.wrote(
           { text: "Use the new table.", to: "@agent-1", clientKey: randomUUID() },
           chat.other,
