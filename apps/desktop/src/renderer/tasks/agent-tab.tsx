@@ -86,6 +86,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
+import { PlanPictures } from "./plan-pictures";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
@@ -606,7 +607,9 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
  * automation's prompt, or the task a worker was, as a message sent to the
  * agent, at a sent message's measure over the line naming who sent it and
  * when, as a sent message's bubble stands over its own: a card folded under
- * its title, and a webhook's body folded again inside it.
+ * its title, and a webhook's body folded again inside it. Where the agent
+ * works on a task, the plan's own pictures are drawn in the card as its
+ * page draws them (`plan-pictures.tsx`), read only once the card is opened.
  */
 function PlanCard({
   text,
@@ -616,6 +619,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
+  planId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -629,8 +633,11 @@ function PlanCard({
   sentAt?: number | undefined;
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
+  /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
+  planId?: string | undefined;
 }): ReactNode {
   const named = sender != null;
+  const words = <TranscriptWords text={text} />;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-task-card="" aria-label={lead.label} className="agent-origin-card">
@@ -639,7 +646,13 @@ function PlanCard({
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
-          <TranscriptWords text={text} />
+          {planId === undefined ? (
+            words
+          ) : (
+            <PlanPictures planId={planId} text={text}>
+              {words}
+            </PlanPictures>
+          )}
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
@@ -897,10 +910,13 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
+  planId,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
+  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  planId?: string | undefined;
   /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
   origin?: TranscriptOrigin | undefined;
   /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
@@ -928,6 +944,7 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
+        planId={planId}
       />
     );
   }
@@ -1055,6 +1072,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
+  planId,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1092,6 +1110,8 @@ function AgentTranscriptView({
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
+  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  planId?: string | undefined;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1121,6 +1141,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message}
                 plan={message === plan}
+                planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 delegation={delegation}
@@ -1285,6 +1306,7 @@ function AgentTabView({
               briefSender={starter === undefined ? undefined : starterActor}
               origin={origin}
               readerId={readerId}
+              planId={agent.planId ?? undefined}
               delegation={{
                 models,
                 own: { model: agent.model, effort: agent.effort },
