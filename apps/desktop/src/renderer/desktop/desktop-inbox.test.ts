@@ -1401,7 +1401,7 @@ test("a box answered in words holds its Send at the field's end on a card a 220p
   assert.deepEqual([sendAt(178), sendAt(678)], ["under", "under"]);
 });
 
-test("one column wide, an item's bar too narrow for both crumbs beside the way back and the pager keeps the agent's; narrower still, the way back draws its glyph alone, named still, and both crumbs take a line under it", async () => {
+test("one column wide, an item's bar too narrow for both crumbs beside the way back and the pager keeps the agent's; narrower still, the way back draws its glyph alone, named still, and both crumbs share a line under it", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 800);

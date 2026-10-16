@@ -4198,6 +4198,12 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--list-gap);
 }
 
+/* Note that the agent's crumb gives way as the task's does, because the
+   breadcrumbs keep their last crumb whole, and the path's clip would cut it. */
+.inbox-crumbs li.inbox-crumb {
+  flex-shrink: 1;
+}
+
 .inbox-crumb:active {
   background: var(--raised-strong);
   color: var(--text-primary);
@@ -4288,7 +4294,7 @@ body:has(.app-stage[data-capture="true"])
    the pager, drops the task's crumb, and the agent's keeps enough of its
    name to read; its hover card names it whole. Narrower still the way back
    draws its glyph alone, named still, beside the pager, and the crumbs take
-   a line of their own under them, where both fit again. */
+   a line of their own under them, where both fit again, sharing it. */
 @container inbox-item (width < 560px) {
   .inbox-crumb:first-child,
   .inbox-crumb:first-child + .file-breadcrumb-separator {
@@ -4329,6 +4335,21 @@ body:has(.app-stage[data-capture="true"])
   .inbox-crumb:first-child,
   .inbox-crumb:first-child + .file-breadcrumb-separator {
     display: flex;
+  }
+
+  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
+  .inbox-crumbs li.inbox-crumb:first-child {
+    flex-shrink: 4;
+  }
+
+  .inbox-view-items .inbox-crumbs .tab {
+    min-width: calc(
+      var(--tab-start) +
+      var(--control-glyph) +
+      var(--tab-gap) +
+      3.5ch +
+      var(--tab-end)
+    );
   }
 }
 
