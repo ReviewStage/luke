@@ -1,9 +1,11 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { CodingAgentsIcon } from "@luke/ui";
-import { type Actor, teammateCreator } from "@luke/ui/actor-model";
+import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import {
   ArrowRightIcon,
+  ArrowUpRightIcon,
   AudioLinesIcon,
   CircleCheckIcon,
   FactoryIcon,
@@ -18,26 +20,33 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
+import { agentTabLabel } from "../planning/coding-agent-model";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
-import { AgentGlyph } from "../planning/tab-look";
+import { AgentGlyph, agentEndMark } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import {
+  agentMovedAt,
   EMPTY_MERGED,
+  FACTORY_BLOCK,
   FACTORY_STEP,
+  FACTORY_STOP,
+  FACTORY_WORK,
+  type FactoryBlock,
   type FactoryBoard,
-  type FactoryBuilding,
-  type FactoryMerge,
   type FactoryPlanning,
-  type FactoryQuestion,
   type FactoryShipped,
   type FactoryStep,
+  type FactoryStop,
+  type FactoryWork,
   factoryBoard,
+  factoryMovedAt,
   type MergedSeen,
   noteMerged,
 } from "./factory-model";
@@ -45,61 +54,66 @@ import { paneTiming } from "./pane-motion";
 import { planCardOf } from "./plan-card";
 
 /**
- * desktop-factory.tsx -- the window's Factory: every plan of the workspace being planned, built, and shipped right now, on one line, with what waits on the developer at the foot of the step it holds up.
+ * desktop-factory.tsx -- the window's Factory: every plan of the workspace being planned, built, and shipped right now, as three stations on one line, each leading with what waits on the developer there.
  *
  * It stands in the plan's place beside the sidebar, as the Inbox does, and
  * is a live view rather than a report: no range, no totals, only where work
  * stands now (`factory-model.ts`), read from the plan list, main's Inbox
- * read, and the call. Three steps run left to right, Plan, Build, and Ship,
- * each a card listing its plans as the sidebar draws a plan, with the
- * plan's card on hover, and a question's hover saying it whole. What waits on the developer is the foot of a step,
- * lined up across the line: the Inbox's open questions under Build, each in
- * full with the question's glyph rather than the working mark, since its
- * agent is stopped, and the pull requests ready to merge under Ship. Where
- * both wait, the one to take first says so. A question opens in the Inbox,
- * a pull request on GitHub, and anything else its plan. A row that moves
- * from one step to another slides there once, and one that arrives fades in;
- * nothing else moves, and the times count on with the window's minute.
- * Escape leaves it for the plan it stood over, and so does any row of the
- * sidebar. Until the plan list is read nothing stands, a list that could
- * not be read says so with Retry, above the line where an earlier read still
- * stands, and with nothing being planned, built, or shipped the page is the
- * app's empty state. It is an experiment
+ * read, and the call. Three stations run left to right, Plan, Build, and
+ * Ship, each a card counting the rows it lists. Every row reads as Home's
+ * does: a glyph, what it is, the task it is about in the faint context ink,
+ * a teammate's face, and when it moved, the time slot holding nothing but a
+ * time. What waits on the developer stands first in the station it holds
+ * up, in the unread weight with its dot, apart from the rest by a hairline:
+ * under Build the agents stopped on a question or a failed turn, under Ship
+ * failing checks and pull requests ready to merge. The line above the
+ * stations says how many wait and how many agents work. A question opens in
+ * the Inbox, an agent its page, a pull request on GitHub (its row ends in
+ * ↗), and anything else its plan, whose card hangs on the row's hover. A row
+ * that moves from one station to another slides there once, and one that
+ * arrives fades in; nothing else moves, and the times count on with the
+ * window's minute. Escape leaves it for the plan it stood over, and so does
+ * any row of the sidebar. Until the plan list is read nothing stands, a list
+ * that could not be read says so with Retry, above the line where an earlier
+ * read still stands, and with nothing being planned,
+ * built, or shipped the page is the app's empty state. It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
 
-/** What each step is called, its glyph, and what its line says with nothing in it. */
+/** What each station is called, its glyph, and what it says with nothing in it. */
 const STEPS = {
   [FACTORY_STEP.PLAN]: { name: "Plan", Icon: AudioLinesIcon, idle: "No task being planned" },
   [FACTORY_STEP.BUILD]: { name: "Build", Icon: CodingAgentsIcon, idle: "No agents working" },
   [FACTORY_STEP.SHIP]: { name: "Ship", Icon: GitMergeIcon, idle: "Nothing just shipped" },
 } as const;
 
-/** The most rows a step lists before it counts the rest. */
+/** The most rows of work a station lists before it counts the rest; what waits on the developer is never cut. */
 const STEP_ROWS = 4;
 
 const CallGlyph = SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.CALL].icon;
 
-/** A pull request ready to merge opens on GitHub, where it is merged; one the service sent no page for opens its plan. */
-function openMerge(plans: PlansControl, { plan, pullRequest }: FactoryMerge): void {
-  if (pullRequest.url === undefined) plans.onSelect(plan.id);
-  else plans.repositories.openGitHub(pullRequest.url);
-}
+/** What a block's row says it waits for. */
+const BLOCK_WORDS = {
+  [FACTORY_BLOCK.CHECKS]: "checks failing",
+  [FACTORY_BLOCK.MERGE]: "ready to merge",
+} as const;
 
 function count(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** What needs the developer, in the summary's words: questions, then merges. */
-function needsText(board: FactoryBoard): string | undefined {
-  const parts = [
-    board.questions.length > 0 ? count(board.questions.length, "question", "questions") : "",
-    board.merges.length > 0 ? count(board.merges.length, "merge", "merges") : "",
-  ].filter((part) => part !== "");
-  if (parts.length === 0) return undefined;
-  const waiting = board.questions.length + board.merges.length;
-  return `${parts.join(" and ")} ${waiting === 1 ? "needs" : "need"} you`;
+/** A pull request opens on GitHub, where it is worked on and merged; one the service sent no page for opens its plan. */
+function openPullRequest(plans: PlansControl, plan: PlanSummary, pullRequest: PlanPullRequestLine) {
+  if (pullRequest.url === undefined) plans.onSelect(plan.id);
+  else plans.repositories.openGitHub(pullRequest.url);
+}
+
+/** What a pull request still being built says: a draft, or its checks running. */
+function buildingWords(pullRequest: PlanPullRequestLine): string {
+  return pullRequest.state === PULL_REQUEST_STATE.DRAFT
+    ? `#${pullRequest.number} draft`
+    : `#${pullRequest.number} checks running`;
 }
 
 /**
@@ -157,32 +171,46 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
   }, [root, board]);
 }
 
-/** A row as the sidebar draws a plan: its glyph, its words, and how long ago it moved, or a word in its time's place, led by its creator's face where a teammate created its task; one waiting on the developer in the unread weight with a dot past its time. Its hover hangs `card`, or says its words whole. */
+/**
+ * A row as Home draws one: its glyph, what it is, the task it is about in
+ * the context ink, a teammate's face, and when it moved; one that opens
+ * GitHub says so with ↗ after its words, one that failed wears the failed
+ * mark before its time, and one waiting on the developer is in the unread
+ * weight with a dot past its time. Its hover hangs `card`, or says its
+ * words whole.
+ */
 function FactoryRow({
   slide,
   glyph,
   words,
-  time,
+  context,
+  actor,
+  at,
+  end,
+  external = false,
   waiting = false,
-  creator,
   card,
   onOpen,
 }: {
-  /** Who created the row's task, where a teammate did, worn before its time. */
-  creator?: Actor | undefined;
-  /** What the row is across steps, so a move slides it: its plan, or its question. */
+  /** What the row is across stations, so a move slides it: its plan, agent, item, or pull request. */
   slide: string;
   glyph: React.ReactNode;
   words: string;
-  /** How long ago the row moved, or a word in its time's place. */
-  time: { readonly at: number } | { readonly word: string };
+  /** The task the row is about, where its words are not the task's name. */
+  context?: string | undefined;
+  /** Who the row names, where a teammate: who started its agent, else who created its task. */
+  actor?: Actor | undefined;
+  at: number;
+  /** What stands before the time: the failed mark on what failed. */
+  end?: React.ReactNode;
+  external?: boolean;
   waiting?: boolean;
   card?: React.ReactNode;
   onOpen: () => void;
 }): React.JSX.Element {
   const now = useMinute();
   return (
-    <li className="sidebar-plan-item inbox-row factory-row" data-factory-row={slide}>
+    <li className="sidebar-plan-item home-row inbox-row factory-row" data-factory-row={slide}>
       <Tooltip label={words} card={card}>
         <button
           type="button"
@@ -191,12 +219,20 @@ function FactoryRow({
           onClick={onOpen}
         >
           <span className="sidebar-plan-line">
-            <span className="sidebar-pinned-tab-glyph">{glyph}</span>
+            <span className="home-row-picture">{glyph}</span>
             <span className="sidebar-plan-name">{words}</span>
-            {creator === undefined ? null : <CreatorHeard actor={creator} />}
+            {external ? (
+              <span className="factory-external">
+                <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                <span className="visually-hidden">(opens on GitHub)</span>
+              </span>
+            ) : null}
+            {context === undefined ? null : <span className="home-row-context">{context}</span>}
+            {actor === undefined ? null : <CreatorHeard actor={actor} />}
             <span className="sidebar-plan-time">
-              {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
-              {"word" in time ? time.word : <RelativeTime at={time.at} now={now} hint={false} />}
+              {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+              {end}
+              <RelativeTime at={at} now={now} hint={false} />
             </span>
             {waiting ? (
               <span className="inbox-row-dot">
@@ -210,70 +246,44 @@ function FactoryRow({
   );
 }
 
-/** What waits on the developer at a step's foot: whose turn it is, what to do, why, and the rows. */
-function Wait({
-  order,
-  name,
-  line,
-  children,
-}: {
-  order: string | undefined;
-  name: string;
-  line: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="factory-wait">
-      <p className="factory-over">
-        Waiting for you
-        {order === undefined ? null : ` · ${order}`}
-      </p>
-      <h3 className="factory-head">
-        <span className="factory-name">{name}</span>
-        <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-      </h3>
-      <p className="factory-line">{line}</p>
-      <ul className="sidebar-plans factory-rows" data-wait="">
-        {children}
-      </ul>
-    </div>
-  );
-}
-
-/** One step: its glyph, name, and count, what it holds in a line, its first rows and how many more, and what waits at its foot. */
-function Step({
+/** One station: its glyph, name, and the count of its rows, what waits on the developer first and then its work, or a line saying it holds nothing. */
+function Station({
   step,
-  line,
+  needs = [],
   rows,
-  wait,
 }: {
   step: FactoryStep;
-  line: string | undefined;
+  needs?: readonly React.ReactNode[];
   rows: readonly React.ReactNode[];
-  wait?: React.ReactNode;
 }): React.JSX.Element {
   const { name, Icon, idle } = STEPS[step];
-  const held = rows.length;
+  const held = needs.length + rows.length;
   return (
     <section className="factory-step" data-step={step} aria-label={name}>
-      <div className="factory-work">
-        <h2 className="factory-head">
-          <Icon className="factory-glyph" aria-hidden="true" />
-          <span className="factory-name">{name}</span>
-          {held > 0 ? <span className="factory-count">{held}</span> : null}
-        </h2>
-        <p className="factory-line">{line ?? idle}</p>
+      <h2 className="factory-head">
+        <Icon className="factory-glyph" aria-hidden="true" />
+        <span className="factory-name">{name}</span>
+        {held > 0 ? <span className="factory-count">{held}</span> : null}
+      </h2>
+      {held === 0 ? <p className="factory-idle">{idle}</p> : null}
+      {needs.length === 0 ? null : (
+        <ul className="sidebar-plans factory-rows" data-needs="">
+          {needs}
+        </ul>
+      )}
+      {rows.length === 0 ? null : (
         <ul className="sidebar-plans factory-rows">
           {rows.slice(0, STEP_ROWS)}
-          {held > STEP_ROWS ? <li className="factory-more">{held - STEP_ROWS} more</li> : null}
+          {rows.length > STEP_ROWS ? (
+            <li className="factory-more">{rows.length - STEP_ROWS} more</li>
+          ) : null}
         </ul>
-      </div>
-      {wait}
+      )}
     </section>
   );
 }
 
-/** The arrow from one step to the next. */
+/** The arrow from one station to the next. */
 function Arrow(): React.JSX.Element {
   return (
     <span className="factory-arrow" aria-hidden="true">
@@ -282,7 +292,18 @@ function Arrow(): React.JSX.Element {
   );
 }
 
-/** The line, left to right, and what waits at its steps' feet. */
+/** Who a row names: whoever started its agent where that is a teammate, else whoever created its task where that is. */
+function useWho(): (plan: PlanSummary, agent?: PlanAgentLine) => Actor | undefined {
+  const reader = useMemberDirectory();
+  return (plan, agent) => {
+    const starter = agent?.startedBy;
+    if (starter === undefined) return teammateCreator(plan, reader);
+    if (starter.userId === reader.readerId) return undefined;
+    return personActor(starter, reader.members, reader.readerId);
+  };
+}
+
+/** The line, left to right, each station leading with what waits on the developer there. */
 function Line({
   plans,
   board,
@@ -293,17 +314,11 @@ function Line({
   now: number;
 }): React.JSX.Element {
   const card = (plan: PlanSummary) => planCardOf(plans, plan, now);
-  const reader = useMemberDirectory();
-  const creator = (plan: PlanSummary) => teammateCreator(plan, reader);
-  const order = (step: FactoryStep) =>
-    board.questions.length > 0 && board.merges.length > 0
-      ? board.first === step
-        ? "start here"
-        : "then"
-      : undefined;
-  const ask = ({ plan, item }: FactoryQuestion) => {
+  const who = useWho();
+  const models = plans.agents.models;
+  const ask = (plan: PlanSummary, itemId: string) => {
     plans.inboxView.onOpen();
-    plans.inboxView.onChoose({ planId: plan.id, itemId: item.id });
+    plans.inboxView.onChoose({ planId: plan.id, itemId });
   };
   const planRow = ({ plan, onCall }: FactoryPlanning) => (
     <FactoryRow
@@ -311,156 +326,149 @@ function Line({
       slide={plan.id}
       glyph={onCall ? <CallGlyph /> : <FileTextIcon />}
       words={plan.name}
-      time={onCall ? { word: "On a call" } : { at: plan.updatedAt }}
-      creator={creator(plan)}
+      context={onCall ? "On a call with Luke" : undefined}
+      actor={who(plan)}
+      at={plan.updatedAt}
       card={card(plan)}
       onOpen={() => plans.onSelect(plan.id)}
     />
   );
-  const buildRow = ({ plan, agent, pullRequest }: FactoryBuilding) => (
+  const stopRow = (stop: FactoryStop) => {
+    const { plan } = stop;
+    if (stop.kind === FACTORY_STOP.QUESTION) {
+      const agent = plan.agents?.agents.find((each) => each.id === stop.item.agentId);
+      return (
+        <FactoryRow
+          key={stop.item.id}
+          slide={stop.item.id}
+          glyph={agent === undefined ? <MessageCircleQuestionIcon /> : <AgentGlyph agent={agent} />}
+          words={stop.item.title}
+          context={plan.name}
+          actor={who(plan, agent)}
+          at={stop.item.postedAt}
+          waiting
+          // Note that a question hangs no card, because its hover says the question whole, which its one line cuts short.
+          onOpen={() => ask(plan, stop.item.id)}
+        />
+      );
+    }
+    const { agent } = stop;
+    return (
+      <FactoryRow
+        key={agent.id}
+        slide={agent.id}
+        glyph={<AgentGlyph agent={agent} />}
+        words={`${agentTabLabel(agent, models)} failed`}
+        context={plan.name}
+        actor={who(plan, agent)}
+        at={agentMovedAt(plan, agent)}
+        end={agentEndMark(agent, true)}
+        waiting
+        card={card(plan)}
+        onOpen={() => plans.onShowAgent(plan.id, agent.id)}
+      />
+    );
+  };
+  const workRow = (work: FactoryWork) => {
+    const { plan } = work;
+    if (work.kind === FACTORY_WORK.AGENT) {
+      const { agent } = work;
+      return (
+        <FactoryRow
+          key={agent.id}
+          slide={agent.id}
+          glyph={<AgentGlyph agent={agent} />}
+          words={agentTabLabel(agent, models)}
+          context={plan.name}
+          actor={who(plan, agent)}
+          at={agentMovedAt(plan, agent)}
+          card={card(plan)}
+          onOpen={() => plans.onShowAgent(plan.id, agent.id)}
+        />
+      );
+    }
+    const { pullRequest } = work;
+    return (
+      <FactoryRow
+        key={pullRequest.url ?? pullRequest.number}
+        slide={pullRequest.url ?? plan.id}
+        glyph={<PullRequestMark pullRequest={pullRequest} />}
+        words={buildingWords(pullRequest)}
+        context={plan.name}
+        actor={who(plan)}
+        at={factoryMovedAt(plan)}
+        external={pullRequest.url !== undefined}
+        card={card(plan)}
+        onOpen={() => openPullRequest(plans, plan, pullRequest)}
+      />
+    );
+  };
+  const blockRow = ({ kind, plan, pullRequest }: FactoryBlock) => (
     <FactoryRow
-      key={plan.id}
-      slide={plan.id}
-      glyph={
-        agent !== undefined ? (
-          <AgentGlyph agent={agent} />
-        ) : pullRequest !== undefined ? (
-          <PullRequestMark pullRequest={pullRequest} />
-        ) : null
-      }
-      words={plan.name}
-      time={{ at: agent?.at ?? plan.updatedAt }}
-      creator={creator(plan)}
+      key={pullRequest.url ?? pullRequest.number}
+      slide={pullRequest.url ?? plan.id}
+      glyph={<PullRequestMark pullRequest={pullRequest} />}
+      words={`#${pullRequest.number} ${BLOCK_WORDS[kind]}`}
+      context={plan.name}
+      actor={who(plan)}
+      at={factoryMovedAt(plan)}
+      end={kind === FACTORY_BLOCK.CHECKS ? stateEndMark(GLYPH_STATE.FAILED, true) : undefined}
+      external={pullRequest.url !== undefined}
+      waiting
       card={card(plan)}
-      onOpen={() =>
-        agent === undefined ? plans.onSelect(plan.id) : plans.onShowAgent(plan.id, agent.id)
-      }
-    />
-  );
-  const questionRow = (question: FactoryQuestion) => (
-    <FactoryRow
-      key={question.item.id}
-      slide={question.item.id}
-      glyph={<MessageCircleQuestionIcon className="factory-asking" />}
-      words={question.item.title}
-      time={{ at: question.item.postedAt }}
-      waiting
-      onOpen={() => ask(question)}
-    />
-  );
-  const mergeRow = (ready: FactoryMerge) => (
-    <FactoryRow
-      key={ready.pullRequest.url ?? ready.pullRequest.number}
-      slide={ready.plan.id}
-      glyph={<PullRequestMark pullRequest={ready.pullRequest} />}
-      words={ready.plan.name}
-      time={{ word: `#${ready.pullRequest.number}` }}
-      waiting
-      creator={creator(ready.plan)}
-      card={card(ready.plan)}
-      onOpen={() => openMerge(plans, ready)}
+      onOpen={() => openPullRequest(plans, plan, pullRequest)}
     />
   );
   const shippedRow = ({ plan, pullRequest, at }: FactoryShipped) => (
     <FactoryRow
       key={pullRequest.url ?? pullRequest.number}
-      slide={plan.id}
+      slide={pullRequest.url ?? plan.id}
       glyph={<CircleCheckIcon className="factory-shipped" />}
-      words={plan.name}
-      time={{ at }}
-      creator={creator(plan)}
+      words={`#${pullRequest.number} merged`}
+      context={plan.name}
+      actor={who(plan)}
+      at={at}
+      external={pullRequest.url !== undefined}
       card={card(plan)}
-      onOpen={() => plans.onSelect(plan.id)}
+      onOpen={() => openPullRequest(plans, plan, pullRequest)}
     />
   );
   return (
     <div className="factory-line-up">
-      <Step
-        step={FACTORY_STEP.PLAN}
-        line={board.planning.length > 0 ? "Being planned with Luke" : undefined}
-        rows={board.planning.map(planRow)}
-      />
+      <Station step={FACTORY_STEP.PLAN} rows={board.planning.map(planRow)} />
       <Arrow />
-      <Step
+      <Station
         step={FACTORY_STEP.BUILD}
-        line={
-          board.agentsWorking > 0
-            ? `${count(board.agentsWorking, "agent", "agents")} working`
-            : board.building.length > 0
-              ? "In checks"
-              : undefined
-        }
-        rows={board.building.map(buildRow)}
-        wait={
-          board.questions.length === 0 ? null : (
-            <Wait
-              order={order(FACTORY_STEP.BUILD)}
-              name={`Answer ${count(board.questions.length, "question", "questions")}`}
-              line="Agents are stopped until you answer"
-            >
-              {board.questions.map(questionRow)}
-            </Wait>
-          )
-        }
+        needs={board.stopped.map(stopRow)}
+        rows={board.working.map(workRow)}
       />
       <Arrow />
-      <Step
+      <Station
         step={FACTORY_STEP.SHIP}
-        line={board.shipped.length > 0 ? `${board.shipped.length} just shipped` : undefined}
+        needs={board.blocked.map(blockRow)}
         rows={board.shipped.map(shippedRow)}
-        wait={
-          board.merges.length === 0 ? null : (
-            <Wait
-              order={order(FACTORY_STEP.SHIP)}
-              name="Ready to merge"
-              line="Not shipped until you merge"
-            >
-              {board.merges.map(mergeRow)}
-            </Wait>
-          )
-        }
       />
     </div>
   );
 }
 
-/** The line under the title: what needs the developer, which leads to the wait to take first, then what is moving. */
-function Summary({
-  plans,
-  board,
-}: {
-  plans: PlansControl;
-  board: FactoryBoard;
-}): React.JSX.Element {
-  const needs = needsText(board);
-  // The summary leads to the wait to take first: the Inbox while a question waits, else the first pull request ready to merge.
-  const [firstMerge] = board.merges;
-  const takeFirst = () => {
-    if (board.questions.length > 0 || firstMerge === undefined) plans.inboxView.onOpen();
-    else openMerge(plans, firstMerge);
-  };
-  const working =
-    board.agentsWorking > 0
-      ? `${count(board.agentsWorking, "agent", "agents")} working on ${count(board.plansWorking, "task", "tasks")}`
-      : undefined;
+/** The line over the stations: how many things wait on the developer, then how many agents work. */
+function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
+  const waiting = board.stopped.length + board.blocked.length;
   return (
     <p className="factory-summary">
-      {needs === undefined ? (
-        <span>Nothing needs you</span>
+      {waiting === 0 ? (
+        <span>{NEEDS_YOU.NONE}</span>
       ) : (
-        <button type="button" className="factory-needs" onClick={takeFirst}>
+        <span className="factory-needs">
           <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-          {needs}
-        </button>
+          {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+        </span>
       )}
-      {working === undefined ? null : (
-        <>
-          <span className="factory-sep" aria-hidden="true">
-            ·
-          </span>
-          <span>{working}</span>
-        </>
-      )}
+      <span className="factory-sep" aria-hidden="true">
+        ·
+      </span>
+      <span>{count(board.agentsWorking, "agent working", "agents working")}</span>
     </p>
   );
 }
@@ -476,11 +484,12 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
   const [root, setRoot] = useState<HTMLElement | null>(null);
   useRowSlide(root, board);
   const empty =
-    board.planning.length === 0 &&
-    board.building.length === 0 &&
-    board.questions.length === 0 &&
-    board.merges.length === 0 &&
-    board.shipped.length === 0;
+    board.planning.length +
+      board.stopped.length +
+      board.working.length +
+      board.blocked.length +
+      board.shipped.length ===
+    0;
   return (
     <section className="factory-view" aria-label="Factory" ref={setRoot}>
       <header className="desktop-toolbar">
@@ -509,7 +518,7 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
             {plans.listFailed ? (
               <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
             ) : null}
-            <Summary plans={plans} board={board} />
+            <Summary board={board} />
             {/* A teammate's task names its creator against the listed workspace's members. */}
             <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
               <Line plans={plans} board={board} now={now} />

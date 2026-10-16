@@ -1,25 +1,28 @@
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import type { AppInboxPlan, AppInboxWaitingItem } from "@luke/host/app-state";
+import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { agentStillWriting } from "../planning/coding-agent-model";
 
 /**
- * factory-model.ts -- what the Factory tab draws: the plans being planned, built, and shipped right now, and what of them waits on the developer, from the plan list, main's Inbox read, and the call.
+ * factory-model.ts -- what the Factory tab draws: the plans being planned, the agents building them, and what ships, each station leading with what waits on the developer, from the plan list, main's Inbox read, and the call.
  *
  * Factory is a live view, not a report: it holds no range and no totals,
- * only where work stands now. A plan stands in the step its own state puts
- * it in, worked out here rather than stored: Plan while it has no agents
- * and was saved lately or is on the call, Build while an agent works on it
- * or its pull request is still in checks, Ship for a minute after one of
- * its pull requests was seen to merge. What waits on the developer is the
- * bottom of two steps: the Inbox's open items under Build, since an agent
- * that asks is stopped until it is answered, and the pull requests ready
- * to merge under Ship, since nothing merges without the developer. An
- * agent is stalled by holding an open item, not by a status of its own.
- * Every list is read from what the window already holds; nothing here
- * fetches. Note that the list's row names at most three pull requests,
- * open and draft ones first (`PLAN_AGENTS_BOUNDS`), so a plan with more
- * open than that shows the three the row names.
+ * only where work stands now. A plan stands in Plan while it has no agents
+ * and was saved lately or is on the call. Build lists each agent still at
+ * work with its plan, and each pull request still in checks or a draft; it
+ * leads with what stops an agent until the developer acts, the Inbox's open
+ * items and the agents whose turn failed in the last day. Ship lists a pull
+ * request for a minute after it was seen to merge, and leads with what
+ * stops a merge: failing checks, then pull requests ready to merge, since
+ * nothing merges without the developer. Every list is read from what the
+ * window already holds; nothing here fetches. Note that the list's row names
+ * at most three agents and three pull requests (`PLAN_AGENTS_BOUNDS`), at
+ * work and open ones first, so a plan with more shows the ones its row names.
  */
 
 /** The steps of the line, left to right. */
@@ -37,27 +40,59 @@ export const PLANNING_WINDOW_MS = 24 * 3_600_000;
 /** How long a pull request seen turning merged stands in Ship before it leaves. */
 export const SHIPPED_LINGER_MS = 60_000;
 
+/** How long an agent whose turn failed still waits on the developer to retry it. */
+export const FAILED_WINDOW_MS = 24 * 3_600_000;
+
 /** A plan being planned: drafted lately, or the one on the call. */
 export interface FactoryPlanning {
   readonly plan: PlanSummary;
   readonly onCall: boolean;
 }
 
-/** A plan being built: the agent at work on it, or else the pull request still in checks. */
-export interface FactoryBuilding {
-  readonly plan: PlanSummary;
-  readonly agent: PlanAgentLine | undefined;
-  readonly pullRequest: PlanPullRequestLine | undefined;
-}
+/** What Build lists of the work going on: an agent at work, or a pull request still in checks or a draft. */
+export const FACTORY_WORK = {
+  AGENT: "agent",
+  PULL_REQUEST: "pull-request",
+} as const;
 
-/** An open Inbox item and its plan: the agent that posted it is stopped until it is answered. */
-export interface FactoryQuestion {
-  readonly plan: PlanSummary;
-  readonly item: AppInboxWaitingItem;
-}
+export type FactoryWork =
+  | {
+      readonly kind: typeof FACTORY_WORK.AGENT;
+      readonly plan: PlanSummary;
+      readonly agent: PlanAgentLine;
+    }
+  | {
+      readonly kind: typeof FACTORY_WORK.PULL_REQUEST;
+      readonly plan: PlanSummary;
+      readonly pullRequest: PlanPullRequestLine;
+    };
 
-/** A pull request waiting on the developer to merge it. */
-export interface FactoryMerge {
+/** What stops an agent until the developer acts: an open Inbox item it posted, or its failed turn. */
+export const FACTORY_STOP = {
+  QUESTION: "question",
+  FAILED: "failed",
+} as const;
+
+export type FactoryStop =
+  | {
+      readonly kind: typeof FACTORY_STOP.QUESTION;
+      readonly plan: PlanSummary;
+      readonly item: AppInboxWaitingItem;
+    }
+  | {
+      readonly kind: typeof FACTORY_STOP.FAILED;
+      readonly plan: PlanSummary;
+      readonly agent: PlanAgentLine;
+    };
+
+/** What stops a merge until the developer acts: failing checks to fix, or a pull request ready to merge. */
+export const FACTORY_BLOCK = {
+  CHECKS: "checks",
+  MERGE: "merge",
+} as const;
+
+export interface FactoryBlock {
+  readonly kind: (typeof FACTORY_BLOCK)[keyof typeof FACTORY_BLOCK];
   readonly plan: PlanSummary;
   readonly pullRequest: PlanPullRequestLine;
 }
@@ -87,20 +122,19 @@ export interface FactoryInput {
   readonly now: number;
 }
 
-/** The board: each step's work, what waits on the developer, and which wait to take first. */
+/** The board: each station's work, led by what waits on the developer there. */
 export interface FactoryBoard {
   readonly planning: readonly FactoryPlanning[];
-  readonly building: readonly FactoryBuilding[];
-  /** The open Inbox items, the longest waiting first. */
-  readonly questions: readonly FactoryQuestion[];
-  readonly merges: readonly FactoryMerge[];
+  /** What stops an agent: the questions, then the failures, each the latest first. */
+  readonly stopped: readonly FactoryStop[];
+  /** The agents at work, the latest moved first, then the pull requests still being built. */
+  readonly working: readonly FactoryWork[];
+  /** What stops a merge: failing checks, then pull requests ready to merge, each the latest first. */
+  readonly blocked: readonly FactoryBlock[];
   /** What shipped within the last minute, the latest first. */
   readonly shipped: readonly FactoryShipped[];
-  /** The agents at work across the board, and the plans they work on. */
+  /** The agents at work across the board. */
   readonly agentsWorking: number;
-  readonly plansWorking: number;
-  /** The step whose wait to take first: questions before merges, since an agent that asks is stopped. */
-  readonly first: FactoryStep | undefined;
 }
 
 export const EMPTY_MERGED: MergedSeen = new Map();
@@ -129,27 +163,94 @@ function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
   return plan.agents?.pullRequests ?? [];
 }
 
-/** Where one plan stands: its build row, its merges, its questions, and whether it is being planned. */
-function placePlan(plan: PlanSummary, input: FactoryInput) {
-  const agents = plan.agents;
-  const items = input.waiting.find((each) => each.planId === plan.id)?.items ?? [];
-  const questions = items.map((item) => ({ plan, item }));
-  const merges = pullRequestsOf(plan)
-    .filter(readyToMerge)
-    .map((pullRequest) => ({ plan, pullRequest }));
-  const checking = pullRequestsOf(plan).find(
-    (pullRequest) => STANDING_STATES.has(pullRequest.state) && !readyToMerge(pullRequest),
+/** When a plan's pull request moved, which the wire does not carry: its newest agent turn, else its save. */
+export function factoryMovedAt(plan: PlanSummary): number {
+  return Math.max(plan.updatedAt, ...(plan.agents?.agents ?? []).map((agent) => agent.at ?? 0));
+}
+
+/**
+ * When an agent last moved: its turn's start or settle, or, for one that
+ * never ran a turn, its task's last activity (`taskTime`), which counts the
+ * agent's start, so an agent that failed before its first turn on an old
+ * task is as recent as it is.
+ */
+export function agentMovedAt(plan: PlanSummary, agent: PlanAgentLine): number {
+  return agent.at ?? taskTime(plan, TASK_ORDER.UPDATED);
+}
+
+/** An agent whose turn failed lately, which waits on the developer to retry it. */
+function failedLately(plan: PlanSummary, agent: PlanAgentLine, now: number): boolean {
+  return (
+    agent.status === CODING_AGENT_STATUS.FAILED &&
+    now - agentMovedAt(plan, agent) < FAILED_WINDOW_MS
   );
-  const working = agents !== undefined && agents.working > 0;
-  const agent = agents?.agents.find((each) => agentStillWriting(each.status));
-  const building =
-    working || checking !== undefined
-      ? { plan, agent: working ? agent : undefined, pullRequest: checking }
-      : undefined;
+}
+
+/** Failing checks on an open pull request, which wait on the developer; a draft's are its own work still. */
+function checksFailing(pullRequest: PlanPullRequestLine): boolean {
+  return (
+    pullRequest.state === PULL_REQUEST_STATE.OPEN && pullRequest.checks === CHECK_SUMMARY.FAILING
+  );
+}
+
+/** Where one plan stands: what of it stops, works, and blocks, and whether it is being planned. */
+function placePlan(plan: PlanSummary, input: FactoryInput) {
+  const agents = plan.agents?.agents ?? [];
+  const items = input.waiting.find((each) => each.planId === plan.id)?.items ?? [];
+  const questions = items.map((item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan, item }));
+  const failed = agents
+    .filter((agent) => failedLately(plan, agent, input.now))
+    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.FAILED, plan, agent }));
+  const standing = pullRequestsOf(plan).filter((each) => STANDING_STATES.has(each.state));
+  const blocked = standing.flatMap((pullRequest): FactoryBlock[] => {
+    if (readyToMerge(pullRequest)) return [{ kind: FACTORY_BLOCK.MERGE, plan, pullRequest }];
+    if (checksFailing(pullRequest)) {
+      return [{ kind: FACTORY_BLOCK.CHECKS, plan, pullRequest }];
+    }
+    return [];
+  });
+  const building = standing.filter((each) => !readyToMerge(each) && !checksFailing(each));
+  const working: FactoryWork[] = [
+    ...agents
+      .filter((agent) => agentStillWriting(agent.status))
+      .map((agent): FactoryWork => ({ kind: FACTORY_WORK.AGENT, plan, agent })),
+    ...building.map(
+      (pullRequest): FactoryWork => ({ kind: FACTORY_WORK.PULL_REQUEST, plan, pullRequest }),
+    ),
+  ];
   const onCall = plan.id === input.callPlanId;
-  const drafted = (agents?.total ?? 0) === 0 && input.now - plan.updatedAt < PLANNING_WINDOW_MS;
-  const planning = building === undefined && (onCall || drafted) ? { plan, onCall } : undefined;
-  return { building, merges, questions, planning };
+  const drafted = agents.length === 0 && input.now - plan.updatedAt < PLANNING_WINDOW_MS;
+  const busy = working.length + blocked.length + failed.length > 0;
+  const planning = !busy && (onCall || drafted) ? { plan, onCall } : undefined;
+  return { questions, failed, working, blocked, planning };
+}
+
+/** When a stop or a piece of work last moved: a question's post, an agent's turn, a pull request's plan. */
+function stopAt(stop: FactoryStop): number {
+  return stop.kind === FACTORY_STOP.QUESTION
+    ? stop.item.postedAt
+    : agentMovedAt(stop.plan, stop.agent);
+}
+
+function workAt(work: FactoryWork): number {
+  return work.kind === FACTORY_WORK.AGENT
+    ? agentMovedAt(work.plan, work.agent)
+    : factoryMovedAt(work.plan);
+}
+
+function latestFirst<T>(at: (each: T) => number): (a: T, b: T) => number {
+  return (a, b) => at(b) - at(a);
+}
+
+/** One kind of a list ahead of the other, each the latest first. */
+function kindsInOrder<T extends { readonly kind: string }>(
+  list: readonly T[],
+  order: readonly T["kind"][],
+  at: (each: T) => number,
+): T[] {
+  return order.flatMap((kind) =>
+    list.filter((each) => each.kind === kind).toSorted(latestFirst(at)),
+  );
 }
 
 /** The pull requests of a plan seen merged within the last minute. */
@@ -172,26 +273,23 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
   const planning = placed
     .flatMap((each) => (each.planning === undefined ? [] : [each.planning]))
     .toSorted((a, b) => Number(b.onCall) - Number(a.onCall) || b.plan.updatedAt - a.plan.updatedAt);
-  const building = placed
-    .flatMap((each) => (each.building === undefined ? [] : [each.building]))
-    .toSorted((a, b) => (b.agent?.at ?? b.plan.updatedAt) - (a.agent?.at ?? a.plan.updatedAt));
-  const questions = placed
-    .flatMap((each) => each.questions)
-    .toSorted((a, b) => a.item.postedAt - b.item.postedAt);
-  const merges = placed.flatMap((each) => each.merges);
-  const shipped = plans.flatMap((plan) => shippedOf(plan, input)).toSorted((a, b) => b.at - a.at);
-  const working = plans.filter((plan) => (plan.agents?.working ?? 0) > 0);
-  const first =
-    questions.length > 0 ? FACTORY_STEP.BUILD : merges.length > 0 ? FACTORY_STEP.SHIP : undefined;
+  const stops = placed.flatMap((each) => [...each.questions, ...each.failed]);
+  const blockAt = (block: FactoryBlock) => factoryMovedAt(block.plan);
   return {
     planning,
-    building,
-    questions,
-    merges,
-    shipped,
-    agentsWorking: working.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0),
-    plansWorking: working.length,
-    first,
+    stopped: kindsInOrder(stops, [FACTORY_STOP.QUESTION, FACTORY_STOP.FAILED], stopAt),
+    working: kindsInOrder(
+      placed.flatMap((each) => each.working),
+      [FACTORY_WORK.AGENT, FACTORY_WORK.PULL_REQUEST],
+      workAt,
+    ),
+    blocked: kindsInOrder(
+      placed.flatMap((each) => each.blocked),
+      [FACTORY_BLOCK.CHECKS, FACTORY_BLOCK.MERGE],
+      blockAt,
+    ),
+    shipped: plans.flatMap((plan) => shippedOf(plan, input)).toSorted((a, b) => b.at - a.at),
+    agentsWorking: plans.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0),
   };
 }
 
