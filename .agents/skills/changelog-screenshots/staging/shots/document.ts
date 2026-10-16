@@ -8,14 +8,14 @@
  * ago) as the app draws it at rest: under the pointer.
  */
 
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { codingAgentAnswers } from "./coding-agent";
-import { shotPlanningView } from "./plan-document";
+import { shotTasksView } from "./plan-document";
 import type { ShotSpec } from "./shot-spec";
 
 export function documentShot(): ShotSpec {
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: FIXTURE_CLOSED_PANEL,
     answers: codingAgentAnswers(),
     layout: { sidebarCollapsed: true },

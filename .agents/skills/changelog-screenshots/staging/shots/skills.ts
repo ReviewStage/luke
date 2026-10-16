@@ -17,19 +17,19 @@
 
 import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import type { PlanSkillsAnswer } from "@luke/features/plan-wire";
+import type { TaskSkillsAnswer } from "@luke/features/plan-wire";
 import type {
   CodeLines,
   CodeToken,
-  PlanningFileAnswer,
-  PlanningTreeAnswer,
+  TasksFileAnswer,
+  TasksTreeAnswer,
 } from "@luke/features/planning-view";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers, MODEL, shotAgents } from "./coding-agent";
-import { AGENT_2_TITLE, PLAN_REPOSITORY, SHOT_ID, shotPlanningView } from "./plan-document";
+import { AGENT_2_TITLE, TASK_REPOSITORY, SHOT_ID, shotTasksView } from "./plan-document";
 import { NEVER, type ShotAnswers, type ShotSpec, type ShotStep } from "./shot-spec";
 
 /** The skill the developer named, whose SKILL.md the File tab shows. */
@@ -192,12 +192,12 @@ function skillFile(
   firstLine: number,
   lastLine: number,
   raw: boolean | undefined,
-): PlanningFileAnswer {
+): TasksFileAnswer {
   if (raw === true) {
     return {
       text: {
         path: SKILL_PATH,
-        repository: PLAN_REPOSITORY,
+        repository: TASK_REPOSITORY,
         branch: BRANCH,
         text: `${SKILL_MD.join("\n")}\n`,
       },
@@ -208,7 +208,7 @@ function skillFile(
   return {
     file: {
       path: SKILL_PATH,
-      repository: PLAN_REPOSITORY,
+      repository: TASK_REPOSITORY,
       branch: BRANCH,
       firstLine: first,
       lineCount: lines.length,
@@ -234,7 +234,7 @@ const FILES = [
 ];
 
 /** One folder of the repository, its entries read off {@link FILES}; the whole repository where recursive. */
-function folder(path: string, recursive: boolean | undefined): PlanningTreeAnswer {
+function folder(path: string, recursive: boolean | undefined): TasksTreeAnswer {
   const prefix = path === "" ? "" : `${path}/`;
   const under = FILES.filter((file) => file.startsWith(prefix)).map((file) =>
     file.slice(prefix.length),
@@ -247,7 +247,7 @@ function folder(path: string, recursive: boolean | undefined): PlanningTreeAnswe
           kind: under.includes(name) ? ("file" as const) : ("folder" as const),
         }));
   return {
-    folder: { path, repository: PLAN_REPOSITORY, branch: BRANCH, entries, truncated: false },
+    folder: { path, repository: TASK_REPOSITORY, branch: BRANCH, entries, truncated: false },
   };
 }
 
@@ -415,23 +415,23 @@ function answers(): ShotAnswers {
       ? { ...agent, createdAt: ago(STARTED_MINUTES), runStartedAt: ago(TURN_MINUTES) }
       : agent,
   );
-  const skills: PlanSkillsAnswer = {
-    skills: { repository: PLAN_REPOSITORY, branch: BRANCH, skills: SKILLS },
+  const skills: TaskSkillsAnswer = {
+    skills: { repository: TASK_REPOSITORY, branch: BRANCH, skills: SKILLS },
   };
   return {
     ...shared,
     [ACT_KIND.CODING_AGENTS_LIST]: (payload) =>
-      payload.planId === SHOT_ID.PLAN ? { agents } : { agents: [] },
+      payload.taskId === SHOT_ID.TASK ? { agents } : { agents: [] },
     [ACT_KIND.CODING_AGENTS_MESSAGES]: (payload) =>
       payload.agentId === SHOT_ID.AGENT_2 && payload.callId === undefined
         ? runningPage(payload.after)
         : shared[ACT_KIND.CODING_AGENTS_MESSAGES]?.(payload),
-    [ACT_KIND.PLANNING_SKILLS]: () => skills,
-    [ACT_KIND.PLANNING_FILE]: (payload) =>
+    [ACT_KIND.TASKS_SKILLS]: () => skills,
+    [ACT_KIND.TASKS_FILE]: (payload) =>
       payload.path === SKILL_PATH
         ? skillFile(payload.firstLine, payload.lastLine, payload.raw)
         : undefined,
-    [ACT_KIND.PLANNING_TREE]: (payload) => folder(payload.path, payload.recursive),
+    [ACT_KIND.TASKS_TREE]: (payload) => folder(payload.path, payload.recursive),
   };
 }
 
@@ -477,7 +477,7 @@ function stageOnce(state: { treeHidden: boolean }): boolean {
 /** The step that opens the picker: a loop on the window's own timer, since the box and the chip are drawn under the agent's tab, not the App. */
 const typeSlash: ShotStep = {
   key: "skill-picker",
-  ready: ({ plans }) => plans.agents.agentIds?.includes(SHOT_ID.AGENT_2) ?? false,
+  ready: ({ tasks }) => tasks.agents.agentIds?.includes(SHOT_ID.AGENT_2) ?? false,
   run: () => {
     const state = { treeHidden: false };
     let ticks = 0;
@@ -493,7 +493,7 @@ const typeSlash: ShotStep = {
 
 export function skillsShot(): ShotSpec {
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: { ...FIXTURE_CLOSED_PANEL, width: 640 },
     answers: answers(),
     layout: {

@@ -6,8 +6,8 @@ import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item";
 import { useMemberDirectory } from "../member-directory";
-import { RelativeTime } from "../planning/relative-time";
-import { AgentGlyph, agentEndMark } from "../planning/tab-look";
+import { RelativeTime } from "../tasks/relative-time";
+import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 
@@ -93,12 +93,12 @@ export function SidebarAgent({
     onPin === undefined ? [] : [pinItem(agent, onPin)],
   ].filter((group) => group.length > 0);
   return (
-    <li className="sidebar-plan-item">
+    <li className="sidebar-task-item">
       <Tooltip label={name}>
         <button
           ref={row}
           type="button"
-          className="sidebar-plan sidebar-agent"
+          className="sidebar-task sidebar-agent"
           aria-current={current ? "page" : undefined}
           data-menu-open={String(menu.open !== undefined)}
           data-unread={String(unread)}
@@ -108,15 +108,15 @@ export function SidebarAgent({
           }}
           onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
         >
-          <span className="sidebar-plan-line">
+          <span className="sidebar-task-line">
             <span className="sidebar-agent-glyph" aria-hidden="true">
               <AgentGlyph agent={agent} />
             </span>
-            <span className="sidebar-plan-name">{name}</span>
+            <span className="sidebar-task-name">{name}</span>
             {unread ? <span className="visually-hidden">(unread)</span> : null}
-            <span className="sidebar-plan-time">
+            <span className="sidebar-task-time">
               {repository === undefined ? null : (
-                <span className="sidebar-plan-repository">{repository}</span>
+                <span className="sidebar-task-repository">{repository}</span>
               )}
               {starter === undefined ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
               {agentEndMark(agent, false)}

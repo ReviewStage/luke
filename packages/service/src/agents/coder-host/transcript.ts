@@ -126,6 +126,7 @@ type TranscriptMessage = StoredUIMessage &
     readonly startedAt?: number;
     readonly finishedAt?: number;
     readonly sentBy?: CodingAgentSender;
+    readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
   };
 
@@ -277,18 +278,19 @@ interface LinesRead {
   readonly places: ReadonlyMap<string, LinePlace>;
 }
 
-/** A row as the page carries it: its message, for a developer's line what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
+/** A row as the page carries it: its message, for a developer's line when and what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
   { senders, places }: LinesRead,
 ): TranscriptMessage {
-  const sent = senders.get(record.id);
-  const place = places.get(record.id);
-  if (sent !== undefined || place !== undefined) {
+  if (record.message.role === MESSAGE_ROLE.USER) {
+    const sent = senders.get(record.id);
+    const place = places.get(record.id);
     return {
       ...record.message,
       ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
+      sentAt: record.placedAt.getTime(),
       ...(place === undefined ? undefined : { arrivedIn: place }),
     };
   }

@@ -38,7 +38,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenPersonProvider } from "../person-door";
-import { dayAndTimeText } from "../planning/plan-time";
+import { dayAndTimeText } from "../tasks/task-time";
 import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
@@ -53,8 +53,9 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * a member leaves, a refusal the role earns says so, an owner or admin
  * invites by address and role and copies or cancels what is pending, and
  * every workspace's GitHub group, the first one's too, holds GitHub:
- * an owner's or an admin's to connect, or to manage from its one Manage
- * menu once connected, and a member's to read. Synthetic accounts.
+ * an owner's or an admin's to connect, or to manage on GitHub from its one
+ * button once connected, its accounts inset under it, and a member's to
+ * read, and Linear beside it, disconnected from its ⋯. Synthetic accounts.
  */
 
 const OWNER: WorkspaceMember = {
@@ -1196,10 +1197,10 @@ const integrationRows = (page: HTMLElement) =>
 const rowButtons = (row: HTMLElement) =>
   [...row.querySelectorAll("button")].map((each) => each.textContent);
 
-/** The row's Manage, which opens its menu. */
-const manageOn = (row: HTMLElement) =>
+/** The row's ⋯, which opens its menu. */
+const ellipsisOn = (row: HTMLElement) =>
   row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
-  assert.fail("the row draws no Manage");
+  assert.fail("the row draws no ⋯");
 
 /** The connects and disconnects sent, by their payloads. */
 const githubSent = () =>
@@ -1210,23 +1211,31 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says once an account is connected. */
+/** The words GitHub's row says once an account is connected: to an owner or an admin, and to a member. */
+const MANAGES_ON_GITHUB = "Add accounts and choose repositories on GitHub.";
 const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 
-test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add connection and Manage, and every account connected under it", async () => {
+/** A connected workspace whose Linear is connected too. */
+const WITH_LINEAR: Workspace = { ...CONNECTED, linear: { active: true } };
+
+test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with one Manage on GitHub and no menu, and every account connected inset under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...SEVERAL, role });
     const group = githubGroup(page);
     const row = rowNamed(group, "GitHub");
+    act(() => {
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
 
     assert.equal(group.querySelector("h2")?.textContent, "Integrations");
     assert.equal(
       row.querySelector(".settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
-    assert.deepEqual(rowButtons(row), ["Add connection", "Manage"], `a ${role}'s controls`);
+    assert.deepEqual(rowButtons(row), ["Manage on GitHub"], `a ${role}'s controls`);
+    assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
-      ["GitHub", MANAGED_ON_GITHUB],
+      ["GitHub", MANAGES_ON_GITHUB],
       ["acme-org", "Connected"],
       ["acme-labs", "Suspended or removed on GitHub."],
     ]);
@@ -1234,32 +1243,30 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       rowNamed(group, "acme-labs").querySelector('[data-state="attention"]')?.textContent,
       "Suspended or removed on GitHub.",
     );
+    assert.equal(row.classList.contains("settings-row-nested"), false);
     for (const name of ["acme-org", "acme-labs"]) {
-      assert.deepEqual(rowButtons(rowNamed(group, name)), [], `${name} offers nothing to press`);
+      const account = rowNamed(group, name);
+      assert.equal(account.classList.contains("settings-row-nested"), true, `${name} is inset`);
+      assert.equal(account.querySelector(".workspace-tile")?.textContent, "A", `${name}'s tile`);
+      assert.equal(
+        account.querySelector<HTMLImageElement>(".workspace-tile-picture")?.getAttribute("src"),
+        `https://github.com/${name}.png?size=32`,
+        `${name}'s picture is its own on GitHub`,
+      );
+      assert.deepEqual(rowButtons(account), [], `${name} offers nothing to press`);
     }
     for (const root of roots.splice(0)) act(() => root.unmount());
   }
 });
 
-test("Manage holds Choose repositories on GitHub alone, no Disconnect, and it and Add connection open GitHub through the same connect", async () => {
+test("Manage on GitHub opens GitHub through the same connect as Connect, and nothing on the page disconnects GitHub", async () => {
   const { page } = await mount(SEVERAL);
-  const row = rowNamed(page, "GitHub");
 
-  act(() => manageOn(row).click());
-  const menu = document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("no menu");
-  const drawn = [...menu.children].map((child) =>
-    child.tagName === "HR" ? "rule" : child.textContent,
-  );
-  act(() => manageOn(row).click());
-  await chooseAction(row, "Choose repositories on GitHub");
-  act(() => button(row, "Add connection").click());
+  act(() => button(rowNamed(page, "GitHub"), "Manage on GitHub").click());
   await settle();
 
-  assert.equal(menu.getAttribute("aria-label"), "GitHub actions");
-  assert.deepEqual(drawn, ["Choose repositories on GitHub"]);
   assert.equal(page.textContent?.includes("Disconnect"), false);
   assert.deepEqual(githubSent(), [
-    [ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: SEVERAL.id }],
     [ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: SEVERAL.id }],
   ]);
 });
@@ -1269,17 +1276,17 @@ test("a service from before several connections names one GitHub account alone, 
   const { page } = await mount(legacy);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", MANAGED_ON_GITHUB],
+    ["GitHub", MANAGES_ON_GITHUB],
     ["acme-org", "Connected"],
   ]);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add connection", "Manage"]);
+  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Manage on GitHub"]);
 });
 
-test("Escape in Manage's menu hands focus back to Manage", async () => {
-  const { page } = await mount(CONNECTED);
-  const manage = manageOn(rowNamed(page, "GitHub"));
+test("Escape in Linear's menu hands focus back to its ⋯", async () => {
+  const { page } = await mount(WITH_LINEAR);
+  const ellipsis = ellipsisOn(rowNamed(page, "Linear"));
 
-  act(() => manage.click());
+  act(() => ellipsis.click());
   const firstFocused = document.activeElement?.textContent;
   act(() => {
     document.activeElement?.dispatchEvent(
@@ -1287,23 +1294,21 @@ test("Escape in Manage's menu hands focus back to Manage", async () => {
     );
   });
 
-  assert.equal(firstFocused, "Choose repositories on GitHub");
-  assert.equal(document.activeElement, manage);
-  assert.equal(manage.getAttribute("aria-expanded"), "false");
+  assert.equal(firstFocused, "Disconnect");
+  assert.equal(document.activeElement, ellipsis);
+  assert.equal(ellipsis.getAttribute("aria-expanded"), "false");
 });
 
-test("a GitHub page the browser could not open is said under the row, from Manage, Add connection, and Connect alike", async () => {
+test("a GitHub page the browser could not open is said under the row, from Manage on GitHub and Connect alike", async () => {
   refuseGitHubOpen = true;
   const managed = await mount(CONNECTED);
-  await chooseAction(rowNamed(managed.page, "GitHub"), "Choose repositories on GitHub");
-  const added = await mount(CONNECTED);
-  act(() => button(rowNamed(added.page, "GitHub"), "Add connection").click());
+  act(() => button(rowNamed(managed.page, "GitHub"), "Manage on GitHub").click());
   await settle();
   const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   act(() => button(rowNamed(unconnected.page, "GitHub"), "Connect").click());
   await settle();
 
-  for (const { page } of [managed, added, unconnected]) {
+  for (const { page } of [managed, unconnected]) {
     assert.equal(
       githubGroup(page).querySelector('.error-message[role="alert"]')?.textContent,
       "Luke could not open your browser.",
@@ -1330,7 +1335,7 @@ test("an owner or an admin of a workspace with no GitHub is offered Connect alon
   ]);
 });
 
-test("a member reads every account connected, or is told to ask an owner or admin, and is offered no Manage, Connect, or right-click menu", async () => {
+test("a member reads every account connected, or is told to ask an owner or admin, and is offered no Manage on GitHub, Connect, or right-click menu", async () => {
   const connected = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const unconnected = await mount(ACME);
 
@@ -1603,13 +1608,13 @@ test("an address already invited is said under the form, and a member is offered
   );
 });
 
-test("Manage's menu left open on one workspace closes when another is listed in its place", async () => {
-  const { page, relist } = await mount(CONNECTED);
-  act(() => manageOn(rowNamed(page, "GitHub")).click());
+test("a row's menu left open on one workspace closes when another is listed in its place", async () => {
+  const { page, relist } = await mount(WITH_LINEAR);
+  act(() => ellipsisOn(rowNamed(page, "Linear")).click());
   const opened = document.querySelector('[role="menu"]:not([data-leaving])') !== null;
 
   await relist({
-    ...CONNECTED,
+    ...WITH_LINEAR,
     id: "workspace-beta",
     name: "Beta",
     github: { login: "beta", active: true },
@@ -1618,7 +1623,7 @@ test("Manage's menu left open on one workspace closes when another is listed in 
 
   assert.equal(opened, true);
   assert.equal(document.querySelector('[role="menu"]:not([data-leaving])'), null);
-  assert.equal(manageOn(rowNamed(page, "GitHub")).getAttribute("aria-expanded"), "false");
+  assert.equal(ellipsisOn(rowNamed(page, "Linear")).getAttribute("aria-expanded"), "false");
 });
 
 test("a workspaces read that failed says so with Retry, which asks for them again", () => {
@@ -1703,12 +1708,14 @@ test("an admin's Linear row in Integrations connects Linear for the workspace at
   assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
 });
 
-test("a connected workspace's Linear reads connected for everyone, its Manage disconnects after asking, and a member sees it read only", async () => {
-  const connected: Workspace = { ...CONNECTED, linear: { active: true } };
+test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
+  const connected = WITH_LINEAR;
   const admin = await mount(connected);
   const row = rowNamed(admin.page, "Linear");
   const words = rowWords(row);
-  const controls = rowButtons(row);
+  const controls = [...row.querySelectorAll("button")].map(
+    (each) => each.textContent || each.getAttribute("aria-label"),
+  );
 
   await chooseAction(row, "Disconnect");
   await confirm("Disconnect");
@@ -1718,7 +1725,7 @@ test("a connected workspace's Linear reads connected for everyone, its Manage di
   const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
 
   assert.deepEqual(words, ["Linear", "Connected for everyone in this workspace"]);
-  assert.deepEqual(controls, ["Manage"]);
+  assert.deepEqual(controls, ["Linear actions"]);
   assert.deepEqual(linearSent(), [
     [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId: connected.id }],
   ]);

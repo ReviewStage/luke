@@ -159,7 +159,7 @@
   --terminal-find-current: #b36b00;
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
-     outside the tree (`planning.css`). */
+     outside the tree (`tasks.css`). */
   --file-icon-gray: #adadb1;
   --file-icon-red: #ff6762;
   --file-icon-vermilion: #d5512f;
@@ -886,7 +886,7 @@ body,
 }
 
 /* A draft waiting in a box (`draft-mark.tsx`): a pencil in the muted ink, at
-   the failed mark's size where it takes the same place at a tab's end. */
+   the failed mark's size. */
 .draft-mark {
   display: inline-flex;
   width: 14px;

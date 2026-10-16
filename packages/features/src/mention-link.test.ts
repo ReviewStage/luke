@@ -4,6 +4,7 @@ import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
   decodeMention,
   encodeMention,
+  handedMentionsIn,
   isMentionableTool,
   isMentionLabel,
   linkLabels,
@@ -48,6 +49,17 @@ test("a plan's address is found by its id alone, whatever workspace it is spelle
   ]) {
     assert.deepEqual(decodeMention(target, null), ROLLOUT, target);
   }
+});
+
+test("a task's address a later build writes under task reads as the one written under plan, by either scheme, and another step reads as no mention", () => {
+  for (const target of [
+    `https://tryluke.dev/acme/task/${TASK_ID}#rollout`,
+    `tryluke://tryluke.dev/acme/task/${TASK_ID}#rollout`,
+  ]) {
+    assert.deepEqual(decodeMention(target, null), ROLLOUT, target);
+  }
+  assert.deepEqual(decodeMention(`https://tryluke.dev/acme/task/${TASK_ID}`, null), TASK);
+  assert.equal(decodeMention(`https://tryluke.dev/acme/tasks/${TASK_ID}`, null), undefined);
 });
 
 test("every form written before the link was settled reads as the mention the settled form names", () => {
@@ -752,4 +764,70 @@ test("an agent on no task is mentioned by its own Luke link under the workspace,
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
   }
+});
+
+test("words pasted whole that are an address of Luke's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
+  const pasted = (words: string) => pastedLinkMention(words, REPOSITORY);
+  const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-2" };
+
+  assert.deepEqual(pasted(` ${encodeMention(ROLLOUT, PLACE)}\n`), {
+    mention: ROLLOUT,
+    name: "rollout",
+  });
+  assert.deepEqual(pasted(encodeMention(TASK, PLACE).replace("https:", "tryluke:")), {
+    mention: TASK,
+    name: "Plan",
+  });
+  assert.deepEqual(pasted(encodeMention(page, PLACE)), { mention: page, name: "Page" });
+  assert.deepEqual(pasted(encodeMention(agent, PLACE)), { mention: agent, name: "Agent" });
+  assert.equal(pasted(`https://github.com/${REPOSITORY}/blob/HEAD/src/app.ts`), undefined);
+  assert.equal(pasted("luke://mcp/linear"), undefined);
+  assert.equal(pasted(`see ${encodeMention(ROLLOUT, PLACE)}`), undefined);
+});
+
+test("an agent is handed each @ mention and each bare address of Luke's own, in order, a bare address ending where GFM ends it", () => {
+  const section = encodeMention(ROLLOUT, PLACE);
+  const plan = encodeMention(TASK, PLACE);
+  const words = [
+    `Read (${plan}), then [@app.ts](luke://file/app.ts) and **${section}**.`,
+    `Not https://github.com/${REPOSITORY}/blob/HEAD/a.ts, https://linear.app/acme/issue/LUKE-1,`,
+    `![@pic](${plan}), [the plan](${plan}), \`${section}\`, or x${section}.`,
+  ].join("\n");
+
+  assert.deepEqual(
+    handedMentionsIn(words, REPOSITORY).map(({ label, mention }) => ({ label, mention })),
+    [
+      { label: plan, mention: TASK },
+      { label: "@app.ts", mention: { kind: MENTION_KIND.FILE, path: "app.ts" } },
+      { label: section, mention: ROLLOUT },
+    ],
+  );
+});
+
+test("a message is read for at most twenty mentions across its @ links and its bare addresses", () => {
+  const words = Array.from({ length: 25 }, (_, at) =>
+    at % 2 === 0
+      ? `[@f${at}](luke://file/f${at}.ts)`
+      : encodeMention({ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: `s${at}` }, PLACE),
+  ).join(" ");
+
+  const handed = handedMentionsIn(words, null);
+
+  assert.equal(handed.length, 20);
+  assert.deepEqual(handed.at(-1)?.mention, {
+    kind: MENTION_KIND.SECTION,
+    taskId: TASK_ID,
+    anchor: "s19",
+  });
+});
+
+test("a bare address's end is read in one pass however long the punctuation after it", () => {
+  const section = encodeMention(ROLLOUT, PLACE);
+  const words = `${section}${"!".repeat(50_000)}${")".repeat(50_000)}`;
+
+  assert.deepEqual(
+    handedMentionsIn(words, null).map(({ target }) => target),
+    [section],
+  );
 });

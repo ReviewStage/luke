@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { ownFailedAutomationRuns } from "@luke/database/models/automation-store";
 import type { AccountFailedRun, AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
-import { Clock, Duration, Effect, Schedule } from "effect";
+import { Clock, Duration, Effect } from "effect";
+import { cursorOf, heldUntilMoved as heldOpen } from "../../http/held-read.js";
 import {
   accountInboxAutomations,
   accountInboxTasks,
@@ -22,9 +22,9 @@ import { CODER } from "./bounds.js";
 /**
  * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
  *
- * The cursor is a digest of where every item stands, so a post, a close,
- * an answer, and a new item each move it, and a reader that holds it hears
- * the next change once. A read whose cursor is
+ * The cursor is a digest of where every item stands (`http/held-read.ts`),
+ * so a post, a close, an answer, and a new item each move it, and a reader
+ * that holds it hears the next change once. A read whose cursor is
  * still the inbox's is held, looked at again every `MESSAGES_POLL`, each
  * look reading where the items stand and none of their words, and let
  * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
@@ -51,43 +51,18 @@ import { CODER } from "./bounds.js";
 /** How far back a run that failed to start is still carried to its automation's owner. */
 const FAILED_RUN_WINDOW = Duration.days(7);
 
-/** How many characters of the digest a cursor carries: far more than any two inboxes of a plan could share by chance. */
-const CURSOR_CHARS = 32;
+/** What a cursor digests of one thing it covers, an item or a failed run. */
+type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
+  readonly status: string;
+};
 
-/** What a cursor digests of one thing it covers, an item or a failed run: its id, revision, status, and instant. */
-type CursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & { readonly status: string };
-
-/**
- * Where the inbox stands for a reader: a digest of every item's id,
- * revision, status, and instant, taken in the items' id order so the same
- * items read in another order are the same cursor, and any change to any
- * item moves it, two within one millisecond included. Note that an empty
- * inbox digests to a cursor of its own rather than the start, so a first
- * read answers at once.
- */
-function cursorOf(stamps: readonly CursorStamp[]): string {
-  const standing = stamps
-    .map((stamp) => [stamp.id, stamp.revision, stamp.status, stamp.updatedAt] as const)
-    .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, CURSOR_CHARS);
-}
-
-/**
- * Waits until the stamps move past the reader's cursor, or the hold ends:
- * each look reads where the items stand and none of their words, and the
- * caller reads them whole once this returns.
- */
+/** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends. */
 function heldUntilMoved(
-  stamps: InboxStoreEffect<readonly CursorStamp[]>,
+  stamps: InboxStoreEffect<readonly InboxCursorStamp[]>,
   after: string,
   poll: Duration.Duration,
 ): InboxStoreEffect<void> {
-  const moved = Effect.map(stamps, (standing) => cursorOf(standing) !== after);
-  return moved.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: (changed) => changed }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
-    Effect.asVoid,
-  );
+  return heldOpen(stamps, after, poll, CODER.MESSAGES_HOLD);
 }
 
 /** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
@@ -101,7 +76,7 @@ function failedRunsOf(userId: string): InboxStoreEffect<readonly AccountFailedRu
 }
 
 /** Where each failed run stands, as the cursor digests it beside the items: a run settles once, so its id and instant are all of it. */
-function failedRunStamps(runs: readonly AccountFailedRun[]): readonly CursorStamp[] {
+function failedRunStamps(runs: readonly AccountFailedRun[]): readonly InboxCursorStamp[] {
   return runs.map((run) => ({
     id: run.id,
     revision: 0,

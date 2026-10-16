@@ -1,0 +1,217 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "words",
+                "block"
+              ]
+            },
+            "quote": {
+              "type": "string"
+            },
+            "anchor": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "to": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            },
+            "section": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "resolved"
+              ]
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "comment",
+                      "asked",
+                      "resolved",
+                      "reopened"
+                    ]
+                  },
+                  "writer": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string",
+                        "enum": [
+                          "member",
+                          "luke",
+                          "agent"
+                        ]
+                      },
+                      "by": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "agentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 36
+                      }
+                    },
+                    "required": [
+                      "actor"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "words": {
+                    "type": "string"
+                  },
+                  "asked": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string",
+                        "enum": [
+                          "luke",
+                          "agent"
+                        ]
+                      },
+                      "agentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 36
+                      }
+                    },
+                    "required": [
+                      "actor"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "at": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "editedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "writer",
+                  "at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "createdAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "updatedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "revision": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "scope",
+            "quote",
+            "section",
+            "status",
+            "entries",
+            "createdAt",
+            "updatedAt",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "thread"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "deleted": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "refused": {
+          "type": "string",
+          "enum": [
+            "too-many",
+            "no-words",
+            "not-yours",
+            "no-entry",
+            "key-taken"
+          ]
+        }
+      },
+      "required": [
+        "refused"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

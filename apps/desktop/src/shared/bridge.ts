@@ -215,8 +215,8 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:voice-hotkey-press",
     args: noArgs,
-    result: result<{ planId: string } | undefined>(
-      (value) => value === undefined || (isRecord(value) && isWireString(value.planId)),
+    result: result<{ taskId: string } | undefined>(
+      (value) => value === undefined || (isRecord(value) && isWireString(value.taskId)),
     ),
   }),
   onVoiceHotkeyRelease: entry({
@@ -252,11 +252,11 @@ export const BRIDGE = {
    * voice window alone, carrying the plan the panel had open when it was
    * pressed and nothing else.
    */
-  onPlanningTalk: entry({
+  onTasksTalk: entry({
     kind: "subscribe",
     channel: "app:planning-talk-forwarded",
     args: noArgs,
-    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+    result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),
   /**
    * A coding agent's notification clicked: the panel is to open the plan on
@@ -268,10 +268,10 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:show-agent",
     args: noArgs,
-    result: result<{ planId: string | null; agentId: string }>(
+    result: result<{ taskId: string | null; agentId: string }>(
       (value) =>
         isRecord(value) &&
-        (value.planId === null || isWireString(value.planId)) &&
+        (value.taskId === null || isWireString(value.taskId)) &&
         isWireString(value.agentId),
     ),
   }),
@@ -284,7 +284,7 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:show-inbox",
     args: noArgs,
-    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+    result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),
   /**
    * A notification of an item of an agent with no plan clicked: the panel is
@@ -373,11 +373,11 @@ export const BRIDGE = {
    * own card: the panel is to show the call's plan. An event, as a notification's click is, because it is an
    * ask the window answers once.
    */
-  onShowPlan: entry({
+  onShowTask: entry({
     kind: "subscribe",
-    channel: "app:show-plan",
+    channel: "app:show-task",
     args: noArgs,
-    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+    result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),
   /**
    * A Luke link the system handed the app: the panel is to open the place it
@@ -403,7 +403,7 @@ export const BRIDGE = {
     channel: "app:agent-ended",
     args: noArgs,
     result: result<{
-      planId: string | null;
+      taskId: string | null;
       agentId: string;
       words: string;
       detail: string;
@@ -411,7 +411,7 @@ export const BRIDGE = {
     }>(
       (value) =>
         isRecord(value) &&
-        (value.planId === null || isWireString(value.planId)) &&
+        (value.taskId === null || isWireString(value.taskId)) &&
         isWireString(value.agentId) &&
         isWireString(value.words) &&
         isWireString(value.detail) &&
@@ -428,10 +428,10 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:inbox-item-opened",
     args: noArgs,
-    result: result<{ planId: string; itemId: string; words: string; detail: string }>(
+    result: result<{ taskId: string; itemId: string; words: string; detail: string }>(
       (value) =>
         isRecord(value) &&
-        isWireString(value.planId) &&
+        isWireString(value.taskId) &&
         isWireString(value.itemId) &&
         isWireString(value.words) &&
         isWireString(value.detail),

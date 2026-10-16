@@ -42,7 +42,7 @@ export function useColumnDock(
     if (host === null) return;
     // Found afresh on every change under the shell, because a plan still
     // loading draws its column only once its document lands.
-    const columnSelector = panelFull ? ".side-panel" : ".desktop-plan-main, .agent-page";
+    const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
     let column = host.querySelector(columnSelector);
     const sized = new ResizeObserver(() => write());
     function write(): void {

@@ -11,9 +11,11 @@ import { task } from "./plan.js";
  * (`repository-pin.ts`): a plan of a shared workspace pinned by one member
  * stands pinned for them alone, and follows their sign-in to every Mac.
  * Pinning a plan already pinned keeps the instant it was first pinned;
- * unpinning deletes the row. Each row leaves with its account or its plan,
- * whichever goes first, and one left behind by a member who has since left
- * the workspace reads as nothing, since every read gates on membership first.
+ * dragging it in the sidebar gives it a position, which a pin with none
+ * stands beside by that instant; unpinning deletes the row. Each row
+ * leaves with its account or its plan, whichever goes first, and one left
+ * behind by a member who has since left the workspace reads as nothing,
+ * since every read gates on membership first.
  */
 export const taskPin = pgTable(
   "plan_pin",
@@ -24,6 +26,8 @@ export const taskPin = pgTable(
     taskId: uuid("plan_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
+    // Where the pin stands in the sidebar's Pinned section once it has been dragged, a fractional index (`@luke/features/pin-order`); null stands it by `pinnedAt`.
+    position: text("position"),
     pinnedAt: timestamptz("pinned_at").notNull(),
   },
   (table) => [

@@ -66,16 +66,16 @@ export function voiceRuntimeActRows(
     // own card, names no plan: the call's is read here, so it cannot bring
     // forward a plan the call is not about.
     [ACT_KIND.CALL_SHOW_TASK]: (_payload, { call, panel }) => {
-      const planId = state.snapshot().voice.view?.callTaskId;
-      if ((!call && !panel) || planId === undefined) return;
+      const taskId = state.snapshot().voice.view?.callTaskId;
+      if ((!call && !panel) || taskId === undefined) return;
       panels.focusExpanded();
-      panels.broadcast(channels.onShowPlan, { planId });
+      panels.broadcast(channels.onShowTask, { taskId });
     },
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
-    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp, taskId: planId }, { voice }) =>
+    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp, taskId }, { voice }) =>
       voice
-        ? Effect.map(liveSession.createLiveSession(sdp, planId), Option.getOrUndefined)
+        ? Effect.map(liveSession.createLiveSession(sdp, taskId), Option.getOrUndefined)
         : Effect.succeed(undefined),
     [ACT_KIND.VOICE_END_LIVE_SESSION]: (request, { voice }) =>
       voice ? Effect.as(liveSession.endLiveSession(request), undefined) : Effect.succeed(undefined),

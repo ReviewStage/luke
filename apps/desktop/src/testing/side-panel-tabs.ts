@@ -10,12 +10,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { TOOL_STATE } from "../renderer/ai-elements/tool";
-import { AgentChangesTab } from "../renderer/planning/agent-changes-tab";
-import { notesBefore } from "../renderer/planning/file-note";
-import { PagePane } from "../renderer/planning/page-pane";
-import { TranscriptSubagent } from "../renderer/planning/transcript-blocks";
+import { AgentChangesTab } from "../renderer/tasks/agent-changes-tab";
+import { notesBefore } from "../renderer/tasks/file-note";
+import { PagePane } from "../renderer/tasks/page-pane";
+import { TranscriptSubagent } from "../renderer/tasks/transcript-blocks";
 import { onRegistry } from "./copy-feedback";
-import { codingAgentsControl } from "./plans-control";
+import { codingAgentsControl } from "./tasks-control";
 
 /**
  * side-panel-tabs.ts -- the side panel's tabs drawn as the panel draws them, synthetic throughout, for the tests that read them at a width (`container-width.ts`).
@@ -158,7 +158,7 @@ export function drawSubagentRow(): Promise<HTMLElement> {
 export function drawPageTab(): Promise<HTMLElement> {
   return drawn(
     createElement(PagePane, {
-      planId: PLAN,
+      taskId: PLAN,
       page: PAGE,
       // The page is drawn rather than its source, which is never read.
       readSource: () => Promise.resolve({ lines: [] }),

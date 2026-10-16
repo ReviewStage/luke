@@ -300,19 +300,19 @@ function ViewChip({
  */
 export function ViewChips({
   createdBy,
-  plans,
+  tasks,
   onClearCreatedBy,
   archive,
 }: {
   createdBy: string | undefined;
   /** The listed tasks, which name a creator the members no longer list. */
-  plans: readonly TaskSummary[];
+  tasks: readonly TaskSummary[];
   onClearCreatedBy: () => void;
   archive: ArchivedView;
 }): React.JSX.Element | null {
   const reader = useMemberDirectory();
   if (createdBy === undefined && !archive.shown) return null;
-  const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, plans);
+  const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, tasks);
   return (
     <div className="sidebar-view-chips">
       {actor === undefined ? null : (

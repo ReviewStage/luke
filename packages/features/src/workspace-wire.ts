@@ -117,6 +117,8 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "sign-up",
   "status",
   "support",
+  "task",
+  "tasks",
   "terms",
 ]);
 

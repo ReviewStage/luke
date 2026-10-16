@@ -10,9 +10,9 @@ import type { CallCardInput } from "../call/call-card";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
 import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
-import { revisionSummary } from "../planning/plan-history-model";
-import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
-import { sayRestored } from "../planning/version-view";
+import { revisionSummary } from "../tasks/plan-history-model";
+import { type PlanHistorySource, usePlanHistory } from "../tasks/use-plan-history";
+import { sayRestored } from "../tasks/version-view";
 import { useToast } from "../toast";
 import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page";
 
@@ -120,7 +120,7 @@ export function TemplateVersionHistory({
   );
   const versions = usePlanHistory({
     source,
-    planId: TEMPLATE_DOCUMENT_ID,
+    taskId: TEMPLATE_DOCUMENT_ID,
     editedAt: undefined,
     name: TEMPLATE_TITLE,
     shown: true,

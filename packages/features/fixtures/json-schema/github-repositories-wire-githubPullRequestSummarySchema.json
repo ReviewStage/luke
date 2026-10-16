@@ -19,6 +19,9 @@
         "merged",
         "closed"
       ]
+    },
+    "author": {
+      "type": "string"
     }
   },
   "required": [

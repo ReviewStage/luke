@@ -1,7 +1,7 @@
 import { linkFace, TEXT_LINK_CLASS } from "@luke/ui/link-face";
 import { ArrowUpRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { opensAsLink } from "./planning/use-open-link";
+import { opensAsLink } from "./tasks/use-open-link";
 import { Tooltip } from "./tooltip";
 
 /**

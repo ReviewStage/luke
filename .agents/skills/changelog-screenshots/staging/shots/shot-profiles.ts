@@ -18,7 +18,7 @@ import { inboxShot } from "./inbox";
 import { integrationsShot } from "./integrations";
 import { pagesShot } from "./pages";
 import { paletteShot } from "./palette";
-import { plansShot } from "./plans";
+import { tasksShot } from "./tasks";
 import type { ShotSpec } from "./shot-spec";
 import { skillsShot } from "./skills";
 
@@ -32,7 +32,7 @@ const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
   [RUN_PROFILE.SHOT_SKILLS, skillsShot],
   [RUN_PROFILE.SHOT_PAGES, pagesShot],
   [RUN_PROFILE.SHOT_INTEGRATIONS, integrationsShot],
-  [RUN_PROFILE.SHOT_PLANS, plansShot],
+  [RUN_PROFILE.SHOT_TASKS, tasksShot],
   [RUN_PROFILE.SHOT_PALETTE, paletteShot],
 ]);
 

@@ -181,6 +181,19 @@ plan ever showed, pasted and undone, is deleted a day after it was sent.
 Deleting the task deletes its pictures; deleting your account leaves the
 pictures you added to a task that stays, as it leaves the words you wrote.
 
+**A plan's comments.** When you comment on a task's plan, our service keeps
+the comment in our database beside the task, under the task rather than your
+account: your words, which member wrote them and when, the words of the plan
+the thread is on as they stood when it was started, where those words stand
+in the plan now, and the section they stand in. It keeps the same of each
+reply, edit, resolve, and reopen, and of every comment Luke or a coding agent
+on the task writes, naming the member whose turn it ran on. Every member of
+the workspace sees every comment, as they see the plan. Comments are stored
+as written and readable by our own operators, like the plan. Deleting a
+comment or a thread deletes it at once; deleting the task deletes all of its
+comments; deleting your account leaves the comments you wrote on a task that
+stays, naming nobody, as it leaves the words you wrote.
+
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
 template (up to 20,000 characters; a built-in one until you do), sent as you
@@ -857,7 +870,9 @@ only when you press Send.
   choice is your account's, so it follows you to every Mac you sign in on.
   Each call that shows Luke on video opens one avatar session at Keyframe: our
   service asks Keyframe for it
-  on our key, naming the stock persona Luke appears as and nothing about you,
+  on our key, naming the stock persona Luke appears as (the default, or the
+  avatar you chose under Video calls, which is kept on that Mac) and nothing
+  about you,
   and hands the session's one-time pass to your Mac, where only Luke's main
   window holds it. That window then sends Keyframe Luke's synthesized voice as
   he speaks, which carries what he says about your plan, and plays back the
@@ -869,7 +884,11 @@ only when you press Send.
   receives is Luke's alone. Our service logs only whether a session started, the
   Keyframe server it opened on, and, when one could not, why, and keeps, with
   the call's record, when each session started and ended, its length, and why it
-  ended. Keyframe keeps what it receives under its own retention policy.
+  ended. Keyframe keeps what it receives under its own retention policy. The
+  Avatar menu under Video calls shows each stock avatar's photo, which your
+  Mac loads straight from Keyframe's public storage as the menu is drawn, so
+  Keyframe sees your Mac's IP address then, as any site serving an image does;
+  no referrer and nothing of yours is sent with it.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash

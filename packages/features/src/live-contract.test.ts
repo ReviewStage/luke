@@ -16,6 +16,7 @@ import {
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "./live-contract.js";
+import { VIDEO_AVATAR } from "./video-avatar.js";
 
 const SDP =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
@@ -108,7 +109,7 @@ test("a development override reduces to its origin; a packaged build never leave
 
 const REQUEST_ID = "2b000000-0000-4000-8000-000000000002";
 
-test("the desktop's avatar frames are a start with nothing else, or a stop with a listed reason", () => {
+test("the desktop's avatar frames are a start naming at most an avatar, or a stop with a listed reason", () => {
   const start = { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId: REQUEST_ID };
   const stop = {
     type: VOICE_SERVICE_FRAME.AVATAR_STOP,
@@ -117,8 +118,18 @@ test("the desktop's avatar frames are a start with nothing else, or a stop with 
   };
   assert.deepEqual(avatarRequestFrameFromWire(start), start);
   assert.deepEqual(avatarRequestFrameFromWire(stop), stop);
-  // A request names only what it declares: the service picks the persona, never the desktop.
+  // A request names only what it declares: an avatar by its key, never Keyframe's persona.
   assert.equal(avatarRequestFrameFromWire({ ...start, personaId: "p_1" }), undefined);
+  const chosen = { ...start, avatar: VIDEO_AVATAR.CELIA };
+  assert.deepEqual(avatarRequestFrameFromWire(chosen), chosen);
+  // An avatar a newer Mac lists reads as the default, so the start is still answered.
+  assert.deepEqual(avatarRequestFrameFromWire({ ...start, avatar: "nova" }), {
+    ...start,
+    avatar: VIDEO_AVATAR.DEFAULT,
+  });
+  const longAvatar = "a".repeat(AVATAR_FRAME_BOUNDS.AVATAR_CHARS + 1);
+  assert.equal(avatarRequestFrameFromWire({ ...start, avatar: longAvatar }), undefined);
+  assert.equal(avatarRequestFrameFromWire({ ...start, avatar: 7 }), undefined);
   assert.equal(avatarRequestFrameFromWire({ ...stop, reason: "bored" }), undefined);
   assert.equal(
     avatarRequestFrameFromWire({ type: VOICE_SERVICE_FRAME.AVATAR_STOP, requestId: REQUEST_ID }),

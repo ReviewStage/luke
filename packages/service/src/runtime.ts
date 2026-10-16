@@ -12,7 +12,10 @@ import { FetchHttpClient } from "effect/http";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
-import { integrationConnectFromEnvironment } from "./integrations/integration-connect.js";
+import {
+  integrationConnectFromEnvironment,
+  workspaceLinearConnectFromEnvironment,
+} from "./integrations/integration-connect.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
 /**
@@ -51,7 +54,8 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  *
  * `IntegrationConnect` is the one place each integration's connector UID and
  * allowlist are read, for the account routes that connect and disconnect an account and
- * the agents that read its tokens alike.
+ * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
+ * place the workspace Linear connector's UID is.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -70,6 +74,7 @@ export const webServices = Layer.mergeAll(
   hostedEnvironment,
   githubAppFromEnvironment,
   integrationConnectFromEnvironment,
+  workspaceLinearConnectFromEnvironment,
   webLogger,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));

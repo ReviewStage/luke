@@ -898,6 +898,32 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       }),
   );
 
+  it.effect(
+    "an agent's pin dragged to a position keeps its first instant, and is the dragging member's alone",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, agentId } = yield* openSharedAgent;
+        const pinnedAt = yield* Clock.currentTimeMillis;
+        yield* pinCodingAgent(dean, agentId, true);
+        yield* pinCodingAgent(charles, agentId, true);
+        yield* TestClock.adjust("1 minute");
+
+        yield* pinCodingAgent(dean, agentId, true, "a1");
+        yield* pinCodingAgent(dean, agentId, true, "Zz");
+        yield* pinCodingAgent(dean, agentId, true);
+
+        const listed = (agents: readonly { id: string; pinPosition: string | null }[]) =>
+          agents.find(({ id }) => id === agentId)?.pinPosition;
+        assert.equal(listed(yield* listTasklessCodingAgents(dean)), "Zz");
+        assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
+        assert.equal(listed(yield* listTasklessCodingAgents(charles)), null);
+
+        yield* pinCodingAgent(dean, agentId, false);
+        yield* pinCodingAgent(dean, agentId, true);
+        assert.equal(listed(yield* listTasklessCodingAgents(dean)), null);
+      }),
+  );
+
   it.effect("an account outside the workspace can neither pin the agent nor read a pin of it", () =>
     Effect.gen(function* () {
       const { dean, agentId } = yield* openSharedAgent;

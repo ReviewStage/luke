@@ -24,6 +24,7 @@ import {
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
 import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -507,6 +508,8 @@ export type TasksRenameParams = typeof tasksRenameParamsSchema.Type;
 export const tasksPinParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   pinned: EffectSchema.Boolean,
+  /** Where the pin stands in the sidebar's Pinned section, given as it is dragged there; only with a pin. */
+  position: EffectSchema.optionalKey(pinPositionSchema),
 });
 
 export type TasksPinParams = typeof tasksPinParamsSchema.Type;

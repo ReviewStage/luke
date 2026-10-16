@@ -251,7 +251,7 @@ export function composeDesktop(
         listAgents: (planId) => operator.host.codingAgentList({ taskId: planId }),
         readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
-        taskName: (planId) => noticeTaskTitle(state.snapshot().tasks, planId),
+        taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),
         open: (place) => {
           windows.panels.focusExpanded();
           windows.showAgent(place);
@@ -275,9 +275,9 @@ export function composeDesktop(
         readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
         accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
         onInboxChanged: (inbox) => state.update({ inbox }),
-        openInbox: (planId) => {
+        openInbox: (taskId) => {
           windows.panels.focusExpanded();
-          windows.showInbox(planId);
+          windows.showInbox(taskId);
         },
         openTasklessItem: (item) => {
           windows.panels.focusExpanded();

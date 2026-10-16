@@ -59,6 +59,8 @@ export interface GitHubPullRequest {
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
+  /** The login of who opened it, where GitHub named one. */
+  readonly author?: string;
 }
 
 /** What a read fails with: GitHub unreachable or answering off its shape. */
@@ -104,6 +106,8 @@ const PullRequestSchema = Schema.Struct({
   deletions: Schema.Number,
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
+  /** Who opened it; null where their account is gone. */
+  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -257,6 +261,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     additions: record.additions,
     deletions: record.deletions,
     changedFiles: record.changed_files,
+    ...(record.user == null ? undefined : { author: record.user.login }),
   };
 }
 

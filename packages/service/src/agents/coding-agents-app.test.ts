@@ -1558,6 +1558,37 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member's PATCH drags their pin of an agent with no plan to a position the list then carries, and one given with an unpin is refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task: plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const patch = (body: { pinned: boolean; position: string }) =>
+          ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
+        const listed = Effect.map(ask(request(TASKS, owner)), (answered) =>
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).planlessAgents?.find(
+            (each) => each.id === agent.id,
+          ),
+        );
+
+        const placed = yield* patch({ pinned: true, position: "a1" });
+        const refused = yield* patch({ pinned: false, position: "a2" });
+        const held = yield* listed;
+
+        assert.equal(placed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.equal(held?.pinPosition, "a1");
+        assert.notEqual(held?.pinnedAt, undefined);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {
@@ -1654,7 +1685,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "each member's line to an agent names them as its sender, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
+    "each member's line to an agent names them as its sender and when it was sent, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1669,6 +1700,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
         );
         yield* sent("Use seven days.");
+        // Charles answers a minute later, which the time each line names says.
+        yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
@@ -1719,6 +1752,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
+
+        // Every line names when it was sent, a minute apart where they were.
+        const sentAts = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        )
+          .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
+          .map((message) => message.sentAt);
+        assert.ok(sentAts.every((at) => at !== undefined));
+        assert.equal((sentAts[2] ?? 0) - (sentAts[1] ?? 0), Duration.toMillis(Duration.minutes(1)));
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
         assert.deepEqual((yield* sendersAs(owner))[2], [

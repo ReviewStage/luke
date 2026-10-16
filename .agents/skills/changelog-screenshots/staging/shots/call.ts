@@ -19,15 +19,15 @@
  */
 
 import {
-  PLAN_WORK_PART,
-  PLAN_WORK_STATE,
-  PLAN_WORK_TOOL,
-  PLANNING_READ,
-  type PlanWorkPart,
-  type PlanWorkTurn,
+  TASK_WORK_PART,
+  TASK_WORK_STATE,
+  TASK_WORK_TOOL,
+  TASKS_READ,
+  type TaskWorkPart,
+  type TaskWorkTurn,
 } from "@luke/features/planning-view";
 import {
-  type PlanTranscript,
+  type TaskTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@luke/features/transcript-wire";
@@ -38,10 +38,10 @@ import {
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
 } from "@luke/live";
-import { FIXTURE_CALL_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CALL_PANEL } from "../tasks/tasks-fixture";
 import { ago, secondsAgo } from "./clock";
 import { codingAgentAnswers, MODEL } from "./coding-agent";
-import { SHOT_ID, shotPlanningView } from "./plan-document";
+import { SHOT_ID, shotTasksView } from "./plan-document";
 import type { ShotSpec, ShotStep } from "./shot-spec";
 
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
@@ -112,7 +112,7 @@ function earlierMessage([role, text]: readonly [TranscriptSpeaker, string], inde
 }
 
 /** What the record holds: yesterday's call, ended, and the one standing now, whose words the voice window reports. */
-function shotTranscript(): PlanTranscript {
+function shotTranscript(): TaskTranscript {
   return {
     calls: [
       {
@@ -141,16 +141,16 @@ function shotTranscript(): PlanTranscript {
 /** A command the planning model ran, in the plan's repository or on the developer's Mac, answered with `output`. */
 function command(
   id: string,
-  where: typeof PLAN_WORK_TOOL.REPOSITORY | typeof PLAN_WORK_TOOL.MAC_COMMAND,
+  where: typeof TASK_WORK_TOOL.REPOSITORY | typeof TASK_WORK_TOOL.MAC_COMMAND,
   line: string,
   output: string | undefined,
 ) {
   return {
-    type: PLAN_WORK_PART.TOOL,
+    type: TASK_WORK_PART.TOOL,
     id,
     tool: where,
-    name: where === PLAN_WORK_TOOL.MAC_COMMAND ? "run_on_mac" : "run_in_repository",
-    state: output === undefined ? PLAN_WORK_STATE.RUNNING : PLAN_WORK_STATE.DONE,
+    name: where === TASK_WORK_TOOL.MAC_COMMAND ? "run_on_mac" : "run_in_repository",
+    state: output === undefined ? TASK_WORK_STATE.RUNNING : TASK_WORK_STATE.DONE,
     subject: line,
     input: JSON.stringify({ command: line }),
     ...(output === undefined ? undefined : { output }),
@@ -158,15 +158,15 @@ function command(
 }
 
 /** The subagent yesterday's turn handed a search to, finished, on Sonnet 5.5 at medium effort. */
-function subagent(startedAt: number): PlanWorkPart {
+function subagent(startedAt: number): TaskWorkPart {
   const task =
     "Find every place that reads a pending membership, so withdrawing an invite doesn't strand a row.";
   return {
-    type: PLAN_WORK_PART.TOOL,
+    type: TASK_WORK_PART.TOOL,
     id: "shot-call-worker",
-    tool: PLAN_WORK_TOOL.WORKER,
+    tool: TASK_WORK_TOOL.WORKER,
     name: "worker",
-    state: PLAN_WORK_STATE.DONE,
+    state: TASK_WORK_STATE.DONE,
     subject: task,
     task: "task_4kR9wPz2",
     input: JSON.stringify({ message: task }),
@@ -181,14 +181,14 @@ function subagent(startedAt: number): PlanWorkPart {
       parts: [
         command(
           "shot-worker-1",
-          PLAN_WORK_TOOL.REPOSITORY,
+          TASK_WORK_TOOL.REPOSITORY,
           'rg -n "pending" src/members src/workspaces',
           "src/members/invite.ts:18:    state: 'pending',\n" +
             "src/members/list.ts:22:  .where(eq(memberships.state, 'active'))\n" +
             "src/workspaces/seats.ts:31:  // pending invites hold a seat until accepted",
         ),
         {
-          type: PLAN_WORK_PART.TEXT,
+          type: TASK_WORK_PART.TEXT,
           text: "Three readers: invite.ts writes it, list.ts filters it out, and seats.ts counts it as a seat. Withdrawing should delete the row so the seat frees up.",
         },
       ],
@@ -201,14 +201,14 @@ function subagent(startedAt: number): PlanWorkPart {
  * developer's ask; and the turn standing now, twenty seconds in, under the
  * developer's last line on the call.
  */
-function shotWork(): PlanWorkTurn[] {
+function shotWork(): TaskWorkTurn[] {
   const askedAt = EARLIER_START + 9 * SECOND_MS;
   return [
     {
       turnId: "shot-turn-withdraw",
       startedAt: askedAt,
       endedAt: askedAt + 52 * SECOND_MS,
-      state: PLAN_WORK_STATE.DONE,
+      state: TASK_WORK_STATE.DONE,
       earlierOmitted: false,
       asked: [EARLIER_ASK_ROW],
       model: MODEL.SOL,
@@ -216,19 +216,19 @@ function shotWork(): PlanWorkTurn[] {
       tokens: { inputTokens: 48_215, outputTokens: 1_874, cachedInputTokens: 36_864 },
       parts: [
         {
-          type: PLAN_WORK_PART.REASONING,
+          type: TASK_WORK_PART.REASONING,
           text: "Who can withdraw today? Read withdrawInvite, hand the pending-membership readers to a subagent, and check the history for why it is sender-only.",
         },
         command(
           "shot-call-1",
-          PLAN_WORK_TOOL.REPOSITORY,
+          TASK_WORK_TOOL.REPOSITORY,
           "rg -n \"state = 'pending'\" src",
           "src/db/schema/memberships.ts:14:  // state = 'pending' until the invite is accepted\n" +
             "src/members/invite.ts:18:    state: 'pending',",
         ),
         command(
           "shot-call-2",
-          PLAN_WORK_TOOL.REPOSITORY,
+          TASK_WORK_TOOL.REPOSITORY,
           "sed -n 40,52p src/members/invite.ts",
           "export async function withdrawInvite(invite: Invite, by: Member) {\n" +
             "  if (invite.invitedBy !== by.id) throw new InviteError('not-yours');\n" +
@@ -238,7 +238,7 @@ function shotWork(): PlanWorkTurn[] {
         subagent(askedAt + 14 * SECOND_MS),
         command(
           "shot-call-3",
-          PLAN_WORK_TOOL.MAC_COMMAND,
+          TASK_WORK_TOOL.MAC_COMMAND,
           "git -C ~/code/relay log --oneline -3 -- src/members",
           JSON.stringify({
             stdout:
@@ -250,7 +250,7 @@ function shotWork(): PlanWorkTurn[] {
           }),
         ),
         {
-          type: PLAN_WORK_PART.TEXT,
+          type: TASK_WORK_PART.TEXT,
           text: "Only the sender can withdraw today: withdrawInvite checks invitedBy and nothing else, and e81f2c4 calls that a stopgap. removeMember already allows any admin through assertAdmin.",
         },
       ],
@@ -258,25 +258,25 @@ function shotWork(): PlanWorkTurn[] {
     {
       turnId: "shot-turn-expiry",
       startedAt: secondsAgo(20),
-      state: PLAN_WORK_STATE.RUNNING,
+      state: TASK_WORK_STATE.RUNNING,
       earlierOmitted: false,
       askedAt: [{ voiceSessionId: LIVE_SESSION, fromMs: LIVE_ASK_FROM_MS }],
       model: MODEL.SOL,
       effort: "medium",
       parts: [
         {
-          type: PLAN_WORK_PART.REASONING,
+          type: TASK_WORK_PART.REASONING,
           text: "Seven days stays the default. Look for a per-workspace settings table an expiry override could live in.",
         },
         command(
           "shot-call-4",
-          PLAN_WORK_TOOL.REPOSITORY,
+          TASK_WORK_TOOL.REPOSITORY,
           "ls src/db/schema",
           "invites.ts\nmemberships.ts\nusers.ts\nworkspaces.ts",
         ),
         command(
           "shot-call-5",
-          PLAN_WORK_TOOL.REPOSITORY,
+          TASK_WORK_TOOL.REPOSITORY,
           'rg -n "settings" src/db/schema/workspaces.ts',
           undefined,
         ),
@@ -289,7 +289,7 @@ function shotWork(): PlanWorkTurn[] {
 function shotCall(): NonNullable<ShotSpec["call"]> {
   return {
     voiceStatus: LIVE_STATUS.LISTENING,
-    callPlanId: SHOT_ID.PLAN,
+    callTaskId: SHOT_ID.TASK,
     callTranscript: {
       voiceSessionId: LIVE_SESSION,
       lines: LIVE_LINES.map(([speaker, words, startMs, endMs], index) => ({
@@ -309,7 +309,7 @@ function shotCall(): NonNullable<ShotSpec["call"]> {
  * output stays folded.
  */
 const CLOSED_FOLD =
-  '.plan-call details[data-turn-fold]:not([data-shot-opened]) > summary[aria-expanded="false"]';
+  '.task-call details[data-turn-fold]:not([data-shot-opened]) > summary[aria-expanded="false"]';
 
 /** Opens every closed turn fold on the Call tab once, a nested one as its parent's opening draws it. */
 function openFolds(): void {
@@ -333,9 +333,9 @@ const OPEN_FOLDS: ShotStep = {
 
 export function callShot(): ShotSpec {
   return {
-    planning: shotPlanningView({
+    tasks: shotTasksView({
       extra: {
-        transcript: { status: PLANNING_READ.READY, transcript: shotTranscript() },
+        transcript: { status: TASKS_READ.READY, transcript: shotTranscript() },
         work: shotWork(),
       },
     }),

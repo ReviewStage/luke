@@ -131,7 +131,7 @@ test("the stack stands on the highest dock at the window's foot by the styleshee
   const watched = vi.spyOn(MutationObserver.prototype, "observe");
   const sized = vi.spyOn(ResizeObserver.prototype, "observe");
   const column = document.body.appendChild(document.createElement("div"));
-  column.className = "desktop-plan-main";
+  column.className = "desktop-task-main";
   const docks = ["desktop-call-bar", "agent-composer", "agent-todos-dock"].map((name) => {
     const dock = column.appendChild(document.createElement("div"));
     dock.className = name;

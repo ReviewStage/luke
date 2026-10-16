@@ -58,7 +58,7 @@ const readVoiceSession = (liveSessionId: string) =>
 
 /** A call registered about the plan, started at the instant given, with the segments said on it in order. */
 const callWith = (
-  input: { userId: string; planId: string; startedAt: number },
+  input: { userId: string; taskId: string; startedAt: number },
   segments: ReadonlyArray<readonly [VoiceSegmentRole, string]>,
 ) =>
   Effect.gen(function* () {
@@ -67,7 +67,7 @@ const callWith = (
     const voiceSessionId = yield* record.register({
       userId: input.userId,
       sessionId: liveSessionId,
-      taskId: input.planId,
+      taskId: input.taskId,
       attachId: randomUUID(),
       model: LIVE_DEFAULTS.MODEL,
     });
@@ -92,11 +92,11 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         const owner = yield* openUser;
         const other = yield* openUser;
         const liveSessionId = `live_r_${randomUUID()}`;
-        const planId = randomUUID();
+        const taskId = randomUUID();
         const registered = yield* record.register({
           userId: owner,
           sessionId: liveSessionId,
-          taskId: planId,
+          taskId: taskId,
           attachId: randomUUID(),
           model: LIVE_DEFAULTS.MODEL,
         });
@@ -114,7 +114,7 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         assert.equal(taken, undefined);
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           voiceSessionId: registered,
-          taskId: planId,
+          taskId: taskId,
         });
         assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), undefined);
         assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), undefined);
@@ -146,11 +146,11 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         const starter = yield* openUser;
         const teammate = yield* openUser;
         const stranger = yield* openUser;
-        const plan = yield* startTask(starter, { name: "Teammate invitations" });
-        yield* joinWorkspace(plan.workspaceId, teammate);
+        const task = yield* startTask(starter, { name: "Teammate invitations" });
+        yield* joinWorkspace(task.workspaceId, teammate);
 
-        assert.equal((yield* record.heldTask({ userId: teammate, taskId: plan.id }))?.id, plan.id);
-        assert.equal(yield* record.heldTask({ userId: stranger, taskId: plan.id }), undefined);
+        assert.equal((yield* record.heldTask({ userId: teammate, taskId: task.id }))?.id, task.id);
+        assert.equal(yield* record.heldTask({ userId: stranger, taskId: task.id }), undefined);
       }),
   );
 
@@ -160,25 +160,25 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
       Effect.gen(function* () {
         const owner = yield* openUser;
         const teammate = yield* openUser;
-        const planId = randomUUID();
+        const taskId = randomUUID();
         const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
         // Registered newest first, so the order read back is the calls' and not the rows'.
-        const second = yield* callWith({ userId: owner, planId, startedAt: NOW - 60_000 }, [
+        const second = yield* callWith({ userId: owner, taskId, startedAt: NOW - 60_000 }, [
           [USER, "Seven days."],
         ]);
-        const first = yield* callWith({ userId: owner, planId, startedAt: NOW - 3_600_000 }, [
+        const first = yield* callWith({ userId: owner, taskId, startedAt: NOW - 3_600_000 }, [
           [USER, "Invites "],
           [USER, "should expire."],
           [ASSISTANT, "After how many days?"],
         ]);
-        yield* callWith({ userId: owner, planId: randomUUID(), startedAt: NOW }, [
+        yield* callWith({ userId: owner, taskId: randomUUID(), startedAt: NOW }, [
           [USER, "Another plan's words."],
         ]);
-        const teammates = yield* callWith({ userId: teammate, planId, startedAt: NOW }, [
+        const teammates = yield* callWith({ userId: teammate, taskId, startedAt: NOW }, [
           [USER, "A teammate's."],
         ]);
 
-        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: planId }), [
+        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: taskId }), [
           { voiceSessionId: first, role: USER, text: "Invites should expire." },
           { voiceSessionId: first, role: ASSISTANT, text: "After how many days?" },
           { voiceSessionId: second, role: USER, text: "Seven days." },

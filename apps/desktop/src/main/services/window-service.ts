@@ -100,7 +100,7 @@ export interface WindowService extends DesktopService {
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
-  showInbox: (planId: string) => void;
+  showInbox: (taskId: string) => void;
   /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
   showInboxItem: (item: {
     readonly agentId: string;
@@ -283,8 +283,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
   }
 
-  function showInbox(planId: string): void {
-    panels.broadcast(channels.onShowInbox, { planId });
+  function showInbox(taskId: string): void {
+    panels.broadcast(channels.onShowInbox, { taskId });
   }
 
   function showInboxItem(item: {
@@ -371,7 +371,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The plan open in the panel is what a press with no call opens one
       // about, whether or not the panel still shows it; a standing call takes
       // the press whatever plan is open, and with neither the key opens nothing.
-      talkPlanId: () => state.snapshot().tasks.activeTaskId,
+      talkTaskId: () => state.snapshot().tasks.activeTaskId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;

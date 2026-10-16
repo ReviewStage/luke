@@ -22,7 +22,7 @@ import { useDisclosure } from "../use-disclosure";
  * closes it alone, and resting on another item closes it. A submenu is a
  * flyout, a second menu on its own surface beside the first, which stands
  * whole behind it; it is never a page drawn in the menu's place, as the MCP
- * popover's server page is (`../planning/agent-servers.tsx`). Closing hands
+ * popover's server page is (`../tasks/agent-servers.tsx`). Closing hands
  * focus back at once and plays the menu's exit after it: the menu is held
  * drawn, inert, until the exit is done, and opening it again in that time
  * takes it back as it stands.
@@ -261,18 +261,15 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="menu-item-hint" />;
 }
 
-/** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */
-export function MenuItem({
+/** One item, as a menu draws it, reached by the menu's keys. */
+function MenuItem({
   action,
-  inMenu,
   onChoose,
 }: {
   action: MenuAction;
-  /** A menu's item, reached by the menu's keys, or else a button of its own in the page's order. */
-  inMenu: boolean;
   onChoose: () => void;
 }): React.JSX.Element {
-  const label = <span className="plan-menu-label">{action.label}</span>;
+  const label = <span className="task-menu-label">{action.label}</span>;
   const body = (
     <>
       <span className="menu-item-glyph">{action.icon}</span>
@@ -290,7 +287,7 @@ export function MenuItem({
   // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
   const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
   // A setting in a menu says whether it is on as a menu's check does.
-  if (inMenu && action.checked !== undefined) {
+  if (action.checked !== undefined) {
     return (
       <button
         type="button"
@@ -310,9 +307,9 @@ export function MenuItem({
   return (
     <button
       type="button"
-      role={inMenu ? "menuitem" : undefined}
+      role="menuitem"
       aria-label={heard}
-      tabIndex={inMenu ? -1 : undefined}
+      tabIndex={-1}
       className="menu-item"
       data-danger={action.danger ? "true" : undefined}
       data-detail={action.detail === undefined ? undefined : "true"}
@@ -355,7 +352,7 @@ function SubmenuItem({
       }}
     >
       <span className="menu-item-glyph">{entry.icon}</span>
-      <span className="plan-menu-label">{entry.label}</span>
+      <span className="task-menu-label">{entry.label}</span>
       <span className="menu-item-end">
         <ChevronRightIcon aria-hidden="true" />
       </span>
@@ -437,7 +434,7 @@ function Submenu({
   return (
     <div
       ref={surface}
-      className="menu-surface plan-menu plan-submenu"
+      className="menu-surface task-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
       data-layer={layer}
@@ -448,7 +445,7 @@ function Submenu({
       onKeyDown={keyDown}
     >
       {entry.items.map((action) => (
-        <MenuItem key={action.label} action={action} inMenu onChoose={() => onChoose(action)} />
+        <MenuItem key={action.label} action={action} onChoose={() => onChoose(action)} />
       ))}
     </div>
   );
@@ -577,7 +574,7 @@ export function ActionMenu({
   return createPortal(
     <div
       ref={drawn}
-      className="menu-surface plan-menu"
+      className="menu-surface task-menu"
       role="menu"
       aria-label={label}
       data-layer={layerOf(opener)}
@@ -590,15 +587,15 @@ export function ActionMenu({
     >
       {heading === undefined ? null : (
         <>
-          <div className="plan-menu-heading" role="none">
+          <div className="task-menu-heading" role="none">
             {heading}
           </div>
-          <hr className="plan-menu-rule" />
+          <hr className="task-menu-rule" />
         </>
       )}
       {groups.map((group, index) => (
         <Fragment key={group[0]?.label}>
-          {index > 0 ? <hr className="plan-menu-rule" /> : null}
+          {index > 0 ? <hr className="task-menu-rule" /> : null}
           {group.map((entry) =>
             "items" in entry ? (
               <SubmenuItem
@@ -608,15 +605,15 @@ export function ActionMenu({
                 onOpen={(anchor, focus) => setSubmenu({ entry, anchor, focus })}
               />
             ) : (
-              <MenuItem key={entry.label} action={entry} inMenu onChoose={() => choose(entry)} />
+              <MenuItem key={entry.label} action={entry} onChoose={() => choose(entry)} />
             ),
           )}
         </Fragment>
       ))}
       {footer === undefined ? null : (
         <>
-          <hr className="plan-menu-rule" />
-          <div className="plan-menu-footer" role="none">
+          <hr className="task-menu-rule" />
+          <div className="task-menu-footer" role="none">
             {footer}
           </div>
         </>

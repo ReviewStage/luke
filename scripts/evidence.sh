@@ -70,17 +70,17 @@ capture_evidence duplex --profile duplex --capture-evidence "$LUKE_DUPLEX_EVIDEN
 # The panel's Plans tab over the fixture's synthetic plan: the open plan's
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
-capture_evidence planning --profile planning --capture-evidence "$LUKE_PLANNING_EVIDENCE_PATH"
+capture_evidence tasks --profile tasks --capture-evidence "$LUKE_TASKS_EVIDENCE_PATH"
 # The same plan on its whiteboard: Excalidraw's own bundle loaded over the
 # fixture's board, drawn in the bundled hand-drawn font with nothing fetched
 # from the network.
-capture_evidence planning-board --profile planning-board --capture-evidence "$LUKE_PLANNING_BOARD_EVIDENCE_PATH"
+capture_evidence tasks-board --profile tasks-board --capture-evidence "$LUKE_TASKS_BOARD_EVIDENCE_PATH"
 # The same plan mid-call on its transcript: the earlier call from the record,
 # and the call standing now growing under it.
-capture_evidence planning-transcript --profile planning-transcript --capture-evidence "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
+capture_evidence tasks-transcript --profile tasks-transcript --capture-evidence "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
 # The same plan mid-call on its work: an earlier turn folded to its answer,
 # and the turn standing now with the worker running beside its reads.
-capture_evidence planning-work --profile planning-work --capture-evidence "$LUKE_PLANNING_WORK_EVIDENCE_PATH"
+capture_evidence tasks-work --profile tasks-work --capture-evidence "$LUKE_TASKS_WORK_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -124,10 +124,10 @@ for evidence_path in \
     "$LUKE_SPEAKING_EVIDENCE_PATH" \
     "$LUKE_MUTED_EVIDENCE_PATH" \
     "$LUKE_DUPLEX_EVIDENCE_PATH" \
-    "$LUKE_PLANNING_EVIDENCE_PATH" \
-    "$LUKE_PLANNING_BOARD_EVIDENCE_PATH" \
-    "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH" \
-    "$LUKE_PLANNING_WORK_EVIDENCE_PATH"; do
+    "$LUKE_TASKS_EVIDENCE_PATH" \
+    "$LUKE_TASKS_BOARD_EVIDENCE_PATH" \
+    "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
+    "$LUKE_TASKS_WORK_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
@@ -135,7 +135,7 @@ printf 'Expanded visual evidence: %s\n' "$LUKE_EXPANDED_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$LUKE_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$LUKE_MUTED_EVIDENCE_PATH"
 printf 'Duplex visual evidence: %s\n' "$LUKE_DUPLEX_EVIDENCE_PATH"
-printf 'Planning visual evidence: %s\n' "$LUKE_PLANNING_EVIDENCE_PATH"
-printf 'Planning board visual evidence: %s\n' "$LUKE_PLANNING_BOARD_EVIDENCE_PATH"
-printf 'Planning transcript visual evidence: %s\n' "$LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
-printf 'Planning work visual evidence: %s\n' "$LUKE_PLANNING_WORK_EVIDENCE_PATH"
+printf 'Tasks visual evidence: %s\n' "$LUKE_TASKS_EVIDENCE_PATH"
+printf 'Tasks board visual evidence: %s\n' "$LUKE_TASKS_BOARD_EVIDENCE_PATH"
+printf 'Tasks transcript visual evidence: %s\n' "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
+printf 'Tasks work visual evidence: %s\n' "$LUKE_TASKS_WORK_EVIDENCE_PATH"

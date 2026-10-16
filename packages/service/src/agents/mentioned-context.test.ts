@@ -7,6 +7,7 @@ import {
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
+  encodeMention,
   MENTION_KIND,
   type MentionPlace,
   mentionMarkdown,
@@ -19,6 +20,7 @@ import {
   MENTIONED_BOUNDS,
   type MentionedAgent,
   mentionedContext,
+  mentionedIds,
   mentionedServers,
 } from "./mentioned-context.js";
 
@@ -510,4 +512,54 @@ test("an agent whose task is archived is handed as taking no message, and one me
   assert.match(part, /"Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\)/u);
   assert.match(part, /Its task is archived, so it takes no message\./u);
   assert.doesNotMatch(part, /message_agent/u);
+});
+
+/** A section's address as its heading's ⋯ "Copy link" copies it, bare. */
+const bareSection = (heading: string) =>
+  encodeMention({ kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: anchorOf(heading) }, PLACE);
+
+test("a section's bare address in the words is handed the section as it stands, written alone, as its own label, or between angle brackets", () => {
+  const address = bareSection("Rollout");
+  const handed = `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`;
+
+  for (const words of [
+    `Do what ${address} says.`,
+    `Do what [${address}](${address}) says.`,
+    `Do what <${address}> says.`,
+  ]) {
+    assert.equal(mentionedContext(words, TASK), handed, words);
+  }
+});
+
+test("a gone section's bare address is named by its anchor, and a page's or an agent's bare address is read as its mention", () => {
+  const pageAddress = encodeMention(
+    { kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId: PAGE_ID },
+    PLACE,
+  );
+  const agentAddress = encodeMention(
+    { kind: MENTION_KIND.AGENT, taskId: TASK.id, agentId: OTHER_AGENT_ID },
+    PLACE,
+  );
+  const words = `See ${bareSection("Old flow")}, ${pageAddress} and ${agentAddress}.`;
+
+  assert.match(
+    mentionedContext(words, TASK) ?? "",
+    /The section "old-flow": no longer in the plan\./u,
+  );
+  assert.deepEqual(mentionedIds(words, TASK), { pages: [PAGE_ID], agents: [OTHER_AGENT_ID] });
+});
+
+test("a bare GitHub page of the plan's repository, a bare Linear issue, a bare address in code, and one a link or picture holds between angle brackets are handed nothing and bring in no server", () => {
+  for (const words of [
+    `Fix https://github.com/${TASK.repository}/blob/HEAD/src/app.ts as it stands.`,
+    `Fix [https://github.com/${TASK.repository}/tree/HEAD/src](https://github.com/${TASK.repository}/tree/HEAD/src).`,
+    `Fix ${ISSUE_URL} first.`,
+    `Fix <${ISSUE_URL}> first.`,
+    `Run \`open ${bareSection("Rollout")}\` to see it.`,
+    `See [the rollout](https://example.com/?next=${bareSection("Rollout")}).`,
+    `See [the rollout](<${bareSection("Rollout")}>) and ![its diagram](<${bareSection("Rollout")}>).`,
+  ]) {
+    assert.equal(mentionedContext(words, TASK), undefined, words);
+    assert.deepEqual(mentionedServers(words, TASK.repository), [], words);
+  }
 });

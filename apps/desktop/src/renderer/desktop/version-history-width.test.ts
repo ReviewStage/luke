@@ -9,11 +9,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
-import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { plansControl } from "#testing/plans-control";
+import { DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { HISTORY_READ } from "../planning/use-plan-history";
-import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { tasksControl } from "#testing/tasks-control";
+import { HISTORY_READ } from "../tasks/use-plan-history";
+import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
@@ -60,11 +60,11 @@ afterEach(() => {
 
 /** The plan's version history over the window, its restore read. */
 function drawn(): HTMLElement {
-  const base = plansControl();
-  const plans = plansControl({
+  const base = tasksControl();
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: DOCUMENT_PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     history: {
       ...base.history,
       open: true,
@@ -89,7 +89,7 @@ function drawn(): HTMLElement {
           staged: false,
         },
         history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-        subject: planVersionSubject(plans),
+        subject: taskVersionSubject(plans),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
         call: undefined,
         onExit: ignore,

@@ -36,8 +36,11 @@ import { noNetwork } from "../testing/no-network.js";
 import {
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnect,
   IntegrationConnectFailure,
+  type IntegrationConnectService,
   vercelConnector,
+  WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import {
   type IntegrationAdmission,
@@ -425,6 +428,55 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           [yield* tokenOfAccount(LINEAR), yield* tokenOfAccount("linear-2")],
           [tokenOf(session.workspaceId), tokenOf(subject)],
         );
+      }),
+  );
+
+  it.effect(
+    "in a plan of a workspace with Linear connected on a deployment naming no workspace connector, the turn's Linear is unreachable, never the member's own grant",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* taskBrainHost;
+        const session = yield* plannedSession(host, typedSeat);
+        yield* connected(session.userId);
+        const state = `workspace-state-${session.workspaceId}`;
+        yield* beginWorkspaceIntegrationSignIn(
+          session.workspaceId,
+          LINEAR,
+          session.userId,
+          state,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
+        const grants = new Map([[session.userId, {}]]);
+        // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
+        const accounts = Object.fromEntries(
+          INTEGRATION_PROVIDER_LIST.map((provider) => [
+            provider,
+            fakeConnect(provider === LINEAR ? grants : new Map()),
+          ]),
+        ) as IntegrationConnectService;
+        const unconfigured: ConnectorService = {
+          ...CONNECTOR_ASKED_NOTHING,
+          configured: false,
+          token: () =>
+            Effect.fail(
+              new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED }),
+            ),
+        };
+
+        const read = yield* integrationAccessToken(
+          { provider: LINEAR, connectionName: LINEAR },
+          host.admit(session.auth, session.sessionId),
+        ).pipe(
+          Effect.provide(
+            Layer.merge(
+              Layer.succeed(IntegrationConnect, accounts),
+              Layer.succeed(WorkspaceLinearConnect, unconfigured),
+            ),
+          ),
+        );
+
+        assert.deepEqual(read, Result.fail(LINEAR_UNAVAILABLE.UNREACHABLE));
       }),
   );
 

@@ -268,7 +268,7 @@ function probeRequest(
 /** Every planned request sent to the target and judged; the answer's body is never read. */
 export const probeDeployment = /* @__PURE__ */ Effect.fn("web/probeDeployment")(function* (
   target: ProbeTarget,
-  plan: readonly PlannedRequest[],
+  task: readonly PlannedRequest[],
 ): Effect.fn.Return<
   readonly ProbeResult[],
   HttpClientError.HttpClientError,
@@ -277,7 +277,7 @@ export const probeDeployment = /* @__PURE__ */ Effect.fn("web/probeDeployment")(
   const client = yield* HttpClient.HttpClient;
   const now = yield* Clock.currentTimeMillis;
   return yield* Effect.forEach(
-    plan,
+    task,
     (planned, index) =>
       client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
         Effect.map((response): ProbeResult => {

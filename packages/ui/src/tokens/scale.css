@@ -1,0 +1,35 @@
+/* scale.css -- the base values: one length, corner, and weight per step, meaning the same in every app.
+
+   A base value is named by what it is, so `--luke-space-16` is sixteen
+   pixels on the desktop and on the site alike. A component never picks one
+   at its call site: it reads a role (`profiles.css`), and the role is what
+   one profile sets differently from the other. */
+
+:root {
+  --luke-space-0: 0px;
+  --luke-space-2: 2px;
+  --luke-space-4: 4px;
+  --luke-space-6: 6px;
+  --luke-space-8: 8px;
+  --luke-space-12: 12px;
+  --luke-space-16: 16px;
+  --luke-space-20: 20px;
+  --luke-space-24: 24px;
+  --luke-space-32: 32px;
+  --luke-space-40: 40px;
+  --luke-space-48: 48px;
+  --luke-space-64: 64px;
+  --luke-space-96: 96px;
+
+  --luke-radius-6: 6px;
+  --luke-radius-8: 8px;
+  --luke-radius-10: 10px;
+  --luke-radius-14: 14px;
+  --luke-radius-full: 9999px;
+
+  /* Body and captions, labels, section and dialog headings, page titles. */
+  --luke-weight-regular: 400;
+  --luke-weight-medium: 500;
+  --luke-weight-semibold: 600;
+  --luke-weight-bold: 700;
+}

@@ -33,13 +33,13 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 /** A synthetic provider key, as Settings carries it once. */
 const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const STARTED: CodingAgentAgentAnswer = {
   agent: {
     id: AGENT_ID,
-    planId: PLAN_ID,
+    planId: TASK_ID,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: null,
@@ -87,14 +87,14 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
       observePublished: (agentId, pullRequest) => {
         noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
       },
-      observeTaskGone: (planId) => {
-        noted.push(`gone:${planId}`);
+      observeTaskGone: (taskId) => {
+        noted.push(`gone:${taskId}`);
       },
       shown: (agentId) => {
         noted.push(`shown:${agentId}`);
       },
-      shownInbox: (planId) => {
-        noted.push(`inbox:${planId}`);
+      shownInbox: (taskId) => {
+        noted.push(`inbox:${taskId}`);
       },
     },
     host: {
@@ -118,9 +118,9 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`default:${choice.model}:${choice.effort}`);
           return { choice };
         }),
-      codingAgentList: ({ taskId: planId, includeArchived }) =>
+      codingAgentList: ({ taskId, includeArchived }) =>
         Effect.sync(() => {
-          asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
+          asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);
           return { agents: [] };
         }),
       codingAgentStart: (params) =>
@@ -250,9 +250,9 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
           return { text: "Run the tests" };
         }),
-      codingAgentInbox: ({ taskId: planId, after }) =>
+      codingAgentInbox: ({ taskId, after }) =>
         Effect.sync(() => {
-          asked.push(`inbox:${planId}:${after}`);
+          asked.push(`inbox:${taskId}:${after}`);
           return { items: [ITEM], cursor: "7" };
         }),
       codingAgentInboxAnswer: ({ itemId, revision, reply, clientKey }) =>
@@ -286,13 +286,13 @@ it.effect(
       const outcome = yield* router.performAct(
         {
           kind: ACT_KIND.CODING_AGENTS_START,
-          payload: { taskId: PLAN_ID, idempotencyKey: "press-1" },
+          payload: { taskId: TASK_ID, idempotencyKey: "press-1" },
         },
         PANEL,
       );
 
       assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
-      assert.deepEqual(asked, [`start:${PLAN_ID}:press-1`]);
+      assert.deepEqual(asked, [`start:${TASK_ID}:press-1`]);
     }),
 );
 it.effect(
@@ -301,7 +301,7 @@ it.effect(
     Effect.gen(function* () {
       assert.ok("agent" in STARTED);
       const planless = fixture({ agent: { ...STARTED.agent, planId: null } });
-      const onPlan = fixture();
+      const onTask = fixture();
       const rename = {
         kind: ACT_KIND.CODING_AGENTS_RENAME,
         payload: { agentId: AGENT_ID, title: "Triage" },
@@ -319,7 +319,7 @@ it.effect(
       yield* planless.router.performAct(rename, PANEL);
       yield* planless.router.performAct(archive, PANEL);
       yield* planless.router.performAct(pin, PANEL);
-      yield* onPlan.router.performAct(rename, PANEL);
+      yield* onTask.router.performAct(rename, PANEL);
 
       assert.deepEqual(planless.asked, [
         `rename:${AGENT_ID}:Triage`,
@@ -329,7 +329,7 @@ it.effect(
         `pin:${AGENT_ID}:true`,
         "refresh",
       ]);
-      assert.deepEqual(onPlan.asked, [`rename:${AGENT_ID}:Triage`]);
+      assert.deepEqual(onTask.asked, [`rename:${AGENT_ID}:Triage`]);
     }),
 );
 it.effect(

@@ -163,6 +163,22 @@ export class IntegrationConnect extends Context.Service<
   IntegrationConnectService
 >()("IntegrationConnect") {}
 
+/**
+ * The connector a workspace's own Linear grant is held on, apart from the
+ * accounts' Linear connector. Note that the two cannot be one, because the
+ * accounts' connector signs in through Linear's MCP server, whose tokens
+ * only that server takes, while the workspace's issues are read from
+ * Linear's GraphQL API, which refuses them; a Linear API OAuth token, as
+ * Connect's own Linear connector issues, is taken by both.
+ */
+export class WorkspaceLinearConnect extends Context.Service<
+  WorkspaceLinearConnect,
+  ConnectorService
+>()("WorkspaceLinearConnect") {}
+
+/** The variable naming the workspace Linear connector's UID. */
+const WORKSPACE_LINEAR_CONNECTOR_VARIABLE = "LINEAR_WORKSPACE_CONNECTOR_UID";
+
 /** The subject every ask names: the one the account's row keeps, so a grant is that account's whatever principal a session runs under. */
 function subjectOf(subject: string) {
   return { subject: { type: "user", id: subject } } as const;
@@ -603,4 +619,20 @@ export const integrationConnectFromEnvironment: Layer.Layer<
     // SAFETY: the entries are one per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
     (entries) => Object.fromEntries(entries) as IntegrationConnectService,
   ),
+);
+
+/**
+ * The workspace Linear connector as this deployment's environment names it;
+ * unset, no workspace connects Linear, and one connected before reads as
+ * not connected.
+ */
+export const workspaceLinearConnectFromEnvironment: Layer.Layer<
+  WorkspaceLinearConnect,
+  Config.ConfigError
+> = Layer.effect(
+  WorkspaceLinearConnect,
+  Effect.map(Config.option(Config.String(WORKSPACE_LINEAR_CONNECTOR_VARIABLE)), (read) => {
+    const connector = text(Option.getOrUndefined(read));
+    return connector === undefined ? UNCONFIGURED_CONNECTOR : vercelConnector(connector);
+  }),
 );

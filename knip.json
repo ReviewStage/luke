@@ -37,6 +37,10 @@
       ],
       "project": ["src/**", "scripts/**"]
     },
+    "apps/catalog": {
+      "entry": ["src/main.tsx"],
+      "project": ["src/**"]
+    },
     "apps/web": {
       "entry": [
         "server/routes/**/*.ts",

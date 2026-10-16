@@ -17,6 +17,9 @@
     },
     "state": {
       "type": "string"
+    },
+    "assignee": {
+      "type": "string"
     }
   },
   "required": [

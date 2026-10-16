@@ -114,6 +114,48 @@ it.layer(getTestDB())("a plan's pin", (it) => {
       }),
   );
 
+  it.effect(
+    "a pin dragged to a position keeps its first instant, moves again, and is the dragging member's alone",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const pinnedAt = yield* Clock.currentTimeMillis;
+        yield* updateTask(dean, taskId, { pinned: true });
+        yield* updateTask(charles, taskId, { pinned: true });
+        assert.equal((yield* listedTask(dean, taskId)).pinPosition, undefined);
+        yield* TestClock.adjust("1 minute");
+
+        const placed = yield* updateTask(dean, taskId, { pinned: true, pinPosition: "a1" });
+        assert.equal(Option.getOrUndefined(placed)?.pinPosition, "a1");
+        yield* updateTask(dean, taskId, { pinned: true, pinPosition: "a0V" });
+        yield* updateTask(dean, taskId, { pinned: true });
+
+        const listed = yield* listedTask(dean, taskId);
+        assert.equal(listed.pinPosition, "a0V");
+        assert.equal(listed.pinnedAt, pinnedAt);
+        const opened = yield* readTask(dean, taskId);
+        assert.equal(Option.getOrUndefined(opened)?.task.pinPosition, "a0V");
+        assert.equal((yield* listedTask(charles, taskId)).pinPosition, undefined);
+      }),
+  );
+
+  it.effect(
+    "a plan dragged into place before it was pinned is pinned there, and unpinning lets the place go",
+    () =>
+      Effect.gen(function* () {
+        const { dean, taskId } = yield* openSharedTask;
+        const pinnedAt = yield* Clock.currentTimeMillis;
+
+        yield* updateTask(dean, taskId, { pinned: true, pinPosition: "a3" });
+        assert.equal(yield* pinReadBy(dean, taskId), pinnedAt);
+        assert.equal((yield* listedTask(dean, taskId)).pinPosition, "a3");
+
+        yield* updateTask(dean, taskId, { pinned: false });
+        yield* updateTask(dean, taskId, { pinned: true });
+        assert.equal((yield* listedTask(dean, taskId)).pinPosition, undefined);
+      }),
+  );
+
   it.effect("an account outside the workspace can neither pin the plan nor read a pin of it", () =>
     Effect.gen(function* () {
       const { dean, charles, taskId } = yield* openSharedTask;

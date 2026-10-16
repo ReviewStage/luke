@@ -9,12 +9,12 @@ import { act, createElement, Fragment, type ReactElement, useState } from "react
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { tasksControl } from "#testing/tasks-control";
 import { FeedbackDialog } from "./feedback-dialog";
-import { AttachmentViewer } from "./planning/attachment-viewer";
-import { NewPlanDialog } from "./planning/new-plan-dialog";
 import { ConfirmDialog, useConfirmDialog } from "./settings/confirm-dialog";
+import { AttachmentViewer } from "./tasks/attachment-viewer";
+import { NewTaskDialog } from "./tasks/new-task-dialog";
 
 /**
  * Every modal over the window as the developer meets it: opened from a
@@ -75,14 +75,14 @@ function ConfirmOwner({ shown }: OwnerProps): ReactElement {
   );
 }
 
-function NewPlanOwner({ shown }: OwnerProps): ReactElement {
+function NewTaskOwner({ shown }: OwnerProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const control = plansControl();
+  const control = tasksControl();
   return owned(
     () => setOpen(true),
-    createElement(NewPlanDialog, {
-      newPlan: {
-        ...control.newPlan,
+    createElement(NewTaskDialog, {
+      newTask: {
+        ...control.newTask,
         open: open && shown,
         repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
         onClose: () => setOpen(false),
@@ -127,7 +127,7 @@ function AttachmentOwner({ shown }: OwnerProps): ReactElement {
 /** Each modal by the role its card carries. */
 const DIALOGS = [
   { name: "a confirm", Owner: ConfirmOwner, role: "alertdialog" },
-  { name: "New task", Owner: NewPlanOwner, role: "dialog" },
+  { name: "New task", Owner: NewTaskOwner, role: "dialog" },
   { name: "Send feedback", Owner: FeedbackOwner, role: "dialog" },
   { name: "the attachment viewer", Owner: AttachmentOwner, role: "dialog" },
 ] as const;

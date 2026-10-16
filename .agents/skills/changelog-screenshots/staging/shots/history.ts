@@ -12,12 +12,12 @@
 
 import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@luke/features/plan-wire";
 import {
-  PLAN_CALL_FAILURE,
-  type PlanningRevisionAnswer,
-  type PlanningRevisionsAnswer,
+  TASK_CALL_FAILURE,
+  type TasksRevisionAnswer,
+  type TasksRevisionsAnswer,
 } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago, daysAgo, hoursAgo } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";
 import {
@@ -26,7 +26,7 @@ import {
   SHOT_ID,
   SHOT_SECTIONS,
   type ShotSections,
-  shotPlanningView,
+  shotTasksView,
 } from "./plan-document";
 import type { ShotSpec, ShotStep } from "./shot-spec";
 
@@ -184,26 +184,26 @@ function revisions(): PlanRevisionLine[] {
 export function historyShot(): ShotSpec {
   const docs = documents();
   const lines = revisions();
-  const page: PlanningRevisionsAnswer = { revisions: lines };
-  const revision = (seq: number): PlanningRevisionAnswer => {
+  const page: TasksRevisionsAnswer = { revisions: lines };
+  const revision = (seq: number): TasksRevisionAnswer => {
     const document = documentOf(docs.get(seq));
-    if (document === null) return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+    if (document === null) return { failure: TASK_CALL_FAILURE.UNANSWERED };
     return { revision: { seq, document, previous: documentOf(docs.get(seq - 1)) } };
   };
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: FIXTURE_CLOSED_PANEL,
     answers: {
       ...codingAgentAnswers(),
-      [ACT_KIND.PLANNING_REVISIONS]: (payload) =>
-        payload.planId !== SHOT_ID.PLAN
+      [ACT_KIND.TASKS_REVISIONS]: (payload) =>
+        payload.taskId !== SHOT_ID.TASK
           ? undefined
           : payload.before === undefined
             ? page
             : { revisions: [] },
-      [ACT_KIND.PLANNING_REVISION]: (payload) =>
-        payload.planId === SHOT_ID.PLAN ? revision(payload.seq) : undefined,
-      [ACT_KIND.PLANNING_RESTORE]: () => false,
+      [ACT_KIND.TASKS_REVISION]: (payload) =>
+        payload.taskId === SHOT_ID.TASK ? revision(payload.seq) : undefined,
+      [ACT_KIND.TASKS_RESTORE]: () => false,
     },
     layout: {
       history:

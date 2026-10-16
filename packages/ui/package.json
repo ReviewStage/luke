@@ -1,6 +1,6 @@
 {
   "name": "@luke/ui",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
@@ -16,7 +16,9 @@
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
     "./theme.css": "./src/theme.css",
+    "./tokens.css": "./src/tokens/tokens.css",
     "./search-tokens": "./src/search-tokens.js",
+    "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",

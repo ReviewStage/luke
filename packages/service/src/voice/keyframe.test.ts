@@ -57,11 +57,10 @@ function keyframe(answer: () => Response) {
   });
   const layer = Keyframe.layer({
     apiKey: Redacted.make(API_KEY),
-    personaId: PERSONA_ID,
     baseUrl: BASE,
   }).pipe(Layer.provide(client));
   const createSession = Effect.gen(function* () {
-    return yield* (yield* Keyframe).createSession();
+    return yield* (yield* Keyframe).createSession(PERSONA_ID);
   }).pipe(Effect.provide(layer));
   return { sent, createSession };
 }

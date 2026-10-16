@@ -201,13 +201,13 @@ function highlightOver(input: {
 }
 
 /** The highlighted row of an open submenu, which a reader is told of before the pinned row it opened from. */
-const SUBMENU_HIGHLIGHT = '.plan-compose-submenu [aria-selected="true"]';
+const SUBMENU_HIGHLIGHT = '.task-compose-submenu [aria-selected="true"]';
 
 /** The highlighted option of the list itself. */
 const OPTION_HIGHLIGHT = '[aria-selected="true"]';
 
 /** The one highlighted row of the list or the pinned rows under it. */
-const MENU_HIGHLIGHT = '.plan-compose-menu-list [aria-selected="true"], [data-highlighted="true"]';
+const MENU_HIGHLIGHT = '.task-compose-menu-list [aria-selected="true"], [data-highlighted="true"]';
 
 /** Hands a row drawn in a loop, where no hook may be called, a stable id of its own. */
 function WithId(props: { children: (id: string) => React.JSX.Element }): React.JSX.Element {
@@ -250,12 +250,61 @@ function RowBody(props: {
   return (
     <>
       <RowGlyph icon={props.icon} />
-      <RowWords className="plan-compose-menu-name">{props.label}</RowWords>
+      <RowWords className="task-compose-menu-name">{props.label}</RowWords>
       {props.detail !== undefined ? (
-        <RowWords className="plan-compose-menu-detail">{props.detail}</RowWords>
+        <RowWords className="task-compose-menu-detail">{props.detail}</RowWords>
       ) : null}
       {props.hint}
       <span className="menu-item-end">{props.end}</span>
+    </>
+  );
+}
+
+/**
+ * A menu's rows drawn in place rather than dropped: each a button of its own
+ * in the page's order, in a row's look, under its section's heading as the
+ * menu heads it, with no search and no highlight of its own, as the side
+ * panel's well offers what its "+" offers with every tab closed.
+ */
+export function MenuRowList({
+  rows,
+  onPick,
+}: {
+  rows: readonly MenuRow[];
+  onPick: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {sectionsOf(rows).map((section) => {
+        const buttons = section.rows.map(({ row }) => (
+          <button
+            key={row.id}
+            type="button"
+            className="menu-item"
+            disabled={row.disabled !== undefined}
+            onClick={() => onPick(row.id)}
+          >
+            <RowBody
+              icon={row.icon}
+              label={row.label}
+              detail={row.detail}
+              hint={<RowHint row={row} />}
+              end={null}
+            />
+          </button>
+        ));
+        const first = section.rows[0]?.row.id;
+        return section.heading === undefined ? (
+          <Fragment key={first}>{buttons}</Fragment>
+        ) : (
+          <section key={first} aria-label={section.heading}>
+            <div className="menu-heading" aria-hidden="true">
+              {section.heading}
+            </div>
+            {buttons}
+          </section>
+        );
+      })}
     </>
   );
 }
@@ -482,7 +531,7 @@ export function SearchableMenu(props: {
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
       {searching ? (
-        <div className="plan-compose-menu-search">
+        <div className="task-compose-menu-search">
           <SearchIcon />
           <input
             ref={field}
@@ -512,7 +561,7 @@ export function SearchableMenu(props: {
       <div
         ref={list}
         id={listId}
-        className="plan-compose-menu-list"
+        className="task-compose-menu-list"
         role="listbox"
         aria-label={props.label}
         tabIndex={searching ? undefined : -1}
@@ -564,11 +613,11 @@ export function SearchableMenu(props: {
         })}
         {props.note}
         {matches.length === 0 && props.note === undefined ? (
-          <p className="plan-compose-menu-note">{props.noMatch}</p>
+          <p className="task-compose-menu-note">{props.noMatch}</p>
         ) : null}
       </div>
       {footed ? (
-        <div id={footId} className="plan-compose-menu-foot">
+        <div id={footId} className="task-compose-menu-foot">
           {foot.map((row, index) => (
             <WithId key={row.id}>
               {(id) => {
@@ -613,12 +662,12 @@ export function SearchableMenu(props: {
                   ) : (
                     <button {...shared} role="switch" aria-checked={row.toggle.on}>
                       <RowGlyph icon={row.icon} />
-                      <span className="plan-compose-menu-name">{row.label}</span>
-                      <Switch checked={row.toggle.on} className="plan-compose-menu-switch" />
+                      <span className="task-compose-menu-name">{row.label}</span>
+                      <Switch checked={row.toggle.on} className="task-compose-menu-switch" />
                     </button>
                   );
                 return (
-                  <div className="plan-compose-menu-branch">
+                  <div className="task-compose-menu-branch">
                     {row.disabled === undefined ? (
                       button
                     ) : (
@@ -628,7 +677,7 @@ export function SearchableMenu(props: {
                       <div
                         ref={panel}
                         id={submenuId}
-                        className="menu-surface plan-compose-submenu"
+                        className="menu-surface task-compose-submenu"
                         role="listbox"
                         aria-label={open.label}
                         data-side={place.side}
@@ -660,7 +709,7 @@ export function SearchableMenu(props: {
                           </WithId>
                         ))}
                         {open.note === undefined ? null : (
-                          <p className="plan-compose-menu-foot-note" data-submenu-note="">
+                          <p className="task-compose-menu-foot-note" data-submenu-note="">
                             {open.note}
                           </p>
                         )}
@@ -672,7 +721,7 @@ export function SearchableMenu(props: {
             </WithId>
           ))}
           {props.footNote === undefined ? null : (
-            <p className="plan-compose-menu-foot-note" data-foot-note="">
+            <p className="task-compose-menu-foot-note" data-foot-note="">
               {props.footNote}
             </p>
           )}

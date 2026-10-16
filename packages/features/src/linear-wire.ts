@@ -82,6 +82,8 @@ export const linearIssueSummarySchema = EffectSchema.Struct({
   url: EffectSchema.String,
   /** The name of the workflow state it stands in, `In Progress`; absent where Linear named none. */
   state: EffectSchema.optionalKey(EffectSchema.String),
+  /** The name of the member it is assigned to; absent where it is assigned to no one, and from a service older than it. */
+  assignee: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type LinearIssueSummary = typeof linearIssueSummarySchema.Type;

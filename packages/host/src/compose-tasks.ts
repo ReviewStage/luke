@@ -252,8 +252,8 @@ function withWorkers(
   };
 }
 
-/** A plan's pin and archive as the list carries them, each only where it stands. */
-type TaskMarkStamps = Pick<Task, "pinnedAt" | "archivedAt">;
+/** A plan's pin, where it stands, and its archive as the list carries them, each only where it stands. */
+type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition" | "archivedAt">;
 
 /**
  * How long a read of the account's workspaces stands before a refresh or the
@@ -977,6 +977,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function marksOf(task: Task): TaskMarkStamps {
     return {
       ...(task.pinnedAt === undefined ? undefined : { pinnedAt: task.pinnedAt }),
+      ...(task.pinPosition === undefined ? undefined : { pinPosition: task.pinPosition }),
       ...(task.archivedAt === undefined ? undefined : { archivedAt: task.archivedAt }),
     };
   }
@@ -1003,7 +1004,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       write({ tasks });
       return;
     }
-    const { pinnedAt: _pinned, archivedAt: _archived, ...kept } = held;
+    const { pinnedAt: _pinned, pinPosition: _position, archivedAt: _archived, ...kept } = held;
     write({
       tasks,
       document: { status: TASKS_READ.READY, task: { ...kept, ...marksOf(task) } },
@@ -1479,7 +1480,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return yield* invalid("pinning a plan names it and whether it is pinned");
         }
         if (!gate()) return { changed: false };
-        return yield* markTask(read.success.taskId, { pinned: read.success.pinned });
+        const { taskId, pinned, position } = read.success;
+        return yield* markTask(
+          taskId,
+          position === undefined ? { pinned } : { pinned, pinPosition: position },
+        );
       }),
     // The service answers the pins as they then stand, so the view takes its
     // word rather than the window's guess.

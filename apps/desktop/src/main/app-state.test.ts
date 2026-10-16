@@ -184,7 +184,7 @@ it("recording is what the host permitted less what an account's end stood down",
 
 it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
   const held = initialAppState(RUN, true);
-  const planning = {
+  const tasks = {
     ...held.tasks,
     activeTaskId: "plan-1",
     work: [
@@ -219,7 +219,7 @@ it("the voice and call windows are sent the document, and answered their first r
       title: null,
     },
   } as const;
-  const sent = voiceWindowState({ ...held, tasks: planning });
+  const sent = voiceWindowState({ ...held, tasks: tasks });
   assert.equal(sent.tasks.activeTaskId, "plan-1");
   assert.equal("work" in sent.tasks, false);
   assert.equal("conversation" in sent.tasks, false);
@@ -230,11 +230,11 @@ it("the voice and call windows are sent the document, and answered their first r
     { voice: false, call: true },
   ]) {
     assert.doesNotMatch(
-      JSON.stringify(windowAppState({ ...held, tasks: planning }, window)),
+      JSON.stringify(windowAppState({ ...held, tasks: tasks }, window)),
       /invite-expiry/u,
     );
   }
-  const panel = windowAppState({ ...held, tasks: planning }, { voice: false, call: false });
+  const panel = windowAppState({ ...held, tasks: tasks }, { voice: false, call: false });
   assert.equal(panel.tasks.conversation?.cursor, "1:1");
   assert.deepEqual(sent.run, held.run);
 });

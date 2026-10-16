@@ -29,9 +29,9 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl, waitingOf } from "#testing/plans-control";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
-import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import { tasksControl, waitingOf } from "#testing/tasks-control";
+import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
@@ -41,7 +41,7 @@ const DAY = 86_400_000;
 const NOW = Date.now();
 
 /** A plan of the personal workspace, saved `ago` before now. */
-function plan(n: number, name: string, ago: number, repository: string | null): TaskSummary {
+function task(n: number, name: string, ago: number, repository: string | null): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -52,17 +52,17 @@ function plan(n: number, name: string, ago: number, repository: string | null): 
   };
 }
 
-const INVITES = plan(1, "Teammate invitations", 4 * 60_000, "acme/relay");
-const BILLING = plan(2, "Billing export", 2 * 3_600_000, "acme/ledger");
-const PLANS: readonly TaskSummary[] = [
-  plan(3, "Usage alerts", 5 * DAY, "acme/relay"),
+const INVITES = task(1, "Teammate invitations", 4 * 60_000, "acme/relay");
+const BILLING = task(2, "Billing export", 2 * 3_600_000, "acme/ledger");
+const TASKS: readonly TaskSummary[] = [
+  task(3, "Usage alerts", 5 * DAY, "acme/relay"),
   INVITES,
-  plan(4, "Onboarding checklist", 12 * DAY, null),
+  task(4, "Onboarding checklist", 12 * DAY, null),
   BILLING,
-  plan(5, "Search across plans", 19 * DAY, "acme/relay"),
-  plan(6, "Schema output", 3 * DAY, "acme/schema"),
-  plan(7, "Nightly bump", 6 * 3_600_000, "acme/relay"),
-  plan(8, "Old dashboard", 40 * DAY, "acme/relay"),
+  task(5, "Search across plans", 19 * DAY, "acme/relay"),
+  task(6, "Schema output", 3 * DAY, "acme/schema"),
+  task(7, "Nightly bump", 6 * 3_600_000, "acme/relay"),
+  task(8, "Old dashboard", 40 * DAY, "acme/relay"),
 ];
 
 /** An item of the agent's asking a choice, open unless `status` says otherwise. */
@@ -127,12 +127,12 @@ const SWEEP: AutomationSummary = {
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
-const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
+const HOLDING: Pick<TasksControl, "inbox" | "inboxTasks"> = {
   inbox: [
     { taskId: INVITES.id, items: [waitingOf(EMAIL)] },
     { taskId: BILLING.id, items: [waitingOf(ACCOUNT)] },
   ],
-  inboxPlans: [
+  inboxTasks: [
     { taskId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
     { taskId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
   ],
@@ -207,21 +207,21 @@ afterEach(() => {
 
 /** Every door the page opens, in order. */
 interface Opened {
-  readonly plans: string[];
+  readonly tasks: string[];
   readonly inbox: (InboxChoice | "inbox")[];
-  newPlans: number;
+  newTasks: number;
 }
 
 /** The home page over `overrides`, every door it opens recorded. */
-function mount(overrides: Partial<PlansControl> = {}, accountName = "Dean Stratakos") {
-  const opened: Opened = { plans: [], inbox: [], newPlans: 0 };
-  const plans = plansControl({
-    plans: PLANS,
-    listed: { plans: PLANS, archived: [], ...HOLDING },
+function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Stratakos") {
+  const opened: Opened = { tasks: [], inbox: [], newTasks: 0 };
+  const tasks = tasksControl({
+    tasks: TASKS,
+    listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
-    onSelect: (planId) => opened.plans.push(planId),
-    onNewPlan: () => {
-      opened.newPlans += 1;
+    onSelect: (taskId) => opened.tasks.push(taskId),
+    onNewTask: () => {
+      opened.newTasks += 1;
     },
     inboxView: {
       open: false,
@@ -237,7 +237,7 @@ function mount(overrides: Partial<PlansControl> = {}, accountName = "Dean Strata
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { plans, accountName })),
+      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, accountName })),
     ),
   );
   return { page: container, opened };
@@ -254,9 +254,9 @@ async function settle(): Promise<void> {
 function rows(page: HTMLElement, section: string): string[] {
   const region = page.querySelector(`section[aria-labelledby="${section}"]`);
   assert.ok(region, `${section} stands`);
-  return [...region.querySelectorAll(".sidebar-plan")].map(
+  return [...region.querySelectorAll(".sidebar-task")].map(
     (row) =>
-      `${row.querySelector(".sidebar-plan-name")?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
+      `${row.querySelector(".sidebar-task-name")?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
   );
 }
 
@@ -318,9 +318,9 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
   button(page, "Usage alerts").click();
   button(page, "New task").click();
 
-  assert.deepEqual(opened.inbox, ["inbox", { planId: INVITES.id, itemId: EMAIL.id }]);
-  assert.deepEqual(opened.plans, [PLANS[0]?.id]);
-  assert.equal(opened.newPlans, 1);
+  assert.deepEqual(opened.inbox, ["inbox", { taskId: INVITES.id, itemId: EMAIL.id }]);
+  assert.deepEqual(opened.tasks, [TASKS[0]?.id]);
+  assert.equal(opened.newTasks, 1);
 });
 
 test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
@@ -334,7 +334,7 @@ test("the waiting items stand under the Inbox's name, the place a press on one o
 });
 
 test("with nothing waiting, the home's Inbox says so in the Inbox's own words, as a line with no glyph", async () => {
-  const { page } = mount({ listed: { plans: PLANS, archived: [], inbox: [], inboxPlans: [] } });
+  const { page } = mount({ listed: { tasks: TASKS, archived: [], inbox: [], inboxTasks: [] } });
   await settle();
 
   const section = page.querySelector('section[aria-labelledby="home-inbox"]');
@@ -346,8 +346,8 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
 test("a refused read of the task list says so under Recent, with Retry, which asks for the list again", async () => {
   let retries = 0;
   const { page } = mount({
-    plans: [],
-    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     listFailed: true,
     onRetryList: () => {
       retries += 1;
@@ -367,10 +367,10 @@ test("a refused read of the task list says so under Recent, with Retry, which as
 
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
   const { page } = mount({
-    plans: [],
-    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     inbox: [],
-    inboxPlans: [],
+    inboxTasks: [],
   });
 
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
@@ -409,7 +409,7 @@ test("↑ and ↓ move the focus through the rows from the window, and leave a k
 });
 
 test("a workspace with no plan of its own, in an account with plans elsewhere, welcomes the account back rather than as new, and lists none of the others' Inbox", async () => {
-  const { page } = mount({ listed: { plans: [], archived: [], inbox: [], inboxPlans: [] } });
+  const { page } = mount({ listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] } });
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
@@ -420,24 +420,24 @@ test("a workspace with no plan of its own, in an account with plans elsewhere, w
 test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
   const { page } = mount();
   await settle();
-  const newPlan = button(page, "New task");
-  newPlan.focus();
+  const newTask = button(page, "New task");
+  newTask.focus();
   act(() => {
-    newPlan.dispatchEvent(
+    newTask.dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
     );
   });
-  assert.ok(document.activeElement === newPlan, "New plan keeps the focus");
+  assert.ok(document.activeElement === newTask, "New plan keeps the focus");
 });
 
 test("Home lists every open item of the listed plans, a teammate's agent's included, though main counts only the account's own as waiting on it", async () => {
   // Billing's question is a teammate's agent's: main's account read holds the plan, but waits the account on Invitations' alone.
   const { page } = mount({
     listed: {
-      plans: PLANS,
+      tasks: TASKS,
       archived: [],
       inbox: [{ taskId: INVITES.id, items: [waitingOf(EMAIL)] }],
-      inboxPlans: HOLDING.inboxPlans,
+      inboxTasks: HOLDING.inboxTasks,
     },
   });
   await settle();
@@ -450,7 +450,7 @@ test("Home lists every open item of the listed plans, a teammate's agent's inclu
 
 test("Home lists an item an automation's agent with no plan waits on, by its automation, and opens the Inbox on it by its agent", async () => {
   const { page, opened } = mount({
-    inboxPlanless: [
+    inboxTaskless: [
       {
         id: QUARANTINE.id,
         agentId: SWEEP_AGENT,
@@ -477,11 +477,11 @@ test("Home lists an item an automation's agent with no plan waits on, by its aut
 
 test("an account with no plan yet but an automation's question waiting on it is shown the question rather than welcomed as new", async () => {
   const { page } = mount({
-    plans: [],
-    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     inbox: [],
-    inboxPlans: [],
-    inboxPlanless: [
+    inboxTasks: [],
+    inboxTaskless: [
       {
         id: QUARANTINE.id,
         agentId: SWEEP_AGENT,
@@ -518,7 +518,7 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
     pullRequestTotal: 0,
     pullRequests: [],
   };
-  const plans = PLANS.map((each) => (each.id === INVITES.id ? { ...each, agents } : each));
+  const tasks = TASKS.map((each) => (each.id === INVITES.id ? { ...each, agents } : each));
   const { page } = mount({
     me: "user-dean",
     workspace: {
@@ -528,8 +528,8 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
       github: null,
       memberCount: 2,
     },
-    plans,
-    listed: { plans, archived: [], ...HOLDING },
+    tasks,
+    listed: { tasks, archived: [], ...HOLDING },
   });
   await settle();
 
@@ -558,13 +558,13 @@ test("a waiting row of an agent with no plan names the automation that started i
     role: WORKSPACE_ROLE.OWNER,
     github: null,
   };
-  const plans = plansControl({
-    plans: [],
-    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+  const tasks = tasksControl({
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     inbox: [],
-    inboxPlans: [],
+    inboxTasks: [],
     workspace,
-    inboxPlanless: [
+    inboxTaskless: [
       {
         id: QUARANTINE.id,
         agentId: SWEEP_AGENT,
@@ -586,9 +586,9 @@ test("a waiting row of an agent with no plan names the automation that started i
       onRegistry(
         AtomRegistry.make(),
         createElement(ListedAutomations, {
-          plans,
+          tasks,
           on: true,
-          children: createElement(DesktopHome, { plans, accountName: "Dean Stratakos" }),
+          children: createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
         }),
       ),
     ),
@@ -606,18 +606,18 @@ test("a waiting row of an agent with no plan names the automation that started i
 
 test("a question of another workspace's automation, which Home does not list, reads none of the listed workspace's automations", async () => {
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
-  const plans = plansControl({
-    plans: [],
-    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+  const tasks = tasksControl({
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     inbox: [],
-    inboxPlans: [],
+    inboxTasks: [],
     workspace: {
       id: "workspace-personal",
       name: "Personal",
       role: WORKSPACE_ROLE.OWNER,
       github: null,
     },
-    inboxPlanless: [
+    inboxTaskless: [
       {
         id: QUARANTINE.id,
         agentId: SWEEP_AGENT,
@@ -640,9 +640,9 @@ test("a question of another workspace's automation, which Home does not list, re
       onRegistry(
         AtomRegistry.make(),
         createElement(ListedAutomations, {
-          plans,
+          tasks,
           on: true,
-          children: createElement(DesktopHome, { plans, accountName: "Dean Stratakos" }),
+          children: createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
         }),
       ),
     ),
@@ -653,7 +653,7 @@ test("a question of another workspace's automation, which Home does not list, re
 });
 
 test("a recent task a teammate created wears their face before its time, and the reader's own wears none", async () => {
-  const plans = PLANS.map((each) =>
+  const tasks = TASKS.map((each) =>
     each.id === INVITES.id
       ? { ...each, ownerId: CHARLES.userId, createdBy: CHARLES }
       : {
@@ -671,15 +671,15 @@ test("a recent task a teammate created wears their face before its time, and the
       github: null,
       memberCount: 2,
     },
-    plans,
-    listed: { plans, archived: [], ...HOLDING },
+    tasks,
+    listed: { tasks, archived: [], ...HOLDING },
   });
   await settle();
 
   const region = page.querySelector('section[aria-labelledby="home-recent"]');
-  const faces = [...(region?.querySelectorAll(".sidebar-plan") ?? [])].flatMap((row) => {
-    const face = row.querySelector<HTMLImageElement>(".sidebar-plan-time .actor-mark img");
-    return face === null ? [] : [[row.querySelector(".sidebar-plan-name")?.textContent, face.src]];
+  const faces = [...(region?.querySelectorAll(".sidebar-task") ?? [])].flatMap((row) => {
+    const face = row.querySelector<HTMLImageElement>(".sidebar-task-time .actor-mark img");
+    return face === null ? [] : [[row.querySelector(".sidebar-task-name")?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
 });
@@ -692,7 +692,7 @@ test("a row whose title runs long keeps the task or repository it is about in si
   assert.equal(abouts.length, 8, "both sections' rows say what they are about");
   for (const about of abouts) {
     const title =
-      about.parentElement?.querySelector(".sidebar-plan-name") ?? assert.fail("a title");
+      about.parentElement?.querySelector(".sidebar-task-name") ?? assert.fail("a title");
     assert.notEqual(getComputedStyle(title).flexShrink, "0", "the title gives way");
     assert.notEqual(getComputedStyle(about).minWidth, "0px", "what it is about keeps a floor");
   }
