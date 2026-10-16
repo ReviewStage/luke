@@ -114,8 +114,13 @@ export function OpenedNote({
       <ActorLine>
         {"Opened by "}
         <ActorRef actor={actor} />
-        {words === undefined ? null : `${SEPARATOR}${words.after}`}
-        {ago}
+        {words === undefined ? null : (
+          // Note that the time is one piece, so where a long login leaves it no room it moves under the name whole, rather than cutting the name.
+          <span className="card-when">
+            {`${SEPARATOR}${words.after}`}
+            {ago}
+          </span>
+        )}
       </ActorLine>
     </CardNote>
   );

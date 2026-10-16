@@ -7597,6 +7597,19 @@ button.automation-run:hover {
   font-weight: 500;
 }
 
+/* Who opened a pull request on its card, and how long ago it moved after
+   them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
+   as one piece where a long login leaves it no room, so the name is never
+   cut for it, as an agent's origin line wraps. */
+.card-note .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.card-when {
+  white-space: pre;
+}
+
 /* A pull request's comment and commit counts, each its glyph and its
    number, apart as a row of stats. */
 .card-counts {
