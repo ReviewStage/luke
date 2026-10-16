@@ -1090,7 +1090,10 @@ export function InboxPane({
           </Tooltip>
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
-        {pager === undefined || pager.total < 2 ? null : <InboxPagerControls pager={pager} />}
+        {pager === undefined ||
+        (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+          <InboxPagerControls pager={pager} />
+        )}
       </header>
       <div className="desktop-inbox">
         <div

@@ -13,7 +13,10 @@ import { cardTitle } from "./tool-call-model";
  * The steps follow the list's own order, its grouping and its Needs-you
  * filter as drawn, settled items among them and a folded group's left out,
  * so the count matches the rows, and they stop at its ends rather than
- * wrapping round. K and J are offered only while the Inbox is on screen, so
+ * wrapping round. The item read keeps its place among the steps where the
+ * filter draws it no row, once it is answered, so they still reach the rows
+ * either side; the pager then counts nothing, there being no row to count it
+ * as. K and J are offered only while the Inbox is on screen, so
  * a page drawn over it, a full-screen side panel or Settings, keeps them. K and J
  * choose the item above and below wherever the Inbox stands, as Linear's
  * Inbox has them: split, they move the chosen row and the item beside it;
@@ -30,8 +33,8 @@ const NEXT_CHORD = APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord;
 
 /** What the pager draws and steps by. */
 export interface InboxPager {
-  readonly at: number;
-  readonly total: number;
+  /** Where the chosen item's row stands among the rows, counted from one; none where the filter draws it no row. */
+  readonly count: { readonly at: number; readonly total: number } | undefined;
   /** Chooses the item above the chosen one; none at the list's top. */
   readonly onPrevious: (() => void) | undefined;
   /** Chooses the item below the chosen one; none at the list's foot. */
@@ -91,31 +94,39 @@ export interface InboxPagerPlace {
   readonly folded: (key: string) => boolean;
 }
 
-/** The chosen item's place among the rows and the steps either side of it, K and J offered while the Inbox is on screen and each has somewhere to go; none where no row holds the chosen item. */
+/** The chosen item's place among the rows drawn and the steps either side of it, which keep it in its place where it has no row, K and J offered while the Inbox is on screen and each has somewhere to go; none where the steps do not hold the chosen item. */
 export function useInboxPager(
-  view: InboxListView,
+  steps: InboxListView,
+  rows: InboxListView,
   chosen: string | undefined,
   onChoose: (listed: InboxListed) => void,
   place: InboxPagerPlace,
 ): InboxPager | undefined {
-  const steps = inboxSteps(view, chosen, place.folded);
-  const previous = steps?.previous;
-  const next = steps?.next;
+  const at = inboxSteps(steps, chosen, place.folded);
+  const row = inboxSteps(rows, chosen, place.folded);
+  const previous = at?.previous;
+  const next = at?.next;
   const onPrevious = previous === undefined ? undefined : () => onChoose(previous);
   const onNext = next === undefined ? undefined : () => onChoose(next);
   useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, place.shown ? onPrevious : undefined);
   useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, place.shown ? onNext : undefined);
-  if (steps === undefined) return undefined;
-  return { at: steps.at, total: steps.total, onPrevious, onNext };
+  if (at === undefined) return undefined;
+  return {
+    count: row === undefined ? undefined : { at: row.at, total: row.total },
+    onPrevious,
+    onNext,
+  };
 }
 
-/** The pager at the end of an item's bar: "2 of 8", then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
+/** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
 export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.Element {
   return (
     <div className="desktop-toolbar-actions inbox-pager">
-      <span className="inbox-pager-count">
-        {pager.at} of {pager.total}
-      </span>
+      {pager.count === undefined ? null : (
+        <span className="inbox-pager-count">
+          {pager.count.at} of {pager.count.total}
+        </span>
+      )}
       <Tooltip label="Previous item" command={APP_COMMAND.PREVIOUS_INBOX_ITEM}>
         <button
           type="button"

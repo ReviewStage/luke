@@ -216,7 +216,10 @@ function PlanInboxTab({
     columns.onOpen(listed.item.id);
   };
   // Note that the column is hidden, though drawn, while the side panel fills the window.
-  const pager = useInboxPager(steps, chosen?.item.id, choose, { shown, folded: NO_FOLDS });
+  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
+    shown,
+    folded: NO_FOLDS,
+  });
   const next = inboxNext(
     steps,
     chosen,
@@ -259,7 +262,7 @@ function PlanInboxTab({
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
           ) : inbox.read && filteredOut ? (
-            <NeedsYouEmpty needsYou={needsYou} />
+            <NeedsYouEmpty needsYou={needsYou} onList={columns.onList} />
           ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>

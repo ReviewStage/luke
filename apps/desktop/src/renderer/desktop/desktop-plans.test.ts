@@ -481,6 +481,11 @@ test("a task's Inbox holding only settled items, Needs you pressed on, lists no 
   assert.deepEqual(narrow.standing(), ["list", ""]);
   assert.equal(narrow.filteredOut()?.[2], "Show all");
   narrow.showAll();
+  assert.deepEqual(
+    narrow.standing(),
+    ["list", ""],
+    "Show all leaves the rows it brings back standing",
+  );
   assert.deepEqual(narrow.head(), ["Inbox", "false"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();

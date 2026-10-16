@@ -6,8 +6,9 @@
  * and the one it shows is the item: the chosen one, the whole Inbox wide,
  * under a way back to the list, which Back's chord and Escape take as well,
  * so an Inbox holding one item is that item rather than a list of one row.
- * The list stands alone only once the way back was taken, or while nothing
- * is chosen, and a row pressed there opens its item again. An Inbox whose
+ * The list stands alone only once the way back was taken or Show all
+ * pressed, or while nothing is chosen, and a row pressed there opens its
+ * item again. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a plan's own Inbox tab stand in
@@ -54,6 +55,8 @@ export interface InboxColumns {
   readonly onOpen: (itemId: string) => void;
   /** Goes back from the item to the list, while the item stands alone and the list holds more. */
   readonly onBack: (() => void) | undefined;
+  /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
+  readonly onList: () => void;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -144,5 +147,9 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
       setListAsked(false);
     },
     onBack: back,
+    onList: () => {
+      pressed.current = true;
+      setListAsked(true);
+    },
   };
 }

@@ -4,6 +4,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
@@ -367,8 +368,15 @@ function NeedsYouOnly({
   );
 }
 
-/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off. */
-export function NeedsYouEmpty({ needsYou }: { needsYou: InboxWaitingOnly }): React.JSX.Element {
+/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off and keeps the list standing where the Inbox shows one column. */
+export function NeedsYouEmpty({
+  needsYou,
+  onList,
+}: {
+  needsYou: InboxWaitingOnly;
+  /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
+  onList: () => void;
+}): React.JSX.Element {
   return (
     <EmptyState
       icon={<InboxIcon />}
@@ -377,7 +385,10 @@ export function NeedsYouEmpty({ needsYou }: { needsYou: InboxWaitingOnly }): Rea
         <button
           type="button"
           className="toolbar-button"
-          onClick={() => needsYou.onWaitingOnly(false)}
+          onClick={() => {
+            onList();
+            needsYou.onWaitingOnly(false);
+          }}
         >
           {NEEDS_YOU_PRESS.ALL}
         </button>
@@ -432,6 +443,42 @@ export interface InboxListHead {
   readonly waiting: boolean;
 }
 
+/**
+ * Keeps the keyboard in the list when the row holding it is no longer
+ * drawn, as Needs you leaves out an item answered on another Mac while its
+ * row is focused: the keyboard goes to Needs you, the control that left it
+ * out. Note that a removed row fires no blur, so the row last focused is
+ * remembered and looked for after every render.
+ */
+function useRowFocusKept(): {
+  ref: React.RefObject<HTMLElement | null>;
+  onFocus: (event: React.FocusEvent) => void;
+  onBlur: () => void;
+} {
+  const ref = useRef<HTMLElement | null>(null);
+  const focusedRow = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const row = focusedRow.current;
+    if (list === null || row === undefined || list.hidden) return;
+    const rows = list.querySelectorAll<HTMLElement>("[data-item-id]");
+    if ([...rows].some((each) => each.dataset.itemId === row)) return;
+    focusedRow.current = undefined;
+    if (document.activeElement !== null && document.activeElement !== document.body) return;
+    list.querySelector<HTMLElement>(".inbox-needs-you-only")?.focus();
+  });
+  return {
+    ref,
+    onFocus: (event) => {
+      focusedRow.current =
+        event.target instanceof HTMLElement ? event.target.dataset.itemId : undefined;
+    },
+    onBlur: () => {
+      focusedRow.current = undefined;
+    },
+  };
+}
+
 /** The list: its head where it has one, then each plan's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
@@ -459,6 +506,7 @@ export function InboxList({
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
+  const rowFocus = useRowFocusKept();
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -480,9 +528,12 @@ export function InboxList({
   );
   return (
     <nav
+      ref={rowFocus.ref}
       className="inbox-plans"
       aria-label="Inbox items"
       hidden={columns === INBOX_COLUMNS.ITEM}
+      onFocus={rowFocus.onFocus}
+      onBlur={rowFocus.onBlur}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} />

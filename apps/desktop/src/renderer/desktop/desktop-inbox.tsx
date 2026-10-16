@@ -100,6 +100,7 @@ function ListNote({
   empty,
   alone,
   filteredOut,
+  onList,
   onRetry,
 }: {
   failed: boolean;
@@ -109,6 +110,8 @@ function ListNote({
   alone: boolean;
   /** Needs you, where it leaves out every item the Inbox holds, for its empty state to turn off. */
   filteredOut: InboxWaitingOnly | undefined;
+  /** Asks for the list, so Show all leaves it standing. */
+  onList: () => void;
   onRetry: () => void;
 }): React.JSX.Element | null {
   if (failed) {
@@ -120,7 +123,7 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
-  if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} />;
+  if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
@@ -299,7 +302,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     choose(listed);
     columns.onOpen(listed.item.id);
   };
-  const pager = useInboxPager(steps, chosen?.item.id, choose, {
+  const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: plans.shown,
     folded: folds.folded,
   });
@@ -356,6 +359,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
                   empty={listedItems(list).length === 0}
                   alone={columns.shown === INBOX_COLUMNS.LIST}
                   filteredOut={filteredOut ? choices : undefined}
+                  onList={columns.onList}
                   onRetry={onRetry}
                 />
               }
