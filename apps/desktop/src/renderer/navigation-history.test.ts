@@ -313,3 +313,32 @@ test("Chat is the chat of the workspace it stood in, so Back returns to it in th
   other.stand(onChat(false, opened, "workspace-platform"));
   assert.equal(other.history().canGoBack, false, "Chat of another workspace is no step back");
 });
+
+test("the Issues page is its workspace's, so once another is listed Back passes over it", async () => {
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  let reopened = 0;
+  const control = tasksControl();
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
+  const initech = { ...acme, id: "workspace-initech", name: "Initech" };
+  const window = mount(
+    tasksControl({
+      workspace: acme,
+      issuesView: { ...control.issuesView, open: true, onOpen: () => (reopened += 1) },
+    }),
+  );
+  // The account's experiments arrive with the window's state, which the page is reachable by.
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  window.stand(
+    tasksControl({
+      workspace: initech,
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: TASK_ID,
+      boundFor: TASK_ID,
+    }),
+  );
+
+  assert.equal(window.history().canGoBack, false);
+  assert.equal(reopened, 0);
+});

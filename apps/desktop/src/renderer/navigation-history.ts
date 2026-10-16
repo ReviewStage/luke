@@ -100,7 +100,11 @@ type Place =
       /** The workspace listed as Chat stood, whose chat it read. */
       readonly workspaceId: string | undefined;
     }
-  | { readonly kind: typeof PLACE_KIND.ISSUES }
+  | {
+      readonly kind: typeof PLACE_KIND.ISSUES;
+      /** The workspace whose issues stood, which is no place of another's. */
+      readonly workspaceId: string | undefined;
+    }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -140,7 +144,7 @@ function madeFromNew(standing: Place, place: Place): boolean {
   );
 }
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the same Automations page, Chat in the same workspace, the same workspace's Issues page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
@@ -154,6 +158,7 @@ function sameStep(one: Place | undefined, other: Place): boolean {
   if (one.kind === PLACE_KIND.CHAT && other.kind === PLACE_KIND.CHAT) {
     return one.workspaceId === other.workspaceId;
   }
+  if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
 }
 
@@ -390,7 +395,7 @@ export function useWindowHistory(input: {
       return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage, workspaceId: listedWorkspace };
     }
     if (chatOpen) return { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace };
-    if (issuesOpen) return { kind: PLACE_KIND.ISSUES };
+    if (issuesOpen) return { kind: PLACE_KIND.ISSUES, workspaceId: listedWorkspace };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
@@ -424,7 +429,8 @@ export function useWindowHistory(input: {
     }
     // Chat is the chat of the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.CHAT) return chatOn && to.workspaceId === listedWorkspace;
-    if (to.kind === PLACE_KIND.ISSUES) return issuesOn;
+    // The Issues page is a workspace's, so Back passes over it once another is listed.
+    if (to.kind === PLACE_KIND.ISSUES) return issuesOn && to.workspaceId === listedWorkspace;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (!("taskId" in to) || to.taskId === boundFor) return true;

@@ -113,9 +113,19 @@ function mount(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const control = tasksControl({ workspace: WORKSPACE });
+  registry = AtomRegistry.make();
+  list(WORKSPACE);
+  return container;
+}
+
+/** The registry every render of one mount shares, so a render again is the same window. */
+let registry = AtomRegistry.make();
+
+/** The page drawn again in place, listing the workspace given. */
+function list(workspace: Workspace): void {
+  const control = tasksControl({ workspace });
   const plans = tasksControl({
-    workspace: WORKSPACE,
+    workspace,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -126,7 +136,7 @@ function mount(): HTMLElement {
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
@@ -136,7 +146,6 @@ function mount(): HTMLElement {
       ),
     ),
   );
-  return container;
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -258,4 +267,24 @@ test("a read that did not land is said with a retry, which asks again and draws 
 
   assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
   assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+});
+
+test("a title typed and not yet filed is dropped once another workspace is listed, so it is never filed there", async () => {
+  const page = mount();
+  await settle();
+  const field = page.querySelector<HTMLInputElement>("input[aria-label='New issue title']");
+  assert.ok(field, "the field stands");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    set?.call(field, "Meant for Acme");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='New issue title']")?.value,
+    "",
+  );
 });

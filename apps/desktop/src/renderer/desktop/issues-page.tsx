@@ -103,7 +103,8 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-          <NewIssueField disabled={workspace === undefined} onFile={onFile} />
+          {/* Keyed by the workspace, so a title typed in one is never filed in another. */}
+          <NewIssueField key={workspace?.id} disabled={workspace === undefined} onFile={onFile} />
         </div>
       </header>
       <div className="issues-scroll scroll-fade-top">
