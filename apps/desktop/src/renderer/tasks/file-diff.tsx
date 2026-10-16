@@ -135,7 +135,12 @@ export function PierreDiff({
   useEffect(() => {
     if (handle.current === undefined) return;
     const was = drawn.current;
-    if (was.patch === patch && sameLook(was.look, look) && sameSelection(was.selected, selected)) {
+    if (
+      was.patch === patch &&
+      sameLook(was.look, look) &&
+      sameSelection(was.selected, selected) &&
+      was.excerpt === excerpt
+    ) {
       return;
     }
     drawn.current = { patch, look, selected, excerpt };
