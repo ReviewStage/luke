@@ -14,6 +14,7 @@ import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -733,7 +734,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           taskId,
           sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
         };
-        return yield* runShowPage(binding, input);
+        return yield* runShowPage(binding, input, {
+          kind: PAGE_SHOWER.AGENT,
+          agentId: found.success.id,
+        });
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),

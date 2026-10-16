@@ -9,6 +9,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
@@ -127,7 +128,15 @@ const STATE: AppStateSnapshot = (() => {
       tasks: [PLAN],
       workspaces: [ACME, BETA],
       activeTaskId: PLAN_ID,
-      pages: [{ id: PAGE_ID, title: "Unfurl matrix", version: 3, at: AT }],
+      pages: [
+        {
+          id: PAGE_ID,
+          title: "Unfurl matrix",
+          version: 3,
+          at: AT,
+          shownBy: { kind: PAGE_SHOWER.LUKE },
+        },
+      ],
     },
     inbox: {
       ...snapshot.inbox,
@@ -316,7 +325,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 
-test("a page's chip hangs its title, its version, and when it moved; one the window holds nothing of, or one of another plan, keeps the chip's own card", async () => {
+test("a page's chip hangs its title, its version and who showed it, and when it moved; one the window holds nothing of, or one of another plan, keeps the chip's own card", async () => {
   const container = await drawn(
     [
       mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE_ID }, "", PLACE),
@@ -348,7 +357,7 @@ test("a page's chip hangs its title, its version, and when it moved; one the win
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
-  assert.equal(page.sub, "Version 3");
+  assert.equal(page.sub, "Version 3 · Shown by Luke");
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(other.card, "data-mention-card");
   assert.equal(other.name, "Old draft");

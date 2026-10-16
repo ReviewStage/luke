@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { listPages, readPageVersion, writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { Effect, Option } from "effect";
 
 /**
@@ -35,7 +36,7 @@ const openTask = Effect.gen(function* () {
 
 /** A write the test expects to land, as the page it left. */
 const written = (userId: string, taskId: string, write: Parameters<typeof writePage>[2]) =>
-  Effect.map(writePage(userId, taskId, write), Option.getOrThrow);
+  Effect.map(writePage(userId, taskId, write, { kind: PAGE_SHOWER.LUKE }), Option.getOrThrow);
 
 it.layer(getTestDB())("a plan's pages", (it) => {
   it.effect("another account's plan lists, reads, and takes no page", () =>
@@ -46,8 +47,17 @@ it.layer(getTestDB())("a plan's pages", (it) => {
 
       assert.deepEqual(yield* listPages(other, taskId), []);
       assert.ok(Option.isNone(yield* readPageVersion(other, taskId, chart.id, 1)));
-      assert.ok(Option.isNone(yield* writePage(other, taskId, MOCKUP)));
-      assert.ok(Option.isNone(yield* writePage(other, taskId, { pageId: chart.id, ...MOCKUP })));
+      assert.ok(Option.isNone(yield* writePage(other, taskId, MOCKUP, { kind: PAGE_SHOWER.LUKE })));
+      assert.ok(
+        Option.isNone(
+          yield* writePage(
+            other,
+            taskId,
+            { pageId: chart.id, ...MOCKUP },
+            { kind: PAGE_SHOWER.LUKE },
+          ),
+        ),
+      );
       assert.deepEqual(yield* listPages(userId, taskId), [chart]);
     }),
   );
