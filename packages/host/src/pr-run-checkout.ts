@@ -320,7 +320,7 @@ function commitOf(tool: GitTool, clone: string, ref: string) {
 }
 
 /** The repository's GitHub address, which the clone's `origin` names; no credential is ever in it. */
-export function githubAddress(repository: string): string {
+function githubAddress(repository: string): string {
   return `https://github.com/${repository}.git`;
 }
 

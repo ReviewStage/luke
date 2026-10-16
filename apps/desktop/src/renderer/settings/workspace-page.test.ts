@@ -107,7 +107,8 @@ const RELAY_REPOSITORY = {
 };
 
 /** The run commands set on this Mac, as the host keeps them. */
-let runCommands: { workspaceId: string; repository: string; command: string }[] = [];
+let runCommands: { repository: string; setupCommand: string | null; runCommand: string | null }[] =
+  [];
 /** Whether the service refuses to read the invitations. */
 let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
@@ -180,14 +181,15 @@ function answer(request: Act): Promise<ActOutcome> {
         }),
       );
     case ACT_KIND.PR_RUN_COMMANDS:
-      return Promise.resolve(done({ commands: runCommands }));
+      return Promise.resolve(done({ runs: runCommands }));
     case ACT_KIND.PR_RUN_SET_COMMAND: {
-      const { workspaceId, repository, command } = request.payload;
+      const { repository, setupCommand, runCommand } = request.payload;
+      const key = repository.toLowerCase();
       runCommands = [
-        ...runCommands.filter((each) => each.repository !== repository.toLowerCase()),
-        ...(command === null
+        ...runCommands.filter((each) => each.repository !== key),
+        ...(setupCommand === null && runCommand === null
           ? []
-          : [{ workspaceId, repository: repository.toLowerCase(), command }]),
+          : [{ repository: key, setupCommand, runCommand }]),
       ];
       return Promise.resolve(done(undefined));
     }
@@ -1718,32 +1720,39 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   );
 });
 
-test("a repository's row opens its own page, where its run command on this Mac is saved and removed", async () => {
+test("a repository's row opens its own page, where its shared setup and run commands are saved and removed", async () => {
   const { page } = await mount(ACME);
   await settle();
   const row = () =>
     [...page.querySelectorAll<HTMLButtonElement>(".repository-row")].find(
       (each) => each.querySelector("strong")?.textContent === "acme/relay",
     ) ?? assert.fail("no acme/relay row");
+  const typeInto = (id: string, value: string) => {
+    const field = page.querySelector<HTMLTextAreaElement>(`#${id}`) ?? assert.fail(`no ${id}`);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+        field,
+        value,
+      );
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
 
-  assert.equal(row().querySelector("small")?.textContent, "No run command on this Mac");
+  assert.equal(row().querySelector("small")?.textContent, "No run command yet");
   act(() => row().click());
   await settle();
   assert.equal(page.querySelector(".repository-page-title")?.textContent, "acme/relay");
-  const field =
-    page.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("no run command field");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
-      field,
-      "  pnpm install && pnpm dev  ",
-    );
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  typeInto("repository-setup-command", "  pnpm install  ");
+  typeInto("repository-run-command", "pnpm dev --port $LUKE_PORT");
   act(() => button(page, "Save").click());
   await settle();
 
   assert.deepEqual(runCommands, [
-    { workspaceId: ACME.id, repository: "acme/relay", command: "pnpm install && pnpm dev" },
+    {
+      repository: "acme/relay",
+      setupCommand: "pnpm install",
+      runCommand: "pnpm dev --port $LUKE_PORT",
+    },
   ]);
   act(() => button(page, "Remove").click());
   await settle();
@@ -1754,7 +1763,7 @@ test("a repository's row opens its own page, where its run command on this Mac i
     ).click(),
   );
   await settle();
-  assert.equal(row().querySelector("small")?.textContent, "No run command on this Mac");
+  assert.equal(row().querySelector("small")?.textContent, "No run command yet");
 });
 
 /** The workspace Linear connects and disconnects sent, by their payloads. */
@@ -1837,7 +1846,7 @@ test("a section sought while a repository's page is open draws the workspace's s
   assert.equal(page.querySelector(".repository-page-title"), null);
   assert.equal(repositoryRow() !== null, true);
 
-  runCommands = [{ workspaceId: ACME.id, repository: "acme/relay", command: "make serve" }];
+  runCommands = [{ repository: "acme/relay", setupCommand: null, runCommand: "make serve" }];
   act(() => {
     window.dispatchEvent(new Event("focus"));
   });

@@ -105,10 +105,12 @@ export function PrRunTab({
   // The screen mounts once the bundle has loaded and the tab has drawn its place; it takes no input.
   useEffect(() => {
     if (module === undefined || element === null) return;
+    // Note that the run's output comes from a pipe, so its bare line feeds are drawn as new lines.
     const mounted = module.mount(element, {
       onInput: () => undefined,
       onResize: () => undefined,
       onLink: openLink,
+      convertEol: true,
     });
     live.current.handle = mounted;
     setHandle(mounted);

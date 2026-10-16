@@ -948,8 +948,14 @@
   padding: var(--space-12) var(--space-16);
 }
 
+.repository-run-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
 .repository-run-command {
-  min-height: 64px;
+  min-height: 44px;
   resize: vertical;
   font-family: var(--font-mono);
   font-size: 12px;

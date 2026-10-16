@@ -1503,7 +1503,7 @@ function ShownWorkspace({
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         repository={repository}
-        command={repositories.commands.get(repository.toLowerCase())}
+        run={repositories.commands.get(repository.toLowerCase())}
         onBack={() => setRepository(undefined)}
         onSaved={repositories.reread}
       />

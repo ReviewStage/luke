@@ -57,7 +57,7 @@ function fixture(options: { start?: PrRunOutcome; location?: string | null } = {
   let stateListener: Parameters<HostOperator["onPrRunState"]>[0] | undefined;
   let ids = 0;
   const host: PrRunActsDependencies["host"] = {
-    prRunCommands: () => Effect.succeed({ commands: [] }),
+    prRunCommands: () => Effect.succeed({ runs: [] }),
     prRunSetCommand: () => Effect.succeed({ done: true }),
     prRunStart: ({ connectionId }) =>
       Effect.sync(() => {

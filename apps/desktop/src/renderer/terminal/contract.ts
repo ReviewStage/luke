@@ -29,6 +29,12 @@ export interface TerminalProps {
   readonly onResize: (size: TerminalSize) => void;
   /** A link in the output pressed with ⌘ held, as a terminal on a Mac opens one. */
   readonly onLink: (url: string) => void;
+  /**
+   * Whether a bare line feed starts a new line at the left edge, as output
+   * read from a pipe needs, since no terminal turned its line feeds into
+   * carriage returns and line feeds; a shell's own output never does.
+   */
+  readonly convertEol?: boolean;
 }
 
 /** Which way a find over the scrollback goes: to the next match, the one before, or the query as typed, keeping to the match it was at. */

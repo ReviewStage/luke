@@ -30,7 +30,7 @@ const command = EffectSchema.NullOr(
 );
 
 /** One repository's commands; null where none is set. */
-export const repositoryRunSchema = EffectSchema.Struct({
+const repositoryRunSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   setupCommand: command,
   runCommand: command,

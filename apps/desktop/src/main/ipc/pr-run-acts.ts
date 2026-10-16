@@ -2,7 +2,7 @@
  * pr-run-acts.ts -- the act rows that run a pull request on this Mac: the account's run commands read and set, a run started, stopped, and closed for the panel that drew it, and its checkout shown in Finder or deleted.
  *
  * The rows carry a pull request's workspace, repository, and number, and a
- * run command, and nothing else. A start mints a connection for the asking
+ * repository's setup and run commands, and nothing else. A start mints a connection for the asking
  * panel and that pull request, opens a channel, posts the channel's other
  * end to that panel alone, and only then asks the host to run, so the port
  * stands before anything is printed. What the run prints arrives as the
@@ -204,9 +204,9 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
   };
 
   return {
-    [ACT_KIND.PR_RUN_COMMANDS]: (_payload, sender) => {
+    [ACT_KIND.PR_RUN_COMMANDS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_COMMANDS, sender);
-      return Effect.flatMap(host.prRunCommands(), (answer) =>
+      return Effect.flatMap(host.prRunCommands(params), (answer) =>
         answer === undefined
           ? Effect.fail(new ActRefused({ message: ACT[ACT_KIND.PR_RUN_COMMANDS].refusal }))
           : Effect.succeed(answer),

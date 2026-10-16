@@ -1,4 +1,4 @@
-import { createServer } from "node:net";
+import { type AddressInfo, createServer } from "node:net";
 import { Duration, Effect, Fiber, Option, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
@@ -76,13 +76,19 @@ export function runPullRequestCommand(
 /** The port a run is handed when the Mac finds none free, which a run command may still bind or not. */
 const FALLBACK_PORT = 3000;
 
+/** Whether a server's address is a pipe's path rather than a TCP address. */
+function isPipePath(address: string | AddressInfo): address is string {
+  return address === String(address);
+}
+
 /** A port no process on this Mac holds now, asked of the system by listening on port 0 and letting it go. */
 export const freeLocalPort: Effect.Effect<number> = Effect.callback<number>((resume) => {
   const server = createServer();
   server.once("error", () => resume(Effect.succeed(FALLBACK_PORT)));
   server.listen(0, "127.0.0.1", () => {
+    // A server listening on a TCP port answers its address as an object, never a pipe's path.
     const address = server.address();
-    const port = typeof address === "object" && address !== null ? address.port : FALLBACK_PORT;
+    const port = address !== null && !isPipePath(address) ? address.port : FALLBACK_PORT;
     server.close(() => resume(Effect.succeed(port)));
   });
 });

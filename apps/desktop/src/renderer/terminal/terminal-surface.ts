@@ -156,6 +156,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     ...TERMINAL_LOOK,
     fontFamily: monospaceFont(host),
     theme: terminalTheme(host),
+    convertEol: props.convertEol === true,
   });
   terminal.attachCustomKeyEventHandler((event) => {
     const key = terminalKey(event);
