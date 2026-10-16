@@ -40,7 +40,10 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * - A page an agent showed on a plan is the plan's address with
  *   `/page/<pageId>` after it, and one of the plan's coding agents with
  *   `/agent/<agentId>`, the links the window already opens them by
- *   (`luke-link.ts`): ids alone, never the page's title or the agent's.
+ *   (`luke-link.ts`): ids alone, never the page's title or the agent's. A
+ *   coding agent on no task, as an automation's run or a one-off starts
+ *   one, is the workspace's address with `/agent/<agentId>` after it, its
+ *   own link, so any agent of the workspace can be mentioned.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -290,7 +293,8 @@ const mentionSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.AGENT),
-    taskId: taskIdSchema,
+    /** The task the agent works on; absent for an agent on none. */
+    taskId: EffectSchema.optionalKey(taskIdSchema),
     agentId: thingIdSchema,
   }),
 ]);
@@ -303,7 +307,7 @@ export type PlanMention = Extract<
   { readonly kind: typeof MENTION_KIND.TASK | typeof MENTION_KIND.SECTION }
 >;
 
-/** A mention of something the plan holds beside its words: a page an agent showed on it, or one of its coding agents. */
+/** A mention of something the workspace holds beside a plan's words: a page an agent showed on a plan, or a coding agent, on a task or on none. */
 export type TaskMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.PAGE | typeof MENTION_KIND.AGENT }
@@ -434,22 +438,25 @@ function legacyFields(url: URL) {
   }
 }
 
-/** The fields a page's or an agent's address under its plan spells after the plan's id: `/page/<id>` or `/agent/<id>`, with no fragment. */
+/** The fields a page's or an agent's address spells after its task's id, or after the workspace for an agent on no task: `/page/<id>` or `/agent/<id>`, with no fragment. */
 function taskFields(taskId: string | undefined, rest: readonly string[], hash: string) {
   const [step, id, ...more] = rest;
   if (id === undefined || more.length > 0 || hash !== "") return undefined;
+  // A page always stands on a task, so one with none reads as nothing to the schema.
   if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
-  if (step === LINK.AGENT_STEP)
-    return { kind: MENTION_KIND.AGENT, taskId, agentId: decodedPart(id) };
-  return undefined;
+  if (step !== LINK.AGENT_STEP) return undefined;
+  const agentId = decodedPart(id);
+  return taskId === undefined
+    ? { kind: MENTION_KIND.AGENT, agentId }
+    : { kind: MENTION_KIND.AGENT, taskId, agentId };
 }
 
-/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it. */
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`. */
 function planFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
-  if (first !== "" || workspace === "" || step !== LINK.TASK_STEP || id === undefined) {
-    return undefined;
-  }
+  if (first !== "" || workspace === "" || id === undefined) return undefined;
+  if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
+  if (step !== LINK.TASK_STEP) return undefined;
   if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
   const taskId = decodedPart(id);
   if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.TASK, taskId };
@@ -719,8 +726,14 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return linkAddress(mention.url);
     case MENTION_KIND.PAGE:
       return `${taskTarget(mention.taskId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
-    case MENTION_KIND.AGENT:
-      return `${taskTarget(mention.taskId, place, "")}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
+    case MENTION_KIND.AGENT: {
+      // An agent on no task stands under its workspace, as its own Luke link does.
+      const owner =
+        mention.taskId === undefined
+          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}`
+          : taskTarget(mention.taskId, place, "");
+      return `${owner}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
+    }
   }
 }
 

@@ -143,8 +143,10 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
-  // What the words mention of the plan goes with them, read off the plan this send read as its sender.
-  const reads = yield* hostedStoreOrUnavailable(readMentioned(userId, line.text, task?.task));
+  // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
+  const reads = yield* hostedStoreOrUnavailable(
+    readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
+  );
   const mentioned = mentionedContext(line.text, task?.task, reads);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;

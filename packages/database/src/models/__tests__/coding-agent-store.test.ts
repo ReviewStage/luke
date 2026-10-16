@@ -33,6 +33,7 @@ import {
   linePlacesOf,
   lineSendersOf,
   listCodingAgentsOnPullRequest,
+  listPublishedCodingAgentsById,
   listTasklessCodingAgents,
   listWorkspaceCodingAgents,
   pinCodingAgent,
@@ -423,6 +424,42 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
           ],
           [true, true, false],
           "the agent's conversation is its workspace's, as its sessions are admitted",
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
+  it.effect(
+    "agents named by id are read for any member of their workspace, an archived one among them, and as none for an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const first = yield* tasklessAgent(starter, workspace);
+        const second = yield* tasklessAgent(starter, workspace);
+        yield* archiveCodingAgent(starter, second.agentId, true);
+
+        const read = yield* listPublishedCodingAgentsById(teammate, [
+          first.agentId,
+          second.agentId,
+          randomUUID(),
+        ]);
+        assert.deepEqual(
+          read.map(({ agent, published }) => [agent.id, agent.archivedAt !== null, published]),
+          [
+            [first.agentId, false, null],
+            [second.agentId, true, null],
+          ],
+        );
+        assert.deepEqual(
+          yield* listPublishedCodingAgentsById(outsider, [first.agentId, second.agentId]),
+          [],
+          "another workspace's agents are none of an outsider's",
         );
       }),
   );

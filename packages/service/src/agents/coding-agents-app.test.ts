@@ -1691,6 +1691,65 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message mentioning agents on another task and on none of the workspace hands each by its task with how to message it, and one of another workspace the sender is also in as not found",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const billing = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
+        const onBilling = yield* startedAgentOf(owner, billing.id, ask);
+        const oneOff = yield* startedAgentOf(owner, task.id, ask);
+        const foreign = yield* startedAgentOf(owner, task.id, ask);
+        // The sender is a member of a second workspace, which holds the foreign agent.
+        const elsewhere = yield* openWorkspace(other);
+        yield* joinWorkspace(elsewhere, owner);
+        const moved = (agentId: string, organizationId: string) =>
+          Database.use((db) =>
+            db
+              .update(codingAgent)
+              .set({ taskId: null, organizationId })
+              .where(eq(codingAgent.id, agentId)),
+          );
+        yield* moved(oneOff.agent.id, task.workspaceId);
+        yield* moved(foreign.agent.id, elsewhere);
+        const place = { workspace: "acme", repository: task.repository };
+        const mention = (agentId: string, planId: string | undefined, name: string) =>
+          mentionMarkdown(
+            planId === undefined
+              ? { kind: MENTION_KIND.AGENT, agentId }
+              : { kind: MENTION_KIND.AGENT, taskId: planId, agentId },
+            name,
+            place,
+          );
+        const words = `Line up with ${mention(onBilling.agent.id, billing.id, "Billing agent")}, ${mention(oneOff.agent.id, undefined, "Sweeper")} and ${mention(foreign.agent.id, undefined, "Stranger")}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const part = message[1];
+        assert.ok(part?.type === "text");
+        assert.match(
+          part.text,
+          new RegExp(
+            `another coding agent of your workspace on the task "Billing", "[^"]+" \\(id \`${onBilling.agent.id}\`\\)`,
+            "u",
+          ),
+        );
+        assert.match(
+          part.text,
+          new RegExp(`on no task, "[^"]+" \\(id \`${oneOff.agent.id}\`\\)`, "u"),
+        );
+        assert.equal(
+          part.text.match(/To message it, call `message_agent` with its id\./gu)?.length,
+          2,
+        );
+        assert.match(part.text, /The coding agent "Stranger": not found in your workspace\./u);
+        assert.ok(!part.text.includes(`id \`${foreign.agent.id}\``), part.text);
+      }),
+  );
+
+  it.effect(
     "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
     () =>
       Effect.gen(function* () {

@@ -837,6 +837,22 @@ const findAgentsOfTasks = SqlSchema.findAll({
     ),
 });
 
+const findPublishedAgentsById = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, agentIds }) =>
+    Database.use((db) =>
+      db
+        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+        .from(codingAgent)
+        .where(and(inArray(codingAgent.id, [...agentIds]), agentReachableBy(userId)))
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+    ),
+});
+
 const findAgentsOnBranches = SqlSchema.findAll({
   Request: Schema.Struct({
     repository: Schema.String,
@@ -1131,6 +1147,17 @@ export function listPublishedCodingAgents(
   if (planIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
   return Effect.map(findAgentsOfTasks({ userId, planIds, includeArchived }), (rows) =>
+    rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
+}
+
+/** The agents named, by id, on a plan or with none, archived or not, each with what it published, in the order they were started: the read opening an agent's tab makes, so one of a workspace the account is not in names none. None asked, none read. */
+export function listPublishedCodingAgentsById(
+  userId: string,
+  agentIds: readonly string[],
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  if (agentIds.length === 0) return Effect.succeed([]);
+  return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }

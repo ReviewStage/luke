@@ -733,3 +733,23 @@ test("a page or an agent of a plan is its Luke link, read back by the app's sche
     assert.equal(decodeMention(target, null), undefined, target);
   }
 });
+
+test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on no task names nothing", () => {
+  const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-9" };
+
+  assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-9");
+  assert.deepEqual(decodeMention("https://tryluke.dev/acme/agent/agent-9", null), agent);
+  assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/agent/agent-9", null), agent);
+  assert.deepEqual(linkMention("", "https://tryluke.dev/acme/agent/agent-9", null), {
+    mention: agent,
+    name: "Agent",
+  });
+  for (const target of [
+    "https://tryluke.dev/acme/agent/agent-9/inbox/item-1",
+    "https://tryluke.dev/acme/agent/agent-9#top",
+    "https://tryluke.dev/acme/agent/",
+    "https://tryluke.dev/acme/page/page-1",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});

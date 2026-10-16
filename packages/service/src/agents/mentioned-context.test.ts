@@ -386,12 +386,19 @@ const PAGE_HTML = "<!doctype html>\n<h1>Invites by week</h1>\n<p>Code: ```x```</
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
-const agent = (name: string, agentId = OTHER_AGENT_ID, planId = TASK.id) =>
-  mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: planId, agentId }, name, PLACE);
+const agent = (name: string, agentId = OTHER_AGENT_ID, planId: string | undefined = TASK.id) =>
+  mentionMarkdown(
+    planId === undefined
+      ? { kind: MENTION_KIND.AGENT, agentId }
+      : { kind: MENTION_KIND.AGENT, taskId: planId, agentId },
+    name,
+    PLACE,
+  );
 
 const OTHER_AGENT: MentionedAgent = {
   id: OTHER_AGENT_ID,
   name: "Store the invitations",
+  task: { id: TASK.id, name: "Rollout", archived: false },
   repository: "acme/relay",
   branch: "luke/store-invitations",
   pullRequest: { number: 42, url: "https://github.com/acme/relay/pull/42" },
@@ -414,15 +421,52 @@ test("a page of the plan the words mention is handed by its id and version, with
   );
 });
 
-test("another agent of the plan the words mention is handed by its id and where its work stands on GitHub, and never its conversation", () => {
+test("another agent of the plan the words mention is handed by its id, where its work stands on GitHub, and how to message it, and never its conversation", () => {
   const part = mentionedContext(`Build on ${agent("Store")}.`, TASK, READS) ?? "";
 
   assert.match(
     part,
-    /another coding agent on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
+    /another coding agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
   );
   assert.match(part, /`gh pr diff 42`/u);
+  assert.match(part, /To message it, call `message_agent` with its id\./u);
   assert.match(part, /Its conversation is not yours to read\./u);
+});
+
+test("an agent of the workspace on another task or on none is handed with its task, to an agent with a plan or with none, and an archived one is not offered to message", () => {
+  const onAnother = {
+    ...OTHER_AGENT,
+    task: { id: "1c1c1c1c-0000-4000-8000-000000000000", name: "Billing", archived: false },
+  };
+  const onNone = { ...OTHER_AGENT, task: null, archived: true };
+  const reads = (standing: MentionedAgent) => ({
+    pages: new Map(),
+    agents: new Map([[OTHER_AGENT_ID, standing]]),
+  });
+
+  const another = mentionedContext(
+    `See ${agent("Store", OTHER_AGENT_ID, onAnother.task.id)}.`,
+    TASK,
+    reads(onAnother),
+  );
+  const none =
+    mentionedContext(
+      `See ${agent("Store", OTHER_AGENT_ID, undefined)}.`,
+      undefined,
+      reads(onNone),
+    ) ?? "";
+
+  assert.match(
+    another ?? "",
+    /another coding agent of your workspace on the task "Billing", "Store the invitations"/u,
+  );
+  assert.match(another ?? "", /To message it, call `message_agent`/u);
+  assert.match(
+    none,
+    /another coding agent of your workspace on no task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\), archived, working in `acme\/relay`/u,
+  );
+  assert.match(none, /`gh pr diff 42 --repo acme\/relay`/u);
+  assert.doesNotMatch(none, /message_agent/u);
 });
 
 test("an agent of the plan that published nothing yet is handed its branch to fetch, and one with no branch as having nothing to read", () => {
@@ -441,21 +485,21 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
   assert.match(read(fresh), /It has pushed no work yet, so there is none of its to read\./u);
 });
 
-test("a page or an agent the send did not find on the plan is named as gone, and one of another plan is handed nothing", () => {
+test("a page the send did not find on the plan is named as gone, an agent it did not find in the workspace as not found, and a page of another plan is handed nothing", () => {
   const gone = mentionedContext(
     `See ${page("Old chart", "5f5f5f5f-0000-4000-8000-000000000000")} and ${agent("Old", "6a6a6a6a-0000-4000-8000-000000000000")}.`,
     TASK,
     READS,
   );
   const elsewhere = mentionedContext(
-    `See ${agent("Store", OTHER_AGENT_ID, "1c1c1c1c-0000-4000-8000-000000000000")}.`,
+    `See ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: "1c1c1c1c-0000-4000-8000-000000000000", pageId: PAGE_ID }, "Chart", PLACE)}.`,
     TASK,
     READS,
   );
 
   assert.equal(
     gone,
-    `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe coding agent "Old": no longer on this task.`,
+    `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe coding agent "Old": not found in your workspace.`,
   );
   assert.equal(elsewhere, undefined);
 });
@@ -496,4 +540,16 @@ test("a page whose cut-off end holds long runs of both fence characters still ha
     }) ?? "";
 
   assert.match(part, /\n```html\n<h1>Chart<\/h1>\n… \(\d+ more characters\)\n```$/u);
+});
+
+test("an agent whose task is archived is handed as taking no message, and one mentioned in upper case is found as the store holds it", () => {
+  const onArchived = { ...OTHER_AGENT, task: { id: TASK.id, name: "Rollout", archived: true } };
+  const reads = { pages: new Map(), agents: new Map([[OTHER_AGENT_ID, onArchived]]) };
+
+  const part =
+    mentionedContext(`See ${agent("Store", OTHER_AGENT_ID.toUpperCase())}.`, TASK, reads) ?? "";
+
+  assert.match(part, /"Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\)/u);
+  assert.match(part, /Its task is archived, so it takes no message\./u);
+  assert.doesNotMatch(part, /message_agent/u);
 });

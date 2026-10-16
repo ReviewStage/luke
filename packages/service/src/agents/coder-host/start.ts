@@ -235,7 +235,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const reads =
     words === undefined
       ? undefined
-      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.task));
+      : yield* hostedStoreOrUnavailable(
+          readMentioned(userId, words, {
+            task: landing.task,
+            workspaceId: landing.workspaceId,
+          }),
+        );
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
