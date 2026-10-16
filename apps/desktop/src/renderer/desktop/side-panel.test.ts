@@ -17,7 +17,13 @@ import { plansControl } from "#testing/plans-control";
 import { ChangesCard } from "../planning/agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import { ADD_SECTION, changesOffers, changesTabOf, panelEntries } from "./side-panel";
+import {
+  ADD_SECTION,
+  changesOffers,
+  changesTabOf,
+  panelEntries,
+  pullRequestTabOf,
+} from "./side-panel";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -111,6 +117,27 @@ test('the "+" offers each pull request once as a Pull request tab, under the age
   );
   for (const entry of entries) entry.onPick();
   assert.deepEqual(chosen, [{ pullRequest: FIRST.id }, { pullRequest: THIRD.id }]);
+});
+
+test("a shared pull request's Pull request tab stands under the agent it was opened under, whichever agent's Changes tab is open", () => {
+  const control = agents();
+  const panel = { ...plansControl().sidePanel, pullRequests: [{ pullRequest: FIRST.id }] };
+  const openChanges = [{ changes: SECOND.id }];
+  const chosen: unknown[] = [];
+  const [row] = panelEntries({
+    panel: { ...panel, onChoose: (tab) => chosen.push(tab) },
+    kinds: [],
+    workers: [],
+    files: [],
+    changes: changesOffers(control, openChanges),
+  }).filter((entry) => entry.row.section === ADD_SECTION.PULL_REQUESTS);
+  row?.onPick();
+  assert.deepEqual(chosen, [{ pullRequest: FIRST.id }], "the + chooses the tab already open");
+  assert.deepEqual(
+    [FIRST, SECOND].map((each) => pullRequestTabOf(control, each.id, panel.pullRequests)),
+    [{ pullRequest: FIRST.id }, { pullRequest: FIRST.id }],
+    "either agent's chip chooses it too",
+  );
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {

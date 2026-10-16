@@ -241,15 +241,15 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.deepEqual(
           overview.checks.map(({ name, app, state }) => ({ name, app, state })),
           [
-            { name: "test", app: "GitHub Actions", state: CHECK_STATE.PASSED },
             { name: "lint", app: "GitHub Actions", state: CHECK_STATE.FAILED },
             { name: "build", app: "GitHub Actions", state: CHECK_STATE.PENDING },
-            { name: "deploy", app: "GitHub Actions", state: CHECK_STATE.SKIPPED },
             { name: "vercel", app: null, state: CHECK_STATE.PENDING },
+            { name: "test", app: "GitHub Actions", state: CHECK_STATE.PASSED },
+            { name: "deploy", app: "GitHub Actions", state: CHECK_STATE.SKIPPED },
           ],
         );
-        assert.equal(overview.checks[4]?.url, "https://vercel.example/deploy");
-        assert.equal(overview.checks[4]?.completedAt, null);
+        assert.equal(overview.checks[2]?.url, "https://vercel.example/deploy");
+        assert.equal(overview.checks[2]?.completedAt, null);
         assert.deepEqual(overview.reviewers, [
           { by: asPriya, state: REVIEW_STATE.REQUESTED },
           { by: asCharles, state: REVIEW_STATE.APPROVED },
@@ -321,6 +321,42 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.deepEqual(overview.checks, []);
         assert.equal(overview.conversation[0]?.cut, true);
         assert.equal(overview.conversation[0]?.body.length, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS);
+      }),
+  );
+
+  it.effect(
+    "a head with more checks than the bound keeps the one that failed, a commit status after a full page of passing runs",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const passing = Array.from({ length: OVERVIEW_BOUNDS.MAX_CHECKS }, (_, at) =>
+          checkRun(`test ${at}`, "completed", "success"),
+        );
+        const overview = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            checkRuns: passing,
+            statuses: [
+              {
+                context: "vercel",
+                state: "failure",
+                target_url: null,
+                created_at: "2026-10-15T09:02:00Z",
+                updated_at: "2026-10-15T09:03:00Z",
+              },
+            ],
+          }),
+        );
+
+        assert.ok(overview !== undefined);
+        assert.equal(overview.checks.length, OVERVIEW_BOUNDS.MAX_CHECKS);
+        assert.deepEqual(
+          overview.checks
+            .filter((each) => each.state === CHECK_STATE.FAILED)
+            .map((each) => each.name),
+          ["vercel"],
+        );
       }),
   );
 

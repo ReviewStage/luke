@@ -34,6 +34,7 @@ import {
   COLUMN,
   changesTabOf,
   planCards,
+  pullRequestTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
   useColumnFocus,
@@ -234,9 +235,7 @@ export function DesktopAgentPage({
   const openChanges = (changed: string) =>
     sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
   const openPullRequest = (published: string) =>
-    sidePanel.onChoose({
-      pullRequest: changesTabOf(control, published, sidePanel.changes).changes,
-    });
+    sidePanel.onChoose(pullRequestTabOf(control, published, sidePanel.pullRequests));
   const shown = plans.shown && !sidePanel.fullScreen;
   const cards = planCards({
     agents: control,

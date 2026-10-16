@@ -774,7 +774,20 @@ function statusStateOf(state: string): CheckState {
   return FAILING_STATUS_STATES.has(state) ? CHECK_STATE.FAILED : CHECK_STATE.PENDING;
 }
 
-/** A head's checks one by one, as GitHub lists them: its check runs, then its commit statuses, up to the bound. */
+/** Where a check stands in the order the bound keeps them by: what asks for a look first. */
+const CHECK_RANK = {
+  [CHECK_STATE.FAILED]: 0,
+  [CHECK_STATE.PENDING]: 1,
+  [CHECK_STATE.PASSED]: 2,
+  [CHECK_STATE.SKIPPED]: 3,
+} as const satisfies Record<CheckState, number>;
+
+/**
+ * A head's checks one by one: its check runs and its commit statuses, those
+ * that failed first, then those still running, up to the bound. Note that
+ * they are ordered before they are cut, because a head with a hundred
+ * passing runs would otherwise leave out the one status that failed.
+ */
 function checksOf(
   token: Redacted.Redacted,
   fullName: string,
@@ -814,7 +827,9 @@ function checksOf(
       }),
   );
   return Effect.map(Effect.all([runs, statuses], { concurrency: "unbounded" }), ([a, b]) =>
-    [...a, ...b].slice(0, OVERVIEW_BOUNDS.MAX_CHECKS),
+    [...a, ...b]
+      .sort((one, other) => CHECK_RANK[one.state] - CHECK_RANK[other.state])
+      .slice(0, OVERVIEW_BOUNDS.MAX_CHECKS),
   );
 }
 

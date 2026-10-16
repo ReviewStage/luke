@@ -298,37 +298,71 @@ export interface TerminalOffer {
   readonly showsOnChord: boolean;
 }
 
-/** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
+/** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, the pull request the tab draws, and every agent on that pull request, in the order started. */
 export interface ChangesOffer {
   readonly agentId: string;
   readonly agent: CodingAgentSummary;
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
+  readonly sharing: readonly string[];
 }
 
 /** No Changes tab open on the plan, the same array every render. */
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
 
+/** Every agent on the agent's pull request, in the order started; the agent alone where its pull request is not yet held. */
+function sharingOf(agents: CodingAgentsControl, agentId: string): readonly string[] {
+  const url = agents.pullRequests.get(agentId)?.url;
+  if (url === undefined) return [agentId];
+  return (agents.agents ?? []).flatMap((agent) =>
+    agents.pullRequests.get(agent.id)?.url === url ? [agent.id] : [],
+  );
+}
+
 /**
- * The agent whose Changes tab stands for the agent's pull request: among the
- * agents on that pull request, in the order started, the first whose tab is
- * open on the plan (`open`), else the first; the agent itself where its pull
- * request is not yet held. Note that an open tab is preferred, because the
- * agents' pull requests are read apart, so a later agent's may land first
- * and its tab be opened before an earlier one shares it.
+ * The agent whose tab of a kind stands for its pull request: among the
+ * agents on that pull request (`sharing`), in the order started, the first
+ * whose tab of that kind is open (`open`, by agent), else the first. Note
+ * that an open tab is preferred, because the agents' pull requests are read
+ * apart, so a later agent's may land first and its tab be opened before an
+ * earlier one shares it; and each kind is resolved by its own open tabs, so
+ * a Changes tab opened under one agent never moves the Pull request tab.
  */
+function standingAgentOf(sharing: readonly string[], open: readonly string[]): string | undefined {
+  return sharing.find((agent) => open.includes(agent)) ?? sharing[0];
+}
+
+/** The agent whose Changes tab stands for the agent's pull request (`standingAgentOf`). */
 function changesAgentOf(
   agents: CodingAgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
 ): string {
-  const url = agents.pullRequests.get(agentId)?.url;
-  if (url === undefined) return agentId;
-  const sharing = (agents.agents ?? []).filter(
-    (agent) => agents.pullRequests.get(agent.id)?.url === url,
+  return (
+    standingAgentOf(
+      sharingOf(agents, agentId),
+      open.map((tab) => tab.changes),
+    ) ?? agentId
   );
-  const opened = sharing.find((agent) => open.some((tab) => tab.changes === agent.id));
-  return (opened ?? sharing[0])?.id ?? agentId;
+}
+
+/**
+ * The Pull request tab an agent's pull request chip opens: the one that
+ * stands for its pull request among the Pull request tabs open (`open`),
+ * as the "+" offers it, so two agents on one pull request never stand two
+ * Pull request tabs on it.
+ */
+export function pullRequestTabOf(
+  agents: CodingAgentsControl,
+  agentId: string,
+  open: readonly PullRequestStripTab[],
+): PullRequestStripTab {
+  const sharing = sharingOf(agents, agentId);
+  const standing = standingAgentOf(
+    sharing,
+    open.map((tab) => tab.pullRequest),
+  );
+  return { pullRequest: standing ?? agentId };
 }
 
 /**
@@ -354,7 +388,8 @@ export function changesOffers(
     // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
     const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
     const label = agentTabLabel(agent, agents.models);
-    return [{ agentId: agent.id, agent, label, pullRequest: shown }];
+    const sharing = sharingOf(agents, each.id);
+    return [{ agentId: agent.id, agent, label, pullRequest: shown, sharing }];
   });
 }
 
@@ -464,8 +499,12 @@ export function panelEntries(input: {
     };
   });
   // Note that a Pull request tab's row is named by the key its tab is drawn
-  // under, because the pull request's page names its Changes row.
-  const pullRequestRows = changes.map(({ agentId, label, pullRequest }) => {
+  // under, because the pull request's page names its Changes row; and that
+  // it opens the Pull request tab already standing for the pull request
+  // under whichever agent it was opened, rather than the Changes tab's.
+  const openPullRequests = panel.pullRequests.map((tab) => tab.pullRequest);
+  const pullRequestRows = changes.map(({ agentId: changesAgent, label, pullRequest, sharing }) => {
+    const agentId = standingAgentOf(sharing, openPullRequests) ?? changesAgent;
     const look = tabLook({ kind: TAB_KIND.PULL_REQUEST, agentName: label });
     const number = pullRequestNumberLabel(pullRequest);
     return {
