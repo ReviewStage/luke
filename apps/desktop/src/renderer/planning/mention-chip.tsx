@@ -40,11 +40,12 @@ import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
+import { MentionedAgentCard } from "./mentioned-agent-card";
 import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
-import { type LinkStanding, useLinkStanding } from "./use-link-standing";
+import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -74,7 +75,8 @@ import { useOpenLink } from "./use-open-link";
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
- * has one. A link to any other place in Luke, a member, an Inbox item, an
+ * has one, and otherwise the same card read as it is hung, on any task of
+ * the workspace or on none (`mentioned-agent-card.tsx`). A link to any other place in Luke, a member, an Inbox item, an
  * automation, an agent's message (`@luke/features/luke-link`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
@@ -284,6 +286,10 @@ function MentionCard({
   doors: MentionDoors;
   standing: LinkStanding | undefined;
 }): ReactNode {
+  const workspaceId = useWordsWorkspaceId({
+    planId: doors.planId,
+    workspace: doors.place.workspace,
+  });
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
@@ -304,7 +310,7 @@ function MentionCard({
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.planId);
-  return (
+  const card = (
     <HoverCard data-mention-card="">
       <CardHead
         glyph={<MentionGlyph mention={mention} doors={doors} standing={standing} />}
@@ -317,6 +323,17 @@ function MentionCard({
       )}
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
+  );
+  // Any other agent hangs its tab's card all the same, read as the card is hung, its own card standing in until then.
+  if (mention.kind !== MENTION_KIND.AGENT) return card;
+  return (
+    <MentionedAgentCard
+      agentId={mention.agentId}
+      taskId={mention.taskId}
+      name={name}
+      workspaceId={workspaceId}
+      fallback={card}
+    />
   );
 }
 
