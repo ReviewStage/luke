@@ -201,18 +201,17 @@ export function runInboxTool(
   );
 }
 
-/** One `look_at_picture` call run under the agent's session, in the turn eve names, for the tool, which runs here rather than at an edge of its own. */
+/** One `look_at_picture` call run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
 export function lookAtPlanPicture(
   auth: SessionAuth,
   sessionId: string,
-  eveTurnId: string,
   input: UnparsedWireValue,
 ): Promise<PictureLookResult> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
-      return yield* host.lookAtPicture(admitted.success, { sessionId, eveTurnId }, input);
+      return yield* host.lookAtPicture(admitted.success, input);
     }),
   );
 }

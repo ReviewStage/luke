@@ -492,11 +492,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const ref = { planId: agent.planId, attachmentId: kept.id };
         const input = { address: planAttachmentAddress(ref, "acme") };
 
-        const answer = yield* host.lookAtPicture(
-          admitted,
-          { sessionId, eveTurnId: "turn_0" },
-          unparsedWire(input),
-        );
+        const answer = yield* host.lookAtPicture(admitted, unparsedWire(input));
         assert.equal(answer.status, PICTURE_LOOK_STATUS.LOOKED);
         if (answer.status !== PICTURE_LOOK_STATUS.LOOKED) return;
         assert.equal(answer.image, Base64.encode(picture.bytes));

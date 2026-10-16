@@ -26,7 +26,6 @@ import { END_CALL_TOOL, runEndCall } from "../../plans/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
 import {
   LOOK_AT_PICTURE_TOOL,
-  type PictureLookCall,
   pictureLookModelOutput,
   runLookAtPicture,
 } from "../../plans/picture-look.js";
@@ -416,12 +415,11 @@ export interface HostedToolDeclaration {
   readonly endsTurn?: boolean;
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds and its looks at the plan's pictures, and the plan's coding agents. */
+/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
-  readonly pictures: PictureLookCall;
   readonly agents: CodingAgentCall;
 }
 
@@ -509,7 +507,7 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LOOK_AT_PICTURE_TOOL,
     run: (call, input) =>
-      Effect.map(runLookAtPicture(call.pictures, input), (result) => ({ ...result })),
+      Effect.map(runLookAtPicture(call.plan, input), (result) => ({ ...result })),
   },
   {
     ...SHOW_PAGE_TOOL,

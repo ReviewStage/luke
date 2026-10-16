@@ -162,7 +162,7 @@ Pictures are stored as sent and readable by our own operators, like the plan.
 Luke and the coding agents read the plan with each picture's line, its
 address, its alt text, and its caption, but not the picture. Luke, or a
 coding agent on the task, may look at one of the plan's pictures when those
-words are not enough, at most four a turn, read as the member the turn runs
+words are not enough, read as the member the turn runs
 for, which sends the picture to the model that looked; our service keeps
 only that it looked in the task conversation or the agent's transcript, not
 the picture, though the model's session history may keep it (see "Who we send

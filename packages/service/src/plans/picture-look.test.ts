@@ -12,16 +12,14 @@ import { unparsedWire } from "@luke/wire";
 import { Effect } from "effect";
 import { Base64 } from "effect/encoding";
 import {
-  PICTURE_LOOK,
   PICTURE_LOOK_REFUSAL,
   PICTURE_LOOK_STATUS,
-  type PictureLookCall,
   pictureLookModelOutput,
-  pictureLooks,
   pictureNotLooked,
   runLookAtPicture,
   storedPictureLookOutput,
 } from "./picture-look.js";
+import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
  * `look_at_picture`, the planning model's and a coding agent's look at one
@@ -29,7 +27,7 @@ import {
  * dialect: a member's look hands the model the picture as an image while
  * the conversation keeps only that it looked; a picture of another plan, one
  * the plan does not hold, and one read by an account outside the plan's
- * workspace are refused alike; and a turn looks only so many times. The
+ * workspace are refused alike; and a turn looks as often as it asks. The
  * model is the boundary, played by reading what it would be shown.
  *
  * Synthetic accounts and pictures throughout.
@@ -63,17 +61,12 @@ const openPicturedPlans = Effect.gen(function* () {
   return { owner, outsider, planId: plan.id, otherId: other.id, attachmentId: kept.id, address };
 });
 
-/** A look as a turn makes one: bound to the plan as the account, in the turn named, over the host's count given. */
-function lookCall(
-  userId: string,
-  planId: string,
-  looks = pictureLooks(),
-  turnId = "turn-1",
-): PictureLookCall {
-  return { plan: { userId, planId }, turnId, looks };
+/** A look as a turn makes one: bound to the plan as the account. */
+function lookCall(userId: string, planId: string): PlanDocumentBinding {
+  return { userId, planId };
 }
 
-const look = (call: PictureLookCall, address: string) =>
+const look = (call: PlanDocumentBinding, address: string) =>
   runLookAtPicture(call, unparsedWire({ address }));
 
 it.layer(getTestDB())("look_at_picture", (it) => {
@@ -130,37 +123,20 @@ it.layer(getTestDB())("look_at_picture", (it) => {
   );
 
   it.effect(
-    "a turn looks at so many pictures and is refused the next, a look that found no picture spending none, while another turn looks again",
+    "a turn looks at the plan's pictures as often as it asks, and every look answers the picture",
     () =>
       Effect.gen(function* () {
         const { owner, planId, address } = yield* openPicturedPlans;
-        const looks = pictureLooks();
-        const missing = planAttachmentAddress({ planId, attachmentId: randomUUID() }, "acme");
 
-        const misses = [
-          yield* look(lookCall(owner, planId, looks), missing),
-          yield* look(lookCall(owner, planId, looks), missing),
-        ];
         const statuses: string[] = [];
-        for (let at = 0; at <= PICTURE_LOOK.MAX_PER_TURN; at += 1) {
-          statuses.push((yield* look(lookCall(owner, planId, looks), address)).status);
+        for (let at = 0; at < 12; at += 1) {
+          statuses.push((yield* look(lookCall(owner, planId), address)).status);
         }
-        const past = yield* look(lookCall(owner, planId, looks), address);
-        // Past the bound nothing is read, so a picture the plan does not hold is refused for the bound too.
-        const pastMissing = yield* look(lookCall(owner, planId, looks), missing);
-        const next = yield* look(lookCall(owner, planId, looks, "turn-2"), address);
 
-        assert.deepEqual(statuses, [
-          ...Array.from({ length: PICTURE_LOOK.MAX_PER_TURN }, () => PICTURE_LOOK_STATUS.LOOKED),
-          PICTURE_LOOK_STATUS.NOT_LOOKED,
-        ]);
-        assert.deepEqual(misses, [
-          pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
-          pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
-        ]);
-        assert.deepEqual(past, pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
-        assert.deepEqual(pastMissing, pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
-        assert.equal(next.status, PICTURE_LOOK_STATUS.LOOKED);
+        assert.deepEqual(
+          statuses,
+          Array.from({ length: 12 }, () => PICTURE_LOOK_STATUS.LOOKED),
+        );
       }),
   );
 });
