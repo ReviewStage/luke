@@ -196,6 +196,10 @@
     "dest": "/api/default.js?route=automations/automation&id=$1"
   },
   {
+    "src": "/api/issues/([^/]+)",
+    "dest": "/api/default.js?route=issues/issue&id=$1"
+  },
+  {
     "src": "/api/account/delete",
     "dest": "/api/default.js?route=account/delete"
   },
@@ -314,6 +318,10 @@
   {
     "src": "/api/inbox",
     "dest": "/api/default.js?route=inbox"
+  },
+  {
+    "src": "/api/issues",
+    "dest": "/api/default.js?route=issues"
   },
   {
     "src": "/api/mac-commands",
