@@ -159,10 +159,11 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   address as a member or an admin and sees the invitations still pending,
   each with its accept link to copy and send and a Cancel, under the Mac's
   own Better Auth session; an owner or admin removes a member, and anyone but
-  an owner leaves. Its Integrations group holds the GitHub row: for an owner
-  or admin, Connect, or once connected, "Connected" with one Manage menu
-  holding "Choose repositories on GitHub" and Disconnect; a member reads it
-  alone. Every way into Settings at a place takes one typed link,
+  an owner leaves. Its Integrations group holds the GitHub row, with every
+  connected GitHub account inset under it, Connected or suspended: for an
+  owner or admin, Connect, or once connected, one "Manage on GitHub", which
+  opens the GitHub page where accounts are added and repositories chosen;
+  a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@luke/settings/settings-views`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
