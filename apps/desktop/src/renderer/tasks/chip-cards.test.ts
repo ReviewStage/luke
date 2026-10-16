@@ -417,3 +417,11 @@ test("a member's and an automation's chips under another workspace's link are re
   assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
   assert.equal(audit.name, "Weekly audit");
 });
+
+test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {
+  const container = await drawn(`Ask [Sam](https://tryluke.dev/${BETA.id}/person/${SAM}).`);
+
+  const member = await cardOf(chipsOf(container)[0]);
+
+  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+});

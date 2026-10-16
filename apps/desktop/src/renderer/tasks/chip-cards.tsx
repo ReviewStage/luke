@@ -168,9 +168,11 @@ export function PageChipCard({
   );
 }
 
-/** The workspace a link was written under, by its slug, as the account holds it; none where it holds no such workspace. */
-function useLinkWorkspace(slug: string): Workspace | undefined {
-  return useAppState()?.tasks?.workspaces.find((each) => each.slug === slug);
+/** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */
+function useLinkWorkspace(written: string): Workspace | undefined {
+  return useAppState()?.tasks?.workspaces.find(
+    (each) => each.slug === written || each.id === written,
+  );
 }
 
 /**
