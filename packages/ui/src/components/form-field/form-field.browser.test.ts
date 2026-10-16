@@ -82,3 +82,17 @@ test("an empty error and a missing description say nothing, so the control is ne
   await expect.element(input).not.toHaveAttribute("aria-describedby");
   expect(document.querySelectorAll("p").length).toBe(1);
 });
+
+test("a label of unbroken words wraps inside its field rather than painting past it", async () => {
+  const { container } = await mount(
+    createElement("div", {
+      style: { width: 120 },
+      children: createElement(FormField, {
+        label: "acme/a-repository-whose-name-runs-long",
+        children: (control) => createElement("input", { ...control, type: "text" }),
+      }),
+    }),
+  );
+  const label = container.querySelector("label");
+  expect(label && label.scrollWidth <= label.clientWidth).toBe(true);
+});

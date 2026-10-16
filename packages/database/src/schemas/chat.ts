@@ -1,7 +1,12 @@
 import {
+  type AskStatus,
   CHANNEL_KIND,
+  CHAT_BOUNDS,
   type ChannelKind,
+  type ChatAsk,
   type ChatBlock,
+  type ChatImageType,
+  type ChatReply,
   MEMBER_KIND,
   type MemberKind,
 } from "@luke/features/chat-wire";
@@ -9,6 +14,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -58,7 +64,16 @@ const literal = (value: string) => sql.raw(`'${value}'`);
  * (`@luke/features/chat-wire`), its mentions the members its words named,
  * resolved as it was posted, and its client key the poster's for the post,
  * unique in its channel, so a post repeated after a lost answer lands once.
- * Every row goes with its workspace.
+ *
+ * A message may carry an ask under a key of its author's, unique per author,
+ * so posting under the key again writes the message again in place: its
+ * revision moves on, it opens again, and what it asks replaces what it
+ * asked. The ask is the wire's own JSON (`chatAskSchema`). An answer is
+ * taken at the revision it names while the ask is open, written beside it
+ * with the key the answer was sent under and the member who answered, and
+ * posted as that member's reply in the ask's thread; the poster resolves it
+ * with why. `touched_at` is when the message last changed, which orders what
+ * waits across workspaces. Every row goes with its workspace.
  */
 export const chatMember = pgTable(
   "chat_member",
@@ -196,6 +211,25 @@ export const chatMessage = pgTable(
     /** The poster's key for the post, unique in its channel. */
     clientKey: text("client_key").notNull(),
     createdAt: timestamptz("created_at").notNull(),
+    /** When the message last changed: when it was posted until a change moves it on. */
+    touchedAt: timestamptz("touched_at").notNull().defaultNow(),
+    /** The ask the message carries; null on a message that asks nothing. */
+    ask: jsonb("ask").$type<ChatAsk>(),
+    /** The author's key for the ask; null with no ask. */
+    askKey: text("ask_key"),
+    /** Moved on by every change of the author's, which an answer names so it answers the ask it was shown. */
+    askRevision: integer("ask_revision"),
+    askStatus: text("ask_status").$type<AskStatus>(),
+    /** The answer; null until one is taken. */
+    answer: jsonb("answer").$type<ChatReply>(),
+    /** The key the answer was sent under; null until one is taken. */
+    answerKey: text("answer_key"),
+    /** The member who answered; null until one is taken. */
+    answeredByMemberId: uuid("answered_by_member_id").references((): AnyPgColumn => chatMember.id, {
+      onDelete: "set null",
+    }),
+    /** Why the author resolved the ask; null until it does. */
+    closedReason: text("closed_reason"),
   },
   (table) => [
     uniqueIndex("chat_message_organization_seq").on(table.organizationId, table.seq),
@@ -208,5 +242,61 @@ export const chatMessage = pgTable(
       .where(sql`${table.parentId} is not null`),
     // What changed past a reader's cursor.
     index("chat_message_organization_touched").on(table.organizationId, table.touchedSeq),
+    // One ask per key per author: a post under a key it used is that ask's write.
+    uniqueIndex("chat_message_author_ask_key")
+      .on(table.authorMemberId, table.askKey)
+      .where(sql`${table.askKey} is not null`),
+    // What waits across a workspace is read on every look of a held read.
+    index("chat_message_organization_ask_status")
+      .on(table.organizationId, table.askStatus)
+      .where(sql`${table.askKey} is not null`),
+    check(
+      "chat_message_ask_whole",
+      sql`(${table.askKey} is null) = (${table.ask} is null)
+        and (${table.askKey} is null) = (${table.askRevision} is null)
+        and (${table.askKey} is null) = (${table.askStatus} is null)`,
+    ),
+  ],
+);
+
+/** A column of raw bytes, read and written as they stand. */
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+});
+
+/**
+ * One picture of a chat message's: the bytes of an image block, kept beside
+ * the message it belongs to, as an inbox item's are (`inbox-attachment.ts`).
+ * An agent posts an image by the path of a file in its sandbox; the service
+ * reads the file and keeps it here, so the message's block names a row of
+ * this table rather than anything the agent wrote, and a reader fetches it
+ * under the account. The bytes stand in the row, bounded by a check on the
+ * column at the image bound, and the media type is what the service sniffed
+ * them to be. The row goes with its message and its workspace.
+ */
+export const chatAttachment = pgTable(
+  "chat_attachment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessage.id, { onDelete: "cascade" }),
+    /** The media type the bytes were sniffed to be, which they are served under. */
+    contentType: text("content_type").$type<ChatImageType>().notNull(),
+    /** How many bytes the picture is, read off the row without the bytes. */
+    byteCount: integer("byte_count").notNull(),
+    bytes: bytea("bytes").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    // A message's attachments are read and deleted by the message.
+    index("chat_attachment_message").on(table.messageId),
+    check(
+      "chat_attachment_bytes_bound",
+      sql`octet_length(${table.bytes}) <= ${sql.raw(String(CHAT_BOUNDS.MAX_IMAGE_BYTES))}`,
+    ),
   ],
 );
