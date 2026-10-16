@@ -48,7 +48,20 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
-import { and, count, desc, eq, isNull, max, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  max,
+  ne,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -796,6 +809,79 @@ export function accountInboxLiveStatements(
     plans: liveStatementOf(plans),
     automations: liveStatementOf(automations),
   });
+}
+
+/** The statement a plan's or an agent's inbox is subscribed to live: its open items and its latest settled ones, as one result. */
+export interface ScopeInboxLiveStatements {
+  readonly items: LiveStatement;
+}
+
+/**
+ * A scope's items written for Neon Realtime: the same rows, joins, bound,
+ * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, each
+ * column under the key `live-wire.ts` reads it by and each instant in epoch
+ * milliseconds. The open items and the latest settled ones are one
+ * statement, so an item settling moves from one to the other in one change
+ * rather than leaving the reader a moment holding neither. The order is the
+ * reader's to keep, since Realtime keeps none.
+ */
+function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveStatements> {
+  const latestSettled = queryBuilder
+    .select({ id: inboxItem.id })
+    .from(inboxItem)
+    .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+    .orderBy(...LATEST_FIRST)
+    .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
+  return Option.map(
+    liveStatementOf(
+      queryBuilder
+        .select(
+          liveSelection(
+            {
+              id: inboxItem.id,
+              agentId: inboxItem.agentId,
+              key: inboxItem.key,
+              revision: inboxItem.revision,
+              version: inboxItem.version,
+              title: inboxItem.title,
+              blocks: inboxItem.blocks,
+              response: inboxItem.response,
+              needsReply: inboxItem.needsReply,
+              status: inboxItem.status,
+              answer: inboxItem.answer,
+              answeredBy: inboxItem.answeredBy,
+              answeredByName: INBOX_COLUMNS.answeredByName,
+              closedReason: inboxItem.closedReason,
+            },
+            { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+          ),
+        )
+        .from(inboxItem)
+        .where(
+          and(
+            inScope(scope),
+            or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+          ),
+        ),
+    ),
+    (items) => ({ items }),
+  );
+}
+
+/** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
+export function taskInboxLiveStatements(
+  userId: string,
+  taskId: string,
+): Option.Option<ScopeInboxLiveStatements> {
+  return scopeLiveStatements({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
+}
+
+/** One agent's inbox written for Neon Realtime, as `memberAgentInboxItems` reads it. */
+export function memberAgentInboxLiveStatements(
+  userId: string,
+  agentId: string,
+): Option.Option<ScopeInboxLiveStatements> {
+  return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
 /** The scope's items: every open one, then the latest settled ones up to the limit. */

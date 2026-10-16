@@ -23,7 +23,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { AccountInboxLiveAnswer } from "@luke/features/live-wire";
+import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -42,11 +42,11 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
-import type { WireRecord, WireValue } from "@luke/wire";
-import { Effect } from "effect";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
+import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { LiveClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+import type { LiveClient } from "./live-follow.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -193,6 +193,7 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 function fakeService() {
   const asked: string[] = [];
   let live: AccountInboxLiveAnswer | undefined;
+  let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
   const client: CodingAgentClient = {
     models: () =>
@@ -402,6 +403,16 @@ function fakeService() {
         asked.push("account-inbox-live");
         return live ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
+    taskInboxLive: (taskId) =>
+      Effect.sync(() => {
+        asked.push(`plan-inbox-live:${taskId}`);
+        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      }),
+    agentInboxLive: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`agent-inbox-live:${agentId}`);
+        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      }),
   };
   return {
     client,
@@ -409,6 +420,10 @@ function fakeService() {
     /** What the service seals for following the account's inbox; none answers unanswered, as a service without Realtime does. */
     seal: (next: AccountInboxLiveAnswer | undefined) => {
       live = next;
+    },
+    /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
+    sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
+      scope = next;
     },
   };
 }
@@ -442,6 +457,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       call,
       asked: service.asked,
       seal: service.seal,
+      sealScope: service.sealScope,
       realtime,
       inboxes,
       reset: composer.reset,
@@ -704,11 +720,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `archive:${AGENT_ID}:true`,
       `pin:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
+      `agent-inbox-live:${AGENT_ID}`,
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `overview:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
+      `plan-inbox-live:${TASK_ID}`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
@@ -769,7 +787,7 @@ it.effect(
 );
 
 /** Every step the follower has to take, taken: it runs on a fiber of its own. */
-const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
 /** A second item, changed after `WAITING`, which the answer lists first. */
 const NEWER: AccountInboxEntry = {
@@ -864,6 +882,9 @@ it.effect(
       assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
 
       realtime.deliver("items", [{ id: "not an item" }]);
+      for (const part of ["planless", "plans", "automations", "failedRuns"]) {
+        realtime.deliver(part, []);
+      }
       yield* settled;
       assert.deepEqual(realtime.closed, [SEALED.url]);
       yield* TestClock.adjust("5 seconds");
@@ -903,5 +924,94 @@ it.effect(
       yield* live.reset;
       yield* settled;
       assert.deepEqual(live.realtime.closed, [SEALED.url, SEALED.url]);
+    }),
+);
+
+const SEALED_SCOPE: ScopeInboxLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: { items: sealed("items") },
+};
+
+/** That item as its row delivers it, what it leaves out held as null. */
+const ITEM_ROW = {
+  ...ITEM,
+  answer: null,
+  answeredBy: null,
+  answeredByName: null,
+  closedReason: null,
+};
+
+it.effect(
+  "a plan's inbox is answered from its Realtime subscription: at once once its rows land, then as soon as they move past the reader's cursor, unchanged when the hold ends, and never from the held read",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, realtime } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: INBOX_CURSOR_START }),
+      );
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      const answered = yield* Fiber.join(first);
+      assert.ok(isRecord(answered) && isWireString(answered.cursor));
+      assert.deepEqual(answered.items, [ITEM]);
+
+      // Read again from that cursor, it holds until the items move.
+      const next = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: answered.cursor }),
+      );
+      yield* settled;
+      const closed = {
+        ...ITEM_ROW,
+        revision: 3,
+        status: INBOX_STATUS.CLOSED,
+        closedReason: "Done",
+      };
+      realtime.deliver("items", [closed]);
+      yield* settled;
+      const moved = yield* Fiber.join(next);
+      assert.ok(isRecord(moved) && isWireString(moved.cursor));
+      assert.notEqual(moved.cursor, answered.cursor);
+      assert.deepEqual(moved.items, [
+        { ...ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
+      ]);
+
+      const unchanged = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: moved.cursor }),
+      );
+      yield* settled;
+      yield* TestClock.adjust("20 seconds");
+      assert.deepEqual(yield* Fiber.join(unchanged), moved);
+      // One subscription served every read, and the service's held read was never asked.
+      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+    }),
+);
+
+it.effect(
+  "an agent's inbox the account does not reach is not found, and one the service seals nothing for is the held read",
+  () =>
+    Effect.gen(function* () {
+      const refused = yield* subject();
+      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(
+        yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
+          agentId: AGENT_ID,
+          after: INBOX_CURSOR_START,
+        }),
+        { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+      );
+
+      const held = yield* subject();
+      assert.deepEqual(
+        yield* held.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
+          agentId: AGENT_ID,
+          after: INBOX_CURSOR_START,
+        }),
+        { items: [ITEM], cursor: "8" },
+      );
+      assert.deepEqual(held.realtime.opened, []);
     }),
 );
