@@ -7600,8 +7600,10 @@ button.automation-run:hover {
 /* Who opened a pull request on its card, and how long ago it moved after
    them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
    as one piece where a long login leaves it no room, so the name is never
-   cut for it, as an agent's origin line wraps. */
-.card-note .actor-words {
+   cut for it, as an agent's origin line wraps. Only the line holding that
+   time wraps, so every other card's line naming an actor, a one-line
+   starter's among them, keeps to its one row. */
+.card-note .actor-words:has(> .card-when) {
   flex-wrap: wrap;
   row-gap: var(--space-2);
 }
