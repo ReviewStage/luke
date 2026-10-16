@@ -199,9 +199,9 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
 }
 
 /** One of the developer's messages as a copy reads it: their words. */
-function developerTurn(message: CodingAgentMessage): CopiedTurn {
+function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn {
   const blocks = [{ kind: COPIED_BLOCK.WORDS, text: messageWords(message) }] as const;
-  const notice = chatNoticeOf(message);
+  const notice = chatOn ? chatNoticeOf(message) : undefined;
   if (notice !== undefined) return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
   return { speaker: SPEAKER.DEVELOPER, blocks };
 }
@@ -221,8 +221,10 @@ export function agentTranscript(input: {
   brief: CodingAgentBrief | undefined;
   /** The task a worker was handed, where the transcript is a worker's rather than the agent's own. */
   task?: string | undefined;
+  /** Whether the window offers Chat, without which a chat notice is copied as the plain line it is drawn as. */
+  chatOn: boolean;
 }): CopiedTranscript {
-  const { title, brief, task } = input;
+  const { title, brief, task, chatOn } = input;
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   const first = messages.find(
     (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
@@ -237,11 +239,11 @@ export function agentTranscript(input: {
   // A line that reached a turn while it ran is copied where the tab draws it, between the turn's work before and after it.
   const turns = placedMessages(messages).flatMap(({ message, arrived }): CopiedTurn[] => {
     if (message === first) return [];
-    if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message)];
+    if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message, chatOn)];
     return turnStretches(agentRows(message, false, { arrived })).map((stretch) =>
       stretch.line === undefined
         ? { speaker, blocks: rowBlocks(stretch.rows).flatMap(agentBlock) }
-        : developerTurn(stretch.line),
+        : developerTurn(stretch.line, chatOn),
     );
   });
   return {

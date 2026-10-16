@@ -124,10 +124,11 @@ export function agentTranscriptRead(
   agentId: string,
   title: string,
   brief: CodingAgentBrief | undefined,
+  chatOn: boolean,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief }),
+      messages === undefined ? undefined : agentTranscript({ title, messages, brief, chatOn }),
     );
 }
 
@@ -254,7 +255,13 @@ function agentTabs(input: {
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
-    const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
+    const read = agentTranscriptRead(
+      agents.readTranscript,
+      agent.id,
+      label,
+      agent.brief,
+      agents.chatOn,
+    );
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     return {
       tab,

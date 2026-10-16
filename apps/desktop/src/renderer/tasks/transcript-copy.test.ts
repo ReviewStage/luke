@@ -64,6 +64,7 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
     title: "Tile",
     messages,
     brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
   });
 
   assert.equal(
@@ -95,6 +96,7 @@ test("a chat notice is copied under the member it tells of a message from, never
   const transcript = agentTranscript({
     title: "Add teammate invitations",
     brief: undefined,
+    chatOn: true,
     messages: [
       notice,
       said("plan", MESSAGE_ROLE.USER, "Build invitations."),
@@ -120,4 +122,27 @@ test("a chat notice is copied under the member it tells of a message from, never
     kind: LATEST_ACTIVITY.WORDS,
     text: "Yes, base on my migration.",
   });
+});
+
+test("with Chat off, a chat notice is copied as the plain line it is drawn as, under the developer's heading, and still never as the plan", () => {
+  const notice: CodingAgentMessage = {
+    ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    chatOn: false,
+    messages: [notice, said("plan", MESSAGE_ROLE.USER, "Build invitations.")],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Developer",
+      "@agent-1 are you changing memberships?",
+    ].join("\n\n") + "\n",
+  );
 });

@@ -76,6 +76,7 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     me: undefined,
+    chatOn: true,
     agents: [],
     archived: [],
     agentIds: [],
