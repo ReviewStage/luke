@@ -233,6 +233,24 @@ test("a press on the name in a section's byline opens no editor, while a press o
   assert.equal(open().markdown, BODY);
 });
 
+test("a click on the panel's empty room opens an empty plan's text with the caret at its start, and opens nothing on a plan with text", () => {
+  const { container, render } = mount();
+  const scroller =
+    container.querySelector<HTMLElement>(".plan-document-scroll") ??
+    assert.fail("the document scrolls");
+
+  act(() => scroller.click());
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+
+  render({ ...DOCUMENT_PLAN, document: { body: "", assumptions: [] } });
+  act(() => scroller.click());
+
+  assert.equal(open().markdown, "");
+  assert.equal(open().placement, undefined, "the caret at the text's start");
+  assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+});
+
 test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {
   const { container, sent, unmount } = mount();
   act(() => block(container, "Goal").click());
