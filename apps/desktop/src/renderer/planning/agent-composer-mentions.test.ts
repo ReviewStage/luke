@@ -833,7 +833,7 @@ test("a word typed after @ finds an agent the workspace's newest leave out, as t
   });
 });
 
-test("a sent mention of an agent the page has no tab of hangs a card naming where it works: this task, another, or none", () => {
+test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
       taskId === undefined
@@ -846,7 +846,17 @@ test("a sent mention of an agent the page has no tab of hangs a card naming wher
     createElement(TranscriptWords, {
       text: `${mention("agent-7", PLAN_ID)} ${mention(BILLING_AGENT.id, BILLING.id)} ${mention(SWEEPER.id, undefined)}`,
     }),
-    planPage([]),
+    // The task page's doors answer a card for any id, a "Not found" one for an agent it has no tab of.
+    {
+      ...planPage([]),
+      doors: {
+        ...planPage([]).doors,
+        agentOf: (agentId: string) => ({
+          actor: STORE_AGENT.actor,
+          card: createElement("div", { "data-mention-card": "" }, `Not found ${agentId}`),
+        }),
+      },
+    },
   );
 
   const notes = [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => {
@@ -862,7 +872,8 @@ test("a sent mention of an agent the page has no tab of hangs a card naming wher
   });
 
   assert.deepEqual(
-    notes.map((words) => /A coding agent on [a-z ]+task/u.exec(words)?.[0]),
-    ["A coding agent on this task", "A coding agent on another task", "A coding agent on no task"],
+    notes.map((words) => /A coding agent on [a-z ]+task|Not found/u.exec(words)?.[0]),
+    ["Not found", "A coding agent on another task", "A coding agent on no task"],
+    "the task's own agent hangs its tab's card; another task's and one on none name where they work",
   );
 });

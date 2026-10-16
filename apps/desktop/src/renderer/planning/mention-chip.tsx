@@ -245,7 +245,7 @@ function MentionGlyph({
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {
-      const look = doors.agentOf?.(mention.agentId);
+      const look = mention.taskId === doors.planId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
         <AgentMark provider={undefined} />
       ) : (
@@ -297,8 +297,11 @@ function MentionCard({
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
+  // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
+    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.planId
+      ? doors.agentOf?.(mention.agentId)?.card
+      : undefined;
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.planId);
