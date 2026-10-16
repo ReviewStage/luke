@@ -15,7 +15,12 @@ import {
 import type { Plan } from "@luke/features/plan-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "./attached-files.js";
-import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "./mentioned-context.js";
+import {
+  MENTIONED_BOUNDS,
+  type MentionedAgent,
+  mentionedContext,
+  mentionedServers,
+} from "./mentioned-context.js";
 
 /**
  * What a coding agent's message mentions of its plan, handed beside its
@@ -370,4 +375,99 @@ test("a server of an account past its provider's first is pointed at and brought
     "notion-2",
     INTEGRATION_PROVIDER.NOTION,
   ]);
+});
+
+const PAGE_ID = "3b9a0c1d-2e4f-4a6b-8c0d-1e2f3a4b5c6d";
+
+const OTHER_AGENT_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b";
+
+const PAGE_HTML = "<!doctype html>\n<h1>Invites by week</h1>\n<p>Code: ```x```</p>";
+
+const page = (name: string, pageId = PAGE_ID) =>
+  mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: PLAN.id, pageId }, name, PLACE);
+
+const agent = (name: string, agentId = OTHER_AGENT_ID, planId = PLAN.id) =>
+  mentionMarkdown({ kind: MENTION_KIND.AGENT, planId, agentId }, name, PLACE);
+
+const OTHER_AGENT: MentionedAgent = {
+  id: OTHER_AGENT_ID,
+  name: "Store the invitations",
+  repository: "acme/relay",
+  branch: "luke/store-invitations",
+  pullRequest: { number: 42, url: "https://github.com/acme/relay/pull/42" },
+  archived: false,
+};
+
+const READS = {
+  pages: new Map([
+    [PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000, html: PAGE_HTML }],
+  ]),
+  agents: new Map([[OTHER_AGENT_ID, OTHER_AGENT]]),
+};
+
+test("a page of the plan the words mention is handed by its id and version, with its HTML as it stands in a fence its own backticks cannot close", () => {
+  const part = mentionedContext(`Build what ${page("Invites by week")} shows.`, PLAN, READS);
+
+  assert.equal(
+    part,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at the page "Invites by week" (id \`${PAGE_ID}\`, version 3) shown on this task. To change it, show it again with \`show_page\` and \`page: "${PAGE_ID}"\`, which writes its next version in its place. Its HTML as it stands:\n\n\`\`\`\`html\n${PAGE_HTML}\n\`\`\`\``,
+  );
+});
+
+test("another agent of the plan the words mention is handed by its id and where its work stands on GitHub, and never its conversation", () => {
+  const part = mentionedContext(`Build on ${agent("Store")}.`, PLAN, READS) ?? "";
+
+  assert.match(
+    part,
+    /another coding agent on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
+  );
+  assert.match(part, /`gh pr diff 42`/u);
+  assert.match(part, /Its conversation is not yours to read\./u);
+});
+
+test("an agent of the plan that published nothing yet is handed its branch to fetch, and one with no branch as having nothing to read", () => {
+  const pushed = { ...OTHER_AGENT, pullRequest: null };
+  const fresh = { ...OTHER_AGENT, branch: null, pullRequest: null };
+  const read = (standing: MentionedAgent) =>
+    mentionedContext(`See ${agent("Store")}.`, PLAN, {
+      pages: new Map(),
+      agents: new Map([[OTHER_AGENT_ID, standing]]),
+    }) ?? "";
+
+  assert.match(
+    read(pushed),
+    /`git fetch origin luke\/store-invitations` and `git diff HEAD\.\.\.FETCH_HEAD`/u,
+  );
+  assert.match(read(fresh), /It has pushed no work yet, so there is none of its to read\./u);
+});
+
+test("a page or an agent the send did not find on the plan is named as gone, and one of another plan is handed nothing", () => {
+  const gone = mentionedContext(
+    `See ${page("Old chart", "5f5f5f5f-0000-4000-8000-000000000000")} and ${agent("Old", "6a6a6a6a-0000-4000-8000-000000000000")}.`,
+    PLAN,
+    READS,
+  );
+  const elsewhere = mentionedContext(
+    `See ${agent("Store", OTHER_AGENT_ID, "1c1c1c1c-0000-4000-8000-000000000000")}.`,
+    PLAN,
+    READS,
+  );
+
+  assert.equal(
+    gone,
+    `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe coding agent "Old": no longer on this task.`,
+  );
+  assert.equal(elsewhere, undefined);
+});
+
+test("a long page is cut on a line to its bound, saying how much was left out", () => {
+  const long = Array.from({ length: 2_000 }, (_, at) => `<p>row ${at}</p>`).join("\n");
+  const part =
+    mentionedContext(`See ${page("Rows")}.`, PLAN, {
+      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Rows", version: 1, at: 0, html: long }]]),
+      agents: new Map(),
+    }) ?? "";
+
+  assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
+  assert.match(part, /\n… \(\d+ more characters\)\n```$/u);
 });

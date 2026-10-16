@@ -110,8 +110,9 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  *
  * An `@` at the start of a word, on a plan's page, opens the list of what
  * the message can mention, the plan's repository's files and folders, the
- * plan's sections, the repository's skills, and the account's connected MCP
- * servers and their tools
+ * plan's sections, the pages agents showed on it, its other coding agents,
+ * the repository's skills, and the account's connected MCP servers and
+ * their tools
  * (`mention-picker.tsx`), and the one chosen is written into the words as
  * its link, drawn as its chip (`mention-chip.tsx`). A server mentioned is
  * handed to the agent's next turn even where its switch is off, and to that
@@ -238,6 +239,7 @@ function ComposerMore({
 }
 
 export function AgentComposer({
+  agentId,
   status,
   composer,
   model,
@@ -254,6 +256,8 @@ export function AgentComposer({
   keywords = [],
   skills,
 }: {
+  /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
+  agentId?: string | undefined;
   status: CodingAgentStatus;
   composer: AgentComposerControl;
   /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
@@ -379,6 +383,7 @@ export function AgentComposer({
   useMentionBox((mention) => editor.current?.insertMention(mention));
   const mentionPicker = useMentionPicker({
     source: planMentions,
+    self: agentId,
     // The repository's skills, a pick written as the `/name` chip the `/` list writes.
     skills:
       skills === undefined

@@ -41,6 +41,7 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
@@ -236,6 +237,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (!created) return { agent, created };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh.
+  const reads =
+    words === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(readMentioned(userId, words, landing.plan));
   const sessions = yield* eve;
   const opened = yield* sessions
     .open({
@@ -246,12 +251,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           ? eveContent(
               brief.planSnapshot,
               [],
-              words === undefined ? undefined : mentionedContext(words, landing.plan),
+              words === undefined ? undefined : mentionedContext(words, landing.plan, reads),
             )
           : eveContent(
               brief.prompt,
               ask.attachments ?? [],
-              mentionedContext(brief.prompt, landing.plan),
+              mentionedContext(brief.prompt, landing.plan, reads),
             ),
     })
     .pipe(

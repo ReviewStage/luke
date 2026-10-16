@@ -296,7 +296,7 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
       </TranscriptLink>
     );
   }
-  return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+  return <MentionChip mention={found.mention} target={target} name={found.name} doors={doors} />;
 }
 
 /**

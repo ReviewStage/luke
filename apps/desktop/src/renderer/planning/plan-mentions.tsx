@@ -11,6 +11,7 @@ import {
 import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
+import type { MentionableAgent, MentionablePage } from "./mention-picker";
 import { useOpenPlan } from "./use-open-link";
 
 /**
@@ -18,7 +19,7 @@ import { useOpenPlan } from "./use-open-link";
  *
  * The plan's own words draw their mentions through the document
  * (`plan-body.tsx`); an agent's message box on the same page picks them with
- * `@` (`agent-composer.tsx`), and its transcript draws the ones a message
+ * `@` (`agent-composer.tsx`), the plan's pages and agents among them, and its transcript draws the ones a message
  * holds as chips (`transcript-blocks.tsx`). Those stand far from the plan's
  * page in the tree, so the page hands them this, as it hands them its skills
  * (`skill-chip.tsx`'s `SkillFiles`). A place off a plan's page reads nothing,
@@ -46,6 +47,10 @@ export interface PlanMentionsValue {
   /** The id of the workspace whose installation the repository is read through, where no plan names it (`NO_PLAN`). */
   readonly workspaceId?: string | undefined;
   readonly text: () => string;
+  /** The pages agents showed on the plan, which an `@` offers; none off a plan. */
+  readonly pages?: readonly MentionablePage[] | undefined;
+  /** The plan's coding agents, which an `@` offers; none off a plan. */
+  readonly agents?: readonly MentionableAgent[] | undefined;
   readonly doors: MentionDoors;
 }
 

@@ -18,7 +18,9 @@ import { EmptyState } from "../empty-state";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
+import { AgentCard, agentSubject } from "../planning/agent-ref";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { agentActor, agentTabLabel } from "../planning/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../planning/inbox-list";
 import {
@@ -540,6 +542,11 @@ function PlanDocument({
   });
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
+  // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
+  const agentLook = (agentId: string) => {
+    const subject = agentSubject(agents, agentId, views.held, false);
+    return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
+  };
   // What every place on the page that picks or draws a mention reads (`plan-mentions.tsx`).
   const mentions: PlanMentionsValue = {
     planId: plan.id,
@@ -547,6 +554,11 @@ function PlanDocument({
     workspace,
     repository: plan.repository,
     text: () => plan.document.body,
+    pages: plans.pages,
+    agents: (agents.agents ?? []).map((agent) => {
+      const name = agentTabLabel(agent, agents.models);
+      return { id: agent.id, name, actor: agentActor(agent, name) };
+    }),
     doors: {
       planId: plan.id,
       place: { workspace, repository: plan.repository },
@@ -555,6 +567,7 @@ function PlanDocument({
       ),
       onOpenPlan: openMention,
       onOpenFile: openMentionedFile,
+      agentOf: agentLook,
     },
   };
   return (

@@ -705,3 +705,31 @@ test("a server or tool of an account past a provider's first names it by its con
     assert.equal(decodeMention(target, REPOSITORY), undefined, target);
   }
 });
+
+test("a page or an agent of a plan is its Luke link, read back by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
+  const page: Mention = { kind: MENTION_KIND.PAGE, planId: PLAN_ID, pageId: "page-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, planId: PLAN_ID, agentId: "agent-1" };
+  const plan = `https://tryluke.dev/acme/plan/${PLAN_ID}`;
+
+  assert.equal(encodeMention(page, PLACE), `${plan}/page/page-1`);
+  assert.equal(encodeMention(agent, PLACE), `${plan}/agent/agent-1`);
+  assert.deepEqual(
+    decodeMention(`tryluke://tryluke.dev/acme/plan/${PLAN_ID}/agent/agent-1`, null),
+    agent,
+  );
+  assert.deepEqual(linkMention(`${plan}/page/page-1`, `${plan}/page/page-1`, null), {
+    mention: page,
+    name: "Page",
+  });
+  assert.deepEqual(linkMention("", `${plan}/agent/agent-1`, null)?.name, "Agent");
+  for (const target of [
+    `${plan}/page/page-1/version/2`,
+    `${plan}/agent/agent-1/changes`,
+    `${plan}/page/page-1#top`,
+    `${plan}/page/`,
+    `${plan}/version/2`,
+    `${plan}/agent/agent%2F1`,
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});

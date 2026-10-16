@@ -13,10 +13,12 @@ import {
 import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
+  updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
+import { writePage } from "@luke/database/models/plan-pages";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -1556,6 +1558,48 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message mentioning a page and another agent of the plan hands eve the page by its id with its HTML and the agent by its id and branch, never its conversation",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, ask, sent } = yield* startedAgent(eve, { running: true });
+        const other = yield* startedAgentOf(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
+        const shown = yield* writePage(owner, plan.id, {
+          title: "Invites by week",
+          html: "<h1>Invites by week</h1>",
+        });
+        assert.ok(Option.isSome(shown));
+        const place = { workspace: "acme", repository: plan.repository };
+        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, planId: plan.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, planId: plan.id, agentId: other.agent.id }, "Store", place)}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const [said, part] = message;
+        assert.deepEqual(said, { type: "text", text: words });
+        assert.ok(part?.type === "text");
+        assert.ok(part.text.startsWith(MENTIONED_HEADING), part.text);
+        assert.match(
+          part.text,
+          new RegExp(
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*<h1>Invites by week</h1>`,
+            "u",
+          ),
+        );
+        assert.match(
+          part.text,
+          new RegExp(
+            `\\(id \`${other.agent.id}\`\\) working in \`${RELAY_FULL_NAME}\` on the branch \`luke/store-invitations\``,
+            "u",
+          ),
+        );
+        assert.match(part.text, /git fetch origin luke\/store-invitations/u);
+      }),
+  );
+
+  it.effect(
     "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
     () =>
       Effect.gen(function* () {
@@ -1705,6 +1749,9 @@ const startedAgent = (
     assert.ok(Option.isSome(stored));
     return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
   });
+
+/** The same, under a name a suite with a `startedAgent` of its own still reaches. */
+const startedAgentOf = startedAgent;
 
 function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
   return request(PLAN_AGENTS, bearer, { method: "POST", id: planId, body });
