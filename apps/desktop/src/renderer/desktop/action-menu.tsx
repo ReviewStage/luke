@@ -142,6 +142,12 @@ export function riseAbove(button: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.top - MENU_DROP, align: MENU_ALIGN.START, grow: MENU_GROW.UP };
 }
 
+/** Where a menu raised from a button at a row's right end hangs: over it, its right edge on the button's. */
+export function riseAboveEnd(button: HTMLElement): MenuPlacement {
+  const bounds = button.getBoundingClientRect();
+  return { x: bounds.right, y: bounds.top - MENU_DROP, align: MENU_ALIGN.END, grow: MENU_GROW.UP };
+}
+
 /**
  * Where a right-click's menu hangs: at the pointer, growing rightward from
  * it; or, for the menu key the system turned into a right-click, which says

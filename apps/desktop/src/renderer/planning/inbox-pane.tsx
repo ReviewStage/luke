@@ -637,7 +637,7 @@ function SendPresses({
   if (presses !== undefined) {
     const { back, ahead } = presses;
     return (
-      <div className="flex shrink-0 gap-(--control-gap)">
+      <div className="inbox-presses flex gap-(--control-gap)">
         {back === undefined ? null : (
           <button
             type="button"
@@ -876,8 +876,8 @@ function AnswerBox({
               control.onDraft(item, { ...draft, note: event.currentTarget.value })
             }
           />
-          <PromptInputFooter>
-            <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
+          <PromptInputFooter className="inbox-answer-foot">
+            <PromptInputTools className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
               {item.needsReply ? null : (
                 <span data-inbox-quiet="">
                   {draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED}

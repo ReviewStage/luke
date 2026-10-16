@@ -697,6 +697,8 @@ export function AgentServersButton({
   servers,
   statuses,
   face,
+  open: heldOpen,
+  onOpenChange,
 }: {
   servers: AgentServersControl;
   /** Where every connection stands, as the composer around the button reads it. */
@@ -707,8 +709,13 @@ export function AgentServersButton({
    * button leaves it out.
    */
   face?: React.ReactNode;
+  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the button's own otherwise. */
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = heldOpen ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);

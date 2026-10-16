@@ -37,6 +37,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layComposerAt, shown } from "#testing/composer-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
@@ -1310,6 +1311,43 @@ test("an item that needs no reply says a bare press won't message the agent, and
     box.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.equal(quiet(), "Your note will be sent to the agent.");
+});
+
+test("an item's box on a card a 220px column wide leaves out its quiet line and keeps both its presses, which a card a 720px column wide draws beside the line", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  };
+  inboxes = new Map([
+    [BILLING.id, [todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("the box");
+  const drawn = () =>
+    [...foot.querySelectorAll("[data-inbox-quiet], button")]
+      .filter(shown)
+      .map((each) => each.textContent);
+
+  const narrow = layComposerAt(178);
+  try {
+    assert.deepEqual(drawn(), ["Can't do this", "Done"]);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layComposerAt(678);
+  try {
+    assert.deepEqual(drawn(), [
+      "Without a note, this won't message the agent.",
+      "Can't do this",
+      "Done",
+    ]);
+  } finally {
+    wide.remove();
+  }
 });
 
 test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
