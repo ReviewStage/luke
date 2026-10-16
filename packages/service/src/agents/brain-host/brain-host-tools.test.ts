@@ -53,6 +53,7 @@ import { STEER_OUTCOME } from "../coder-host/steer.js";
 import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
+  LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
   START_AGENT_TOOL,
@@ -309,6 +310,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
       id: agent.id,
       title: "anthropic/claude-opus-5.5",
       status: CODING_AGENT_STATUS.RUNNING,
+      onYourTask: true,
     },
   });
   assert.equal(eve.sent.length, 1);
@@ -398,7 +400,7 @@ test("Luke's agent tools reach every agent of the task's workspace: a list names
     deploymentSecret: () => Redacted.make(CRON_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
-  const call = await callerOn(acting, plan, eve.services);
+  const call = await callerOn(acting, plan, eve.services, CATALOG);
   const listedIds = async (input: WireRecord) => {
     const listed = await call(LIST_AGENTS_TOOL.name, input);
     assert.ok(Array.isArray(listed.agents), JSON.stringify(listed));
@@ -459,6 +461,19 @@ test("Luke's agent tools reach every agent of the task's workspace: a list names
     reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
   });
   assert.equal(eve.sent.length, 2);
+
+  // Luke lists the workspace's tasks and starts an agent on another of them by its id.
+  const tasks = await call(LIST_TASKS_TOOL.name, {});
+  assert.ok(Array.isArray(tasks.tasks), JSON.stringify(tasks));
+  assert.deepEqual(
+    tasks.tasks.map((task) => (isRecord(task) ? task.id : undefined)).sort(),
+    [plan.planId, billing.planId].sort(),
+  );
+  const started = await call(START_AGENT_TOOL.name, { taskId: billing.planId }, "call-start");
+  const startedId = startedAgentOf(started).id;
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(opener, startedId)));
+  assert.equal(stored.planId, billing.planId);
+  assert.equal(eve.sent.length, 3);
 });
 
 /** The agent a start answered, as the model reads it; the test fails where the answer carries none. */

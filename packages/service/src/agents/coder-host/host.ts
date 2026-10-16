@@ -51,6 +51,7 @@ import {
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
   runListAgents,
+  runListTasks,
   runMessageAgent,
   runStartAgent,
 } from "../coding-agent-tools.js";
@@ -319,8 +320,8 @@ export interface CoderHost extends HostAdmission {
   /**
    * Runs one of the agent's tools about the workspace's coding agents
    * (`../coding-agent-tools.ts`), the agent its session was admitted to as
-   * the caller: a list, a message sent under the call's own key, or a start
-   * on its own task under the same key, which reach eve as the deployment
+   * the caller: a list of agents or of tasks, a message sent under the
+   * call's own key, or a start on a task of its workspace under the same key, which reach eve as the deployment
    * acting for this agent's starter, and reach nothing where the deployment
    * names no secret or no origin for eve.
    */
@@ -359,7 +360,8 @@ export interface AgentToolCall {
   readonly tool:
     | typeof CODER_TOOL.LIST_AGENTS
     | typeof CODER_TOOL.MESSAGE_AGENT
-    | typeof CODER_TOOL.START_AGENT;
+    | typeof CODER_TOOL.START_AGENT
+    | typeof CODER_TOOL.LIST_TASKS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -369,6 +371,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
+  [CODER_TOOL.LIST_TASKS]: runListTasks,
 } as const;
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */

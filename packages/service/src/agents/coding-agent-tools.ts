@@ -3,8 +3,10 @@ import {
   awaitingLinesOfReached,
   type CodingAgent,
   latestTurnsOfReached,
+  readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
+import { listPlans } from "@luke/database/models/plan-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -101,6 +103,9 @@ import {
  * credential.
  */
 
+/** The most tasks a list of them answers, the newest started first. */
+const TASKS_LIST_LIMIT = 50;
+
 const CODING_AGENT_TOOL_BOUNDS = {
   /** The newest turns a progress read walks, the one under way included. */
   TAIL_TURNS: 3,
@@ -128,6 +133,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a message as text of at ` +
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
+  UNREADABLE_TASKS:
+    "Not run: narrow the tasks by words of their name, and page them by an offset of 0 or more.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
@@ -156,7 +163,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: give a prompt as text of at most " +
     `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
     "bounded the same or none, and a model with its effort, both or neither.",
-  NO_TASK: "Not started: you work on no task, so there is no plan to start an agent on.",
+  NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+  NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   NOT_REACHABLE:
@@ -244,6 +252,13 @@ const START_PROMPT = Schema.Trim.check(
  * caller started the agent and then messaged it the rest.
  */
 const START_AGENT_INPUT = Schema.Struct({
+  taskId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `The task to start the agent on, by the id ${AGENT_TOOL.LIST_TASKS} answered; leave it out ` +
+        "for the task you work on.",
+    ),
+  ),
   prompt: Schema.optionalKey(
     describeWire(
       START_PROMPT,
@@ -323,7 +338,8 @@ export const MESSAGE_AGENT_TOOL = {
 export const START_AGENT_TOOL = {
   name: AGENT_TOOL.START_AGENT,
   description:
-    "Start a new coding agent on the task you work on, exactly as the developer's Start button " +
+    "Start a new coding agent on the task you work on, or on another task of your workspace by " +
+    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start button ` +
     "would: on the task's plan itself with no prompt, or on the prompt given in the plan's " +
     "place, with the note after either. This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
@@ -333,6 +349,37 @@ export const START_AGENT_TOOL = {
     "is open, or `rejected` and why nothing was started; a rejected model or effort lists the " +
     "choices.",
   inputSchema: START_AGENT_INPUT,
+} as const;
+
+/** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
+const LIST_TASKS_INPUT = Schema.Struct({
+  nameContains: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(200)),
+      "Only the tasks whose name holds these words, whatever their case; leave it out for all.",
+    ),
+  ),
+  offset: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      "How many of the matching tasks to pass over, newest first: the nextOffset an earlier list " +
+        "answered, to read the next page; leave it out for the first.",
+    ),
+  ),
+});
+
+const readTasksAsked = Schema.decodeUnknownResult(LIST_TASKS_INPUT);
+
+export const LIST_TASKS_TOOL = {
+  name: AGENT_TOOL.LIST_TASKS,
+  description:
+    "List the open tasks of your workspace, started by any member: each with its id, its name, " +
+    "the repository its agents work in (null for none yet), who started it, and whether it is " +
+    `the task you work on, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "nextOffset where more stand. Narrow it by words of a task's name with nameContains. Call it " +
+    `to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to ` +
+    `narrow ${AGENT_TOOL.LIST_AGENTS} to one.`,
+  inputSchema: LIST_TASKS_INPUT,
 } as const;
 
 /** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
@@ -541,6 +588,15 @@ const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
     return Option.some({ agent, task: taskReading(task, callerTask(caller)) });
   });
 
+/** Whether the task named is one of the caller's workspace, as its member reads both now. */
+const taskOfCallerWorkspace = (caller: AgentCaller, taskId: string) =>
+  Effect.gen(function* () {
+    const workspace = yield* callerWorkspace(caller);
+    if (Option.isNone(workspace)) return false;
+    const taskWorkspace = yield* planWorkspace(callerUserId(caller), taskId);
+    return Option.isSome(taskWorkspace) && taskWorkspace.value === workspace.value;
+  });
+
 /** A call's refusal as the model reads it, here and at a coding agent's edge for a session it does not admit. */
 export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
@@ -593,14 +649,19 @@ function startedByNote(starter: CodingAgent, note: string | undefined): string {
   return note === undefined ? lead : `${lead}\n\n${note}`;
 }
 
-/** The agent as a start answers it: its id, what it runs on, and where it stands now. */
-const startedReading = (agent: CodingAgent, offered: readonly OfferedModel[]) =>
+/** The agent as a start answers it: its id, what it runs on, where it stands now, and whether it is on the caller's own task, which a window that opens the caller's task alone reads to link it or not. */
+const startedReading = (
+  agent: CodingAgent,
+  offered: readonly OfferedModel[],
+  ownTask: string | null,
+) =>
   Effect.map(standingsOf([agent]), (standing) => ({
     id: agent.id,
     model: agent.model,
     modelName: modelLabel(agent.model, offered),
     effort: agent.effort,
     status: standing(agent).status,
+    onYourTask: agent.planId !== null && agent.planId === ownTask,
   }));
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
@@ -726,7 +787,12 @@ export function runMessageAgent(
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         delivery: sent.success,
-        agent: { id: agent.id, title: agentName(agent), status: CODING_AGENT_STATUS.RUNNING },
+        agent: {
+          id: agent.id,
+          title: agentName(agent),
+          status: CODING_AGENT_STATUS.RUNNING,
+          onYourTask: agent.planId !== null && agent.planId === callerTask(caller),
+        },
       };
     }),
   );
@@ -749,7 +815,8 @@ export function runStartAgent(
   const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const { caller, eve } = call;
-  const planId = callerTask(caller);
+  const named = asked.success.taskId;
+  const planId = named ?? callerTask(caller);
   if (planId === null) return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK));
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
@@ -758,6 +825,24 @@ export function runStartAgent(
   const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   return orStoreRefusal(
     Effect.gen(function* () {
+      // Another task is started on only where it is one of the caller's own workspace. A call run
+      // again after its start landed answers the agent it made while that agent is still of the
+      // caller's workspace, and is refused as naming none once its task has moved out of it, so a
+      // retry neither starts a second agent nor tells of one in a workspace the caller left behind.
+      if (named !== undefined && named !== callerTask(caller)) {
+        const made = yield* readCodingAgentByKey(callerUserId(caller), call.clientKey);
+        if (Option.isSome(made)) {
+          const workspace = yield* callerWorkspace(caller);
+          const ours = Option.isSome(workspace) && made.value.organizationId === workspace.value;
+          if (!ours) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            agent: yield* startedReading(made.value, yield* offeredModels, callerTask(caller)),
+          };
+        }
+        const reached = yield* taskOfCallerWorkspace(caller, named);
+        if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
+      }
       const started = yield* startCodingAgent(Effect.succeed(eve), callerUserId(caller), {
         planId,
         idempotencyKey: call.clientKey,
@@ -775,7 +860,53 @@ export function runStartAgent(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        agent: yield* startedReading(started.success.agent, yield* offeredModels),
+        agent: yield* startedReading(
+          started.success.agent,
+          yield* offeredModels,
+          callerTask(caller),
+        ),
+      };
+    }),
+  );
+}
+
+/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first. */
+export function runListTasks(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const { caller } = call;
+  const asked = readTasksAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
+  }
+  const words = asked.success.nameContains?.toLowerCase();
+  const offset = asked.success.offset ?? 0;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(caller);
+      if (Option.isNone(workspace)) {
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      }
+      const ownTask = callerTask(caller);
+      const plans = yield* listPlans(callerUserId(caller));
+      const matching = plans.filter(
+        (plan) =>
+          plan.workspaceId === workspace.value &&
+          (words === undefined || plan.name.toLowerCase().includes(words)),
+      );
+      const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        repository: plan.repository ?? null,
+        startedBy: plan.createdBy?.name ?? null,
+        isYourTask: plan.id === ownTask,
+      }));
+      const next = offset + TASKS_LIST_LIMIT;
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        tasks,
+        nextOffset: next < matching.length ? next : null,
       };
     }),
   );

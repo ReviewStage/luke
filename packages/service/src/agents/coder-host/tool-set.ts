@@ -58,6 +58,7 @@ export const CODER_TOOL = {
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
+  LIST_TASKS: AGENT_TOOL.LIST_TASKS,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
@@ -65,14 +66,11 @@ export const CODER_TOOL = {
   SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
-/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, and `start_agent`, which starts another agent on it. */
-export type PlanTool =
-  | typeof CODER_TOOL.EDIT_PLAN
-  | typeof CODER_TOOL.SHOW_PAGE
-  | typeof CODER_TOOL.START_AGENT;
+/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
+export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
 
 /**
- * The task's tools an agent is offered: none for one on no task, as an
+ * The plan's tools an agent is offered: none for one on no plan, as an
  * automation's run starts one, and no `edit_plan` for one handed a prompt,
  * which never saw the plan. Note that each tool withheld is one its call
  * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
@@ -80,8 +78,8 @@ export type PlanTool =
  */
 export function planToolsOf(agent: Pick<CodingAgent, "planId" | "prompt">): ReadonlySet<PlanTool> {
   if (agent.planId === null) return new Set();
-  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE, CODER_TOOL.START_AGENT]);
-  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, CODER_TOOL.START_AGENT]);
+  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
+  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
 }
 
 /**

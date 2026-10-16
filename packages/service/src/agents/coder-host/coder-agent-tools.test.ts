@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { Database } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
@@ -12,6 +13,8 @@ import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { createPlan } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { plan } from "@luke/database/schemas/plan";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
@@ -23,6 +26,7 @@ import {
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -36,7 +40,7 @@ import {
 } from "../../testing/github-app-fake.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
-import { CODING_AGENT_TOOL_REFUSAL } from "../coding-agent-tools.js";
+import { CODING_AGENT_TOOL_REFUSAL, START_CODING_AGENT_REFUSAL } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
@@ -64,6 +68,12 @@ const CRON_SECRET = "cron-secret-1";
 const EVE_ORIGIN = "https://luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+/** What every agent the suite starts runs on and works in. */
+const AGENT_CHOICE = {
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  repository: RELAY_FULL_NAME,
+} as const;
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
@@ -134,17 +144,33 @@ interface StartedAgent extends ConversationTarget {
 
 /** An agent started by the account on the plan, its eve session recorded as the store hook records it. */
 async function agentOn(userId: string, planId: string): Promise<StartedAgent> {
-  const started = await database.run(
-    createCodingAgent(userId, {
-      planId,
-      idempotencyKey: randomUUID(),
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      planSnapshot: "# Teammate invitations",
-      prompt: null,
-      repository: RELAY_FULL_NAME,
-    }),
-  );
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    planId,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+  });
+}
+
+/** An agent started by the account in the workspace on no task, as an automation's run starts one, its session recorded. */
+async function planlessAgentOn(userId: string, workspaceId: string): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    planId: null,
+    organizationId: workspaceId,
+    planSnapshot: null,
+    prompt: "Sweep the flaky tests.",
+  });
+}
+
+/** The agent the start made, its eve session recorded as the store hook records it. */
+async function claimed(
+  userId: string,
+  start: Parameters<typeof createCodingAgent>[1],
+): Promise<StartedAgent> {
+  const started = await database.run(createCodingAgent(userId, start));
   assert.ok(Option.isSome(started));
   const target = { userId, conversationId: started.value.agent.conversationId };
   const session = sessionId();
@@ -258,7 +284,8 @@ async function openWorkspaces() {
   const strangers = await agentOn(stranger, strangersPlan.id);
   return {
     workspaceId,
-    plans: { invitations: invitations.id, billing: billing.id },
+    elsewhere,
+    plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewherePlan.id },
     agents: { caller, teammates, archived, otherWorkspaces, strangers },
   };
 }
@@ -319,7 +346,12 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   assert.deepEqual(sent, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     delivery: STEER_OUTCOME.SENT,
-    agent: { id: teammates.id, title: OPUS, status: CODING_AGENT_STATUS.RUNNING },
+    agent: {
+      id: teammates.id,
+      title: OPUS,
+      status: CODING_AGENT_STATUS.RUNNING,
+      onYourTask: false,
+    },
   });
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
@@ -442,6 +474,110 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+});
+
+test("list_tasks names the open tasks of the caller's workspace, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
+  const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const listed = await call(CODER_TOOL.LIST_TASKS, {});
+  assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
+  assert.ok(Array.isArray(listed.tasks));
+  const tasks = listed.tasks.flatMap((task) =>
+    isRecord(task) ? [{ id: task.id, name: task.name, isYourTask: task.isYourTask }] : [],
+  );
+  assert.deepEqual(
+    [...tasks].sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [
+      { id: plans.billing, name: "Billing", isYourTask: false },
+      { id: plans.invitations, name: "Teammate invitations", isYourTask: true },
+    ],
+  );
+
+  // Narrowed by words of a name, whatever their case, and paged by an offset.
+  const billing = await call(CODER_TOOL.LIST_TASKS, { nameContains: "BILL" });
+  assert.deepEqual(
+    Array.isArray(billing.tasks) ? billing.tasks.map((task) => isRecord(task) && task.id) : [],
+    [plans.billing],
+  );
+  assert.equal(billing.nextOffset, null);
+  const paged = await call(CODER_TOOL.LIST_TASKS, { offset: 1 });
+  assert.equal(Array.isArray(paged.tasks) ? paged.tasks.length : -1, 1);
+  assert.deepEqual(await call(CODER_TOOL.LIST_TASKS, { offset: -1 }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
+  });
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { taskId: plans.billing, prompt: "Add the invoice export." },
+    "call-billing",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const stored = Option.getOrThrow(
+    await database.run(readCodingAgent(caller.userId, started.agent.id)),
+  );
+  assert.equal(stored.planId, plans.billing);
+  assert.equal(started.agent.onYourTask, false, "an agent started on another task is said to be");
+  assert.equal(eve.sent.length, 1);
+  // The same call run again answers the agent it made, and starts nothing.
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { taskId: plans.billing, prompt: "Add the invoice export." },
+    "call-billing",
+  );
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, started.agent.id);
+  // Once its task has moved to another workspace, its agents with it as a move takes them, the call
+  // tells nothing of that agent and still starts none.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      Effect.andThen(
+        db.update(plan).set({ organizationId: elsewhere }).where(eq(plan.id, plans.billing)),
+        db
+          .update(codingAgent)
+          .set({ organizationId: elsewhere })
+          .where(eq(codingAgent.planId, plans.billing)),
+      ),
+    ),
+  );
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.START_AGENT,
+      { taskId: plans.billing, prompt: "Add the invoice export." },
+      "call-billing",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_SUCH_TASK },
+  );
+  assert.equal(eve.sent.length, 1, "the call run again starts nothing");
+
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.START_AGENT,
+      { taskId: plans.elsewhere, prompt: "Add the invoice export." },
+      "call-elsewhere",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_SUCH_TASK },
+  );
+  assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
+
+  // An agent on no task is offered the tool too, and names the task it starts on.
+  const sweeper = await planlessAgentOn(caller.userId, workspaceId);
+  const fromNoTask = await peerCaller(hostOf(true), sweeper, eve.services);
+  assert.deepEqual(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.NO_TASK,
+  });
+  const onTask = await fromNoTask(
+    CODER_TOOL.START_AGENT,
+    { taskId: plans.invitations, prompt: "Sweep the invitation tests." },
+    "call-task",
+  );
+  assert.equal(onTask.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onTask));
+  assert.equal(eve.sent.length, 2);
 });
 
 test("an agent whose starter has left the workspace reaches no other agent", async () => {

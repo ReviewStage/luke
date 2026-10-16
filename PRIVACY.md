@@ -117,7 +117,8 @@ account, and the agent's tab names them over it to every other member; a
 message of a member whose account is deleted keeps no account and reads as a
 former member's. A coding agent can also list the other coding agents of its
 workspace, on any task and whichever member started them, send one a
-message, and start a new one on its own task, without asking you first; a
+message, list the workspace's open tasks, and start a new one on its own
+task or another task of the workspace, without asking you first; a
 message is kept in the receiving agent's transcript under the sending
 agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
