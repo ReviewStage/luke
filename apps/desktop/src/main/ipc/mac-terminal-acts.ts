@@ -215,8 +215,14 @@ export function macTerminalActRows(
         // A tab closed, or a page gone, while the settings were read starts nothing.
         if (panel.asking.get(params.agentId) !== ask) return;
         panel.asking.delete(params.agentId);
+        // A read that failed is said, rather than taken for a repository with no command.
+        if (answer === undefined) {
+          return yield* Effect.fail(
+            new ActRefused({ message: ACT[ACT_KIND.MAC_REPOSITORIES].refusal }),
+          );
+        }
         const key = params.repository.toLowerCase();
-        const entry = answer?.repositories.find((each) => each.repository.toLowerCase() === key);
+        const entry = answer.repositories.find((each) => each.repository.toLowerCase() === key);
         opened(sender.sender, params, entry?.command ?? null);
       });
     },

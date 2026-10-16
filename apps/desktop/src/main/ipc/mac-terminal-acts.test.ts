@@ -57,14 +57,19 @@ interface ScriptedTerminal {
   exit(code: number): void;
 }
 
-function fixture(repositories: readonly MacRepository[], read: Effect.Effect<void> = Effect.void) {
+function fixture(
+  repositories: readonly MacRepository[] | undefined,
+  read: Effect.Effect<void> = Effect.void,
+) {
   const opened: ScriptedPort[] = [];
   const started: ScriptedTerminal[] = [];
   const gone = new Map<WebContents, () => void>();
   const rows = macTerminalActRows({
     host: {
-      macRepositories: () => Effect.as(read, { repositories }),
-      setMacRepository: () => Effect.succeed({ repositories }),
+      macRepositories: () =>
+        Effect.as(read, repositories === undefined ? undefined : { repositories }),
+      setMacRepository: () =>
+        Effect.succeed(repositories === undefined ? undefined : { repositories }),
     },
     stateRoot: "/state",
     ports: {
@@ -265,4 +270,21 @@ it.effect(
       assert.equal(opened[0]?.closed, true);
       assert.match(started[1]?.script ?? "", /'luke\/next-thing'/u);
     }),
+);
+
+it.effect("an open whose read of the run commands failed says so and starts nothing", () =>
+  Effect.gen(function* () {
+    const { router, started, opened } = fixture(undefined);
+    const answer = yield* router.performAct(
+      { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
+      panelOf(),
+    );
+
+    assert.deepEqual(answer, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.MAC_REPOSITORIES].refusal,
+    });
+    assert.equal(started.length, 0);
+    assert.equal(opened.length, 0);
+  }),
 );
