@@ -155,7 +155,10 @@ in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
 `overflow-clip-margin: var(--focus-ring-room)`, which names its box because
 Chromium drops a bare `calc()` there), and a card whose clip is its own edge
 sets `--focus-ring-offset` to `--focus-ring-inset` for what it holds, so the
-ring is drawn inside, on a header rounded as the card is. A
+ring is drawn inside, on a header rounded as the card is. Every
+control scrolls in with `--focus-ring-reach` to spare (`scroll-margin`), and a
+scroller that fades an edge scroll-pads by the fade, so the keyboard never
+leaves a row sliced at a scroller's edge or under its fade. A
 scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill

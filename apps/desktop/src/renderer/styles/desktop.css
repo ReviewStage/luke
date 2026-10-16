@@ -5126,6 +5126,8 @@ button.automation-run:hover {
    top edge, through the shared top fade, once the page has left its top. */
 .template-document .plan-document-scroll {
   padding-top: 0;
+  /* A control the keyboard reaches is scrolled in past the fade at the top. */
+  scroll-padding-top: var(--scroll-fade);
   animation: scroll-top-fade linear both;
   animation-timeline: scroll(self block);
   animation-range: 0 var(--scroll-fade);
