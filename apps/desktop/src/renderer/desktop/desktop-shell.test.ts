@@ -19,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
@@ -860,3 +861,31 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
     ),
   );
 });
+
+test("no place the window stands on can be scrolled sideways into the room its bars draw past the column's edges, folded sidebar or not", async () => {
+  await handBridge();
+  // Note that the window's stylesheets are laid once, because jsdom takes seconds to lay them.
+  const style = layContainersAt({});
+  const clipped: Record<string, string> = {};
+  for (const folded of [false, true]) {
+    for (const place of PLACES) {
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      act(() =>
+        root?.render(onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded }))),
+      );
+      await settle();
+      const shell = container.querySelector(".desktop-shell");
+      assert.ok(shell, `${place} stands in the window's shell`);
+      clipped[`${place}${folded ? ", folded" : ""}`] = getComputedStyle(shell).overflow;
+      act(() => root?.unmount());
+      container.remove();
+    }
+  }
+  style.remove();
+  assert.deepEqual(
+    clipped,
+    Object.fromEntries(Object.keys(clipped).map((place) => [place, "clip"])),
+  );
+}, 60_000);
