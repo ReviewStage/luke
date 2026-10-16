@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { Database } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
@@ -12,6 +13,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { createPlan } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { plan } from "@luke/database/schemas/plan";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
@@ -23,6 +25,7 @@ import {
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -280,6 +283,7 @@ async function openWorkspaces() {
   const strangers = await agentOn(stranger, strangersPlan.id);
   return {
     workspaceId,
+    elsewhere,
     plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewherePlan.id },
     agents: { caller, teammates, archived, otherWorkspaces, strangers },
   };
@@ -467,7 +471,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
 });
 
 test("list_tasks names the open tasks of the caller's workspace, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
-  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
@@ -498,6 +502,20 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   );
   assert.equal(stored.planId, plans.billing);
   assert.equal(eve.sent.length, 1);
+  // The same call run again after its task moved to another workspace answers the agent it made.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(plan).set({ organizationId: elsewhere }).where(eq(plan.id, plans.billing)),
+    ),
+  );
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { taskId: plans.billing, prompt: "Add the invoice export." },
+    "call-billing",
+  );
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, started.agent.id);
+  assert.equal(eve.sent.length, 1, "the call run again starts nothing");
 
   assert.deepEqual(
     await call(

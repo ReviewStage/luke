@@ -3,6 +3,7 @@ import {
   awaitingLinesOfReached,
   type CodingAgent,
   latestTurnsOfReached,
+  readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
 import { listPlans } from "@luke/database/models/plan-store";
@@ -792,8 +793,16 @@ export function runStartAgent(
   const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   return orStoreRefusal(
     Effect.gen(function* () {
-      // Another task is started on only where it is one of the caller's own workspace.
+      // Another task is started on only where it is one of the caller's own workspace; a call run
+      // again after its start landed answers the agent it made, wherever its task stands since.
       if (named !== undefined && named !== callerTask(caller)) {
+        const made = yield* readCodingAgentByKey(callerUserId(caller), call.clientKey);
+        if (Option.isSome(made)) {
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            agent: yield* startedReading(made.value, yield* offeredModels),
+          };
+        }
         const reached = yield* taskOfCallerWorkspace(caller, named);
         if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
       }
