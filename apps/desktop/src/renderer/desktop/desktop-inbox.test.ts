@@ -526,7 +526,7 @@ function subjectOf(page: HTMLElement): (string | boolean | null | undefined)[] {
   const standing = subject.querySelector(".inbox-standing");
   return [
     subject.querySelector("h2[data-inbox-title]")?.textContent,
-    standing?.textContent,
+    wordsOf(standing),
     standing?.querySelector(".attention-mark") !== null,
   ];
 }
@@ -564,6 +564,28 @@ test("a thread leads with its item's title as its subject, and a line saying whe
     /^Alertswithdrew this /u,
   );
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
+});
+
+test("a teammate's open item does not need you: its subject's line says it waits on them, by their face and name, with no attention mark, and its box still takes your answer", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: CHARLES }, RETRY]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Waiting on Charles Pan", false]);
+  const standing =
+    page.querySelector(".inbox-view-items:not([hidden]) .inbox-standing") ??
+    assert.fail("the subject says where the item stands");
+  assert.equal(
+    standing.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+    "person",
+    "the teammate is named by their face",
+  );
+  assert.ok(
+    page.querySelector(".inbox-view-items:not([hidden]) textarea"),
+    "any member may answer",
+  );
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {

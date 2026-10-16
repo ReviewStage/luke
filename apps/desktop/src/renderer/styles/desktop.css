@@ -4385,16 +4385,17 @@ button.integration-tool-head:hover,
   color: var(--text-primary);
 }
 
-/* An item waiting on the developer wears the attention mark beside its
-   words, in the primary ink, since it is the one standing that asks for a
-   hand; a settled one says where it stands in the line's muted ink. */
+/* An item that needs the reader wears the attention mark beside its
+   words, in the primary ink, since it is the one standing that asks for
+   their hand; a teammate's open item names whom it waits on, and a settled
+   one says where it stands, in the line's muted ink. */
 .inbox-standing {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
 }
 
-.inbox-standing[data-status="open"] {
+.inbox-standing[data-status="open"]:not([data-waiting]) {
   color: var(--text-primary);
 }
 

@@ -21,7 +21,7 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { BackIcon, ChevronRightIcon } from "@luke/ui";
-import { type Actor, actorName } from "@luke/ui/actor-model";
+import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
@@ -39,7 +39,7 @@ import {
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
-import { usePerson } from "../member-directory";
+import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
@@ -72,8 +72,10 @@ import {
   inboxReply,
   itemWorkspaceId,
   NEEDS_YOU,
+  needsReader,
   pressesOf,
   proposedOptions,
+  readersItem,
   SETTLED_BY,
   settlementOf,
   withChoice,
@@ -955,12 +957,39 @@ const STANDING_WORDS = {
   [INBOX_STATUS.CLOSED]: "Withdrawn",
 } as const;
 
-/** Where the item stands, in the subject's line: an item waiting on the developer wears the attention mark, which only answering it takes away. */
-function Standing({ item }: { item: InboxItem }): React.JSX.Element {
-  const open = item.status === INBOX_STATUS.OPEN;
+/**
+ * Where the item stands, in the subject's line. An item that needs the
+ * reader, open and asked by an agent they started (`needsReader`), wears the
+ * attention mark, which only answering it takes away; a teammate's open item
+ * waits on the teammate, named by their face and name, which any member may
+ * still answer; a settled one says how it was settled.
+ */
+function Standing({
+  item,
+  readerId,
+}: {
+  item: InboxItem;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const directory = useMemberDirectory();
+  const reader = directory.readerId ?? readerId;
+  const waitsOn =
+    item.status === INBOX_STATUS.OPEN && !readersItem(item, reader)
+      ? personActor(item.startedBy, directory.members, reader, directory.former)
+      : undefined;
+  if (waitsOn !== undefined) {
+    return (
+      <span className="inbox-standing" data-status={item.status} data-waiting="true">
+        <ActorLine>
+          {"Waiting on "}
+          <ActorRef actor={waitsOn} sentence />
+        </ActorLine>
+      </span>
+    );
+  }
   return (
     <span className="inbox-standing" data-status={item.status}>
-      {open ? <AttentionMark /> : null}
+      {needsReader(item, reader) ? <AttentionMark /> : null}
       {STANDING_WORDS[item.status]}
     </span>
   );
@@ -969,15 +998,18 @@ function Standing({ item }: { item: InboxItem }): React.JSX.Element {
 /**
  * The thread's subject, as a plan or a pull request leads with one: the
  * item's title, and under it a muted line of its agent, which hangs its
- * card and opens its tab, when it asked, and where the item stands.
+ * card and opens its tab, when it asked, and where the item stands: needing
+ * the reader, waiting on the teammate whose agent asks it, or settled.
  */
 function Subject({
   item,
   by,
+  readerId,
   now,
 }: {
   item: InboxItem;
   by: ItemAgent;
+  readerId: string | undefined;
   now: number;
 }): React.JSX.Element {
   return (
@@ -994,7 +1026,7 @@ function Subject({
           asked <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
         </span>
         <span aria-hidden="true">·</span>
-        <Standing item={item} />
+        <Standing item={item} readerId={readerId} />
       </p>
     </header>
   );
@@ -1267,7 +1299,7 @@ export function InboxPane({
           ref={board}
         >
           <WordsWorkspace value={workspaceId}>
-            <Subject item={item} by={by} now={now} />
+            <Subject item={item} by={by} readerId={agents.me} now={now} />
             <ol className="inbox-thread" aria-label="Thread">
               <Comment
                 kind={COMMENT.ASKED}
