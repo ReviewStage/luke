@@ -148,6 +148,14 @@
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/overview",
+    "dest": "/api/default.js?route=agents/overview&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/github-image",
+    "dest": "/api/default.js?route=agents/github-image&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/inbox",
     "dest": "/api/default.js?route=agents/inbox&id=$1"
   },

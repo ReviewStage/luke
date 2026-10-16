@@ -4,7 +4,6 @@ import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
-  changesLabelOf,
   type FileStripTab,
   inTaskOrder,
   isAgentTab,
@@ -18,6 +17,7 @@ import {
   movedOrder,
   openedOrder,
   type PageStripTab,
+  pullRequestLabelOf,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -63,8 +63,12 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
- * nowhere, so a launch opens none. An agent's Changes tab, opened from the
- * Changes chip at its tab's foot, the "+", the plan's summary, or ⌘K, is
+ * nowhere, so a launch opens none. An agent's Pull request tab, kept as
+ * `changes` for the tab that once showed its files alone, opened from the
+ * pull request's chip or the Changes chip at its tab's foot, the "+", the
+ * plan's summary, or ⌘K, shows the pull request's overview or its files
+ * (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
+ * window's life and kept nowhere, and is
  * the one kind besides the fixed three kept as they are: one per agent,
  * since each agent works in a sandbox and a pull request of its own, it is
  * opened on the plan it was opened on and held to that plan's agents, and
@@ -207,6 +211,14 @@ export interface OpenFile {
 
 /** A file a File tab showed, as its history holds it to show again. */
 type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "commit">;
+
+/** What an agent's Pull request tab shows: the pull request's page, or its changed files. */
+export const PULL_REQUEST_VIEW = {
+  OVERVIEW: "overview",
+  FILES: "files",
+} as const;
+
+export type PullRequestView = (typeof PULL_REQUEST_VIEW)[keyof typeof PULL_REQUEST_VIEW];
 
 /** Which way a File tab's history is walked. */
 export const FILE_HISTORY_STEP = {
@@ -403,6 +415,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on each plan, by plan. */
   readonly lastTerminals: Readonly<Record<string, string>>;
+  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  readonly pullRequestViews: Readonly<Record<string, PullRequestView>>;
   /** The open tabs of this Mac's terminals, by agent, in the order opened. */
   readonly macTerminals: readonly MacTerminalStripTab[];
   readonly tasks: Readonly<Record<string, TaskTabs>>;
@@ -493,6 +507,10 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
+  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  pullRequestViews: Readonly<Record<string, PullRequestView>>;
+  /** Chooses what an agent's Pull request tab shows, its tab open or not. */
+  onPullRequestView: (agentId: string, view: PullRequestView) => void;
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -722,7 +740,7 @@ function agentPinLabel(tab: PinnableTab, labels: ReadonlyMap<string, string>): s
   if (isAgentTab(tab)) return labels.get(tab.agent);
   if (!isChangesTab(tab)) return undefined;
   const agent = labels.get(tab.changes);
-  return agent === undefined ? undefined : changesLabelOf(agent);
+  return agent === undefined ? undefined : pullRequestLabelOf(agent);
 }
 
 /** The state with each agent, and each agent's Changes, pinned on the plan named as `labels` names the agent, and the state as it is where every one already was. */
@@ -1233,7 +1251,7 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
 /** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, any Changes tab's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) return TAB_WORDS.CHANGES;
+  if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
   if (tab === MAIN_TAB.INBOX) return TAB_WORDS.INBOX;
   return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
 }
@@ -1281,6 +1299,7 @@ function settled(state: SidePanelState): HeldState {
     pages: [],
     terminals: [],
     lastTerminals: {},
+    pullRequestViews: {},
     macTerminals: [],
     tasks: currentTasks(state.tasks),
     pins:
@@ -1637,6 +1656,15 @@ export function useSidePanel(
       update((held) => withNoteFolded(held, path, callId, folded)),
     [update],
   );
+  const onPullRequestView = useCallback(
+    (agentId: string, view: PullRequestView) =>
+      update((held) =>
+        held.pullRequestViews[agentId] === view
+          ? held
+          : { ...held, pullRequestViews: { ...held.pullRequestViews, [agentId]: view } },
+      ),
+    [update],
+  );
   const onMove = useCallback(
     (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
@@ -1702,6 +1730,8 @@ export function useSidePanel(
     pages: state.pages,
     terminals: state.terminals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
+    pullRequestViews: state.pullRequestViews,
+    onPullRequestView,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

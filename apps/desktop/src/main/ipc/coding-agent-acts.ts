@@ -6,6 +6,8 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageParams,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
@@ -18,6 +20,7 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
@@ -97,6 +100,12 @@ export interface CodingAgentActsDependencies {
     codingAgentChanges(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentChangesAnswerView>;
+    codingAgentOverview(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentOverviewAnswerView>;
+    codingAgentGitHubImage(
+      params: CodingAgentGitHubImageParams,
+    ): Effect.Effect<CodingAgentGitHubImageView>;
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
@@ -160,6 +169,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
+  | typeof ACT_KIND.CODING_AGENTS_OVERVIEW
+  | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
   | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
@@ -292,6 +303,15 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_CHANGES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHANGES, sender);
       return host.codingAgentChanges(params);
+    },
+    [ACT_KIND.CODING_AGENTS_OVERVIEW]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW, sender);
+      return host.codingAgentOverview(params);
+    },
+    // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
+    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, sender);
+      return host.codingAgentGitHubImage(params);
     },
     [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);

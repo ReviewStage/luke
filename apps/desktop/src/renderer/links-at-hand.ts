@@ -39,7 +39,7 @@ const LINK_THING = {
   CALL: "call",
   AGENT: "agent",
   WORKER: "worker",
-  CHANGES: "changes",
+  CHANGES: "pull request",
   INBOX: "Inbox",
   INBOX_ITEM: "Inbox item",
   AUTOMATIONS: "Automations",

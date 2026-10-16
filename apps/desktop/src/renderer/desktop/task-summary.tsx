@@ -129,7 +129,7 @@ const TABS_SECTION = "Tabs";
 const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
-  ADD_SECTION.CHANGES,
+  ADD_SECTION.PULL_REQUESTS,
   ADD_SECTION.SUBAGENTS,
   ADD_SECTION.FILES,
   ADD_SECTION.PAGES,
@@ -388,7 +388,7 @@ function withCards(
       );
       return { ...entry, card };
     }
-    if (row.section === ADD_SECTION.CHANGES) {
+    if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;

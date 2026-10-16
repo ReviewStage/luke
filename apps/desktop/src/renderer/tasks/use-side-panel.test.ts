@@ -163,19 +163,19 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
+  act(() => first.control().onPin({ changes: AGENT }, "Pull request: Invite flow"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(
     second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Changes: Invite flow" }],
+    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request: Invite flow" }],
   );
   // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
   act(() => second.control().onRenamePins(TASK, new Map([[AGENT, "Expiring invites"]])));
-  assert.equal(second.control().pins[0]?.label, "Changes: Expiring invites");
+  assert.equal(second.control().pins[0]?.label, "Pull request: Expiring invites");
 
   // Shown from its pin on another plan, it opens there, at the end of that plan's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });

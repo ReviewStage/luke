@@ -1363,6 +1363,7 @@ export function AgentTab({
   shown,
   onOpenSubagent,
   onOpenChanges,
+  onOpenPullRequest,
   onOpenTarget,
   cards,
   onHeld,
@@ -1382,6 +1383,8 @@ export function AgentTab({
   cards?: TranscriptCards | undefined;
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;
+  /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
+  onOpenPullRequest?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -1472,6 +1475,7 @@ export function AgentTab({
           openGitHub,
           copy: copyWithToast,
           openChanges: onOpenChanges,
+          openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}
         delegationStarts={shown ? transcript.delegations : undefined}

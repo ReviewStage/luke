@@ -460,20 +460,20 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
     [...well.querySelectorAll("section")].map((each) => each.getAttribute("aria-label")),
     headings,
   );
-  assert.deepEqual(headings, ["Changes", "Terminal"]);
+  assert.deepEqual(headings, ["Pull requests", "Terminal"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the empty panel offers the agent's pull request");
   act(() => changes.click());
   await settle();
   assert.ok(
     [...shown.querySelectorAll("[role='tab']")].some((tab) =>
-      (tab.textContent ?? "").includes("Changes"),
+      (tab.textContent ?? "").includes("Pull request"),
     ),
-    "the Changes tab stands in the panel",
+    "the Pull request tab stands in the panel",
   );
 });
 
-test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
+test("an archived agent's pull request, picked from the panel's +, opens in a Pull request tab standing beside its page", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   published = {
     repository: "acme/relay",
@@ -506,8 +506,8 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
   );
 
   assert.ok(
-    tabs.some((label) => label.includes("Changes")),
-    `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
 
