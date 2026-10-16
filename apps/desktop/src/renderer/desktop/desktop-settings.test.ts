@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -444,4 +444,32 @@ test("the plan template's version history keeps a call's card at the foot of its
   assert.ok(back);
   act(() => back.click());
   assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_PLAN]);
+});
+
+test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
+  const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
+  const row = pageButtons(page).find((each) => each.textContent === "Workspace");
+  assert.ok(row, "the Workspace page is listed");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(item, "the row's menu offers Copy link");
+  await act(async () => item.click());
+
+  assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
 });
