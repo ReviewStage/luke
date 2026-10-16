@@ -21,6 +21,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -665,5 +666,50 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       assert.ok(!addableIn(full.body).includes(NOTION));
       assert.deepEqual((yield* add("&add=true")).body, UNAVAILABLE_REFUSAL.body);
     }),
+  );
+
+  it.effect(
+    "sign-ins left past their window hold no account place, so the provider is addable again and takes another",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, { declines: true });
+        const userId = yield* openAccount("left@five-notions.example");
+        const add = (query: string) =>
+          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+            method: "POST",
+            userId,
+          });
+        yield* add("");
+        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("&add=true");
+        yield* TestClock.adjust("16 minutes");
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+
+        assert.equal(accountsIn(read.body).length, 0);
+        assert.ok(addableIn(read.body).includes(NOTION));
+        assert.equal((yield* add("&add=true")).status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+
+  it.effect(
+    "a read that ends the sign-ins holding a provider's places offers the provider again in that same read",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
+          declines: true,
+          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
+        });
+        const userId = yield* openAccount("ended@five-notions.example");
+        const add = (query: string) =>
+          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+            method: "POST",
+            userId,
+          });
+        yield* add("");
+        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("&add=true");
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+
+        assert.equal(accountsIn(read.body).length, 0);
+        assert.ok(addableIn(read.body).includes(NOTION));
+      }),
   );
 });

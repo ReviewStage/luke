@@ -368,6 +368,20 @@ function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undefined): 
 }
 
 /**
+ * Whether a row holds one of its provider's account places: connected,
+ * expired, or a sign-in still under way. Note that a first sign-in that ran
+ * out of time holds none, because no read answers it, so nothing the
+ * developer sees could free its place.
+ */
+function holdsAccountPlace(seams: IntegrationsAppSeams, row: IntegrationConnectionRow): boolean {
+  return (
+    row.status === INTEGRATION_ROW_STATUS.CONNECTED ||
+    row.status === INTEGRATION_ROW_STATUS.EXPIRED ||
+    signInStands(seams, row.stateIssuedAt)
+  );
+}
+
+/**
  * Asks Connect afresh whether the account now holds a grant at the
  * provider, and records it connected where it does; answers whether it
  * does. Connect's own refusal and an outage alike answer no: a sign-in not
@@ -553,12 +567,15 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
     standings.map(({ provider, status }) => [provider, status]),
   );
   const accounts = standings.flatMap((standing) => standing.accounts);
-  const addable = INTEGRATION_PROVIDER_LIST.filter(
-    (provider) =>
-      connect[provider].configured &&
-      connect[provider].multipleAccounts &&
-      providerRows(rows, provider).length < INTEGRATION_ACCOUNTS_MAX,
-  );
+  // Note that the places are counted from what this read settled, so a sign-in it ended frees one at once.
+  const addable = standings
+    .filter(
+      ({ provider, accounts: held }) =>
+        connect[provider].configured &&
+        connect[provider].multipleAccounts &&
+        held.length < INTEGRATION_ACCOUNTS_MAX,
+    )
+    .map(({ provider }) => provider);
   const signInFailures = standings.flatMap((standing) => standing.failures);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     integrations,
@@ -749,7 +766,8 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
   if (adding) {
     if (!connector.multipleAccounts) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    if (providerRows(rows, provider).length >= INTEGRATION_ACCOUNTS_MAX) {
+    const held = providerRows(rows, provider).filter((row) => holdsAccountPlace(seams, row));
+    if (held.length >= INTEGRATION_ACCOUNTS_MAX) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
     const name = mintIntegrationConnectionName(
