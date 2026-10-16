@@ -45,6 +45,8 @@ export const prFetchAnswerSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   prNumber: pullRequestNumberSchema,
   headSha: commitShaSchema,
+  /** The pull request's head branch, as named on its own repository, which a fork's may share with the base's. */
+  headRef: EffectSchema.String.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(255)),
   token: EffectSchema.String.check(EffectSchema.isNonEmpty()),
   /** When GitHub stops honouring the token, as GitHub spells the instant. */
   expiresAt: EffectSchema.String,

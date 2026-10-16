@@ -38,6 +38,8 @@ export type PrFetchRefusal = (typeof PR_FETCH_REFUSAL)[keyof typeof PR_FETCH_REF
 /** What the Mac fetches with: the pull request's head as GitHub held it when asked, and a contents-read token for its repository alone. */
 export interface PrFetchGrant {
   readonly headSha: string;
+  /** The pull request's head branch, as named on its own repository. */
+  readonly headRef: string;
   readonly token: Redacted.Redacted<string>;
   readonly expiresAt: string;
 }
@@ -93,7 +95,12 @@ export class HostedPrFetchClient {
         read.repository.toLowerCase() === request.repository.toLowerCase() &&
         read.prNumber === request.prNumber;
       if (!same) return { refused: PR_FETCH_REFUSAL.UNANSWERED };
-      return { headSha: read.headSha, token: Redacted.make(read.token), expiresAt: read.expiresAt };
+      return {
+        headSha: read.headSha,
+        headRef: read.headRef,
+        token: Redacted.make(read.token),
+        expiresAt: read.expiresAt,
+      };
     });
   }
 }

@@ -105,6 +105,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_PR_FETCH: "/api/github/pr-fetch",
   /**
+   * How a workspace's repositories are set up and run on a Mac, shared by
+   * every member: read (GET, the workspace named by `REPOSITORY_RUNS_QUERY`)
+   * and set one repository's (PUT). `repository-run-wire.ts` declares both.
+   */
+  REPOSITORY_RUNS: "/api/repository-runs",
+  /**
    * One folder of a repository a workspace's installation reaches, as
    * GitHub holds it now (GET), named by the workspace and the repository
    * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,

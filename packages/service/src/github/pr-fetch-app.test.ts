@@ -172,6 +172,7 @@ it.layer(getTestDB())("the pull-request fetch route", (it) => {
           repository: "octocat/relay",
           prNumber: 7,
           headSha: HEAD_SHA,
+          headRef: "fix-relay",
           token: GITHUB_FIXTURE_INSTALLATION_TOKEN,
           expiresAt: "2026-10-01T01:00:00Z",
         });

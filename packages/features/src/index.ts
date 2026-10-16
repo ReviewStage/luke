@@ -130,6 +130,10 @@ export {
   type PrFetchRefusal,
 } from "./pr-fetch-client.js";
 export {
+  HostedRepositoryRunClient,
+  type HostedRepositoryRunClientOptions,
+} from "./repository-run-client.js";
+export {
   agentMessagesPath,
   agentPullRequestPath,
   agentStopPath,

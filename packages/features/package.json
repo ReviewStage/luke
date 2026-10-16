@@ -53,6 +53,7 @@
     "./pr-fetch-wire": "./src/pr-fetch-wire.js",
     "./pr-run-store": "./src/pr-run-store.js",
     "./pr-run-view": "./src/pr-run-view.js",
+    "./repository-run-wire": "./src/repository-run-wire.js",
     "./planning-view": "./src/planning-view.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./repository-reach-wire": "./src/repository-reach-wire.js",

@@ -89,6 +89,7 @@ const prFetchEndpoint = /* @__PURE__ */ Effect.fn("web/githubPrFetchEndpoint")(f
     repository: fetching.value.repository.fullName,
     prNumber,
     headSha: pullRequest.value.headSha,
+    headRef: pullRequest.value.headRef,
     token: Redacted.value(fetching.value.token),
     expiresAt: fetching.value.expiresAt,
   };

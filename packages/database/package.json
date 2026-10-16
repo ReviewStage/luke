@@ -38,6 +38,7 @@
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/repository-pin-store": "./src/models/repository-pin-store.js",
+    "./models/repository-run-store": "./src/models/repository-run-store.js",
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",
     "./models/soft-delete": "./src/models/soft-delete.js",

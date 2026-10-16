@@ -337,6 +337,10 @@
           "dest": "/api/default.js?route=repository-pins"
         },
         {
+          "src": "/api/repository-runs",
+          "dest": "/api/default.js?route=repository-runs"
+        },
+        {
           "src": "/api/workspaces",
           "dest": "/api/default.js?route=workspaces"
         },

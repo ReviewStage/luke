@@ -29,3 +29,4 @@ export * from "./storage.js";
 export * from "./usage.js";
 export * from "./voice.js";
 export * from "./workspace-integration.js";
+export * from "./workspace-repository-run.js";
