@@ -106,6 +106,10 @@ rendering are kept: an attribute is markup, not a script that runs first.
 - Visual evidence covers both themes, a narrow container, long content, and
   the failure states that apply, on synthetic data with a fixed browser and
   fonts. A golden changes only under `LUKE_UPDATE_FIXTURES=1`.
+- Visual goldens are recorded on Linux in the pinned Playwright Chromium,
+  CI's machine, and compared only there: in CI, and in `check.sh` on Linux.
+  A Mac rasterizes the same fonts to different pixels, so `check.sh` on a Mac
+  skips the comparison, says so on a line of its own, and still passes.
 - Desktop fixtures are checked at 1280×840; web at 320, 768, and 1440px wide.
 - Mac-only behavior (native window controls, drag regions, zoom, pane
   motion, call surfaces) needs Mac evidence; without it the validation is
