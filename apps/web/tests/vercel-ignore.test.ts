@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
@@ -9,13 +9,16 @@ import { type TestContext, test } from "vitest";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SCRIPT = "scripts/vercel-ignore.sh";
 
-// SAFETY: the file is this repository's own vercel.json, read for its services' ignore steps.
-const { services } = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8")) as {
-  readonly services: Readonly<Record<string, { readonly ignoreCommand: string }>>;
-};
+/**
+ * The Vercel project's Ignored Build Step, as set in its Git settings: the
+ * script where the branch has it, and a build where it does not, since
+ * Vercel fails a deployment whose step exits anything but 0 or 1.
+ */
+const IGNORED_BUILD_STEP =
+  "[ -f scripts/vercel-ignore.sh ] && bash scripts/vercel-ignore.sh || exit 1";
 
-/** What Vercel makes of the steps' exits: the deployment is skipped when every service's exits zero, and built otherwise. */
-const VERDICT = { SKIP: "skip", BUILD: "build" } as const;
+/** What Vercel makes of the step's exit: 0 skips the deployment, 1 builds it, and anything else fails it. */
+const VERDICT = { SKIP: "skip", BUILD: "build", FAIL: "fail" } as const;
 type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
 /** A commit Vercel's clone does not hold, as a rebased branch's last deployment is. */
@@ -43,11 +46,13 @@ function git(root: string, ...args: string[]): string {
   return ran.stdout.trim();
 }
 
-/** A repository holding the ignore step and one file, so its first commit has the step to run. */
-async function repository(t: TestContext): Promise<string> {
+/** A repository holding the ignore step, so its first commit has the step to run. */
+async function repository(t: TestContext, withScript = true): Promise<string> {
   const root = await temporaryDirectory(t, "luke-vercel-ignore-");
-  mkdirSync(join(root, "scripts"));
-  copyFileSync(join(ROOT, SCRIPT), join(root, SCRIPT));
+  if (withScript) {
+    mkdirSync(join(root, "scripts"));
+    copyFileSync(join(ROOT, SCRIPT), join(root, SCRIPT));
+  }
   git(root, "init", "-q", "-b", "main");
   return root;
 }
@@ -64,32 +69,37 @@ function commit(root: string, path: string): string {
   return git(root, "rev-parse", "HEAD");
 }
 
-/** Runs every service's own ignoreCommand at the head, from `directory`, as Vercel would. */
-function decide(root: string, previous?: string, directory = root): Verdict {
-  const skipped = Object.values(services).every(({ ignoreCommand }) => {
-    const ran = spawnSync("bash", ["-c", ignoreCommand], {
-      cwd: directory,
-      encoding: "utf8",
-      env: {
-        PATH: process.env.PATH,
-        HOME: root,
-        GIT_CONFIG_NOSYSTEM: "1",
-        // Note that a branch with no successful deployment yet carries the variable empty.
-        VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
-      },
-    });
-    return ran.status === 0;
+/** Runs the project's Ignored Build Step at the head, as Vercel does, from the repository's root. */
+function decide(root: string, previous?: string): Verdict {
+  const ran = spawnSync("bash", ["-c", IGNORED_BUILD_STEP], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH,
+      HOME: root,
+      GIT_CONFIG_NOSYSTEM: "1",
+      // Note that a branch with no successful deployment yet carries the variable empty.
+      VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
+    },
   });
-  return skipped ? VERDICT.SKIP : VERDICT.BUILD;
+  if (ran.status === 0) return VERDICT.SKIP;
+  return ran.status === 1 ? VERDICT.BUILD : VERDICT.FAIL;
 }
 
-test("a push that changes only the desktop app or the docs is skipped, from whichever directory the step runs in", async (t) => {
+test("a push that changes only the desktop app or the docs is skipped", async (t) => {
   const root = await repository(t);
   commit(root, "apps/web/package.json");
   commit(root, "apps/desktop/src/main/main.ts");
   assert.equal(decide(root), VERDICT.SKIP);
   commit(root, "docs/proposals/factory/index.html");
-  assert.equal(decide(root, undefined, join(root, "apps/web")), VERDICT.SKIP);
+  assert.equal(decide(root), VERDICT.SKIP);
+});
+
+test("a branch that predates the script is built rather than failed", async (t) => {
+  const root = await repository(t, false);
+  commit(root, "README.md");
+  commit(root, "apps/desktop/src/main/main.ts");
+  assert.equal(decide(root), VERDICT.BUILD);
 });
 
 test("a push that changes anything a service installs or builds from is built", async (t) => {

@@ -44,6 +44,9 @@ EXIT_UNREADABLE=7
 
 # Vercel's own words on a build its ignoreCommand skipped, compared whole.
 SKIPPED_DESCRIPTION="Skipped - Not affected"
+# The project's Ignored Build Step (`scripts/vercel-ignore.sh`) writes no
+# deployment record for a commit it skips, only this commit status.
+IGNORED_STATUS="success: Canceled by Ignored Build Step"
 PREVIEW_ENVIRONMENT=Preview
 SSO_HOST=vercel.com
 SSO_PATH=/sso-api
@@ -174,6 +177,10 @@ read_preview() {
             # as a queue rather than as nothing.
             vercel_status=$(gh api "repos/$repo/commits/$sha/status" \
                 --jq '[.statuses[] | select(.context == "Vercel")][0] | select(. != null) | "\(.state): \(.description)"' 2>/dev/null || true)
+            if [[ $vercel_status == "$IGNORED_STATUS" ]]; then
+                printf 'preview: %s was skipped by the Ignored Build Step; nothing it deploys changed\n' "$sha" >&2
+                return
+            fi
             printf 'preview: waiting (no record yet for %s; Vercel says %s)\n' "$sha" "${vercel_status:-nothing}" >&2
         fi
         if ((attempt < attempts)); then

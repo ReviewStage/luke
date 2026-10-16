@@ -6,7 +6,7 @@
       "framework": "vite",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
       "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
-      "ignoreCommand": "bash \"$(git rev-parse --show-toplevel)/scripts/vercel-ignore.sh\"",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
       "routes": [
         {
           "src": "/api/auth/(.*)",
@@ -439,14 +439,14 @@
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
       "buildCommand": "pnpm exec eve build",
-      "ignoreCommand": "bash \"$(git rev-parse --show-toplevel)/scripts/vercel-ignore.sh\""
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
     },
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/dev...",
       "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
-      "ignoreCommand": "bash \"$(git rev-parse --show-toplevel)/scripts/vercel-ignore.sh\"",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
       "routes": [
         {
           "src": "^/eve/coder/v1/(.*)$",

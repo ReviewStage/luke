@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-set -uo pipefail
 
-# Vercel's Ignored Build Step, the same for every service: exits 0, which
-# skips the service, when nothing any service builds from changed since the
-# last deployment of this branch that succeeded, and non-zero, which builds
-# it, otherwise. One verdict for all three means a deployment either skips
-# whole or builds whole. Vercel refuses a top-level `ignoreCommand` beside
-# `services` (observed on #2989), so each service names this script.
+# The Vercel project's Ignored Build Step (Settings > Git), for the whole
+# deployment: exits 0, which skips it, when nothing any service builds from
+# changed since the last deployment of this branch that succeeded, and 1,
+# which builds it, otherwise. Vercel fails a deployment whose step exits
+# anything else, so the project runs it as
 #
-#   scripts/vercel-ignore.sh           decide, as each service's `ignoreCommand`
+#   [ -f scripts/vercel-ignore.sh ] && bash scripts/vercel-ignore.sh || exit 1
+#
+# which builds a branch that predates the script. It lives in the project
+# rather than in `vercel.json` because Vercel refuses a top-level
+# `ignoreCommand` beside `services`, and does not act on one inside a
+# service (both observed on #2989).
+#
+#   scripts/vercel-ignore.sh           decide, as the project's Ignored Build Step
 #   scripts/vercel-ignore.sh --paths   print the deployed tree, one pathspec a line
 #
 # The deployed tree is every path the web, luke and dev services install or
@@ -21,15 +26,15 @@ set -uo pipefail
 #
 # Note that since the project's Root Directory became the repository root
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
-# and the `git diff HEAD^ HEAD` the services named before this script were
-# observed skipping nothing (2026-10-15), so every push of a desktop-only
-# branch built all three services and woke its branch's Neon compute.
+# so without this step every push of a desktop-only branch built all three
+# services and woke its branch's Neon compute (2026-10-15).
 #
 # The base is `VERCEL_GIT_PREVIOUS_SHA`, the commit of this branch's last
 # deployment that succeeded, when the clone holds it, so every commit pushed
 # since then counts and not the head's alone; otherwise, on a new branch or
 # one rebased past it, the head's parent. Every doubt builds: a base git
-# cannot read, or a diff that errors, exits non-zero.
+# cannot read, or a diff that errors, exits 1. Note that the script sets no
+# `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`.
 
 DEPLOYED_PATHS=(
     :/apps/web
