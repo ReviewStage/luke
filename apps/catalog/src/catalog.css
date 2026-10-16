@@ -264,3 +264,17 @@ body {
   display: flex;
   height: 120px;
 }
+
+/* Room a placeholder stands in, as wide as what it stands for. */
+.catalog-skeleton-line {
+  width: 160px;
+}
+
+.catalog-skeleton-control {
+  width: 120px;
+}
+
+/* A row's item that takes the room its row leaves. */
+.catalog-grow {
+  flex: 1;
+}
