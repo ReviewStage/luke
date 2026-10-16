@@ -370,6 +370,33 @@ function inboxRefusal(output: WireValue | undefined): ToolBlock | undefined {
   return textBlock(stringAt(output, "reason") ?? "");
 }
 
+/** The units a pause is said in, longest first, each by its seconds and its word. */
+const SPAN_UNITS = [
+  [3_600, "hour"],
+  [60, "minute"],
+  [1, "second"],
+] as const;
+
+/** A count of seconds as a row says it, in its largest whole unit or two: "45 seconds", "5 minutes", "1 hour 30 minutes". */
+function spanText(seconds: number): string {
+  const rounded = Math.max(1, Math.round(seconds));
+  const parts = SPAN_UNITS.flatMap(([span, word], index) => {
+    const count = Math.floor((rounded % (SPAN_UNITS[index - 1]?.[0] ?? Infinity)) / span);
+    return count === 0 ? [] : [`${count} ${word}${count === 1 ? "" : "s"}`];
+  });
+  return parts.slice(0, 2).join(" ");
+}
+
+/** How a pause ended: how long it waited, or that a message ended it early. */
+function sleepOutput(output: WireValue): ToolBlock {
+  if (isRecord(output) && output.interrupted === true) {
+    return textBlock("Stopped early: a message arrived.");
+  }
+  const waited =
+    isRecord(output) && isWireNumber(output.waitedSeconds) ? output.waitedSeconds : undefined;
+  return waited === undefined ? jsonBlock(output) : textBlock(`Waited ${spanText(waited)}.`);
+}
+
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
 function knownToolView(
   tool: string,
@@ -489,6 +516,15 @@ function knownToolView(
     case AGENT_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
       return inboxToolView(tool, input, output);
+    case AGENT_TOOL.SLEEP: {
+      const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
+      return {
+        kind: CALL_KIND.SLEEP,
+        subject: seconds === undefined ? "" : spanText(seconds),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
+        output: output === undefined ? undefined : sleepOutput(output),
+      };
+    }
     default:
       return undefined;
   }

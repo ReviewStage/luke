@@ -57,6 +57,8 @@ export const AGENT_TOOL = {
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
+  // eve's own durable pause, which a coding agent takes before it checks on its checks or a deploy again.
+  SLEEP: "sleep",
 } as const;
 
 export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];

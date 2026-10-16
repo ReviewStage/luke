@@ -15,6 +15,7 @@ import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "./pull-request.js";
 import { bashStartingIn } from "./shell.js";
 import { SHOW_IMAGE_TOOL } from "./show-image.js";
+import { SLEEP_TOOL } from "./sleep.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -112,6 +113,7 @@ const AUTHORED_TOOLS = {
     description: SHOW_IMAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_IMAGE_TOOL.inputSchema),
   },
+  [CODER_TOOL.SLEEP]: shown(SLEEP_TOOL),
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */

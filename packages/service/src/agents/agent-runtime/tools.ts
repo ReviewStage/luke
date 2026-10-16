@@ -66,6 +66,7 @@ const TOOL_ROLES = {
   [AGENT_TOOL.LOAD_SKILL]: [PLANNER, CODER],
   [AGENT_TOOL.SHOW_PAGE]: [PLANNER, CODER],
   [AGENT_TOOL.SHOW_IMAGE]: [CODER, CODER_WORKER],
+  [AGENT_TOOL.SLEEP]: [CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 
 /** The tools a role is offered, in the registry's order. */

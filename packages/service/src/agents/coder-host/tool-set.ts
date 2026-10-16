@@ -21,7 +21,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
  * opens for it (`pull-request.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`). The worker's own rows name
+ * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
+ * checks or a deploy with. The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -57,6 +58,7 @@ export const CODER_TOOL = {
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
+  SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
 /** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
