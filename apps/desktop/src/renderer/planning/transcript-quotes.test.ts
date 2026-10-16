@@ -11,9 +11,11 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { CaptionStrip } from "../caption-strip";
 import { MarkdownMessage } from "../markdown-message";
 import type { PlanEditorHandle } from "../plan-editor/contract";
 import { mountPlanEditor } from "../plan-editor/plan-editor";
+import { CAPTION_TONE, type CaptionTone } from "../use-caption-presentation";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 
 /**
@@ -21,11 +23,15 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab";
  * Markdown is: in an agent's reply, in the developer's own bubble, in the
  * plan, and in the plan's editor, each quote wearing the shared quote class
  * and nothing of its renderer's own, flush with the words around it, and a
- * quote inside a quote one more of the same. Synthetic words.
+ * quote inside a quote one more of the same. A caption's failure or notice
+ * keeps its tone's colour inside a quote. Synthetic words.
  */
 
 /** The window's Markdown stylesheet, which draws the shared quote. */
 const MARKDOWN_CSS = readFileSync(path.join(import.meta.dirname, "../styles/markdown.css"), "utf8");
+
+/** The window's base stylesheet, which colours a caption by its tone. */
+const BASE_CSS = readFileSync(path.join(import.meta.dirname, "../styles/base.css"), "utf8");
 
 /** The class the stylesheet draws a quote by. */
 const QUOTE = "markdown-quote";
@@ -47,6 +53,7 @@ beforeEach(() => {
       recordSurfaceEvent: () => undefined,
     },
   });
+  document.head.appendChild(document.createElement("style")).textContent = BASE_CSS;
   document.head.appendChild(document.createElement("style")).textContent = MARKDOWN_CSS;
 });
 
@@ -130,4 +137,24 @@ test("the plan, read and edited, draws a quote in the same style as a transcript
     "the plan",
   );
   assertSharedQuotes(editorView(), "the plan's editor");
+});
+
+test("a failure's or a notice's caption keeps its tone's colour inside a quote", async () => {
+  const tones: readonly CaptionTone[] = [CAPTION_TONE.ERROR, CAPTION_TONE.NOTICE];
+  for (const tone of tones) {
+    const view = await draw(
+      createElement(CaptionStrip, {
+        caption: { content: { tone, words: "> Connection failed." }, shown: true },
+        volumeHint: { wanted: false, text: "", onDismiss: () => undefined },
+      }),
+    );
+    const words = view.querySelector<HTMLElement>(".voice-caption-text");
+    const quote = view.querySelector<HTMLElement>(`.${QUOTE}`);
+    assert.ok(words !== null && quote !== null, `the ${tone} caption draws its quote`);
+    assert.equal(
+      getComputedStyle(quote).color,
+      getComputedStyle(words).color,
+      `the ${tone} quote keeps its tone`,
+    );
+  }
 });
