@@ -349,6 +349,7 @@ function MentionCard({
           {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
         </CardNote>
       )}
+      <OptionalNote words={standing?.byline} />
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );

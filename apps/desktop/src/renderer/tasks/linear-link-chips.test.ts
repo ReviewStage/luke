@@ -125,6 +125,7 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
                     title: "Start a plan from Linear",
                     url: ISSUE,
                     state: "In Progress",
+                    assignee: "Sam Okafor",
                   },
                 ],
               }
@@ -205,4 +206,28 @@ test("once the workspace disconnects Linear, the chip says what the address says
   await settle();
 
   assert.deepEqual(chips(container), [["ENG-1/start-a-plan-from-linear", null]]);
+});
+
+/** The notes of the card a chip hangs: its key and state, who it is with, and its address. */
+function cardNotes(chip: Element | undefined): (string | null)[] {
+  assert.ok(chip, "the link is drawn as its chip");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map((note) => note.textContent);
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  return notes;
+}
+
+test("a Linear issue's card says who it is assigned to, as the workspace's Linear answers it", async () => {
+  const { container } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR);
+
+  assert.deepEqual(cardNotes(container.querySelector(".mention-chip") ?? undefined), [
+    "ENG-1 · In Progress",
+    "Assigned to Sam Okafor",
+    ISSUE,
+  ]);
 });
