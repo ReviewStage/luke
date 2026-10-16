@@ -232,23 +232,36 @@ function PersonActions({
   );
 }
 
+/** The workspace's automations a person made, as read: whether the list is still being read or could not be, and its Retry. */
+interface PersonAutomations {
+  readonly automations: readonly AutomationSummary[];
+  readonly reading: boolean;
+  readonly failed: boolean;
+  readonly onRetry: () => void;
+}
+
 /**
  * The workspace's automations the person made, read while the Automations
  * page is on (`EXPERIMENT.AUTOMATIONS`): the workspace's alone, never their
- * personal ones, which only they read. None until the list is read, and none
- * where it could not be, since the page lists only what it holds.
+ * personal ones, which only they read. None while the list is read or where
+ * it could not be, which the page says rather than pass for a person with none.
  */
 function usePersonAutomations(
   workspaceId: string | undefined,
   userId: string,
   on: boolean,
-): readonly AutomationSummary[] {
-  const { read } = useAutomations(on ? workspaceId : undefined);
-  if (!on || read === undefined || "failure" in read) return [];
-  return read.automations.filter(
+): PersonAutomations {
+  const asked = on ? workspaceId : undefined;
+  const { read, reload } = useAutomations(asked);
+  const none = { automations: [], reading: false, failed: false, onRetry: reload };
+  if (asked === undefined) return none;
+  if (read === undefined) return { ...none, reading: true };
+  if ("failure" in read) return { ...none, failed: true };
+  const automations = read.automations.filter(
     (automation) =>
       automation.creatorId === userId && automationOwner(automation) === AUTOMATION_SCOPE.WORKSPACE,
   );
+  return { ...none, automations };
 }
 
 /** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it; a press opens it. */
@@ -325,11 +338,12 @@ function PersonColumn({
   };
   const page = personPage(userId, listed);
   const you = userId === plans.me;
-  const automations = usePersonAutomations(
+  const theirAutomations = usePersonAutomations(
     plans.workspace?.id,
     userId,
     useExperiment(EXPERIMENT.AUTOMATIONS),
   );
+  const { automations } = theirAutomations;
   const read = useWaitingItems(plans);
   // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
   const waiting = read.items.filter(
@@ -432,8 +446,17 @@ function PersonColumn({
               <span>Some Inbox items could not be read.</span>
               <RetryButton onRetry={read.onRetry} />
             </div>
-          ) : waiting.length === 0 && read.reading ? (
+          ) : null}
+          {theirAutomations.failed ? (
+            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
+              <span>{you ? "Your" : "Their"} automations could not be read.</span>
+              <RetryButton onRetry={theirAutomations.onRetry} />
+            </div>
+          ) : null}
+          {read.failed || theirAutomations.failed ? null : waiting.length === 0 && read.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+          ) : theirAutomations.reading ? (
+            <Spinner label="Loading automations" size={SPINNER_SIZE.INLINE} />
           ) : personPageEmpty(page) && waiting.length === 0 && automations.length === 0 ? (
             <p className="sidebar-note person-empty">
               {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}

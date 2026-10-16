@@ -186,9 +186,12 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
 let root: Root | undefined;
 /** Whether the Inbox's reads are refused, as a read that failed is. */
 let inboxRefused = false;
+/** Whether the automations' reads are refused, as a read that failed is. */
+let automationsRefused = false;
 
 beforeEach(() => {
   inboxRefused = false;
+  automationsRefused = false;
   window.localStorage.clear();
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -203,7 +206,7 @@ beforeEach(() => {
           const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST && !automationsRefused) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
             value: { automations: AUTOMATIONS },
@@ -506,4 +509,21 @@ test("with Automations off, a person's page reads no automations and lists none"
   await settle();
 
   assert.equal(sections(page).Automations, undefined);
+});
+
+test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  automationsRefused = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their automations could not be read\./u);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+
+  automationsRefused = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.match(page.textContent ?? "", /Nothing of theirs here yet\./u);
 });
