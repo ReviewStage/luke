@@ -3,9 +3,9 @@
  *
  * Main decides which failed runs the window hears (`@luke/host/agent-notices`):
  * one for each run, and only while the window is focused, the OS's
- * notification saying it while the window is behind. The toast stands until
- * it is dismissed or its View is pressed, as an agent's end does, and the
- * mark stands until the automation is opened. Main hands the window the
+ * notification saying it while the window is behind. The toast stands for
+ * the news's hold, as an agent's end does, and leaves by itself, since the
+ * mark goes on saying it until the automation is opened. Main hands the window the
  * newest failed run of each of the account's own automations
  * (`AppInboxSlice.failedRuns`), and opening an automation sees its failure,
  * kept in the renderer's own storage as the folds are, so the mark stays off
@@ -16,7 +16,7 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
-import { TOAST_TONE, useToast } from "../toast";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { readKept, writeKept } from "./folded-groups";
 
 /** What a failed run's toast offers, to open the run. */
@@ -51,7 +51,7 @@ export function useFailedRunToasts(view: (place: FailedRunPlace) => void): void 
           words,
           detail,
           waits: true,
-          persists: true,
+          hold: TOAST_HOLD.NEWS,
           tone: TOAST_TONE.FAILED,
           action: {
             label: VIEW_LABEL,

@@ -13,7 +13,13 @@ import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { InboxItemRow } from "../tasks/inbox-list";
-import { holderName, INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model";
+import {
+  holderName,
+  INBOX_HOLDER,
+  type InboxListed,
+  NEEDS_YOU,
+  needsReader,
+} from "../tasks/inbox-model";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -123,9 +129,11 @@ export function RecentRow({
 }
 
 /**
- * Inbox: the waiting items, or what stands in their place while they are
- * read, failed, or none. It is headed by the Inbox's name, the place a press
- * on a row opens, and says it holds nothing waiting in the Inbox's own words.
+ * Inbox: the items that need the reader, a teammate's agent's left to the
+ * Inbox, as the Dock's badge counts them, or what stands in their place
+ * while they are read, failed, or none. It is headed by the Inbox's name,
+ * the place a press on a row opens, and says it holds nothing waiting in the
+ * Inbox's own words.
  */
 function HomeInbox({
   tasks: plans,
@@ -134,7 +142,8 @@ function HomeInbox({
   tasks: TasksControl;
   now: number;
 }): React.JSX.Element | null {
-  const waiting = useWaitingItems(plans);
+  const read = useWaitingItems(plans);
+  const waiting = { ...read, items: read.items.filter(({ item }) => needsReader(item, plans.me)) };
   const { inboxView } = plans;
   const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
