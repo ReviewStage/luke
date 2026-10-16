@@ -237,10 +237,11 @@ const SENDER_NAME = {
 /**
  * What sent a line, as the page names it and by its kind, so the window
  * draws Luke, an automation, and GitHub's login as themselves. Another agent
- * is named with no kind, because the window's schema reads the kind as one
- * of the words it knows, so a kind it was built before would refuse the
- * whole page; a name with no kind and no account is drawn by every build as
- * a sender it cannot place, under that name.
+ * is named with no kind and marked `agent`, because the window's schema reads
+ * the kind as one of the words it knows, so a kind it was built before would
+ * refuse the whole page, while a key it does not know is dropped: an older
+ * build draws it as a sender it cannot place, under its name, and a newer
+ * one as an agent.
  */
 function senderOf(sent: LineSent): CodingAgentSender {
   switch (sent.kind) {
@@ -255,7 +256,7 @@ function senderOf(sent: LineSent): CodingAgentSender {
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
-      return { name: sent.name };
+      return { name: sent.name, agent: true };
   }
 }
 
