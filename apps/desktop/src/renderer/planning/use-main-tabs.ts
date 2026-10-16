@@ -78,15 +78,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * The column's own tabs, each one word beside the agents' and the draft's
- * objects: the plan's, and its Inbox, which stands while open on a plan
- * with an agent, since only an agent posts.
+ * objects: the plan's; its Inbox, which stands while open on a plan with an
+ * agent, since only an agent posts; and its Chat, the plan's own channel,
+ * which stands while open.
  */
 export const MAIN_TAB = {
   PLAN: "plan",
   INBOX: "inbox",
+  CHAT: "chat",
 } as const;
 
-/** The plan's own tab, or its Inbox. */
+/** The plan's own tab, its Inbox, or its Chat. */
 type OwnMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
 
 /** A tab of the plan's column: the plan's own, its Inbox, one agent's, or the draft agent's. */
@@ -127,13 +129,15 @@ const keptTabSchema = Schema.Union([
 
 /**
  * One plan's choices: the tabs viewed on it, the latest last, its order
- * since a tab was first moved on it, whether its Inbox is open, and the
- * items that waited in its inbox at its last read, by id.
+ * since a tab was first moved on it, whether its Inbox is open, the
+ * items that waited in its inbox at its last read, by id, and whether its
+ * Chat is open.
  */
 const planChoicesSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(keptTabSchema)),
   order: Schema.optional(Schema.Array(keptTabSchema)),
   inboxOpen: Schema.optional(Schema.Boolean),
+  chatOpen: Schema.optional(Schema.Boolean),
   inboxSeen: Schema.optional(Schema.Array(Schema.String)),
 });
 
@@ -151,6 +155,7 @@ interface PlanChoices {
   readonly order?: readonly MainTab[] | undefined;
   readonly inboxOpen?: boolean | undefined;
   readonly inboxSeen?: readonly string[] | undefined;
+  readonly chatOpen?: boolean | undefined;
 }
 
 /** The state the hook holds: the kept one, with a draft's tab possibly among a plan's choices. */
@@ -263,19 +268,20 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
 
 /**
  * The strip in its order: the plan's tab, then the open agents', the
- * draft's, and the Inbox where open on a plan with an agent, an archived
- * one included, in the plan's order.
+ * draft's, the Inbox where open on a plan with an agent, an archived one
+ * included, and Chat where open, in the plan's order.
  */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.planId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
   const inbox = choices.inboxOpen === true && (drawn.holds || drawn.waiting);
-  const order = choices.order ?? NO_TABS;
-  return [
-    MAIN_TAB.PLAN,
-    ...inTaskOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
+  const own = [
+    ...(inbox ? [MAIN_TAB.INBOX] : []),
+    ...(choices.chatOpen === true ? [MAIN_TAB.CHAT] : []),
   ];
+  const order = choices.order ?? NO_TABS;
+  return [MAIN_TAB.PLAN, ...inTaskOrder([...agents, ...draft, ...own], order, (tab) => tab)];
 }
 
 /** Whether the tab stands in the plan's strip now. */
@@ -302,34 +308,44 @@ function withViewed(
 }
 
 /**
- * The plan's order with its Inbox after every tab: the tabs the order held
- * but the Inbox, then those the strip draws that it did not, as they stand,
- * so every other tab stays where it stood. Note that on a plan whose agents
- * are unread the Inbox is only let out of the order, because no strip is
- * known to stand after, and a tab the order does not hold stands after
- * those it does.
+ * The plan's order with its Inbox or its Chat after every tab: the tabs the
+ * order held but that one, then those the strip draws that it did not, as
+ * they stand, so every other tab stays where it stood. Note that on a plan
+ * whose agents are unread the tab is only let out of the order, because no
+ * strip is known to stand after, and a tab the order does not hold stands
+ * after those it does.
  */
-function inboxLast(held: HeldState, drawn: DrawnTabs, was: readonly MainTab[]): readonly MainTab[] {
-  const others = was.filter((tab) => tab !== MAIN_TAB.INBOX);
+function ownLast(
+  held: HeldState,
+  drawn: DrawnTabs,
+  was: readonly MainTab[],
+  last: typeof MAIN_TAB.INBOX | typeof MAIN_TAB.CHAT,
+): readonly MainTab[] {
+  const others = was.filter((tab) => tab !== last);
   if (drawn.agents === undefined) return others;
   const unplaced = stripOf(held, drawn).filter(
-    (tab) =>
-      tab !== MAIN_TAB.PLAN && tab !== MAIN_TAB.INBOX && !was.some((other) => sameTab(other, tab)),
+    (tab) => tab !== MAIN_TAB.PLAN && tab !== last && !was.some((other) => sameTab(other, tab)),
   );
-  return [...others, ...unplaced, MAIN_TAB.INBOX];
+  return [...others, ...unplaced, last];
 }
 
 /**
- * The state with the agent's tab, or the plan's Inbox, open, where it was
- * closed. The Inbox opens after every tab of the plan's strip, wherever it
- * stood before it closed.
+ * The state with the agent's tab, or the plan's Inbox or Chat, open, where
+ * it was closed. The Inbox and Chat open after every tab of the plan's
+ * strip, wherever they stood before they closed.
  */
 function withOpened(held: HeldState, drawn: DrawnTabs, tab: MainTab): HeldState {
   if (tab === MAIN_TAB.INBOX)
     return withChoices(held, drawn.planId, (was) =>
       was.inboxOpen === true
         ? was
-        : { ...was, inboxOpen: true, order: inboxLast(held, drawn, was.order ?? NO_TABS) },
+        : { ...was, inboxOpen: true, order: ownLast(held, drawn, was.order ?? NO_TABS, tab) },
+    );
+  if (tab === MAIN_TAB.CHAT)
+    return withChoices(held, drawn.planId, (was) =>
+      was.chatOpen === true
+        ? was
+        : { ...was, chatOpen: true, order: ownLast(held, drawn, was.order ?? NO_TABS, tab) },
     );
   if (!isAgentTab(tab) || !held.closedAgents.includes(tab.agent)) return held;
   return { ...held, closedAgents: held.closedAgents.filter((agent) => agent !== tab.agent) };
@@ -398,6 +414,7 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
     ...was,
     recent: (was.recent ?? NO_TABS).filter((each) => !sameTab(each, tab)),
     ...(tab === MAIN_TAB.INBOX ? { inboxOpen: false } : undefined),
+    ...(tab === MAIN_TAB.CHAT ? { chatOpen: false } : undefined),
   }));
   if (!sameTab(shownIn(held, drawn), tab)) return forgotten;
   const standing = stripOf(forgotten, drawn).filter((each) => !sameTab(each, tab));
@@ -430,10 +447,12 @@ function stored(held: HeldState): MainTabsState {
   return {
     closedAgents: held.closedAgents,
     plans: Object.fromEntries(
-      Object.entries(held.plans).map(([plan, { recent, order, inboxOpen, inboxSeen }]) => [
-        plan,
-        { recent: kept(recent), order: kept(order), inboxOpen, inboxSeen },
-      ]),
+      Object.entries(held.plans).map(
+        ([plan, { recent, order, inboxOpen, inboxSeen, chatOpen }]) => [
+          plan,
+          { recent: kept(recent), order: kept(order), inboxOpen, inboxSeen, chatOpen },
+        ],
+      ),
     ),
   };
 }

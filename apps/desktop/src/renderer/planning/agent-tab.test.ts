@@ -10,14 +10,20 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ProviderMark } from "@luke/ui";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/plans-control";
 import { planCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
+import { fixtureChat } from "./chat-fixture";
+import { CHAT_PLACE, type ChatPlace, chatNames } from "./chat-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**
@@ -28,8 +34,11 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
  * hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
- * left out.
+ * left out. A line a chat notice wrote draws as a card from its sender.
  */
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
@@ -551,5 +560,140 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   assert.ok(
     container.querySelector('[data-call-id="call-linear_remote"]') !== null,
     "the call it ran keeps its row too",
+  );
+});
+
+/** A line a chat notice steered into the agent's turn, telling of message 43 from @agent-2. */
+const NOTICE: CodingAgentMessage = {
+  id: "notice",
+  role: MESSAGE_ROLE.USER,
+  parts: [
+    { type: "text", text: "Chat: @agent-2 in #teammate-invitations asked about memberships." },
+  ],
+  metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+};
+
+/** The notice drawn in an agent's transcript, beside the fixture's chat or none, every place it opens recorded. */
+function noticeDrawn(withChat: boolean) {
+  const opened: ChatPlace[] = [];
+  const read = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(read);
+  const chat = withChat
+    ? {
+        chat: read.answer,
+        names: chatNames([], read.agents, undefined),
+        onOpen: (place: ChatPlace) => opened.push(place),
+      }
+    : undefined;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: NOTICE,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: { models: [], chat },
+        }),
+      ),
+    ),
+  );
+  return { container, opened };
+}
+
+test("a line a chat notice wrote draws as a card from its sender, naming the channel and the message's place, its words the message's own, and Open in Chat opens the channel", () => {
+  const { container, opened } = noticeDrawn(true);
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(card, "the notice draws as a card");
+  assert.equal(container.querySelector(".is-user"), null);
+  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.match(
+    card.querySelector(".chat-notice-place")?.textContent ?? "",
+    /^in #teammate-invitations · m 43 · /u,
+  );
+  assert.match(
+    card.querySelector(".chat-notice-words")?.textContent ?? "",
+    /^@agent-1 are you changing memberships columns\?/u,
+  );
+  const open = card.querySelector<HTMLButtonElement>(".chat-notice-open");
+  act(() => open?.click());
+  assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: read().channelOf(43) }]);
+});
+
+test("where the window holds no chat, a notice's card says its sender and place from the notice alone, its own words under them, with nothing to open", () => {
+  const { container } = noticeDrawn(false);
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.equal(card?.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.equal(card?.querySelector(".chat-notice-place")?.textContent, "m 43");
+  assert.equal(
+    card?.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
+  );
+  assert.equal(card?.querySelector(".chat-notice-open"), null);
+});
+
+/** The fixture's chat, and the channel a message of it was posted in. */
+function read() {
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(chat);
+  return {
+    channelOf: (seq: number) =>
+      chat.answer.messages.find((message) => message.seq === seq)?.channelId,
+  };
+}
+
+test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words under its head", () => {
+  const read = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(read);
+  const answer = {
+    ...read.answer,
+    messages: read.answer.messages.map((message) =>
+      message.seq === 43
+        ? {
+            ...message,
+            blocks: [
+              {
+                type: "link" as const,
+                url: "https://github.com/acme/relay/pull/214",
+                label: "#214",
+              },
+            ],
+          }
+        : message,
+    ),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: NOTICE,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: {
+            models: [],
+            chat: {
+              chat: answer,
+              names: chatNames([], read.agents, undefined),
+              onOpen: () => undefined,
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  assert.equal(
+    container.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
 });

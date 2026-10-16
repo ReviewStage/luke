@@ -4,6 +4,10 @@ import {
   type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatParams,
+  type CodingAgentChatPostParams,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
@@ -125,6 +129,10 @@ export interface CodingAgentActsDependencies {
     codingAgentPicture(
       params: CodingAgentPictureParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
+    codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
+    codingAgentChatPost(
+      params: CodingAgentChatPostParams,
+    ): Effect.Effect<CodingAgentChatWriteAnswerView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -138,6 +146,7 @@ export interface CodingAgentActsDependencies {
     | "observeTaskGone"
     | "shown"
     | "shownInbox"
+    | "shownChat"
   >;
 }
 
@@ -173,7 +182,9 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
-  | typeof ACT_KIND.CODING_AGENTS_PICTURE;
+  | typeof ACT_KIND.CODING_AGENTS_PICTURE
+  | typeof ACT_KIND.CODING_AGENTS_CHAT
+  | typeof ACT_KIND.CODING_AGENTS_CHAT_POST;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -274,10 +285,11 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
       return notedAgent(host.codingAgentPin(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId: inboxPlanId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId: inboxPlanId, chatShown }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
       notices.shownInbox(inboxPlanId);
+      notices.shownChat(chatShown === true);
     },
     [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PAGE, sender);
@@ -349,6 +361,14 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_PICTURE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PICTURE, sender);
       return host.codingAgentPicture(params);
+    },
+    [ACT_KIND.CODING_AGENTS_CHAT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHAT, sender);
+      return host.codingAgentChat(params);
+    },
+    [ACT_KIND.CODING_AGENTS_CHAT_POST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHAT_POST, sender);
+      return host.codingAgentChatPost(params);
     },
   };
 }

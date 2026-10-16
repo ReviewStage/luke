@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
+import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
@@ -428,3 +429,32 @@ export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentInboxAttachmentView = typeof codingAgentInboxAttachmentViewSchema.Type;
+
+/** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
+export const codingAgentChatParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
+
+/** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
+export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+
+export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
+
+/** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
+export const codingAgentChatPostParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  write: chatWriteRequestSchema,
+});
+
+export type CodingAgentChatPostParams = typeof codingAgentChatPostParamsSchema.Type;
+
+/** A write to a workspace's chat, as the window hears it: what the write came to, or why there is no answer. */
+export const codingAgentChatWriteAnswerViewSchema = EffectSchema.Union([
+  chatWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChatWriteAnswerView = typeof codingAgentChatWriteAnswerViewSchema.Type;

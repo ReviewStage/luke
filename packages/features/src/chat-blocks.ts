@@ -2,8 +2,8 @@ import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
+import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
 
 /**
  * chat-blocks.ts -- what a chat message's body and its ask are made of: the blocks, the responses an ask asks, and the answers it takes.
@@ -211,6 +211,9 @@ const WORD_BLOCKS = [
     sha: commitShaSchema,
   }),
 ] as const;
+
+/** One word block as a person writes it from the window: Markdown, a link, or lines of code, never a picture. */
+export const chatWordBlockSchema = EffectSchema.Union(WORD_BLOCKS);
 
 /** What an image block says of its picture: the words that stand for it where it cannot be seen. */
 const imageWords = { alt: filledText(ASK_BOUNDS.MAX_ALT_CHARS) };

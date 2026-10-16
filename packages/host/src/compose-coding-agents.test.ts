@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -47,6 +48,18 @@ const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
+const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
+
+/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
+const CHAT = {
+  self: MEMBER_ID,
+  readSeq: 0,
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  channels: [],
+  messages: [],
+  cursor: "1",
+};
 
 const AGENT: CodingAgentSummary = {
   id: AGENT_ID,
@@ -351,6 +364,16 @@ function fakeService() {
         asked.push(`account-inbox:${after}`);
         return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
+    chat: (workspaceId, after) =>
+      Effect.sync(() => {
+        asked.push(`chat:${workspaceId}:${after}`);
+        return CHAT;
+      }),
+    chatPost: (workspaceId, write) =>
+      Effect.sync(() => {
+        asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
+        return { readSeq: 4 };
+      }),
   };
   return { client, asked };
 }
@@ -537,6 +560,20 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
       { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
+        workspaceId: WORKSPACE_ID,
+        after: CHAT_CURSOR_START,
+      }),
+      CHAT,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
+        workspaceId: WORKSPACE_ID,
+        write: { readTo: 4 },
+      }),
+      { readSeq: 4 },
+    );
 
     assert.deepEqual(asked, [
       "models",
@@ -564,6 +601,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
+      `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
+      `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
     ]);
   }),
 );

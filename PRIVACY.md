@@ -247,7 +247,13 @@ the start of each of its turns reads what was said in the chat since it last
 read, up to 20 messages, sent to the model provider with the rest of the
 turn.
 Deleting a plan deletes its channel with its messages, deleting your account
-deletes your messages, and deleting the workspace deletes its chat.
+deletes your messages, and deleting the workspace deletes its chat. While you are signed in, the same read that keeps
+your waiting inbox items carries what waits on you in chat: every open ask
+someone else posted, and the last direct message or mention of you that you
+have not read, each named only by who posted it, its plan, and its place,
+never its words. While Luke's window is behind, a Mac notification says no
+more than that, such as "@agent-2 messaged you" under the plan's name,
+unless you turn notifications off in Settings › Coding agents.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, or to the prompt you start one with, by picking them with +,
@@ -765,7 +771,7 @@ whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; each coding agent's and
+are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's

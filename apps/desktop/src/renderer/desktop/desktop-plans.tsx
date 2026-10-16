@@ -20,6 +20,7 @@ import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { AgentCard, agentSubject } from "../planning/agent-ref";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { chatNames } from "../planning/chat-model";
 import { agentActor, agentTabLabel } from "../planning/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../planning/inbox-list";
@@ -60,6 +61,7 @@ import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useExperiment } from "../use-app-state";
+import { PlanChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -543,6 +545,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return openColumnTab(MAIN_TAB.CHAT);
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -554,6 +558,17 @@ function PlanDocument({
       }
     }
   };
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = plans.chatView.chat;
+  const chat =
+    chatRead === undefined
+      ? undefined
+      : {
+          chat: chatRead.answer,
+          names: chatNames(plans.plans, chatRead.agents, undefined),
+          onOpen: plans.chatView.onShow,
+        };
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = planCards({
@@ -631,6 +646,7 @@ function PlanDocument({
                       keys={plans.shown && !sideFocused}
                       shown={plans.shown}
                       inbox={inbox.board.open.length}
+                      chat={plans.chatView.available}
                       actionsSlot={actionsSlot}
                       onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                     />
@@ -771,7 +787,14 @@ function PlanDocument({
                         }}
                       />
                     ) : null}
-                    {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+                    {tab === MAIN_TAB.CHAT ? (
+                      <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                        <PlanChatTab plans={plans} planId={plan.id} />
+                      </section>
+                    ) : null}
+                    {tab === MAIN_TAB.PLAN ||
+                    tab === MAIN_TAB.INBOX ||
+                    tab === MAIN_TAB.CHAT ? null : (
                       <AgentPane
                         label={mainTabLabel(tab, agents)}
                         tabbed
@@ -783,6 +806,7 @@ function PlanDocument({
                         onOpenChanges={openChanges}
                         onOpenTarget={openTarget}
                         cards={cards}
+                        chat={chat}
                       />
                     )}
                   </FindScope>

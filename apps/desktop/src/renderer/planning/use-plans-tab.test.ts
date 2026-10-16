@@ -2020,3 +2020,17 @@ test("an agent's pin still waiting its turn when the account changes is never as
 
   assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
 });
+
+test("a fixture run on the chat profile opens Chat at once and its staged chat lands there; a live run stages none", async () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.CHAT });
+  assert.equal(fixture.control().chatView.open, true);
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(fixture.control().chatView.chat, "the staged chat landed");
+  });
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  const live = mount({ shown: true });
+  await settle();
+  assert.equal(live.control().chatView.open, false);
+  assert.equal(live.control().chatView.chat, undefined);
+});

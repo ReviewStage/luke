@@ -29,6 +29,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { fixtureChat } from "../planning/chat-fixture";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -632,4 +633,74 @@ test("the crumb says the plan's repository as the sidebar does: its name alone, 
   };
 
   assert.deepEqual([said([]), said(["acme/api"]), said(["other/web"])], ["web", "web", "acme/web"]);
+});
+
+/** The plan's column on its Chat tab over the fixture's chat, its plan channel this plan's where `ownChannel`. */
+function chatTabMounted(ownChannel: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const staged = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(staged);
+  const chat = {
+    ...staged,
+    answer: {
+      ...staged.answer,
+      channels: staged.answer.channels.map((channel) =>
+        ownChannel && channel.name === "teammate-invitations"
+          ? { ...channel, planId: PLAN.id }
+          : channel,
+      ),
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopPlans, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          captions: undefined,
+          plans: plansControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activePlanId: PLAN.id,
+            region: { kind: DOCUMENT_REGION.READY, task: PLAN },
+            mainTabs: {
+              ...plansControl().mainTabs,
+              tabs: [MAIN_TAB.PLAN, MAIN_TAB.CHAT],
+              tab: MAIN_TAB.CHAT,
+            },
+            chatView: { ...plansControl().chatView, available: true, chat },
+          }),
+        }),
+      ),
+    ),
+  );
+  return { container, root };
+}
+
+test("a plan's Chat tab shows the plan's own channel at reading size, its composer posting there, and says so where the plan has no channel yet", () => {
+  const own = chatTabMounted(true);
+  const tab = own.container.querySelector('section.desktop-plan-chat[aria-label="Chat"]');
+  assert.ok(tab, "the plan's Chat tab");
+  assert.equal(tab.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
+  assert.ok(tab.querySelector('textarea[aria-label="Message #teammate-invitations"]'));
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  act(() => own.root.unmount());
+  own.container.remove();
+
+  const none = chatTabMounted(false);
+  assert.match(
+    none.container.querySelector("section.desktop-plan-chat")?.textContent ?? "",
+    /Nothing is posted in this plan's channel yet\./u,
+  );
+  act(() => none.root.unmount());
+  none.container.remove();
 });

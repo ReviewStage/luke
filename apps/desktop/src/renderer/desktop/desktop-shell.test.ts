@@ -27,6 +27,7 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { fixtureChat } from "../planning/chat-fixture";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -889,3 +890,31 @@ test("no place the window stands on can be scrolled sideways into the room its b
     Object.fromEntries(Object.keys(clipped).map((place) => [place, "clip"])),
   );
 }, 60_000);
+
+/** The sidebar's Chat row, where one stands. */
+function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
+  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-inbox")].find((button) =>
+    button.textContent?.startsWith("Chat"),
+  );
+}
+
+test("the sidebar's Chat row stands only where Chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
+  assert.equal(chatRow(mount(false)), undefined);
+  act(() => root?.unmount());
+
+  let opened = 0;
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const view = { ...plansControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
+  const page = mount(false, false, { chatView: view });
+  const row = chatRow(page);
+  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.getAttribute("aria-current"), null);
+  act(() => row?.click());
+  assert.equal(opened, 1);
+  act(() => root?.unmount());
+
+  const open = mount(false, false, { chatView: { ...view, open: true } });
+  assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
+  assert.equal(homeRow(open).getAttribute("aria-current"), null);
+  assert.ok(open.querySelector(".desktop-main > .chat-view"), "Chat stands in the plan's place");
+});

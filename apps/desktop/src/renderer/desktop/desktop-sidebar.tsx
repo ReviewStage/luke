@@ -37,7 +37,7 @@ import {
 } from "@luke/ui/task-list-model";
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
+import { FactoryIcon, HouseIcon, InboxIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
@@ -47,6 +47,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { forYou } from "../planning/chat-model";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { LinearIssuePicker } from "../planning/linear-issue-picker";
 import { useMinute } from "../planning/plan-time";
@@ -814,6 +815,46 @@ function SidebarInboxRow({
   );
 }
 
+/** How many messages wait on the developer in Chat: what For you lists. */
+function waitingMessages(plans: PlansControl): number {
+  const read = plans.chatView.chat;
+  return read === undefined ? 0 : forYou(read.answer).length;
+}
+
+/**
+ * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
+ * how many messages wait on the developer in For you at its end, in the
+ * Inbox's muted figures, nothing at none. A press opens the window's Chat
+ * (`desktop-chat.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarChatRow({
+  waiting,
+  current,
+  onOpen,
+}: {
+  waiting: number;
+  current: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-inbox"
+      aria-current={current ? "page" : undefined}
+      onClick={onOpen}
+    >
+      <MessagesSquareIcon />
+      Chat
+      {waiting === 0 ? null : (
+        <span className="sidebar-inbox-waiting">
+          {waiting}
+          <span className="visually-hidden"> waiting on you</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 /** What the sidebar is drawn with while it floats, or could. */
 interface FloatingSidebar extends HoverPane {
   /** Whether the sidebar is on screen: pinned, or floating over the work. */
@@ -1011,7 +1052,9 @@ function NewPlanButton({
  * Inbox's, and Factory's follow Search above the rule: Home's goes to the
  * home page, the Inbox's counts what waits on the developer and opens the
  * window's Inbox, and Factory's, while its experiment is on, opens the
- * window's Factory, and the Automations page's likewise opens it. The pinned plans, and the side panel tabs
+ * window's Factory, and the Automations page's likewise opens it; Chat's,
+ * where a chat is read, counts what waits on the developer in Chat and opens
+ * it. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
  * newest pinned first, under a head that folds it, every row one line whose
  * hover card says the rest; whatever the list's view says, they stand as
@@ -1052,10 +1095,11 @@ function SidebarColumn({
 }: DesktopSidebarProps): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.TASKS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
+  // The window's Inbox, an agent's page, Factory, the Automations page, and Chat stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
   const inFactory = onPlans && plans.factoryView.open;
   const inAutomations = onPlans && plans.automationsView.open;
+  const inChat = onPlans && plans.chatView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = plans.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1067,7 +1111,11 @@ function SidebarColumn({
     sidebar.staged,
   );
   const standingIn =
-    inInbox || inFactory || inAutomations || (onPlans && plans.agentView.agentId !== undefined);
+    inInbox ||
+    inFactory ||
+    inAutomations ||
+    inChat ||
+    (onPlans && plans.agentView.agentId !== undefined);
   // Factory and the Automations page are experiments: each row stands only while the account has it on.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -1099,6 +1147,10 @@ function SidebarColumn({
   const openAutomations = () => {
     if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.automationsView.onOpen();
+  };
+  const openChat = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
+    plans.chatView.onOpen();
   };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.TASKS);
@@ -1296,6 +1348,14 @@ function SidebarColumn({
         disabled={!plans.signedIn}
         onOpen={chosen(openInbox)}
       />
+      {/* Chat's row stands wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+      {plans.signedIn && plans.chatView.available ? (
+        <SidebarChatRow
+          waiting={waitingMessages(plans)}
+          current={inChat}
+          onOpen={chosen(openChat)}
+        />
+      ) : null}
       {factoryOn ? (
         <SidebarFactoryRow
           current={inFactory}

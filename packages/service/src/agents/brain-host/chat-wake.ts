@@ -7,11 +7,11 @@ import { Effect, Option, Result } from "effect";
 import { ASK_ORIGIN } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
+  CHAT_DOORS,
   type ChatNotice,
   type ChatNoticeDoor,
   type ChatNoticeDoors,
   type ChatTelling,
-  HELD_DOORS,
   NOTICE_OUTCOME,
   noticeMetadata,
   senderOf,
@@ -107,7 +107,13 @@ function plannerWakeDoor(
       const eve = brainEveFor(userId);
       if (planId === null || eve === undefined) return NOTICE_OUTCOME.HELD;
       const place = notice.message.touchedSeq;
-      const claimed = yield* markNoticed(userId, organizationId, member.id, notice.message.channelId, place);
+      const claimed = yield* markNoticed(
+        userId,
+        organizationId,
+        member.id,
+        notice.message.channelId,
+        place,
+      );
       if (!claimed) return NOTICE_OUTCOME.HELD;
       const key = chatNoticeKey(notice.message.id, place, member.id);
       const woke = yield* wake(eve, planId, key, notice, telling).pipe(
@@ -123,9 +129,9 @@ function plannerWakeDoor(
     );
 }
 
-/** The doors a host tells a post through: the plan's Luke woken, a person held for the window. */
+/** The doors a host tells a post through: the plan's Luke woken, a person told through their window. */
 export function wakingDoors(
   brainEveFor: (accountId: string) => EveSessions | undefined,
 ): ChatNoticeDoors {
-  return { ...HELD_DOORS, planner: plannerWakeDoor(brainEveFor) };
+  return { ...CHAT_DOORS, planner: plannerWakeDoor(brainEveFor) };
 }

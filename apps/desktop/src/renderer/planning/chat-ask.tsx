@@ -1,0 +1,336 @@
+import {
+  ASK_STATUS,
+  CHAT_ASK,
+  CHAT_BOUNDS,
+  type ChatMessage,
+  type ChatReadResponse,
+  type ChatReplyKind,
+  fieldValueWords,
+  knownResponse,
+  replyWords,
+} from "@luke/features/chat-wire";
+import type { InboxReadResponse } from "@luke/features/inbox-wire";
+import { ArrowUpIcon, CheckIcon } from "lucide-react";
+import { useState } from "react";
+import { BusyLabel } from "../spinner";
+import { Tooltip } from "../tooltip";
+import type { ChatAskAnswer } from "./chat-model";
+import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
+import { ChoiceOptions, FormFields } from "./inbox-pane";
+
+/** The ask's response as the Inbox's answer parts read it. */
+function asInboxResponse(response: ChatReadResponse): InboxReadResponse {
+  // SAFETY: chat's ask responses were lifted from the Inbox's and still share its shape; the two
+  // differ only in the brand each puts on a response type a newer service names.
+  return response as unknown as InboxReadResponse;
+}
+
+/**
+ * chat-ask.tsx -- an ask a chat message carries, drawn as a card in its row: what it asks, and its answer, given in place or as it was given.
+ *
+ * The card heads itself with what kind of ask it is, then its title, then
+ * the blocks the poster wrote, which the row hands it. What the ask asks
+ * for follows, from the Inbox's own answer pieces (`inbox-pane.tsx`): a
+ * choice's options, pressed one at a time or several where it allows, one
+ * perhaps recommended; a form's fields. A note line closes an open card:
+ * a choice, words, and a form are sent by its round press or Enter, and
+ * an approval, a task, and an ask of nothing by the presses under it, the
+ * one that holds back and the one that goes ahead, as the Inbox's are. A
+ * card the developer posted waits, and says so; a card whose poster need
+ * not hear back says answering tells nobody. Once answered, the options
+ * stand with the pick marked and the answer said under them, who gave it
+ * and how, a form's fields each with what was filled in; once its poster
+ * resolved it, why. An answer refused keeps the
+ * card as it was and says why under it. A response this build does not
+ * know is drawn as a line naming a newer Luke, answered nowhere.
+ */
+
+/** What a card heads itself with, by what it asks. */
+const ASK_KIND = {
+  [CHAT_ASK.CHOICE]: "Ask · Choice",
+  [CHAT_ASK.APPROVAL]: "Ask · Approval",
+  [CHAT_ASK.TEXT]: "Ask · Words",
+  [CHAT_ASK.TASK]: "Ask · Task",
+  [CHAT_ASK.FORM]: "Ask · Form",
+  [CHAT_ASK.NONE]: "Notice",
+} as const;
+
+/** What a card's note line asks for, by what the ask asks; a text's own placeholder stands where the poster wrote one. */
+const NOTE_PLACEHOLDER = {
+  [CHAT_ASK.CHOICE]: "Add a note, or answer in your own words",
+  [CHAT_ASK.APPROVAL]: "Add a note",
+  [CHAT_ASK.TEXT]: "Your answer",
+  [CHAT_ASK.TASK]: "Add a note",
+  [CHAT_ASK.FORM]: "Add a note",
+  [CHAT_ASK.NONE]: "Add a note",
+} as const;
+
+/** What a card says of a response this build does not know. */
+const NEWER_LUKE = "Answer this in a newer Luke.";
+
+/** What a card the developer posted says while it waits. */
+const WAITING = "Waiting on an answer";
+
+/** What a card whose poster need not hear back says over its answer. */
+const QUIET = "Answering doesn't message the poster.";
+
+type CarriedAsk = NonNullable<ChatMessage["ask"]>;
+
+/** What the note line asks for: the poster's own placeholder on words, the response's words otherwise. */
+function placeholderOf(response: ChatReadResponse): string {
+  if (!knownResponse(response)) return "";
+  if (response.type === CHAT_ASK.TEXT && response.placeholder !== undefined) {
+    return response.placeholder;
+  }
+  return NOTE_PLACEHOLDER[response.type];
+}
+
+/** A settled choice's options: the pick in a picked option's look with a check, the rest stepped back. */
+function Picked({ ask }: { ask: CarriedAsk }): React.JSX.Element | null {
+  const { response } = ask;
+  if (!knownResponse(response) || response.type !== CHAT_ASK.CHOICE) return null;
+  const picks = ask.answer?.choices ?? [];
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What was offered">
+      {response.options.map((option) => {
+        const picked = picks.includes(option.label);
+        return (
+          <li key={option.label} className="inbox-option" data-picked={String(picked)}>
+            <span>
+              <span className="font-medium">{option.label}</span>
+              {response.recommended === option.label ? (
+                <span className="text-muted-foreground"> · Recommended</span>
+              ) : null}
+              {picked ? (
+                <span className="inbox-picked">
+                  <CheckIcon aria-hidden="true" />
+                  Picked
+                </span>
+              ) : null}
+            </span>
+            {option.detail === undefined ? null : (
+              <span className="text-muted-foreground">{option.detail}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The line a settled card closes on: the answer and who gave it, or why its poster resolved it. */
+function Settled({
+  ask,
+  nameOf,
+}: {
+  ask: CarriedAsk;
+  nameOf: (memberId: string) => string;
+}): React.JSX.Element | null {
+  if (ask.status === ASK_STATUS.CLOSED) {
+    return (
+      <p className="chat-ask-settled" data-settled="closed">
+        Resolved{ask.closedReason === undefined ? "" : `: ${ask.closedReason}`}
+      </p>
+    );
+  }
+  if (ask.answer === undefined) return null;
+  const by = ask.answeredBy === undefined ? undefined : nameOf(ask.answeredBy);
+  const values = ask.answer.values ?? [];
+  return (
+    <div className="chat-ask-settled" data-settled="answered">
+      <p className="m-0">
+        {by === undefined ? "" : `${by}: `}
+        {replyWords(ask.answer)}
+        {ask.answer.note === undefined ? null : (
+          <span className="chat-ask-settled-note"> {ask.answer.note}</span>
+        )}
+      </p>
+      {/* A form's answer is what was filled in, so each field stands under the line, in the form's order. */}
+      {values.length === 0 ? null : (
+        <ul className="chat-ask-values">
+          {values.map(({ label, value }) => (
+            <li key={label}>
+              {label}: <span className="chat-ask-settled-note">{fieldValueWords(value)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The presses under the note line that answer an approval, a task, or an ask of nothing; the round send for the rest. */
+function Presses({
+  response,
+  draft,
+  sending,
+  onAnswer,
+}: {
+  response: ChatReadResponse;
+  draft: InboxDraft;
+  sending: boolean;
+  onAnswer: (press?: ChatReplyKind) => void;
+}): React.JSX.Element {
+  const presses = pressesOf(asInboxResponse(response));
+  if (presses === undefined) {
+    return (
+      <Tooltip label="Send">
+        <button
+          type="submit"
+          className="chat-send"
+          aria-label="Send"
+          disabled={
+            sending || inboxReply({ response: asInboxResponse(response) }, draft) === undefined
+          }
+        >
+          <BusyLabel busy={sending} label="Sending">
+            <ArrowUpIcon aria-hidden="true" />
+          </BusyLabel>
+        </button>
+      </Tooltip>
+    );
+  }
+  const { back, ahead } = presses;
+  return (
+    <div className="chat-ask-presses">
+      <button
+        type="button"
+        className="primary-button"
+        disabled={sending}
+        onClick={() => onAnswer(ahead.reply)}
+      >
+        <BusyLabel busy={sending} label="Sending">
+          {ahead.label}
+        </BusyLabel>
+      </button>
+      {back === undefined ? null : (
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={sending}
+          onClick={() => onAnswer(back.reply)}
+        >
+          {back.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** An open card's answer: the response's controls, the note line, and its presses. */
+function Answer({
+  message,
+  ask,
+  onAnswer,
+}: {
+  message: ChatMessage;
+  ask: CarriedAsk;
+  onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<string | undefined>(undefined);
+  const { response } = ask;
+  if (!knownResponse(response)) return <p className="chat-unknown">{NEWER_LUKE}</p>;
+  const byPress = pressesOf(response) !== undefined;
+  const send = (press?: ChatReplyKind) => {
+    const reply = inboxReply({ response }, draft, press);
+    if (reply === undefined || sending) return;
+    setSending(true);
+    setNote(undefined);
+    onAnswer({ seq: message.seq, revision: ask.revision, reply }).then(
+      (refused) => {
+        setSending(false);
+        setNote(refused);
+      },
+      (failed: Error) => {
+        setSending(false);
+        setNote(failed.message);
+      },
+    );
+  };
+  const placeholder = placeholderOf(response);
+  return (
+    <>
+      {response.type === CHAT_ASK.CHOICE ? (
+        <ChoiceOptions choice={response} draft={draft} disabled={sending} onDraft={setDraft} />
+      ) : null}
+      {response.type === CHAT_ASK.FORM ? (
+        <FormFields form={response} draft={draft} disabled={sending} onDraft={setDraft} />
+      ) : null}
+      {ask.needsReply ? null : <p className="chat-ask-quiet">{QUIET}</p>}
+      <form
+        className="chat-ask-note"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!byPress) send();
+        }}
+      >
+        <textarea
+          className="chat-ask-note-field ph-no-capture"
+          aria-label={placeholder}
+          placeholder={placeholder}
+          rows={1}
+          maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
+          value={draft.note}
+          disabled={sending}
+          onChange={(event) => setDraft({ ...draft, note: event.currentTarget.value })}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (!byPress) send();
+          }}
+        />
+        {byPress ? null : (
+          <Presses response={response} draft={draft} sending={sending} onAnswer={send} />
+        )}
+      </form>
+      {byPress ? (
+        <Presses response={response} draft={draft} sending={sending} onAnswer={send} />
+      ) : null}
+      {note === undefined ? null : (
+        <p className="error-message" role="alert">
+          {note}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** An ask's card: its kind, its title, the blocks the row hands it, and its answer as the ask stands. */
+export function AskCard({
+  message,
+  ask,
+  mine,
+  blocks,
+  nameOf,
+  onAnswer,
+}: {
+  message: ChatMessage;
+  ask: CarriedAsk;
+  /** Whether the developer posted it, which leaves them nothing to answer. */
+  mine: boolean;
+  blocks: React.ReactNode;
+  nameOf: (memberId: string) => string;
+  onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const { response } = ask;
+  const open = ask.status === ASK_STATUS.OPEN;
+  return (
+    <div className="chat-ask" data-status={ask.status}>
+      <p className="chat-ask-kind">
+        {knownResponse(response) ? ASK_KIND[response.type] : ASK_KIND[CHAT_ASK.NONE]}
+      </p>
+      {ask.title === undefined ? null : <p className="chat-ask-title">{ask.title}</p>}
+      {blocks}
+      {open && mine ? <p className="chat-ask-quiet">{WAITING}</p> : null}
+      {open && !mine ? <Answer message={message} ask={ask} onAnswer={onAnswer} /> : null}
+      {open ? null : (
+        <>
+          <Picked ask={ask} />
+          <Settled ask={ask} nameOf={nameOf} />
+        </>
+      )}
+    </div>
+  );
+}

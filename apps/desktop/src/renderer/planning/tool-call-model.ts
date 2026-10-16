@@ -1,4 +1,5 @@
 import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
@@ -714,6 +715,9 @@ export function toolCallView(input: {
   );
 }
 
+/** The tools a member talks in chat with, by name. */
+type ChatTool = (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL];
+
 /** What a call's row may open: something the window already draws in a tab of its own. */
 export const TOOL_TARGET = {
   /** A coding agent's tab in the plan's column. */
@@ -728,6 +732,8 @@ export const TOOL_TARGET = {
   SHOWN_CODE: "shown-code",
   /** The plan's Inbox tab. */
   INBOX: "inbox",
+  /** The plan's Chat tab, its channel of the workspace's chat. */
+  CHAT: "chat",
 } as const;
 
 export type ToolTarget =
@@ -736,7 +742,8 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
-  | { readonly kind: typeof TOOL_TARGET.INBOX };
+  | { readonly kind: typeof TOOL_TARGET.INBOX }
+  | { readonly kind: typeof TOOL_TARGET.CHAT };
 
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
@@ -746,6 +753,7 @@ export const TARGET_HINT = {
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
+  [TOOL_TARGET.CHAT]: "Open the plan's chat",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */
@@ -759,6 +767,7 @@ interface TargetedCall {
 const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const PLAN_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
+const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
 
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
@@ -812,13 +821,14 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * worker's own delegation and a loaded skill open their tabs through their
  * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
  * a file's read, write, or patch, or a web read is read in its row's body,
- * so none is listed. Note that a coding agent's file calls stay in their
+ * so none is listed. A chat tool's call opens the plan's Chat tab, where
+ * what it posted or read stands. Note that a coding agent's file calls stay in their
  * bodies, because a File tab and the Changes tab read the repository and
  * the pull request on GitHub rather than the agent's checkout, so what the
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
+  AgentTool | ChatTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
@@ -837,6 +847,9 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
+  [CHAT_TOOL.POST, () => CHAT_TARGET],
+  [CHAT_TOOL.READ, () => CHAT_TARGET],
+  [CHAT_TOOL.RESOLVE, () => CHAT_TARGET],
 ]);
 
 /**

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type {
-  AccountFailedRun,
-  AccountInboxEntry,
-  AccountTasklessEntry,
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountFailedRun,
+  type AccountInboxEntry,
+  type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
@@ -27,6 +29,7 @@ import {
   type AgentNotice,
   AgentNoticeDoors,
   type AgentPlace,
+  type ChatMessageToast,
   createAgentNotices,
   type FailedRunToast,
   type InboxItemToast,
@@ -84,12 +87,15 @@ function fixture() {
   const toasted: AgentEndToast[] = [];
   const inboxToasted: InboxItemToast[] = [];
   const runsToasted: FailedRunToast[] = [];
+  const chatToasted: ChatMessageToast[] = [];
+  let chatOpened = 0;
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
     toastFailedRun: (run) => runsToasted.push(run),
+    toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
@@ -180,6 +186,9 @@ function fixture() {
       automationsOn: () => automationsOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openTasklessItem: (item) => openedTaskless.push(item),
+      openChat: () => {
+        chatOpened += 1;
+      },
       watchInterval: WATCH,
       report: () => undefined,
     });
@@ -228,6 +237,9 @@ function fixture() {
     inboxToasted,
     openedInboxes,
     runsToasted,
+    chatToasted,
+    /** How many times a chat notification's click opened Chat. */
+    chatOpened: () => chatOpened,
     failedRuns,
     openedAutomations,
     /** The account's Automations experiment. */
@@ -921,5 +933,78 @@ it.effect(
 
       assert.deepEqual(f.posted, []);
       assert.deepEqual(f.failedRuns.at(-1), [later]);
+    }),
+);
+
+/** A chat message waiting on the developer, as the account's read carries it. */
+function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountChatEntry {
+  return {
+    messageId: `00000000-0000-4000-8000-${String(seq).padStart(12, "0")}`,
+    seq,
+    workspaceId: "workspace-acme",
+    reason: ACCOUNT_CHAT_REASON.DIRECT,
+    from: "agent-2",
+    planId: TASK_ID,
+    touchedSeq: seq,
+    updatedAt: READ_AT,
+    ...patch,
+  };
+}
+
+it.effect(
+  "a chat message that comes to wait is announced once by who and why under its task, never what was said: as a notification behind, in the toast in front, and nowhere while Chat is on screen; the badge counts it beside the items",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      // The first answer is where the account stands, and announces nothing it holds.
+      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.equal(f.posted.length, 0);
+      assert.equal(f.badges.at(-1), 1);
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [chatEntry(40), chatEntry(47, { reason: ACCOUNT_CHAT_REASON.MENTION, from: "luke" })],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      // The item and the mention that came to wait are each announced; the message already waiting is not.
+      assert.deepEqual(f.said(), [
+        { title: TASK_NAME, body: "@luke mentioned you" },
+        { title: TASK_NAME, body: "Fix invitations: Push to the release branch?" },
+      ]);
+      assert.equal(f.badges.at(-1), 3);
+      f.posted[0]?.onClick();
+      assert.equal(f.chatOpened(), 1);
+
+      f.focus(true);
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [
+          chatEntry(40),
+          chatEntry(47),
+          chatEntry(51, { reason: ACCOUNT_CHAT_REASON.ASK, planId: null }),
+        ],
+        cursor: "3",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.chatToasted, [
+        { messageId: chatEntry(51).messageId, words: "@agent-2 asked you", detail: "Chat" },
+      ]);
+
+      notices.shownChat(true);
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [chatEntry(40), chatEntry(47), chatEntry(51), chatEntry(52)],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.equal(f.chatToasted.length, 1);
+      assert.equal(f.posted.length, 2);
     }),
 );

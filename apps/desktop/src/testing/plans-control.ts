@@ -7,6 +7,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
+import { FOR_YOU } from "../renderer/planning/chat-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
@@ -242,6 +243,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -283,6 +285,20 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onClose: ignore,
     },
     callTaskId: undefined,
+    chatView: {
+      open: false,
+      available: false,
+      chat: undefined,
+      failed: false,
+      onRetry: ignore,
+      place: FOR_YOU,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+      onShow: ignore,
+      onPost: () => Promise.resolve(undefined),
+      onAnswer: () => Promise.resolve(undefined),
+    },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

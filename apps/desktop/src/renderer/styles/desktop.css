@@ -346,10 +346,14 @@ body,
   display: flex;
 }
 
-/* The buttons over the open sidebar, or the floating one, stand on its ground. */
+/* The buttons over the open sidebar, or the floating one, stand on its ground;
+   Chat's rail stands on the sidebar's ground too, so the folded sidebar's
+   buttons over its head do as well. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
+  .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
@@ -5338,6 +5342,520 @@ button.automation-run:hover {
 
 .settings-card > .automation-prompt::placeholder {
   color: var(--text-tertiary);
+}
+
+/* Chat ----------------------------------------------------------------------- */
+
+/* The window's Chat, in the plan's place beside the sidebar as the Inbox
+   stands: the rail of places on the sidebar's ground under a bar the work
+   column's height, and the place chosen beside it at a reading measure. */
+.chat-view {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: var(--chat-rail-width, 248px) minmax(0, 1fr);
+}
+
+.chat-rail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+/* While the sidebar is folded the rail is the window's first column, so its
+   name clears the title bar's buttons as the Inbox's list's does. */
+.desktop-shell[data-sidebar-collapsed="true"] .chat-rail-bar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+.chat-rail-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+.chat-rail-heading {
+  margin: var(--space-12) 0 var(--space-4);
+  padding: 0 var(--space-8);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chat-rail-row .sidebar-plan-line {
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* What a direct message's row says after the handle, the agent's title or
+   the plan, steps back and gives way first, so the handle stays whole. */
+.chat-rail-row .sidebar-plan-name {
+  flex: none;
+  max-width: 70%;
+}
+
+.chat-rail-sub {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-rail-count {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* The plan's own Chat tab fills its column as an agent's tab does, the
+   channel's head standing in for the column's bar. */
+.desktop-plan-chat {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* A member's mark: an agent's glyph as its tab wears it, Luke's initial in
+   his blue, a person's initial on a quiet ground. */
+.chat-mark {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-mark[data-size="small"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.chat-mark[data-kind="planner"] {
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 35%, transparent);
+  background: color-mix(in srgb, var(--voice-luke) 12%, transparent);
+  color: var(--voice-luke);
+}
+
+.chat-mark[data-kind="agent"] {
+  background: transparent;
+}
+
+.chat-stream {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.chat-head {
+  gap: var(--space-12);
+  padding-left: var(--column-inset);
+}
+
+.chat-head-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-head-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-16) var(--column-inset);
+}
+
+.chat-messages,
+.chat-replies {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-message,
+.chat-reply {
+  display: flex;
+  gap: var(--space-12);
+  padding: 10px var(--space-12);
+  border-radius: 10px;
+}
+
+.chat-reply {
+  gap: 10px;
+  padding: var(--space-6) 0;
+}
+
+.chat-message-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chat-byline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.chat-byline-action {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.chat-message:hover .chat-byline-action,
+.chat-byline-action:focus-within {
+  opacity: 1;
+}
+
+.chat-byline-action .chat-thread-toggle {
+  padding: 0;
+}
+
+.chat-author {
+  font-weight: 600;
+}
+
+.chat-handle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-where,
+.chat-time {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chat-words {
+  color: var(--text-body);
+}
+
+.chat-code {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.chat-code-lines,
+.chat-image-words,
+.chat-unknown {
+  color: var(--text-tertiary);
+}
+
+.chat-image-words,
+.chat-unknown,
+.chat-link {
+  margin: 0;
+}
+
+/* An ask draws as a card in its row, headed by what kind of ask it is. */
+.chat-ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.chat-ask-kind {
+  margin: 0;
+  color: var(--state-attention);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.chat-ask-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-ask-option {
+  padding: 10px var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--raised);
+}
+
+.chat-ask-option-label {
+  font-weight: 600;
+}
+
+.chat-ask-recommended,
+.chat-ask-option-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-ask-option-detail {
+  margin: var(--space-2) 0 0;
+}
+
+.chat-thread {
+  margin-top: var(--space-6);
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--hairline);
+}
+
+.chat-thread-toggle {
+  padding: var(--space-4) 0;
+  border: 0;
+  background: none;
+  color: var(--voice-luke);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The composer at a place's foot, at the stream's reading measure: the box,
+   and under it a bar of what it takes with the round send at its end. */
+.chat-composer {
+  position: relative;
+  width: calc(100% - 2 * var(--column-inset));
+  max-width: 900px;
+  margin: var(--space-12) auto var(--space-16);
+}
+
+.chat-thread .chat-composer {
+  width: 100%;
+  margin: var(--space-6) 0 0;
+}
+
+.chat-composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.chat-composer[data-compact="true"] .chat-composer-box {
+  padding: var(--space-6) 10px;
+  border-radius: 10px;
+}
+
+.chat-composer-field,
+.chat-ask-note-field {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+}
+
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.chat-composer[data-compact="true"] .chat-composer-bar {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+}
+
+.chat-send {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.chat-send:not(:disabled) {
+  background: var(--message-sent);
+  color: white;
+}
+
+.chat-send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chat-composer-note {
+  margin: var(--space-6) 0 0;
+}
+
+/* The list an `@` or `#` opens stands over the box at its left. */
+.chat-mention-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-4));
+  left: 0;
+  width: 320px;
+  z-index: 10;
+}
+
+/* An open ask's note line, the round send at its end where the note is what is sent. */
+.chat-ask-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-4) 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--desktop-sidebar);
+}
+
+.chat-ask-presses {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.chat-ask-quiet,
+.chat-ask-settled {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-ask-values {
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-16);
+}
+
+.chat-ask-settled-note {
+  color: var(--text-primary);
+}
+
+/* A chat notice in an agent's transcript: a card across the column washed
+   in Luke's blue, headed by its sender and the message's place, Open in
+   Chat at the head's end. */
+.chat-notice {
+  margin: var(--space-8) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
+}
+
+.chat-notice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-notice-from {
+  color: var(--voice-luke);
+  font-weight: 600;
+}
+
+/* A person's handle reads in the developer's green, as their words do on a call. */
+.chat-notice[data-author="human"] .chat-notice-from {
+  color: var(--voice-developer);
+}
+
+.chat-notice-words {
+  font-size: 14px;
+}
+
+.chat-notice-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chat-notice-open:hover {
+  color: var(--text-primary);
+}
+
+.chat-notice-open svg {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-empty {
+  margin: var(--space-24) 0;
+  color: var(--text-tertiary);
+  text-align: center;
 }
 
 /* Settings ------------------------------------------------------------------- */

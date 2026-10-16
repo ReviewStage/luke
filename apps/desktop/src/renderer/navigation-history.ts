@@ -49,6 +49,7 @@ const PLACE_KIND = {
   PERSON: "person",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  CHAT: "chat",
   SETTINGS: "settings",
 } as const;
 
@@ -73,6 +74,7 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
   | { readonly kind: typeof PLACE_KIND.AUTOMATIONS }
+  | { readonly kind: typeof PLACE_KIND.CHAT }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -266,6 +268,7 @@ export function useWindowHistory(input: {
     | "workspace"
     | "factoryView"
     | "automationsView"
+    | "chatView"
     | "restoring"
     | "leaveGuard"
   >;
@@ -283,6 +286,7 @@ export function useWindowHistory(input: {
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = plans.automationsView.open;
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const chatOpen = plans.chatView.open;
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
@@ -304,6 +308,7 @@ export function useWindowHistory(input: {
     }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
+    if (chatOpen) return { kind: PLACE_KIND.CHAT };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
@@ -322,6 +327,7 @@ export function useWindowHistory(input: {
     listedWorkspace,
     factoryOpen,
     automationsOpen,
+    chatOpen,
   ]);
   const reachable = (to: Place) => {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
@@ -364,12 +370,17 @@ export function useWindowHistory(input: {
       plans.automationsView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, and the Automations page stand over.
+    if (to.kind === PLACE_KIND.CHAT) {
+      plans.chatView.onOpen();
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, and Chat stand over.
     if (inboxOpen) plans.inboxView.onClose();
     if (pageAgent !== undefined) plans.agentView.onClose();
     if (pagePerson !== undefined) plans.personView.onClose();
     if (factoryOpen) plans.factoryView.onClose();
     if (automationsOpen) plans.automationsView.onClose();
+    if (chatOpen) plans.chatView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

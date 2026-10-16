@@ -27,6 +27,7 @@ import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
+import { DesktopChat } from "./desktop-chat";
 import { DesktopFactory } from "./desktop-factory";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
@@ -249,7 +250,7 @@ function transcriptStreaming(plans: PlansControl): boolean {
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; Factory and the Automations page in the listed workspace; the plan on screen in its own workspace, or alone while that is not
+ * from; Factory, the Automations page, and Chat in the listed workspace; the plan on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -270,6 +271,7 @@ function titleSubject(
   if (plans.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: plans.workspace };
   }
+  if (plans.chatView.open) return { signedIn, subject: "Chat", workspace: plans.workspace };
   if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
@@ -353,16 +355,17 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.personView.userId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.personView.userId}:${plans.factoryView.open}:${plans.automationsView.open}:${plans.chatView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's or a person's page, Factory, or the Automations page standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
   const standingIn =
     plans.inboxView.open ||
     plans.agentView.agentId !== undefined ||
     plans.personView.userId !== undefined ||
     plans.factoryView.open ||
-    plans.automationsView.open;
+    plans.automationsView.open ||
+    plans.chatView.open;
   const shownPlan =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -426,13 +429,14 @@ export function DesktopShell({
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The Inbox,
-  // Factory, and the Automations page stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own.
+  // Factory, the Automations page, and Chat stand in the plan's place, so they
+  // draw no panel to toggle; an agent's page draws the agent's own.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const pagePerson = plans.personView.userId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
+  const chatOpen = plans.chatView.open;
   const planToggle = plans.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
   const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
@@ -463,7 +467,12 @@ export function DesktopShell({
         onPressWithin={keepOverlay}
       />
       <main className="desktop-main">
-        {inboxOpen ? (
+        {chatOpen ? (
+          <DesktopChat
+            plans={plans}
+            accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+          />
+        ) : inboxOpen ? (
           <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
             <DesktopInbox plans={plans} />
           </PageFind>

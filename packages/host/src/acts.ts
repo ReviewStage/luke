@@ -19,6 +19,8 @@ import {
 import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -32,6 +34,10 @@ import {
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
+  codingAgentChatAnswerViewSchema,
+  codingAgentChatParamsSchema,
+  codingAgentChatPostParamsSchema,
+  codingAgentChatWriteAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -477,6 +483,14 @@ export const ACT_KIND = {
   TERMINAL_RESUME: "terminal.resume",
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
+  /**
+   * The workspace's chat: read past a cursor (held open by the service
+   * while nothing moved), and written to as the account's own member, a
+   * post, an answer to an ask, a resolve, or how far it has read. The
+   * window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_CHAT: "codingAgents.chat",
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_TASK: "call.showPlan",
@@ -1171,6 +1185,7 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      chatShown: EffectSchema.optionalKey(EffectSchema.Boolean),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
@@ -1345,6 +1360,18 @@ export const ACT = {
     payload: actSchema(terminalShellParamsSchema),
     result: answersNothing,
     refusal: "Could not close that shell.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT]: {
+    payload: actSchema(codingAgentChatParamsSchema),
+    result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
+    refusal: "Could not read the workspace's chat on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT_POST]: {
+    payload: actSchema(codingAgentChatPostParamsSchema),
+    result: wireResult<CodingAgentChatWriteAnswerView>(
+      isReadable(codingAgentChatWriteAnswerViewSchema),
+    ),
+    refusal: "Could not write to the workspace's chat on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

@@ -21,6 +21,7 @@ import {
   AGENT_PART,
   type AgentPart,
   agentRows,
+  chatNoticeOf,
   isDelegation,
   messageWords,
   placedMessages,
@@ -74,11 +75,12 @@ export type LatestActivity =
       readonly code: boolean;
     };
 
-/** Who a turn of the copy is, as its heading names them. */
+/** Who a turn of the copy is, as its heading names them; a chat notice's heading names its sender after the word. */
 const SPEAKER = {
   DEVELOPER: "Developer",
   AGENT: "Agent",
   SUBAGENT: "Subagent",
+  CHAT: "Chat from",
 } as const;
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
@@ -137,7 +139,19 @@ type CopiedCall = Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>;
 
 interface CopiedTurn {
   readonly speaker: Speaker;
+  /** The handle of the member a chat notice tells of a message from, which its heading names; none on any other turn. */
+  readonly from?: string;
   readonly blocks: readonly CopiedBlock[];
+}
+
+/** Whether a turn is words someone else handed the agent, the developer or a chat notice, rather than the agent's own. */
+function handedIn(turn: CopiedTurn): boolean {
+  return turn.speaker === SPEAKER.DEVELOPER || turn.speaker === SPEAKER.CHAT;
+}
+
+/** A turn's heading: who said it, a chat notice's under its sender. */
+function headingOf(turn: CopiedTurn): string {
+  return turn.from === undefined ? `## ${turn.speaker}` : `## ${turn.speaker} @${turn.from}`;
 }
 
 /** A transcript as both copies read it: its tab's name, the brief it opened on, and its turns in order. */
@@ -184,21 +198,22 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
   return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
 }
 
-/** One of the developer's messages as a copy reads it: their words. */
+/** One of the developer's messages as a copy reads it: their words, or a chat notice's under the member it tells of a message from. */
 function developerTurn(message: CodingAgentMessage): CopiedTurn {
-  return {
-    speaker: SPEAKER.DEVELOPER,
-    blocks: [{ kind: COPIED_BLOCK.WORDS, text: messageWords(message) }],
-  };
+  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: messageWords(message) }] as const;
+  const notice = chatNoticeOf(message);
+  if (notice !== undefined) return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
+  return { speaker: SPEAKER.DEVELOPER, blocks };
 }
 
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
  * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
- * agent's call carried. The rest are turns: the developer's words, and the
- * agent's rows as its tab draws them, a line that reached a turn while it
- * ran between the turn's work before and after it, as the tab draws it.
+ * agent's call carried. The rest are turns: the developer's words, a chat
+ * notice's under the member it tells of a message from, and the agent's
+ * rows as its tab draws them, a line that reached a turn while it ran
+ * between the turn's work before and after it, as the tab draws it.
  */
 export function agentTranscript(input: {
   title: string;
@@ -209,7 +224,9 @@ export function agentTranscript(input: {
 }): CopiedTranscript {
   const { title, brief, task } = input;
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
-  const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+  const first = messages.find(
+    (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+  );
   const label =
     task !== undefined
       ? BRIEF_LABEL.SUBAGENT_TASK
@@ -312,7 +329,7 @@ function conciseTurn(turn: CopiedTurn): string[] {
       return;
     }
     if (block.kind !== COPIED_BLOCK.WORDS) return;
-    if (turn.speaker !== SPEAKER.DEVELOPER && index !== last) return;
+    if (!handedIn(turn) && index !== last) return;
     flush();
     said.push(block.text.trim());
   });
@@ -334,9 +351,7 @@ function previewed(block: CopiedBlock): boolean {
  * nothing where the agent has said and run nothing yet.
  */
 export function latestActivity(transcript: CopiedTranscript): LatestActivity | undefined {
-  const turn = transcript.turns.findLast(
-    (each) => each.speaker !== SPEAKER.DEVELOPER && each.blocks.some(previewed),
-  );
+  const turn = transcript.turns.findLast((each) => !handedIn(each) && each.blocks.some(previewed));
   const block = turn?.blocks.findLast(previewed);
   if (block === undefined || block.kind === COPIED_BLOCK.REASONING) return undefined;
   if (block.kind === COPIED_BLOCK.WORDS) {
@@ -401,7 +416,7 @@ export function transcriptMarkdown(transcript: CopiedTranscript, copy: Transcrip
   const { brief } = transcript;
   const turns = transcript.turns.flatMap((turn) => {
     const said = copy === TRANSCRIPT_COPY.CONCISE ? conciseTurn(turn) : fullTurn(turn);
-    return said.length === 0 ? [] : [`## ${turn.speaker}`, ...said];
+    return said.length === 0 ? [] : [headingOf(turn), ...said];
   });
   return `${[
     `# ${transcript.title}`,

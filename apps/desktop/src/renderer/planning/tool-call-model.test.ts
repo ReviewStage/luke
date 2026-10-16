@@ -523,3 +523,12 @@ test("a pause names how long it waits, and its answer how long it waited or that
     text: "Stopped early: a message arrived.",
   });
 });
+
+test("a chat tool's call opens the plan's Chat tab, where what it posted or read stands", () => {
+  assert.deepEqual(
+    ["post_chat", "read_chat", "resolve_ask"].map((tool) =>
+      toolTarget({ tool, callId: "call", input: { text: "hi" }, output: { status: "accepted" } }),
+    ),
+    [{ kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }],
+  );
+});

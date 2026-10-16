@@ -17,11 +17,20 @@ import {
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  CHAT_QUERY,
+  type ChatWriteRequest,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
+  chatWriteRequestSchema,
+} from "./chat-wire.js";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -127,9 +136,10 @@ import {
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a plan's and the account's, are the calls
- * the service holds open, for as long as it waits on the agent's next
- * message or the inbox's next change, so they travel under a deadline of
+ * read, the two inbox reads, a plan's and the account's, and the
+ * workspace's chat read are the calls the service holds open, for as long
+ * as it waits on the agent's next message or the next change, so they
+ * travel under a deadline of
  * their own that outlasts that hold; every other call keeps the account
  * call's usual one. The account's plan
  * template is read and written here too, as Settings asks for it beside
@@ -700,6 +710,48 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    );
+  }
+
+  /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
+  chat(
+    workspaceId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CHAT_QUERY.WORKSPACE_ID]: workspaceId,
+      [CHAT_QUERY.AFTER]: after,
+    });
+    return Effect.flatMap(
+      this.#held.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, chatAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * Writes to a workspace's chat as the account's own member of it: a post,
+   * an answer to an ask, a resolve, or how far the person has read, under
+   * the key the window made where the write carries one, which a retry
+   * carries again; a write the service would refuse by shape is refused
+   * here without traveling.
+   */
+  chatPost(
+    workspaceId: string,
+    request: ChatWriteRequest,
+  ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
     );
   }
 

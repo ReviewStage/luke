@@ -4,6 +4,8 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -16,6 +18,8 @@ import {
   codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
+  codingAgentChatParamsSchema,
+  codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentInboxAnswerParamsSchema,
@@ -56,14 +60,15 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
  * one the service holds open while the agent runs and nothing new stands,
- * and the inbox read another, held while nothing in it changed, so each of
+ * and the inbox read another, held while nothing in it changed, and the
+ * chat read a third, held while nothing in the workspace's chat moved, so each of
  * the window's loops is one held read after another rather than a clock of
  * its own, and a loop ends when the window stops asking. What waits across
  * the account is held the same way, and asked by main's own loop rather
@@ -108,6 +113,8 @@ export type CodingAgentClient = Pick<
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
+  | "chat"
+  | "chatPost"
 >;
 
 export interface CodingAgentsDependencies {
@@ -432,6 +439,26 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.answerInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, after } = yield* read(
+          codingAgentChatParamsSchema,
+          params,
+          "reading a workspace's chat names the workspace and a cursor",
+        );
+        const answer = yield* asked(client.chat(workspaceId, after));
+        return carried<CodingAgentChatAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, write } = yield* read(
+          codingAgentChatPostParamsSchema,
+          params,
+          "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
+        );
+        const answer = yield* asked(client.chatPost(workspaceId, write));
+        return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX]: (params) =>
       Effect.gen(function* () {

@@ -71,8 +71,9 @@ import { steerCodingAgent } from "./steer.js";
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
  * not. A plan's planner and a person are handed to doors of
- * their own, which hold the message until Luke's report turn and the
- * window's announcement fill them. What each member came to is the
+ * their own: a person is told through their window's account-wide read
+ * (`tellPerson`), and the planner's holds the message until Luke's report
+ * turn fills it. What each member came to is the
  * receipt the poster reads: told, held, left, and the handles that named no
  * one. A name marked `@public` is what the coder's tools, Luke's planner,
  * the window's route, and its announcements read as they land.
@@ -128,11 +129,38 @@ export interface ChatNoticeDoors {
   readonly human: ChatNoticeDoor;
 }
 
+/** A door that holds the message for the member's next read. */
+const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
+
 /** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
-export const HELD_DOORS: ChatNoticeDoors = {
-  planner: () => Effect.succeed(NOTICE_OUTCOME.HELD),
-  human: () => Effect.succeed(NOTICE_OUTCOME.HELD),
-};
+export const HELD_DOORS: ChatNoticeDoors = { planner: hold, human: hold };
+
+/**
+ * How a person is told: their member stamped with the message's place, one
+ * at a time as an agent's notice is, which the account's held read carries
+ * to every window they are signed in to and each announces once
+ * (`chat-waiting.ts`); held where a notice already stands unread, which
+ * they read with the rest, and where the stamp could not be made.
+ */
+function tellPerson(
+  member: ChatMemberRow,
+  notice: ChatNotice,
+): Effect.Effect<NoticeOutcome, never, DatabaseServices> {
+  if (member.userId === null || member.leftAt !== null) return Effect.succeed(NOTICE_OUTCOME.HELD);
+  return markNoticed(
+    member.userId,
+    member.organizationId,
+    member.id,
+    notice.message.channelId,
+    notice.message.seq,
+  ).pipe(
+    Effect.map((stamped) => (stamped ? NOTICE_OUTCOME.TOLD : NOTICE_OUTCOME.HELD)),
+    Effect.orElseSucceed(() => NOTICE_OUTCOME.HELD),
+  );
+}
+
+/** The doors a post is told through until Luke's report turn fills the planner's: a person told through their window, Luke held for his next read. */
+export const CHAT_DOORS: ChatNoticeDoors = { planner: hold, human: tellPerson };
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
@@ -377,7 +405,7 @@ export function tellMessage(
 }
 
 /** The refusal a chat store's post answers, in the route's words. */
-const HOSTED_OF_CHAT_REFUSAL = {
+export const HOSTED_OF_CHAT_REFUSAL = {
   [CHAT_REFUSAL.NOT_FOUND]: HOSTED_REFUSAL.NOT_FOUND,
   [CHAT_REFUSAL.NAME_TAKEN]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.TOO_MANY_TOPICS]: HOSTED_REFUSAL.INVALID_REQUEST,

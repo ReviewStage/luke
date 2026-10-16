@@ -16,6 +16,7 @@ import { DraftMark } from "../draft-mark";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
+import type { ChatNoticeDoors } from "../planning/chat-notice";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
@@ -118,6 +119,9 @@ export const INBOX_ROW = "inbox";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
+
+/** The "+" menu's row for the plan's Chat tab. */
+const CHAT_ROW = "chat";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -372,13 +376,21 @@ export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): A
   return [inboxEntry(onPick, 0)];
 }
 
+/** The plan's Chat tab as the "+" menu and ⌘K offer it, by itself, while there is a chat to read. */
+export function chatEntries(available: boolean, onPick: () => void): AddEntry[] {
+  if (!available) return [];
+  return [
+    { row: { id: CHAT_ROW, ...tabLook({ kind: TAB_KIND.CHAT }) }, endMark: undefined, onPick },
+  ];
+}
+
 /**
- * The "+" menu's rows: the plan's Inbox first, by itself under no heading
+ * The "+" menu's rows: the plan's Inbox and Chat first, by itself under no heading
  * (`inboxEntries`); New coding agent, unavailable with Start's own reason
  * while Start could not run, and left out on an archived plan; then each
  * of its agents under Coding agents (`agentEntries`).
  */
-function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
+function addEntries(main: MainTabsControl, agents: CodingAgentsControl, chat: boolean): AddEntry[] {
   const { start } = agents;
   const newAgent: AddEntry = {
     row: {
@@ -390,8 +402,14 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
+  const chatRows = chatEntries(chat, () => main.onChoose(MAIN_TAB.CHAT));
   const agentRows = agentEntries(main, agents);
-  return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
+  return [
+    ...inbox,
+    ...chatRows,
+    ...(agents.onUnarchive === undefined ? [newAgent] : []),
+    ...agentRows,
+  ];
 }
 
 /**
@@ -414,6 +432,7 @@ export function MainTabStrip({
   inbox,
   actionsSlot,
   onOpenTerminal,
+  chat,
 }: {
   plan: TaskSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
@@ -441,6 +460,8 @@ export function MainTabStrip({
   actionsSlot: HTMLElement | null;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
   onOpenTerminal: (agentId: string) => void;
+  /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
+  chat: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const drafted = useDraftedTabs(plan.id);
@@ -463,10 +484,23 @@ export function MainTabStrip({
         },
       ]
     : [];
-  // The agents', the draft's, and the Inbox's tabs in the column's order,
-  // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
+  const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
+    ? [
+        {
+          tab: MAIN_TAB.CHAT,
+          look: {
+            ...tabLook({ kind: TAB_KIND.CHAT }),
+            selected: main.tab === MAIN_TAB.CHAT,
+            onSelect: () => main.onChoose(MAIN_TAB.CHAT),
+          },
+          close: () => main.onClose(MAIN_TAB.CHAT),
+        },
+      ]
+    : [];
+  // The agents', the draft's, the Inbox's, and Chat's tabs in the column's order,
+  // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
+    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab, ...chatTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -579,7 +613,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents)}
+        entries={addEntries(main, agents, chat)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -593,6 +627,7 @@ export function MainTabStrip({
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
   if (tab === MAIN_TAB.INBOX) return tabLook({ kind: TAB_KIND.INBOX }).label;
+  if (tab === MAIN_TAB.CHAT) return tabLook({ kind: TAB_KIND.CHAT }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -616,8 +651,9 @@ export function MainTabContent({
   onOpenChanges,
   onOpenTarget,
   cards,
+  chat,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
+  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX | typeof MAIN_TAB.CHAT>;
   agents: CodingAgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
@@ -634,6 +670,8 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** The chat a chat notice's card reads and opens; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -659,6 +697,7 @@ export function MainTabContent({
       onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
+      chat={chat}
       onHeld={views.onAgentHeld}
       run={agents.origin}
     />

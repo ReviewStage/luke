@@ -63,6 +63,7 @@ import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
 import { type AgentPlace, useAgentEndToasts } from "./planning/agent-end-toast";
+import { useChatToasts } from "./planning/chat-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { MessageRevealProvider } from "./planning/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
@@ -392,7 +393,7 @@ export function App(): React.JSX.Element {
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: plans.page === TASKS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
-    inboxOpen: plans.inboxView.open,
+    inboxOpen: plans.inboxView.open || plans.chatView.open,
     agentPageOpen: plans.agentView.agentId !== undefined,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activeTaskId: state?.tasks.activeTaskId,
@@ -450,6 +451,19 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     plans.inboxShown,
   );
+  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the window's Chat.
+  const showChat = useRef(plans.chatView.onOpen);
+  showChat.current = plans.chatView.onOpen;
+  const openChat = useCallback(
+    () =>
+      guardLeave(() => {
+        changeTab(PANEL_TAB.TASKS);
+        showChat.current();
+      })(),
+    [changeTab, guardLeave],
+  );
+  useEffect(() => window.luke.onShowChat(() => openChat()), [openChat]);
+  useChatToasts(openChat, plans.chatView.open);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

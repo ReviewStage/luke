@@ -6,13 +6,20 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
-import { agentTranscript, TRANSCRIPT_COPY, transcriptMarkdown } from "./transcript-copy";
+import {
+  agentTranscript,
+  LATEST_ACTIVITY,
+  latestActivity,
+  TRANSCRIPT_COPY,
+  transcriptMarkdown,
+} from "./transcript-copy";
 
 /**
  * transcript-copy.test.ts -- a transcript's copy follows the order its tab
  * draws: a message that reached the agent while its turn ran is copied
  * between the turn's work before it and after it, not ahead of the turn,
- * where the service keeps it. Synthetic throughout.
+ * where the service keeps it; a chat notice is copied under the member it
+ * tells of a message from. Synthetic throughout.
  */
 
 /** One answered command the agent ran, under its own call id. */
@@ -75,4 +82,43 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
       "Fixed.",
     ].join("\n\n") + "\n",
   );
+});
+
+function said(id: string, role: CodingAgentMessage["role"], text: string): CodingAgentMessage {
+  return { id, role, parts: [{ type: "text", text }] };
+}
+
+test("a chat notice is copied under the member it tells of a message from, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
+  const notice: CodingAgentMessage = {
+    ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    messages: [
+      notice,
+      said("plan", MESSAGE_ROLE.USER, "Build invitations."),
+      said("turn", MESSAGE_ROLE.ASSISTANT, "Yes, base on my migration."),
+      { ...notice, id: "notice-2" },
+    ],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Chat from @agent-2",
+      "@agent-1 are you changing memberships?",
+      "## Agent",
+      "Yes, base on my migration.",
+      "## Chat from @agent-2",
+      "@agent-1 are you changing memberships?",
+    ].join("\n\n") + "\n",
+  );
+  assert.deepEqual(latestActivity(transcript), {
+    kind: LATEST_ACTIVITY.WORDS,
+    text: "Yes, base on my migration.",
+  });
 });

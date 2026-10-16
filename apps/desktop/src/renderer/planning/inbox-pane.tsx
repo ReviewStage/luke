@@ -179,7 +179,7 @@ const SEND = "Send to agent";
 const BACK_TO_INBOX = "Back to inbox";
 
 /** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
-function LinkBlock({
+export function LinkBlock({
   url,
   label,
   openLink,
@@ -484,7 +484,7 @@ function OptionHead({
 }
 
 /** A choice's options, each pressed to pick it, the one the agent recommends wearing its badge; several stay pressed where the choice allows. */
-function ChoiceOptions({
+export function ChoiceOptions({
   choice,
   draft,
   disabled,
@@ -598,7 +598,7 @@ function FormField({
 }
 
 /** A form's fields, in the agent's order. */
-function FormFields({
+export function FormFields({
   form,
   draft,
   disabled,
