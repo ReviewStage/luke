@@ -57,8 +57,10 @@ import {
  * asking for it again, and a picture inside a settled card no one opened
  * is never asked for. A picture no item names any longer, once the agent
  * posted its item again, is let go, since the service deleted it too. A
- * read that did not answer is held as failed, and the card offers to try
- * again.
+ * picture landing before the hook's own read of the items does is kept all
+ * the same, since the Inbox draws an item from its list's read first and
+ * nothing would ask for the picture again. A read that did not answer is
+ * held as failed, and the card offers to try again.
  *
  * What the developer has put on a card and not sent is its draft, kept by
  * item at the revision it was written against (`../composer-drafts.ts`), so
@@ -205,10 +207,8 @@ export function useTaskInbox(input: {
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
-  // The attachments the items name now, so a picture an item no longer names is let go, and one landing for it is not kept.
+  // The attachments the items name now, so a picture an item no longer names is let go.
   const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
-  const namedNow = useRef(named);
-  namedNow.current = named;
   useEffect(() => {
     setImages((standing) => imagesNamed(standing, named));
   }, [named]);
@@ -340,9 +340,11 @@ export function useTaskInbox(input: {
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another plan, or after its item let it go, is kept for nobody.
+          // An image landing after the window moved to another plan is kept for nobody. Note that one
+          // landing before this hook's read names it is kept, because the Inbox's pane draws the item
+          // from its list's read first, and a picture dropped here is never asked for again.
           setImages((standing) =>
-            latest.current.taskId === askedOn && namedNow.current.has(attachmentId)
+            latest.current.taskId === askedOn
               ? new Map(standing).set(attachmentId, image)
               : standing,
           );
