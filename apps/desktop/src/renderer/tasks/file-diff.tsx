@@ -1,8 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiffLook, DiffSelection, DiffViewHandle } from "../diff-view/contract";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type {
+  DiffAnnotation,
+  DiffLook,
+  DiffSelection,
+  DiffViewHandle,
+} from "../diff-view/contract";
 import { DIFF_LOAD_FAILED, diffViewModuleAtom } from "./diff-view-bundle";
 import { useFileViewSettings } from "./file-view-settings";
 
@@ -52,6 +58,9 @@ export function useDiffLook(roomy: boolean): DiffLook {
   };
 }
 
+/** No notes, one run for every diff that has none. */
+const NO_NOTES: readonly DiffNote[] = [];
+
 /** Whether two looks draw a diff alike: every setting the same, each appearance's theme among them. */
 function sameLook(a: DiffLook, b: DiffLook): boolean {
   return (
@@ -70,6 +79,32 @@ function sameLook(a: DiffLook, b: DiffLook): boolean {
   );
 }
 
+/** A note drawn under a line of the diff, a review thread's: where it stands, and what it says. */
+export interface DiffNote extends DiffAnnotation {
+  readonly content: ReactNode;
+}
+
+/** Whether two runs of notes stand under the same lines by the same keys. */
+function sameNotes(a: readonly DiffAnnotation[], b: readonly DiffAnnotation[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((note, at) => {
+      const other = b[at];
+      return (
+        other !== undefined &&
+        note.key === other.key &&
+        note.side === other.side &&
+        note.line === other.line
+      );
+    })
+  );
+}
+
+/** A note's place alone, which is all the bundle is handed of it. */
+function placeOf({ key, side, line }: DiffAnnotation): DiffAnnotation {
+  return { key, side, line };
+}
+
 /** Whether two selections light the same lines. */
 function sameSelection(a: DiffSelection | undefined, b: DiffSelection | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
@@ -86,6 +121,7 @@ export function PierreDiff({
   look,
   selected,
   excerpt = false,
+  notes = NO_NOTES,
   className = "file-tab-lines diff-view scroll-fade-top",
   boxRef,
 }: {
@@ -95,6 +131,8 @@ export function PierreDiff({
   selected?: DiffSelection | undefined;
   /** Whether the patch is a few lines out of a file, drawn with nothing said of the lines around them. */
   excerpt?: boolean;
+  /** The notes drawn under lines, a review thread's on its line; none for none. */
+  notes?: readonly DiffNote[];
   /** The box's classes: a File tab's place, filling it and scrolling, unless a card's are given. */
   className?: string;
   /** Handed the box the diff is drawn in, which the view measures for a split's room; a door that stays the same, as a state's setter does. */
@@ -105,9 +143,21 @@ export function PierreDiff({
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DiffViewHandle | undefined>(undefined);
   // What the diff was last drawn with; the mount reads the latest, so it is mounted once.
-  const drawn = useRef({ patch, look, selected, excerpt });
-  const latest = useRef({ patch, look, selected, excerpt });
-  latest.current = { patch, look, selected, excerpt };
+  // Note that each note is drawn into an element of its own, kept by its key for the diff's life, which the bundle stands under its line.
+  const noteElements = useRef(new Map<string, HTMLDivElement>());
+  const renderAnnotation = useCallback((key: string) => {
+    const held = noteElements.current.get(key);
+    if (held !== undefined) return held;
+    const element = document.createElement("div");
+    element.className = "diff-note";
+    noteElements.current.set(key, element);
+    return element;
+  }, []);
+  const annotations = notes.map(placeOf);
+  const props = { patch, look, selected, excerpt, annotations, renderAnnotation };
+  const drawn = useRef(props);
+  const latest = useRef(props);
+  latest.current = props;
   const hostRef = useCallback(
     (element: HTMLDivElement | null) => {
       host.current = element;
@@ -135,16 +185,21 @@ export function PierreDiff({
       was.patch === patch &&
       sameLook(was.look, look) &&
       sameSelection(was.selected, selected) &&
-      was.excerpt === excerpt
+      was.excerpt === excerpt &&
+      sameNotes(was.annotations, annotations)
     ) {
       return;
     }
-    drawn.current = { patch, look, selected, excerpt };
-    handle.current.update({ patch, look, selected, excerpt });
+    drawn.current = latest.current;
+    handle.current.update(latest.current);
   });
 
   if (AsyncResult.isFailure(loaded)) {
     return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
   }
-  return <div ref={hostRef} className={className} data-diff-layout={look.layout} />;
+  return (
+    <div ref={hostRef} className={className} data-diff-layout={look.layout}>
+      {notes.map((note) => createPortal(note.content, renderAnnotation(note.key), note.key))}
+    </div>
+  );
 }

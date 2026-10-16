@@ -9,6 +9,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -40,6 +41,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -1447,4 +1449,73 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     assert.fail("the line may be dismissed");
   act(() => dismiss.click());
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+test("Files changed draws each review thread under its line, its comments through the overview's own drawing, folded while Minimize inline comments is on", async () => {
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.COMMENTED,
+    html: null,
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    threads: [thread()],
+  } as const;
+  const changes: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 2,
+            deletions: 1,
+            omitted: null,
+            patch: thread().diffHunk,
+          },
+        ],
+      },
+    });
+  handSettings();
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({ pullRequest: { ...CONVERSATION, conversation: [review] } }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      changes,
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const minimize = async () => {
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+    const toggle = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+      (each) => each.getAttribute("aria-label") === "Minimize inline comments",
+    );
+    act(() => toggle?.click());
+    await settle();
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+  };
+
+  const file = previews.find(
+    (each) => each.annotations !== undefined && each.annotations.length > 0,
+  );
+  assert.deepEqual(file?.annotations, [
+    { key: `${PAGE}#discussion_r1`, side: "additions", line: 13 },
+  ]);
+  const note =
+    file?.renderAnnotation?.(`${PAGE}#discussion_r1`) ?? assert.fail("the thread is drawn");
+  assert.equal(
+    note.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,
+    "once",
+  );
+  assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
+  await minimize();
+  assert.equal(note.querySelector("details")?.open, false, "minimized, the thread stands folded");
 });
