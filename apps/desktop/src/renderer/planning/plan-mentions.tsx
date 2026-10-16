@@ -154,10 +154,11 @@ export function planlessMentions(
 const NO_AGENTS: readonly MentionableAgent[] = [];
 
 /**
- * Reads the workspace's coding agents as an `@` list offers them: each by
- * its tab's name, wearing its tile, with its task named from `tasks`, the
- * tasks the window lists, the archived ones among them where asked; none
- * where no workspace is known or the read failed. The reader stands for as
+ * Reads the workspace's coding agents as an `@` list offers them: the
+ * newest, or those the words name, archived ones among them, each by its
+ * tab's name, wearing its tile, with its task named from `tasks`, the
+ * tasks the window lists, archived ones among them; none where no
+ * workspace is known or the read failed. The reader stands for as
  * long as what it reads by does, so a list keeps what it read.
  */
 export function useMentionAgentsReader(
@@ -170,11 +171,11 @@ export function useMentionAgentsReader(
   const naming = useRef({ tasks, models });
   naming.current = { tasks, models };
   const read = useCallback<MentionAgentsReader>(
-    (archived) => {
+    (words) => {
       if (workspaceId === undefined) return Promise.resolve(NO_AGENTS);
       return act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
         workspaceId,
-        ...(archived ? { includeArchived: true } : undefined),
+        ...(words === undefined ? undefined : { words, includeArchived: true }),
       }).then(
         (answer) => {
           if ("failure" in answer) return NO_AGENTS;

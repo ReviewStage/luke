@@ -65,6 +65,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TITLE_CHARS: 80,
   /** The most characters the reason an agent was archived for may spell: a line of the archived agent's banner, never a report. */
   MAX_ARCHIVE_REASON_CHARS: 500,
+  /** The most characters the words a workspace's agents are found by may spell. */
+  MAX_SEARCH_CHARS: 200,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
   MAX_SERVER_CHARS: 64,
@@ -439,10 +441,11 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
+  WORDS: "words",
   ARCHIVED: CODING_AGENT_LIST_QUERY.ARCHIVED,
 } as const;
 

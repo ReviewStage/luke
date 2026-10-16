@@ -20,8 +20,10 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentPage,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -34,6 +36,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -136,6 +139,8 @@ let told: Act[] = [];
 let published: CodingAgentPullRequestAnswer | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
+/** What the workspace's list of agents answers, whatever it was asked. */
+let workspace: readonly CodingAgentSummary[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -148,6 +153,7 @@ beforeEach(() => {
   published = undefined;
   openedOnGitHub = [];
   copied = [];
+  workspace = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -203,6 +209,9 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
           copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
@@ -755,4 +764,46 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  installScrollIntoView();
+  const billing: Task = {
+    id: "2b2b2b2b-0000-4000-8000-000000000000",
+    workspaceId: PAGE.workspaceId,
+    name: "Billing",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    document: { body: "", assumptions: [] },
+  };
+  workspace = [
+    {
+      id: "3c3c3c3c-0000-4000-8000-000000000000",
+      planId: billing.id,
+      model: PAGE.model,
+      effort: PAGE.effort,
+      title: "Bill by seat",
+      createdAt: 1,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      turnId: null,
+      archivedAt: 3,
+    },
+  ];
+  const page = mount(plansControl({ archived: [billing] }));
+  await settle();
+
+  typeInComposer(page, "Ask @billing");
+  await settle();
+
+  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => [
+      row.querySelector(".plan-compose-menu-name")?.textContent,
+      row.querySelector(".mention-row-detail")?.textContent,
+    ]),
+    [["Bill by seat", "Billing · Archived"]],
+  );
 });

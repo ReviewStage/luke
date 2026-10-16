@@ -228,3 +228,39 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
     ["Plan", "Pages", "Agents"],
   );
 });
+
+test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labelled by its task", async () => {
+  const agent = (id: string, name: string) => ({
+    id,
+    name,
+    actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
+  });
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    agents: [agent("agent-2", "Wire the desktop")],
+    readAgents: () =>
+      Promise.resolve([
+        { ...agent("agent-3", "Bill by seat"), task: { id: "task-billing", name: "Billing" } },
+        agent("agent-4", "Sweep flaky tests"),
+      ]),
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Agents"),
+    ["Agents", ["Wire the desktop", "Bill by seat", "Sweep flaky tests"]],
+  );
+});

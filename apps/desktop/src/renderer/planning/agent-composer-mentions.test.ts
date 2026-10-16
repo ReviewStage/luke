@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type {
+  CodingAgentAgentAnswer,
+  CodingAgentWorkspaceListParams,
+} from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
@@ -120,7 +123,25 @@ const OLD_AGENT = workspaceAgent(
   BILLING.id,
   2_000,
 );
-const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT];
+/** An agent past the newest the workspace's list answers, which only a search finds. */
+const LEDGER = workspaceAgent("6f6f6f6f-0000-4000-8000-000000000000", "Old ledger", null);
+
+/** The newest agents the workspace's list answers, archived ones left out. */
+const NEWEST_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER];
+
+/** Every agent of the workspace, which a search finds among, archived ones included. */
+const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
+
+/** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
+function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly CodingAgentSummary[] {
+  if (words === undefined) return NEWEST_AGENTS;
+  const lower = words.toLowerCase();
+  return WORKSPACE_AGENTS.filter(
+    (agent) =>
+      (agent.title ?? "").toLowerCase().includes(lower) ||
+      (agent.planId === BILLING.id && BILLING.name.toLowerCase().includes(lower)),
+  );
+}
 
 /** Every act the panel told the main process, in order. */
 const told: Act[] = [];
@@ -178,11 +199,7 @@ beforeEach(() => {
                 ? {
                     status: ACT_OUTCOME_STATUS.DONE,
                     value: {
-                      agents: WORKSPACE_AGENTS.filter(
-                        (agent) =>
-                          agent.archivedAt === undefined ||
-                          JSON.stringify(request.payload).includes('"includeArchived":true'),
-                      ),
+                      agents: workspaceAnswer(request.payload),
                     },
                   }
                 : request.kind === ACT_KIND.TASKS_TREE
@@ -773,8 +790,10 @@ test("a word typed after @ finds an agent of another task by its task's name, an
     ["Bill by seat", "Billing"],
     ["Old invoices", "Billing · Archived"],
   ]);
-  // The word was typed whole, so the one read asked for the archived agents among the rest.
-  assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1", includeArchived: true }]);
+  // The word was typed whole, so the one read asked the service to find it, archived agents among them.
+  assert.deepEqual(workspaceReads(), [
+    { workspaceId: "workspace-1", words: "billing", includeArchived: true },
+  ]);
 });
 
 test("an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace", async () => {
@@ -794,4 +813,22 @@ test("an agent of another task picked from the @ list is sent as its link under 
   assert.deepEqual(sent, [
     `Ask [@Bill by seat](https://tryluke.dev/acme/plan/${BILLING.id}/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
   ]);
+});
+
+test("a word typed after @ finds an agent the workspace's newest leave out, as the service searches every agent for it", async () => {
+  const { container } = await workspaceBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  const bare = agentsListed(container).map(([name]) => name);
+  typeInComposer(container, "ledger");
+  await settle();
+
+  assert.ok(!bare.includes("Old ledger"), bare.join(", "));
+  assert.deepEqual(agentsListed(container), [["Old ledger", "No task"]]);
+  assert.deepEqual(workspaceReads().at(-1), {
+    workspaceId: "workspace-1",
+    words: "ledger",
+    includeArchived: true,
+  });
 });

@@ -14,6 +14,7 @@ import {
   archiveCodingAgent,
   readCodingAgent,
   readCodingAgentByKey,
+  renameCodingAgent,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
@@ -630,6 +631,39 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             [kept.agent.id, false],
             [put.agent.id, true],
           ].toSorted(([first], [second]) => String(first).localeCompare(String(second))),
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list finds the agents whose title or task's name holds the words, whatever their case, a wildcard in them matched as itself",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const titled = yield* startedAgentOf(owner, task.id, ask);
+        const other = yield* startedAgentOf(owner, task.id, ask);
+        yield* renameCodingAgent(owner, titled.agent.id, "Ledger 100% sweep");
+        yield* renameCodingAgent(owner, other.agent.id, "Unrelated");
+        const found = (words: string) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          url.searchParams.set("words", words);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .agents.map((agent) => agent.id)
+                .toSorted(),
+          );
+        };
+
+        assert.deepEqual(yield* found("LEDGER"), [titled.agent.id]);
+        assert.deepEqual(yield* found("100%"), [titled.agent.id]);
+        assert.deepEqual(yield* found("10_%"), []);
+        assert.deepEqual(
+          yield* found("teammate invitations"),
+          [titled.agent.id, other.agent.id].toSorted(),
+          "the task's name finds every agent on it",
         );
       }),
   );

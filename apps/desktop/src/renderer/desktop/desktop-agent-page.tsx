@@ -195,7 +195,11 @@ export function DesktopAgentPage({
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
   // The workspace's agents an `@` offers, named by the tasks the window lists.
-  const readMentionAgents = useMentionAgentsReader(workspaceId, plans.plans, agents.models);
+  const mentionTasks = useMemo(
+    () => [...plans.plans, ...plans.archived],
+    [plans.plans, plans.archived],
+  );
+  const readMentionAgents = useMentionAgentsReader(workspaceId, mentionTasks, agents.models);
   const listed = plans.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.

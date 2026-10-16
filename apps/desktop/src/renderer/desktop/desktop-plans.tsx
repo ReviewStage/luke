@@ -401,10 +401,14 @@ function PlanDocument({
       ? undefined
       : ([...plans.plans, ...plans.archived].find((each) => each.id === opened.id) ?? opened);
   const stranded = useStrandedPlanBanner(plans, listedOpen);
-  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists.
+  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists, archived ones among them.
+  const mentionTasks = useMemo(
+    () => [...plans.plans, ...plans.archived],
+    [plans.plans, plans.archived],
+  );
   const readMentionAgents = useMentionAgentsReader(
     opened?.workspaceId,
-    plans.plans,
+    mentionTasks,
     plans.agents.models,
   );
   const openMention = plans.onShowMention;

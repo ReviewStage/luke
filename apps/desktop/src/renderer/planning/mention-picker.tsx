@@ -55,8 +55,10 @@ import { AgentMark } from "./tab-look";
  * by its task: the plan's own agents first, then the workspace's others,
  * on another task or on none, as the place reads them the first time the
  * list opens (`MentionSource.readAgents`), the agent whose box it is left
- * out. An archived agent takes no message, so it is offered only once a
- * word is typed, read then, and marked archived. A mention of a page or an
+ * out. Once a word is typed, the service finds the agents it names by
+ * their title or their task's name, however many the workspace holds. An
+ * archived agent takes no message, so it is offered only once a word is
+ * typed, and marked archived. A mention of a page or an
  * agent names it by its id (`@luke/features/mention-link`), which the
  * agent it is sent to is handed what it needs to read by
  * (`packages/service/src/agents/mentioned-context.ts`).
@@ -482,8 +484,15 @@ export interface MentionableAgent {
   readonly archived?: boolean | undefined;
 }
 
-/** Reads the workspace's coding agents, the archived ones among them where asked; settles with none where the read failed. */
-export type MentionAgentsReader = (archived: boolean) => Promise<readonly MentionableAgent[]>;
+/**
+ * Reads the workspace's coding agents: the newest where no words are given,
+ * or, found by the service, those whose title or task's name holds the
+ * words, the archived ones among them; settles with none where the read
+ * failed.
+ */
+export type MentionAgentsReader = (
+  words: string | undefined,
+) => Promise<readonly MentionableAgent[]>;
 
 /** The pages and agents of a place that offers none. */
 const NO_PAGES: readonly MentionablePage[] = [];
@@ -608,33 +617,33 @@ export function useMentionPicker({
     if (askedAt !== undefined) askSkills?.();
   }, [askedAt, askSkills]);
 
-  // The workspace's agents are read as each `@` word opens the list, and the archived ones among
-  // them once a word is typed in it; a read is kept while the word stands and the place reads alike.
+  // The workspace's newest agents are read as each `@` word opens the list, and once a word is
+  // typed the service finds those it names, archived ones among them, however many the workspace
+  // holds; each read is kept while its word stands, and the last one shown until the next lands.
   const readAgents = source?.readAgents;
   const wordAt = open ? trigger.start : undefined;
-  const typed = open && trigger.query.trim() !== "";
+  const words = open && trigger.query.trim() !== "" ? trigger.query.trim() : undefined;
   const [workspaceAgents, setWorkspaceAgents] = useState<{
     readonly reader: MentionAgentsReader;
     readonly wordAt: number;
-    readonly archived: boolean;
+    readonly words: string | undefined;
     readonly agents: readonly MentionableAgent[];
   }>();
   const agentsRead =
     workspaceAgents?.reader === readAgents && workspaceAgents?.wordAt === wordAt
       ? workspaceAgents
       : undefined;
-  const wantsArchived = typed && agentsRead?.archived !== true;
-  const wantsAgents = agentsRead === undefined || wantsArchived;
+  const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
   useEffect(() => {
     if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
     let live = true;
-    readAgents(wantsArchived).then((agents) => {
-      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, archived: wantsArchived, agents });
+    readAgents(words).then((agents) => {
+      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
     });
     return () => {
       live = false;
     };
-  }, [wantsAgents, wantsArchived, readAgents, wordAt]);
+  }, [wantsAgents, words, readAgents, wordAt]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(
