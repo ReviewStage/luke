@@ -86,6 +86,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
+import { callHeading, useMinute } from "./plan-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
@@ -780,6 +781,17 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
+/** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
+function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
+  const now = useMinute();
+  return (
+    <span className="message-sent-at">
+      {named ? <span aria-hidden="true">·</span> : null}
+      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
+    </span>
+  );
+}
+
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
   readonly message: CodingAgentMessage;
@@ -801,11 +813,11 @@ const SENT_ACTIONS_CLASS = "static border-0 bg-transparent p-0 shadow-none";
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble, with a quiet line
  * under it holding its Copy and Copy link and, at the bubble's edge, who
- * sent it; or one of the agent's own turns, with a copy of its words under
- * it where it has any, ending once it has finished on how long it worked
- * and when it ended.
- * A line that reached a turn while it ran is drawn inside it, as its own
- * bubble between the work before it and the work after it.
+ * sent it and when; or one of the agent's own turns, with a copy of its
+ * words under it where it has any, ending once it has finished on how long
+ * it worked and when it ended. A line that reached a turn while it ran is
+ * drawn inside it, as its own bubble between the work before it and the
+ * work after it.
  */
 export function AgentMessage({
   message,
@@ -854,6 +866,7 @@ export function AgentMessage({
   }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
+    const sentAt = message.sentAt;
     return (
       <Message from={message.role} data-message-id={message.id}>
         <AttachedFileChips files={messageFileChips(message)} />
@@ -864,7 +877,7 @@ export function AgentMessage({
             </SentToAgent>
           </MessageContent>
         )}
-        {words === "" && named === null ? null : (
+        {words === "" && named === null && sentAt === undefined ? null : (
           <div className="message-meta">
             {words === "" ? null : (
               <CopyMessageAction
@@ -874,6 +887,7 @@ export function AgentMessage({
               />
             )}
             {named}
+            {sentAt === undefined ? null : <SentTime at={sentAt} named={named !== null} />}
           </div>
         )}
       </Message>

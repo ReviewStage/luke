@@ -47,6 +47,9 @@ const MEMBER = CODING_AGENT_SENDER.MEMBER;
 /** Charles's sign-in picture, which the members read lists. */
 const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
 
+/** When Charles sent his line. */
+const CHARLES_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
+
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 2 };
 
 /** The workspace's members as the members read answers them: Dean, and Charles with his picture. */
@@ -86,7 +89,7 @@ function line(id: string, text: string, sentBy?: CodingAgentSender): CodingAgent
 const MESSAGES: readonly CodingAgentMessage[] = [
   line("task", "Add the invite flow."),
   line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
-  line("charles", "Not five.", { ...CHARLES, kind: MEMBER }),
+  { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
   line("luke", "Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }),
   line("automation", "Triage the failures.", {
@@ -228,7 +231,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
   ]);
 });
 
-/** What a sent message draws, in the order a reader meets it: its words, its Copy, and who sent it. */
+/** What a sent message draws, in the order a reader meets it: its words, its Copy, who sent it, and when. */
 function readingOrder(message: Element, words: string): readonly string[] {
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
   let text: Node | null = walker.nextNode();
@@ -237,6 +240,7 @@ function readingOrder(message: Element, words: string): readonly string[] {
     ["words", text],
     ["Copy", message.querySelector('button[aria-label="Copy"]')],
     ["sender", message.querySelector(".message-sender")],
+    ["sent at", message.querySelector("time")],
   ];
   return seen
     .flatMap(([name, node]) => (node === null ? [] : [{ name, node }]))
@@ -246,14 +250,18 @@ function readingOrder(message: Element, words: string): readonly string[] {
     .map((each) => each.name);
 }
 
-test("a sent message keeps its bubble on top, with its Copy and then who sent it on the line under it", async () => {
+test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it", async () => {
   const drawn = await drawnFor(DEAN.userId);
   const byId = (id: string) => drawn[MESSAGES.findIndex((each) => each.id === id)];
   const charles = byId("charles");
   const own = byId("dean");
   assert.ok(charles !== undefined && own !== undefined);
-  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender"]);
-  // The reader's own message names nobody, and still offers its Copy under the bubble.
+  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender", "sent at"]);
+  assert.equal(
+    charles.querySelector("time")?.getAttribute("datetime"),
+    new Date(CHARLES_SENT_AT).toISOString(),
+  );
+  // The reader's own message names nobody, and still offers its Copy under the bubble; one from a service older than the time names none.
   assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
   Reflect.deleteProperty(window, "luke");
 });

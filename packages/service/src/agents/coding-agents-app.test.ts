@@ -1654,7 +1654,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "each member's line to an agent names them as its sender, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
+    "each member's line to an agent names them as its sender and when it was sent, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1669,6 +1669,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
         );
         yield* sent("Use seven days.");
+        // Charles answers a minute later, which the time each line names says.
+        yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
@@ -1713,6 +1715,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
+
+        // Every line names when it was sent, a minute apart where they were.
+        const sentAts = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        )
+          .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
+          .map((message) => message.sentAt);
+        assert.ok(sentAts.every((at) => at !== undefined));
+        assert.equal((sentAts[2] ?? 0) - (sentAts[1] ?? 0), Duration.toMillis(Duration.minutes(1)));
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
         assert.deepEqual((yield* sendersAs(owner))[2], [

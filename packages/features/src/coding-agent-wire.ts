@@ -1055,6 +1055,8 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /** Epoch milliseconds one of the developer's lines was sent, which the tab names under its bubble; absent on every other row, and from a service older than it. */
+  sentAt: EffectSchema.optionalKey(countedNumber),
   /**
    * Where in a turn under way one of the developer's lines arrived: the
    * journal of the turn that took it in, by its message id, and how many
