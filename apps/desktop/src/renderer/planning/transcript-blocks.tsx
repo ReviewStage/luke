@@ -4,7 +4,8 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { linkMention, mayNameMention } from "@luke/features/mention-link";
+import { readLink } from "@luke/features/luke-link";
+import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   CALL_KIND,
@@ -75,7 +76,7 @@ import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { MentionChip } from "./mention-chip";
+import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
@@ -182,9 +183,10 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose target may name a mention to be
- * drawn as its own element, which reads what it names against the plan
- * its page is of (`linkMention`): the same rule for a developer's `@`
+ * Marks every link in the words whose target may name a mention, or is a
+ * Luke link to any place (`readLink`), to be drawn as its own element,
+ * which reads what it names against the plan its page is of (`linkChip`):
+ * the same rule for a developer's `@`
  * mention, an agent's link, a reference link, and a bare address. A target
  * is read here before the page's repository is known (`mayNameMention`),
  * so every page of GitHub's is marked, and every other link is drawn as
@@ -200,7 +202,7 @@ function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, strin
       : node.type === "linkReference" && node.identifier !== undefined
         ? definitions.get(node.identifier)
         : undefined;
-  if (target !== undefined && mayNameMention(target)) {
+  if (target !== undefined && (mayNameMention(target) || readLink(target) !== undefined)) {
     node.data = {
       hName: MENTION_ELEMENT.TAG,
       hProperties: { [MENTION_ELEMENT.TARGET]: target },
@@ -287,16 +289,15 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const found =
-    node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
-  if (found === undefined) {
-    return (
-      <TranscriptLink href={target} words={node === undefined ? "" : wordsOf(node)}>
+  const words = node === undefined ? "" : wordsOf(node);
+  const chip = node === undefined ? undefined : linkChip(target, words, doors);
+  return (
+    chip ?? (
+      <TranscriptLink href={target} words={words}>
         {children}
       </TranscriptLink>
-    );
-  }
-  return <MentionChip mention={found.mention} target={target} name={found.name} doors={doors} />;
+    )
+  );
 }
 
 /**
