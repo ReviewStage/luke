@@ -194,30 +194,27 @@ function wholeIn(shown: DOMRect, box: DOMRect, by = 0): boolean {
 
 /**
  * Settles a scroll of the strip's own, a wheel's step or a swipe, on whole
- * tabs in the way it went: a tab it left cut at the strip's start is passed
- * going forward, where the strip has the room, or brought in whole going
- * back, unless that cuts a chosen tab shown whole. Otherwise the cut tab is
- * left as it is, so a scroll that reached the strip's end, by a wheel's
- * steps or the keyboard reaching its last tab, keeps that last tab whole.
+ * tabs: a tab it left cut at the strip's start is passed going forward,
+ * where the strip has the room, and otherwise brought in whole, unless that
+ * cuts a tab shown whole now. A scroll that reached the strip's end, by a
+ * wheel's steps or the keyboard reaching its last tab, so keeps that last
+ * tab whole, and one that stopped just short of it brings the cut tab in.
  * Note that a cut tab is not drawn, so a scroll left between tabs would
  * show an empty room where a tab nearly stood.
  */
 function settle(strip: HTMLElement, forward: boolean): void {
   const shown = strip.getBoundingClientRect();
   const room = strip.scrollWidth - strip.clientWidth - strip.scrollLeft;
-  const own = strip.querySelector(`${TAB}[aria-selected="true"]`)?.closest(".tab");
-  const chosen = own?.getBoundingClientRect();
-  for (const pill of strip.querySelectorAll(".tab")) {
-    const box = pill.getBoundingClientRect();
-    if (box.left >= shown.left - OVERFLOW_SLACK || box.right <= shown.left + OVERFLOW_SLACK)
-      continue;
-    const past = box.right - shown.left + startGap(strip, box.right);
-    const back = box.left - shown.left;
-    const keeps = chosen === undefined || !wholeIn(shown, chosen) || wholeIn(shown, chosen, back);
-    if (forward && past <= room + OVERFLOW_SLACK) scrollStrip(strip, past, false);
-    else if (!forward && keeps) scrollStrip(strip, back, false);
-    return;
-  }
+  const boxes = [...strip.querySelectorAll(".tab")].map((pill) => pill.getBoundingClientRect());
+  const whole = boxes.filter((box) => wholeIn(shown, box));
+  const cut = boxes.find(
+    (box) => box.left < shown.left - OVERFLOW_SLACK && box.right > shown.left + OVERFLOW_SLACK,
+  );
+  if (cut === undefined) return;
+  const past = cut.right - shown.left + startGap(strip, cut.right);
+  const back = cut.left - shown.left;
+  if (forward && past <= room + OVERFLOW_SLACK) scrollStrip(strip, past, false);
+  else if (whole.every((box) => wholeIn(shown, box, back))) scrollStrip(strip, back, false);
 }
 
 /**

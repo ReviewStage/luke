@@ -218,6 +218,15 @@ test("a swipe to the strip's very end keeps its last tab whole, though a tab is 
   );
 });
 
+test("a swipe that stops just short of the strip's end brings the tab cut at its start in whole", async () => {
+  const strip = await drawnAt(250);
+  swipeTo(strip, 230);
+  assert.deepEqual(
+    LABELS.filter((label) => label !== "Teammate invitations" && drawn(strip, label)),
+    ["Withdraw an invite", "Audit retries"],
+  );
+});
+
 test("the last tab chosen from the chevron stands whole at the strip's end, though a tab is left cut at its start", async () => {
   const strip = await drawnAt(250);
   act(() => chevron(strip)?.click());
