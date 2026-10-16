@@ -132,6 +132,22 @@ export function MemorySection({
   const scope = useRef(0);
   /** The workspace the page shows now, which a forget answered after the page moved on checks against. */
   const shown = useRef<string | undefined>(undefined);
+  // Note that every read and forget is numbered as it is sent, and a list is drawn only when it
+  // answers a later request than the list drawn last, so an older answer arriving late never
+  // puts back a memory a newer one already forgot.
+  const sent = useRef(0);
+  const drawn = useRef(0);
+  // Note that a read out while a forget landed may have read the list before that forget's delete,
+  // so its answer is not drawn; the page reads again instead.
+  const forgotten = useRef(0);
+
+  /** Draws the list one request answered, unless a later request's list is drawn already; answers whether it drew. */
+  const draw = useCallback((request: number, list: readonly MemorySummary[]): boolean => {
+    if (request < drawn.current) return false;
+    drawn.current = request;
+    setMemories(list);
+    return true;
+  }, []);
 
   const workspaceId = workspace?.id;
   useEffect(() => {
@@ -144,6 +160,9 @@ export function MemorySection({
   useEffect(() => {
     if (!signedIn || workspaceId === undefined) return;
     let live = true;
+    sent.current += 1;
+    const request = sent.current;
+    const forgottenBefore = forgotten.current;
     // Nothing of an earlier read, an earlier account, or another workspace stands while this one is out.
     setMemories(undefined);
     setReadFailed(false);
@@ -151,7 +170,8 @@ export function MemorySection({
       (answer) => {
         if (!live) return;
         if ("failure" in answer) setReadFailed(true);
-        else setMemories(answer.memories);
+        else if (forgotten.current !== forgottenBefore) setAttempt((count) => count + 1);
+        else draw(request, answer.memories);
       },
       () => {
         if (live) setReadFailed(true);
@@ -160,7 +180,7 @@ export function MemorySection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, workspaceId, readerId, attempt]);
+  }, [act, draw, signedIn, workspaceId, readerId, attempt]);
 
   const forget = useCallback(
     (id: string): Promise<ActionResult> => {
@@ -171,26 +191,27 @@ export function MemorySection({
         });
       }
       const asked = scope.current;
+      sent.current += 1;
+      const request = sent.current;
       setForgetting(id);
       return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
+          if (asked === scope.current) setForgetting(undefined);
           if (answer === undefined || "failure" in answer) {
-            if (asked === scope.current) setForgetting(undefined);
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.FORGET_FAILED };
           }
-          if (asked === scope.current) {
-            setForgetting(undefined);
-            setMemories(answer.memories);
-          } else if (shown.current === workspaceId) {
-            // Back on the workspace it was asked in, whose read may predate the forget: read again rather than draw an earlier scope's answer.
-            setAttempt((count) => count + 1);
-          }
+          forgotten.current += 1;
           // A forget answered while the page shows another workspace draws nothing there.
+          if (shown.current !== workspaceId) return { status: ACTION_RESULT_STATUS.ACCEPTED };
+          // Its own scope's list, unless a later one is drawn; otherwise a read again, since the list
+          // on the page may predate the forget, and the newest read's answer is the one that stands.
+          const drew = asked === scope.current && draw(request, answer.memories);
+          if (!drew) setAttempt((count) => count + 1);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
-    [act, workspaceId],
+    [act, draw, workspaceId],
   );
 
   if (!signedIn) return <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>;

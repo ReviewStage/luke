@@ -67,6 +67,8 @@ let refuseRead = false;
 let refuseForget = false;
 /** Where a forget is held unanswered until the test lets it go, rather than answered at once. */
 let holdForgets: ((answer: ActOutcome) => void)[] | undefined;
+/** Where a read is held unanswered until the test lets it go, rather than answered at once. */
+let holdReads: ((answer: ActOutcome) => void)[] | undefined;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -80,6 +82,10 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.MEMORIES_READ:
+      if (holdReads !== undefined) {
+        const held = holdReads;
+        return new Promise((resolve) => held.push(resolve));
+      }
       return Promise.resolve(done(refuseRead ? unanswered : { memories: stored }));
     case ACT_KIND.MEMORIES_FORGET:
       if (refuseForget) return Promise.resolve(done(unanswered));
@@ -102,6 +108,7 @@ beforeEach(() => {
   refuseRead = false;
   refuseForget = false;
   holdForgets = undefined;
+  holdReads = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -287,6 +294,39 @@ test("a forget answered after the page left its workspace and came back reads th
   await settle();
 
   assert.deepEqual(listedOnReturn, [DEPLOYS.text, TESTS.text]);
+  assert.deepEqual(words(page), [TESTS.text]);
+});
+
+test("a read out while a later forget lands never puts back the memory that forget removed", async () => {
+  const pricing: MemorySummary = {
+    ...DEPLOYS,
+    id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+    text: "Pricing lives in the billing service.",
+  };
+  stored = [DEPLOYS, pricing, TESTS];
+  holdForgets = [];
+  const { page, show } = await mount();
+  await forget(page, DEPLOYS);
+  await show(GLOBEX);
+  await show(ACME);
+  // A second forget goes out before the first answers.
+  await forget(page, pricing);
+  const [releaseFirst, releaseSecond] = holdForgets;
+  assert.ok(releaseFirst !== undefined && releaseSecond !== undefined);
+
+  // The first forget lands after the round trip, so the page reads again, and that read is held.
+  holdReads = [];
+  releaseFirst(done({ memories: [pricing, TESTS] }));
+  await settle();
+  const releaseRead = holdReads[0] ?? assert.fail("the page did not read again");
+  // The second forget lands while that read is out; the read had seen the list before it.
+  stored = [TESTS];
+  holdReads = undefined;
+  releaseSecond(done({ memories: stored }));
+  await settle();
+  releaseRead(done({ memories: [pricing, TESTS] }));
+  await settle();
+
   assert.deepEqual(words(page), [TESTS.text]);
 });
 
