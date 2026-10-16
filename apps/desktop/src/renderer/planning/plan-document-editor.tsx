@@ -603,6 +603,7 @@ export function PlanDocumentEditor({
       text,
       pages: page?.pages,
       agents: page?.agents,
+      readAgents: page?.readAgents,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,

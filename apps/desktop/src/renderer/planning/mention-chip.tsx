@@ -161,8 +161,12 @@ const SERVER_WORDS = "An MCP server";
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
 
-/** What an agent's card says of it, where the place has no card of its tab. */
-const AGENT_WORDS = "A coding agent on this task";
+/** What an agent's card says of it, where the place has no card of its tab: on this task, another, or none. */
+const AGENT_WORDS = {
+  THIS_TASK: "A coding agent on this task",
+  OTHER_TASK: "A coding agent on another task",
+  NO_TASK: "A coding agent on no task",
+} as const;
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
@@ -241,7 +245,7 @@ function MentionGlyph({
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {
-      const look = doors.agentOf?.(mention.agentId);
+      const look = mention.taskId === doors.planId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
         <AgentMark provider={undefined} />
       ) : (
@@ -252,14 +256,17 @@ function MentionGlyph({
 }
 
 /** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
-function noteOf(mention: Mention, state: MentionState): string | undefined {
+function noteOf(mention: Mention, state: MentionState, planId: string): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
   if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
   if (mention.kind === MENTION_KIND.TOOL)
     return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
   if (mention.kind === MENTION_KIND.LINK) return mention.url;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
-  if (mention.kind === MENTION_KIND.AGENT) return AGENT_WORDS;
+  if (mention.kind === MENTION_KIND.AGENT) {
+    if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
+    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+  }
   return undefined;
 }
 
@@ -290,11 +297,14 @@ function MentionCard({
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
+  // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
+    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.planId
+      ? doors.agentOf?.(mention.agentId)?.card
+      : undefined;
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state);
+  const note = noteOf(mention, state, doors.planId);
   return (
     <HoverCard data-mention-card="">
       <CardHead

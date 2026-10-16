@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
@@ -188,6 +189,14 @@ export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  /** Only the agents whose title or task's name holds these words, whatever their case. */
+  words: EffectSchema.optionalKey(
+    EffectSchema.NonEmptyString.check(
+      EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS),
+    ),
+  ),
+  /** Lists the archived agents among the rest, each carrying its `archivedAt`. */
+  includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;

@@ -448,9 +448,11 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
 
 /**
  * GET lists a workspace's agents, on a plan or with none, newest started
- * first, the archived ones left out, narrowed to one repository where the
- * query names one, as the plan list answers them; a workspace the account
- * is not in is not found, as a plan is.
+ * first, the archived ones left out unless `archived=include` asks,
+ * narrowed to one repository where the query names one and to agents whose
+ * title or task's name holds the query's words where it names some, as the plan list
+ * answers them; a workspace the account is not in is not found, as a plan
+ * is.
  */
 const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -463,7 +465,13 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const query = new URL(request.url).searchParams;
   const workspaceId = query.get(CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID) ?? "";
   const repository = query.get(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY) ?? undefined;
-  if (workspaceId === "" || repository === "") {
+  const words = query.get(CODING_AGENT_WORKSPACE_QUERY.WORDS)?.trim();
+  if (
+    workspaceId === "" ||
+    repository === "" ||
+    words === "" ||
+    (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
+  ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const userId = yield* resolvedUserId(seams, request);
@@ -472,6 +480,8 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const agents = yield* hostedStoreOrUnavailable(
     listWorkspaceCodingAgents(userId, workspaceId, {
       ...(repository === undefined ? undefined : { repository }),
+      ...(words === undefined ? undefined : { words }),
+      includeArchived: listsArchived(request),
       limit: WORKSPACE_AGENTS_LIMIT,
     }),
   );
