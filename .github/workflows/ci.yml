@@ -135,11 +135,15 @@ jobs:
   # run against what it migrated: each file clones the `luke` database as a
   # template into one of its own (`@luke/database/testing`), so
   # `db:migrate` goes first. The job keeps its old name because the ruleset
-  # requires it. The image comes from whichever of three registries answers
-  # first, because each one rate-limits anonymous pulls; it starts before the
-  # workspace installs so it boots meanwhile. A release-only change migrates
-  # nothing and touches no store, so the job skips every step after it is
-  # classified.
+  # requires it. The store tests run through turbo, and turbo is asked first
+  # whether it would replay them: their hash covers the migrations and every
+  # workspace web imports, so a change that touches none of it replays the
+  # last pass and the job stands no Postgres at all. Note that the image is
+  # not in the hash, so moving it to a new major is a change to re-run by
+  # hand. The image comes from whichever of three registries answers first,
+  # because each one rate-limits anonymous pulls. A release-only change
+  # migrates nothing and touches no store, so the job skips every step after
+  # it is classified.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
@@ -153,8 +157,20 @@ jobs:
           fetch-depth: 2
       - id: scope
         uses: ./.github/actions/release-only
-      - name: Start Postgres
+      - if: ${{ steps.scope.outputs.release-only != 'true' }}
+        uses: ./.github/actions/setup
+      - name: Ask turbo whether the store tests replay
+        id: store
         if: ${{ steps.scope.outputs.release-only != 'true' }}
+        run: |
+          status=$(node scripts/turbo.mjs run test:store --filter=@luke/web --dry=json | jq -r '.tasks[] | select(.taskId == "@luke/web#test:store") | .cache.status')
+          echo "Store tests: cache $status"
+          echo "replay=$([ "$status" = HIT ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      - name: Start Postgres
+        if: ${{ steps.scope.outputs.release-only != 'true' && steps.store.outputs.replay != 'true' }}
         run: |
           for round in 1 2 3 4; do
             for image in \
@@ -180,10 +196,8 @@ jobs:
           done
           echo "::error::Every registry refused postgres:18"
           exit 1
-      - if: ${{ steps.scope.outputs.release-only != 'true' }}
-        uses: ./.github/actions/setup
       - name: Wait for Postgres
-        if: ${{ steps.scope.outputs.release-only != 'true' }}
+        if: ${{ steps.scope.outputs.release-only != 'true' && steps.store.outputs.replay != 'true' }}
         run: |
           for _ in $(seq 90); do
             status=$(docker inspect --format '{{.State.Health.Status}}' postgres)
@@ -194,7 +208,10 @@ jobs:
           docker logs postgres
           echo "::error::Postgres did not become healthy"
           exit 1
-      - if: ${{ steps.scope.outputs.release-only != 'true' }}
+      - if: ${{ steps.scope.outputs.release-only != 'true' && steps.store.outputs.replay != 'true' }}
         run: pnpm --filter @luke/web db:migrate
       - if: ${{ steps.scope.outputs.release-only != 'true' }}
-        run: pnpm --filter @luke/web test:store
+        run: node scripts/turbo.mjs run test:store --filter=@luke/web
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
