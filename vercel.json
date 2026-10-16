@@ -444,7 +444,7 @@
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/dev...",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/coder...",
       "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
       "routes": [

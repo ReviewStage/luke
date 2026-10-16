@@ -886,7 +886,7 @@ for it. Disconnect and deleting the account still revoke its grant.
 
 `apps/dev/` is the second standalone eve app, built and deployed as the `dev`
 service beside `luke` on the same terms (the root `vercel.json`): its own
-`package.json` (`@luke/dev`, whose one dependency is `eve`), a flat layout
+`package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
 the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
@@ -895,7 +895,14 @@ carries into the service, whose own one `routes` entry turns it back into
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
 `src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
-`apps/web/tests/vercel-services.test.ts` holds the three services and that routing.
+The package's name, unscoped, is the agent's name to eve, which names the
+Workflow queue every deployment of the service consumes after it: a session
+stays owned by the deployment it started on until a newer one's message wakes
+it, so a renamed package strands every standing agent, whose next message
+lands on a queue its owner never reads. The name stays `coder` whatever the
+directory or service is called.
+`apps/web/tests/vercel-services.test.ts` holds the three services, that routing,
+and those names.
 
 A coding agent is one eve session over a `coding_agent` conversation
 (`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored

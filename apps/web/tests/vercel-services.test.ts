@@ -66,6 +66,26 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   assert.deepEqual(regenerated.services, vercel.services);
 });
 
+/**
+ * The name eve knows each agent service by, which it derives from the
+ * service's package name without its scope and names the service's Workflow
+ * queue after. A standing session wakes only on its owning deployment's
+ * queue, so these never change once a session has started under them.
+ */
+const EVE_AGENT_NAME = { [SERVICE.LUKE]: "luke", [SERVICE.DEV]: "coder" } as const;
+
+test("each eve service keeps the agent name its standing sessions' queue is named after, whatever its directory or service key", () => {
+  for (const service of [SERVICE.LUKE, SERVICE.DEV] as const) {
+    const manifest = new URL(
+      `../../../${vercel.services[service].root}/package.json`,
+      import.meta.url,
+    );
+    // SAFETY: the service's own package.json, read for its name.
+    const { name } = JSON.parse(readFileSync(fileURLToPath(manifest), "utf8")) as { name: string };
+    assert.equal(name.slice(name.lastIndexOf("/") + 1), EVE_AGENT_NAME[service], service);
+  }
+});
+
 /** The first step of a path, where it is spelled as itself rather than matched. */
 const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 
