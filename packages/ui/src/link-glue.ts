@@ -23,7 +23,19 @@ export const LINK_GLUE = {
 const CLOSING_PUNCTUATION = /^[,.;:!?)\]}”’»…]+/u;
 
 /** Punctuation that opens against the word after it, at the end of the text before a chip. */
-const OPENING_PUNCTUATION = /[([{“‘«]+$/u;
+const OPENING_PUNCTUATION = new Set(["(", "[", "{", "“", "‘", "«"]);
+
+/**
+ * The run of opening punctuation that ends some text, or nothing. Note that
+ * it is read back from the end rather than by a pattern anchored there,
+ * because such a pattern retries from every opening bracket in the text and
+ * runs in polynomial time on words full of them.
+ */
+function openingAtEnd(value: string): string | undefined {
+  let from = value.length;
+  while (from > 0 && OPENING_PUNCTUATION.has(value.charAt(from - 1))) from -= 1;
+  return from === value.length ? undefined : value.slice(from);
+}
 
 /** A node of either tree, as much of one as its words are told by. */
 interface GlueNode {
@@ -52,8 +64,7 @@ export function gluedRun<Node extends GlueNode>(
     }
     const inside: Node[] = [node];
     const before = run.at(-1);
-    const opening =
-      before?.type === "text" ? OPENING_PUNCTUATION.exec(before.value ?? "")?.[0] : undefined;
+    const opening = before?.type === "text" ? openingAtEnd(before.value ?? "") : undefined;
     if (before !== undefined && opening !== undefined) {
       run.pop();
       const rest = (before.value ?? "").slice(0, -opening.length);

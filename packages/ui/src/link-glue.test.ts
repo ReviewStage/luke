@@ -50,3 +50,12 @@ test("a chip with nothing written against it is held alone, and words with no ch
   );
   assert.equal(glued([text("no chips, here.")]), "no chips, here.");
 });
+
+test("words full of opening brackets before a chip are read in one pass, only the run touching the chip held with it", () => {
+  const brackets = "(".repeat(50_000);
+  // Note that a read retried from every bracket would take billions of steps here, past the test's own timeout.
+  assert.equal(
+    glued([text(`${brackets}x((`), chip("IAM-482"), text(")")]),
+    `${brackets}x[((IAM-482)]`,
+  );
+});
