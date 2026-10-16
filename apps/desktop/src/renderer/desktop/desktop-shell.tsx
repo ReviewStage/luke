@@ -415,15 +415,18 @@ export function DesktopShell({
   if (plans.history.open) {
     return (
       <div className="desktop-shell">
-        <DesktopVersionHistory
-          sidebar={sidebar}
-          history={history}
-          subject={planVersionSubject(plans)}
-          account={account}
-          call={call}
-          onExit={history.canGoBack ? history.onBack : plans.history.onClose}
-          onRestored={history.onLeaveVersionHistory}
-        />
+        {/* A chip in a version's words names an agent's model and starter as the plan's own words do. */}
+        <MentionedAgents value={mentionedAgents}>
+          <DesktopVersionHistory
+            sidebar={sidebar}
+            history={history}
+            subject={planVersionSubject(plans)}
+            account={account}
+            call={call}
+            onExit={history.canGoBack ? history.onBack : plans.history.onClose}
+            onRestored={history.onLeaveVersionHistory}
+          />
+        </MentionedAgents>
         <CaptionStrip {...captions} />
         {newPlanDialog}
       </div>

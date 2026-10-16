@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -25,8 +26,8 @@ import { useKnownNames } from "./use-known-names";
  * them, the read a plan's page takes, held once per task for every card
  * hung of it at once; an agent on no task by the workspace's agents whose
  * title or task holds the name the chip was written with, and where none
- * of those is it, by the workspace's newest, and only then is it not
- * found. Under a rule the card names the task the agent works on, as the
+ * of those is it, by the workspace's newest, and then by its own id, and
+ * only then is it not found. Under a rule the card names the task the agent works on, as the
  * window lists it, or says it works on none; a card of an agent not found
  * says neither. While the read is out, or
  * where it failed or no workspace is known to read it in, the chip's own
@@ -87,6 +88,26 @@ function workspaceAgents(
   );
 }
 
+/** One agent by its id, as its own page reads it; none where the service holds no such agent the account reaches, and nothing where it refused. */
+function agentById(agentId: string): Effect.Effect<AgentsRead> {
+  return Effect.promise(() =>
+    askAct(ACT_KIND.CODING_AGENTS_PAGE, { agentId }).then(
+      (answer) => {
+        if (!("failure" in answer)) {
+          // The page spells no automation as null, where the summary the card reads leaves it out.
+          const { automationId, ...page } = answer.agent;
+          return [automationId === null ? page : { ...page, automationId }];
+        }
+        return answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ? NO_AGENT : UNREAD;
+      },
+      () => UNREAD,
+    ),
+  );
+}
+
+/** A read that found no such agent. */
+const NO_AGENT: readonly CodingAgentSummary[] = [];
+
 /** The words a name searches by, where the service takes them: some, and within its bound. */
 function searchWords(name: string): string | undefined {
   const words = name.trim();
@@ -109,7 +130,10 @@ const tasklessAgentsAtom = Atom.family((workspaceId: string) =>
           const words = searchWords(name);
           const found = words === undefined ? UNREAD : yield* workspaceAgents(workspaceId, words);
           if (found?.some((agent) => agent.id === agentId)) return found;
-          return yield* workspaceAgents(workspaceId, undefined);
+          const newest = yield* workspaceAgents(workspaceId, undefined);
+          if (newest === UNREAD || newest.some((agent) => agent.id === agentId)) return newest;
+          // Note that an agent older than the newest and renamed since is read by its id, and only an agent that read finds not is not found.
+          return yield* agentById(agentId);
         }),
       ),
     ),

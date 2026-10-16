@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -87,6 +88,13 @@ const AUDITOR = agentOf("2a1b0c9d-8e7f-4a6b-9c5d-4e3f2a1b0c9d", {
   status: CODING_AGENT_STATUS.COMPLETED,
 });
 
+/** An agent on no task older than the workspace's newest, renamed since its chip was written, found only by its id. */
+const ARCHIVIST = agentOf("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", {
+  planId: null,
+  title: "Archive stale branches",
+  status: CODING_AGENT_STATUS.COMPLETED,
+});
+
 /** Main's document holding the billing task, by which an agent of it names where it works. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = signedInAs({ id: ME, email: "dean@example.com", name: "Dean Stratakos" });
@@ -130,6 +138,24 @@ function answer(request: Act): ActOutcome {
             agent.title?.toLowerCase().includes(words.toLowerCase()),
           );
     return { status: ACT_OUTCOME_STATUS.DONE, value: { agents } };
+  }
+  if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+    return request.payload.agentId === ARCHIVIST.id
+      ? {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            agent: {
+              ...ARCHIVIST,
+              automationId: null,
+              workspaceId: ACME.id,
+              repository: "acme/relay",
+            },
+          },
+        }
+      : {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+        };
   }
   return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
 }
@@ -191,7 +217,8 @@ function agentReads(): readonly Act[] {
   return told.filter(
     (request) =>
       request.kind === ACT_KIND.CODING_AGENTS_LIST ||
-      request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+      request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST ||
+      request.kind === ACT_KIND.CODING_AGENTS_PAGE,
   );
 }
 
@@ -245,18 +272,20 @@ test("an agent on another task hangs its tab's card, its task's agents read once
   ]);
 });
 
-test("an agent on no task is found by the name its chip was written with, else among the workspace's newest, and is otherwise not found", async () => {
+test("an agent on no task is found by the name its chip was written with, else among the workspace's newest, else by its id, and is otherwise not found", async () => {
   const container = await drawn(
     [
       mentionOf(SWEEPER, "Sweep flaky tests"),
       mentionOf(AUDITOR, "The auditor"),
+      mentionOf(ARCHIVIST, "The archiver"),
       mentionOf(agentOf("0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c", { planId: null }), "Gone"),
     ].join(" "),
   );
-  const [searched, newest, gone] = container.querySelectorAll(".mention-chip");
+  const [searched, newest, byId, gone] = container.querySelectorAll(".mention-chip");
 
   const sweeper = await cardOf(searched);
   const auditor = await cardOf(newest);
+  const archivist = await cardOf(byId);
   const missing = await cardOf(gone);
 
   assert.deepEqual(
@@ -268,6 +297,7 @@ test("an agent on no task is found by the name its chip was written with, else a
     /Started by/u,
     "the reader's own agent names no starter",
   );
+  assert.deepEqual([archivist.name, archivist.foot], ["Archive stale branches", "On no task"]);
   assert.equal(missing.corner, "Not found");
   assert.equal(missing.foot, undefined, "an agent not found works nowhere the card can say");
   assert.deepEqual(
@@ -276,8 +306,12 @@ test("an agent on no task is found by the name its chip was written with, else a
       { workspaceId: ACME.id, includeArchived: true, words: "Sweep flaky tests" },
       { workspaceId: ACME.id, includeArchived: true, words: "The auditor" },
       { workspaceId: ACME.id, includeArchived: true },
+      { workspaceId: ACME.id, includeArchived: true, words: "The archiver" },
+      { workspaceId: ACME.id, includeArchived: true },
+      { agentId: ARCHIVIST.id },
       { workspaceId: ACME.id, includeArchived: true, words: "Gone" },
       { workspaceId: ACME.id, includeArchived: true },
+      { agentId: "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c" },
     ],
   );
 });

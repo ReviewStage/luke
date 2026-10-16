@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -28,6 +28,7 @@ import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { MAIN_TAB } from "../planning/use-main-tabs";
+import { HISTORY_READ } from "../planning/use-plan-history";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
@@ -889,3 +890,76 @@ test("no place the window stands on can be scrolled sideways into the room its b
     Object.fromEntries(Object.keys(clipped).map((place) => [place, "clip"])),
   );
 }, 60_000);
+
+test("a chip of another task's agent in a plan's version history names who started it, as the plan's own words do", async () => {
+  const sam = { userId: "user-sam", name: "Sam Okafor" };
+  const taskId = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
+  const agentId = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      recordSurfaceEvent: () => undefined,
+      act: (request: { kind: string }) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.CODING_AGENTS_LIST
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: {
+                  agents: [
+                    {
+                      id: agentId,
+                      planId: taskId,
+                      model: "anthropic/claude-opus-5.5",
+                      effort: "high",
+                      title: "Prorate seat changes",
+                      createdAt: 1,
+                      status: "completed",
+                      turnId: null,
+                      startedBy: sam,
+                    },
+                  ],
+                },
+              }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const body = `## Rollout\n\nAsk [@Prorate](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId}).\n`;
+  const control = plansControl();
+  const page = mount(false, false, {
+    page: TASKS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
+    me: "user-dean",
+    history: {
+      ...control.history,
+      open: true,
+      viewing: {
+        line: {
+          seq: 2,
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          startedAt: 0,
+          changes: 1,
+        },
+        current: true,
+        read: {
+          kind: HISTORY_READ.READY,
+          document: { body, assumptions: [] },
+          previous: null,
+        },
+      },
+    },
+  });
+  const chip = page.querySelector(".mention-chip");
+  assert.ok(chip, "the version draws the agent's chip");
+
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.match(card?.textContent ?? "", /Started by.*Sam Okafor/u);
+});
