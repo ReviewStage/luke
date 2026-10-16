@@ -11,6 +11,7 @@ import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 
 /** Main's document for a signed-in account in a panel, idle, its experiments as given. */
 function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
@@ -45,7 +46,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], plans: [], planless: [], automations: [] },
-    notifications: { refused: false },
+    notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
   };

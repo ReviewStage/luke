@@ -676,8 +676,10 @@ export function App(): React.JSX.Element {
                             onViewChange: setSettingsView,
                             microphone,
                             notifications: {
-                              refused: state.notifications.refused,
+                              status: state.notifications.status,
+                              packaged: state.run.packaged,
                               onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                              onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
                             },
                             updates,
                             settings,

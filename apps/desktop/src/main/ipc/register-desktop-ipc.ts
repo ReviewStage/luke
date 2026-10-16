@@ -34,8 +34,19 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, state, telemetry, native, updates, operator, windows, notices, avatar, run } =
-    services;
+  const {
+    config,
+    state,
+    telemetry,
+    native,
+    updates,
+    operator,
+    windows,
+    notices,
+    testNotification,
+    avatar,
+    run,
+  } = services;
   const { launch } = config;
   const { panels, voiceWindow, callWindow, hotkeys } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
@@ -80,6 +91,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
       openExternal: config.openExternal,
+      testNotification,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };

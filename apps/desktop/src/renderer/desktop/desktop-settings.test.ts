@@ -8,6 +8,7 @@ import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views"
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -112,7 +113,12 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
       onRequest: ignore,
       onOpenSettings: ignore,
     },
-    notifications: { refused: false, onOpenSettings: ignore },
+    notifications: {
+      status: NOTIFICATIONS_STATUS.UNKNOWN,
+      packaged: true,
+      onOpenSettings: ignore,
+      onTest: ignore,
+    },
     updates: {
       update: {
         status: UPDATE_STATUS.IDLE,
