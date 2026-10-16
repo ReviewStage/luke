@@ -1008,9 +1008,10 @@ own where asked, archived ones marked; `message_agent`, which takes the
 message box's own steer path under eve's id for the call, as the deployment
 acting for the agent's starter, kept under the sending agent's name
 (`MESSAGE_SENDER.AGENT`) and opening with who sent it, and which an archived
-agent or one of another workspace refuses; and `start_agent`, offered only
-to an agent on a task, which starts another on that task by the Start
-button's own path, telling it which agent started it. The
+agent or one of another workspace refuses; `start_agent`, which starts
+another on its own task, or on another task of its workspace by the
+`taskId` that `list_tasks` answers, by the Start button's own path, telling
+it which agent started it; and `list_tasks`, the workspace's open tasks. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
@@ -1773,14 +1774,15 @@ research reads beside it, `queue_question`
 (`src/plans/queue-question.ts`), which runs nothing: its journaled call is
 how a question reaches the voice while the turn still runs, and the four
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
-`list_agents`, `message_agent`, and `start_agent` every coding agent is
-offered and `read_agent` beside them: a list
+`list_agents`, `message_agent`, `start_agent`, and `list_tasks` every coding
+agent is offered and `read_agent` beside them: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
 progress as a bounded tail, a message to one, which takes the message
-box's own steer path (`src/agents/coder-host/steer.ts`), and a start of
-a new one on the call's task, which takes the Start button's own path
+box's own steer path (`src/agents/coder-host/steer.ts`), the workspace's
+open tasks, and a start of a new one on the call's task or another task of
+the workspace by its id, which takes the Start button's own path
 (`src/agents/coder-host/start.ts`) under the tool call's id as its key;
 both reach eve as the deployment acting for the account, the two rows the
 coder channel's deployment table admits. A resumed session
