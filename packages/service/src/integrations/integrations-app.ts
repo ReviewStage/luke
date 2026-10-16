@@ -263,7 +263,9 @@ export interface IntegrationsAppSeams {
     connectionName: string,
     state: string,
   ) => IntegrationStoreEffect<void>;
-  deleteConnection: (userId: string, connectionName: string) => IntegrationStoreEffect<void>;
+  deleteAccount: (
+    account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
+  ) => IntegrationStoreEffect<boolean>;
   /** Labels an account that carries no label yet, once, with what its grant named or an empty label for nothing; only the account under that grant's subject. */
   fillLabel: (account: IntegrationConnectionRow, label: string) => IntegrationStoreEffect<void>;
   /** Names one account; answers whether the account held it. */
@@ -950,11 +952,19 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     }
     const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
     const row = rows.find((each) => each.connectionName === connectionName);
-    if (row !== undefined) {
-      yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, row.connectionName));
-      yield* revokeIntegrationGrant(row);
+    if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
+      if (row !== undefined) yield* revokeIntegrationGrant(row);
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+        status: INTEGRATION_STATUS.DISCONNECTED,
+      });
     }
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });
+    // Note that only the row read is deleted and revoked, so an account added since under the same name stands, and is answered as it stands.
+    const standing = (yield* hostedStoreOrUnavailable(seams.readConnections(userId))).find(
+      (each) => each.connectionName === connectionName,
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      status: standing === undefined ? INTEGRATION_STATUS.DISCONNECTED : rowStatus(standing),
+    });
   },
 );
 

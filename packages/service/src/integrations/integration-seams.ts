@@ -2,7 +2,7 @@ import { resolveHostedUserId } from "../auth/bearer.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
-  deleteIntegrationConnection,
+  deleteIntegrationAccount,
   endIntegrationSignIn,
   fillIntegrationLabel,
   readIntegrationConnections,
@@ -30,7 +30,7 @@ export function integrationsAppSeams(): IntegrationsAppSeams {
     beginSignIn: beginIntegrationSignIn,
     completeSignIn: completeIntegrationSignIn,
     endSignIn: endIntegrationSignIn,
-    deleteConnection: deleteIntegrationConnection,
+    deleteAccount: deleteIntegrationAccount,
     fillLabel: fillIntegrationLabel,
     renameConnection: renameIntegrationConnection,
     mintState: mintIntegrationState,

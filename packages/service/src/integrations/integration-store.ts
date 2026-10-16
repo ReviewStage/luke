@@ -433,6 +433,36 @@ export function deleteIntegrationConnection(
   return deleteRow({ userId, connectionName });
 }
 
+const HeldAccountSchema = Schema.Struct({
+  userId: Schema.String,
+  connectionName: Schema.String,
+  id: Schema.String,
+});
+
+const deleteHeld = SqlSchema.findAll({
+  Request: HeldAccountSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, ...account }) =>
+    Database.use((db) =>
+      db
+        .delete(integrationConnection)
+        .where(and(ofAccount(account), eq(integrationConnection.id, id)))
+        .returning({ id: integrationConnection.id }),
+    ),
+});
+
+/**
+ * Disconnects the one account read, by its row's own id, and answers
+ * whether it was still there: an account added since under the same name
+ * stands, even a provider's first, whose subject is always the user's own.
+ */
+export function deleteIntegrationAccount(
+  account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
+): IntegrationStoreEffect<boolean> {
+  const { userId, connectionName, id } = account;
+  return Effect.map(deleteHeld({ userId, connectionName, id }), (deleted) => deleted.length > 0);
+}
+
 const deleteUnfinished = SqlSchema.void({
   Request: CompleteSchema,
   execute: ({ state, ...account }) =>
