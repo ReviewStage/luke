@@ -6,9 +6,12 @@ import {
   CHAT_BOUNDS,
   type ChatAsk,
   type ChatBlock,
+  type ChatImageType,
+  type ChatReadBlock,
   type ChatReply,
   chatAskSchema,
   chatBlockSchema,
+  chatImageTypeSchema,
   chatReadBlockSchema,
   chatReplySchema,
   formValueLines,
@@ -30,6 +33,7 @@ import {
   max,
   ne,
   notExists,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -38,7 +42,13 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { member, organization, user } from "../schemas/auth.js";
-import { chatChannel, chatMember, chatMessage, workspaceChat } from "../schemas/chat.js";
+import {
+  chatAttachment,
+  chatChannel,
+  chatMember,
+  chatMessage,
+  workspaceChat,
+} from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -2176,4 +2186,162 @@ export function waitingOn(userId: string): ChatStoreEffect<readonly WaitingAsk[]
 /** Where each ask `waitingOn` reads stands, the same asks and none of their words. */
 export function waitingStamps(userId: string): ChatStoreEffect<readonly WaitingStamp[]> {
   return findWaitingStamps({ userId });
+}
+
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+export interface ChatImage {
+  readonly contentType: ChatImageType;
+  readonly bytes: Uint8Array;
+}
+
+/** One picture handed in under the id the message's image block names. */
+export interface ChatImageWrite extends ChatImage {
+  readonly id: string;
+}
+
+const insertAttachment = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    organizationId: Schema.String,
+    messageId: Schema.String,
+    contentType: chatImageTypeSchema,
+    byteCount: Schema.Number,
+    bytes: Schema.Uint8Array,
+    now: Schema.Date,
+  }),
+  execute: ({ now, ...attachment }) =>
+    // A picture already kept under its id stays as it was kept.
+    Database.use((db) =>
+      db
+        .insert(chatAttachment)
+        .values({ ...attachment, createdAt: now })
+        .onConflictDoNothing(),
+    ),
+});
+
+/** The message's attachments no id named any longer, deleted. */
+const deleteOtherAttachments = SqlSchema.void({
+  Request: Schema.Struct({ messageId: Schema.String, kept: Schema.Array(Schema.String) }),
+  execute: ({ messageId, kept }) =>
+    Database.use((db) =>
+      db
+        .delete(chatAttachment)
+        .where(
+          kept.length === 0
+            ? eq(chatAttachment.messageId, messageId)
+            : and(
+                eq(chatAttachment.messageId, messageId),
+                notInArray(chatAttachment.id, [...kept]),
+              ),
+        ),
+    ),
+});
+
+const findAttachment = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    messageId: Schema.String,
+    attachmentId: Schema.String,
+  }),
+  Result: Schema.Struct({ contentType: chatImageTypeSchema, bytes: Schema.Uint8Array }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ contentType: chatAttachment.contentType, bytes: chatAttachment.bytes })
+        .from(chatAttachment)
+        .where(
+          and(
+            eq(chatAttachment.organizationId, key.organizationId),
+            eq(chatAttachment.messageId, key.messageId),
+            eq(chatAttachment.id, key.attachmentId),
+          ),
+        ),
+    ),
+});
+
+/** The message under its row's lock, with its author and the blocks that name its pictures. */
+const lockMessageInWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, messageId: Schema.String }),
+  Result: Schema.Struct({
+    authorMemberId: Schema.String,
+    blocks: Schema.Array(chatReadBlockSchema),
+  }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ authorMemberId: chatMessage.authorMemberId, blocks: chatMessage.blocks })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            eq(chatMessage.id, key.messageId),
+          ),
+        )
+        .for("update"),
+    ),
+});
+
+/** The attachment ids a message's image blocks name. */
+function namedPictures(blocks: readonly ChatReadBlock[]): ReadonlySet<string> {
+  return new Set(
+    blocks.flatMap((block) =>
+      block.type === CHAT_BLOCK.IMAGE && "attachmentId" in block ? [block.attachmentId] : [],
+    ),
+  );
+}
+
+/**
+ * Keeps the pictures of a message, under the ids its image blocks name,
+ * and deletes the ones it had that none of them names, so a picture an
+ * ask dropped when it was posted again is dropped from the store. The
+ * caller reads each picture's bytes from the poster's sandbox and mints
+ * the id its block names. Written under the message's lock, so two writes
+ * of one message's pictures take turns. Answers whether the message is the
+ * author's, which the account acts as, in the workspace, and names every
+ * picture handed in; nothing is written where it is not.
+ */
+export function attachMessageImages(
+  userId: string,
+  organizationId: string,
+  authorMemberId: string,
+  messageId: string,
+  images: readonly ChatImageWrite[],
+): ChatStoreEffect<boolean> {
+  return transaction(
+    Effect.gen(function* () {
+      const author = yield* readerIn(userId, organizationId, authorMemberId);
+      if (Option.isNone(author) || !actsAs(userId, author.value)) return false;
+      const message = yield* lockMessageInWorkspace({ organizationId, messageId });
+      if (Option.isNone(message) || message.value.authorMemberId !== authorMemberId) return false;
+      const named = namedPictures(message.value.blocks);
+      if (!images.every((image) => named.has(image.id))) return false;
+      const now = yield* DateTime.nowAsDate;
+      yield* deleteOtherAttachments({ messageId, kept: images.map((image) => image.id) });
+      yield* Effect.forEach(images, (image) =>
+        insertAttachment({
+          id: image.id,
+          organizationId,
+          messageId,
+          contentType: image.contentType,
+          byteCount: image.bytes.byteLength,
+          bytes: image.bytes,
+          now,
+        }),
+      );
+      return true;
+    }),
+  );
+}
+
+/** The picture, where it is the message's: its type and its bytes; nothing where the account is not in the workspace or the message carries no such picture. */
+export function readAttachment(
+  userId: string,
+  organizationId: string,
+  messageId: string,
+  attachmentId: string,
+): ChatStoreEffect<Option.Option<ChatImage>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* findAttachment({ organizationId, messageId, attachmentId });
+  });
 }

@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
@@ -19,7 +20,9 @@ import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   answerAsk,
+  attachMessageImages,
   CHAT_REFUSAL,
+  type ChatImageWrite,
   type ChatMemberRow,
   type ChatPost,
   channelNamed,
@@ -37,6 +40,7 @@ import {
   openTopicChannel,
   postAsk,
   postMessage,
+  readAttachment,
   resolveAsk,
   roster,
   unreadFor,
@@ -1309,5 +1313,106 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           Option.none(),
         );
       }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's pictures", (it) => {
+  /** A message carrying an image block for each id given, as a post that read its pictures lands. */
+  const pictured = (room: Room, ids: readonly string[]) =>
+    Effect.map(
+      postMessage(room.owner, room.workspace, {
+        authorMemberId: room.first.id,
+        to: { channelId: room.channel.id },
+        blocks: ids.map((attachmentId) => ({
+          type: CHAT_BLOCK.IMAGE,
+          attachmentId,
+          alt: "The rendered invite.",
+        })),
+        mentions: [],
+        clientKey: randomUUID(),
+      }),
+      (posted) => Result.getOrThrow(posted).message,
+    );
+
+  it.effect(
+    "a message's pictures read back byte for byte, one it no longer keeps is dropped, one it never named is refused, and only its author keeps them",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const png = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array([137, 80, 78, 71, 0, 255]),
+        };
+        const webp = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.WEBP,
+          bytes: new Uint8Array([82, 73, 70, 70]),
+        };
+        const message = yield* pictured(room, [png.id, webp.id]);
+        const keep = (images: readonly ChatImageWrite[], author = room.first.id, as = room.owner) =>
+          attachMessageImages(as, room.workspace, author, message.id, images);
+        const read = (attachmentId: string, as = room.owner) =>
+          readAttachment(as, room.workspace, message.id, attachmentId);
+
+        assert.equal(yield* keep([png, webp]), true);
+        const stored = Option.getOrThrow(yield* read(png.id));
+        assert.deepEqual(
+          [stored.contentType, [...stored.bytes]],
+          [png.contentType, [...png.bytes]],
+        );
+
+        yield* keep([webp]);
+        assert.deepEqual(yield* read(png.id), Option.none());
+        assert.equal(Option.getOrThrow(yield* read(webp.id)).contentType, CHAT_IMAGE_TYPE.WEBP);
+
+        const stray = { ...png, id: randomUUID() };
+        assert.equal(yield* keep([webp, stray]), false);
+        assert.deepEqual(yield* read(stray.id), Option.none());
+        assert.equal(yield* keep([png], room.second.id), false);
+        assert.equal(yield* keep([png], room.ada.id, room.teammate), false);
+      }),
+  );
+
+  it.effect("two writes of one message's pictures take turns, and the last one's stand alone", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const a = { id: randomUUID(), contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([1]) };
+      const b = { id: randomUUID(), contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([2]) };
+      const message = yield* pictured(room, [a.id, b.id]);
+      yield* Effect.all(
+        [
+          attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [a]),
+          attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [b]),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const kept = yield* Effect.forEach([a, b], (image) =>
+        Effect.map(readAttachment(room.owner, room.workspace, message.id, image.id), Option.isSome),
+      );
+      assert.equal(kept.filter(Boolean).length, 1);
+    }),
+  );
+
+  it.effect("an account not in the workspace reads none of its pictures", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const stranger = yield* openAccount();
+      const png = {
+        id: randomUUID(),
+        contentType: CHAT_IMAGE_TYPE.PNG,
+        bytes: new Uint8Array([1, 2, 3]),
+      };
+      const message = yield* pictured(room, [png.id]);
+      yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [png]);
+      assert.deepEqual(
+        yield* readAttachment(stranger, room.workspace, message.id, png.id),
+        Option.none(),
+      );
+      assert.equal(
+        Option.isSome(yield* readAttachment(room.teammate, room.workspace, message.id, png.id)),
+        true,
+      );
+    }),
   );
 });
