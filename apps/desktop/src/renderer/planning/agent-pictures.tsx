@@ -15,12 +15,21 @@ import {
   usePicture,
 } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
 import { useAct } from "../act";
 import { PictureBlock } from "../picture-block";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useAddToPlan } from "./add-to-plan";
-import { AttachmentViewer } from "./attachment-viewer";
+import { AttachmentViewer, type ViewerAction } from "./attachment-viewer";
 
 /**
  * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, and the pictures an integration's call answered, under the call's row.
@@ -96,10 +105,7 @@ interface HeldFile {
 }
 
 /** The pictures among `items` the window holds now, as the viewer takes files, each beside the place it stands at. */
-function heldFiles(
-  owner: string,
-  items: readonly { readonly picture: KeptPicture; readonly words: string }[],
-): readonly HeldFile[] {
+function heldFiles(owner: string, items: readonly ViewedPicture[]): readonly HeldFile[] {
   return items.flatMap(({ picture, words }) => {
     const state = pictureNow(owner, picture.id);
     if (state.kind !== PICTURE_STATE.READY) return [];
@@ -108,26 +114,94 @@ function heldFiles(
   });
 }
 
-/** The viewer a set or a call's chips open: how one is opened over the files held, and the viewer while it stands. */
+/** A picture a viewer walks: what it was kept as, and its words. */
+interface ViewedPicture {
+  readonly picture: KeptPicture;
+  readonly words: string;
+}
+
+/** The viewer a set or a call's chips open: how one is opened over its pictures, and the viewer while it stands. */
 interface PictureViewer {
-  readonly open: (files: readonly HeldFile[], id: string) => void;
+  readonly open: (items: readonly ViewedPicture[], id: string) => void;
   readonly viewer: ReactNode;
 }
 
-/** The viewer over the files held, from the one named, until it is closed. */
-function useViewer(): PictureViewer {
+/** One picture of an open viewer's set, watched so the viewer is drawn again as its read lands. */
+function PictureWatch({
+  door,
+  picture,
+  onSettled,
+}: {
+  door: AgentPictureDoor;
+  picture: KeptPicture;
+  onSettled: () => void;
+}): null {
+  const state = usePicture(door.owner, picture.id, door.read);
+  useEffect(() => onSettled(), [state.kind, onSettled]);
+  return null;
+}
+
+/**
+ * The viewer over a set's pictures, from the one named: each picture held
+ * now among the files it walks, and each still read joining them as its
+ * read lands, so a press on the first picture to land reaches the rest.
+ */
+function OpenViewer({
+  door,
+  items,
+  id,
+  onId,
+  onClose,
+  action,
+}: {
+  door: AgentPictureDoor;
+  items: readonly ViewedPicture[];
+  id: string;
+  onId: (id: string) => void;
+  onClose: () => void;
+  action: ViewerAction | undefined;
+}): ReactNode {
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  const files = heldFiles(door.owner, items);
+  const at = files.findIndex((each) => each.id === id);
+  return (
+    <>
+      {items.map((each) => (
+        <PictureWatch key={each.picture.id} door={door} picture={each.picture} onSettled={redraw} />
+      ))}
+      {at < 0 ? null : (
+        <AttachmentViewer
+          files={files.map((each) => each.file)}
+          at={at}
+          onAt={(next) => {
+            const shown = files[next];
+            if (shown !== undefined) onId(shown.id);
+          }}
+          onClose={onClose}
+          action={action}
+        />
+      )}
+    </>
+  );
+}
+
+/** The viewer over a set's pictures, from the one named, until it is closed. */
+function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
   const addToPlan = useAddToPlan();
-  const [viewing, setViewing] = useState<{ files: readonly FileChip[]; at: number } | undefined>();
-  const open = useCallback((files: readonly HeldFile[], id: string) => {
-    const at = files.findIndex((each) => each.id === id);
-    if (at >= 0) setViewing({ files: files.map((each) => each.file), at });
-  }, []);
+  const [viewing, setViewing] = useState<
+    { readonly items: readonly ViewedPicture[]; readonly id: string } | undefined
+  >();
+  const open = useCallback(
+    (items: readonly ViewedPicture[], id: string) => setViewing({ items, id }),
+    [],
+  );
   const viewer =
-    viewing === undefined ? null : (
-      <AttachmentViewer
-        files={viewing.files}
-        at={viewing.at}
-        onAt={(at) => setViewing({ ...viewing, at })}
+    viewing === undefined || door === undefined ? null : (
+      <OpenViewer
+        door={door}
+        items={viewing.items}
+        id={viewing.id}
+        onId={(id) => setViewing({ ...viewing, id })}
         onClose={() => setViewing(undefined)}
         action={addToPlan}
       />
@@ -259,7 +333,7 @@ export function ShownPictures({
   output: Parameters<typeof shownPicturesOf>[1];
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
-  const { open, viewer } = useViewer();
+  const { open, viewer } = useViewer(door);
   const shown = shownPicturesOf(input, output);
   if (door === undefined || shown.length === 0) return null;
   const kept = shown.flatMap((each) =>
@@ -267,7 +341,7 @@ export function ShownPictures({
       ? []
       : [{ picture: each.picture, words: each.caption === "" ? each.name : each.caption }],
   );
-  const openAt = (id: string) => open(heldFiles(door.owner, kept), id);
+  const openAt = (id: string) => open(kept, id);
   const [only] = shown;
   if (shown.length === 1 && only !== undefined && only.picture === undefined) {
     const caption = only.caption === "" ? undefined : only.caption;
@@ -376,7 +450,7 @@ export function CallPictures({
   output: Parameters<typeof calledPicturesOf>[2];
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
-  const { open, viewer } = useViewer();
+  const { open, viewer } = useViewer(door);
   const called = calledPicturesOf(tool, input, output);
   if (door === undefined || called.length === 0) return null;
   const kept = called.flatMap((each) =>
@@ -394,7 +468,7 @@ export function CallPictures({
             key={index}
             door={door}
             called={each}
-            onOpen={() => open(heldFiles(door.owner, kept), each.picture.id)}
+            onOpen={() => open(kept, each.picture.id)}
           />
         ) : (
           <li

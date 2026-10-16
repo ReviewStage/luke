@@ -129,20 +129,30 @@ export function planPictureLine(words: string, address: string): string {
   return `![${escaped(words, /[\\[\]]/gu)}](${escaped(address, /[\\()]/gu)})`;
 }
 
-/** The plan's text with a picture's line at its end, a paragraph of its own. */
-export function withPictureLine(text: string, line: string): string {
-  const body = text.trimEnd();
-  return body === "" ? `${line}\n` : `${body}\n\n${line}\n`;
+/** A picture's line added to a plan's text: the text as it then stands, and exactly what was added to it, which Undo takes back out. */
+export interface PictureAddition {
+  readonly text: string;
+  readonly added: string;
 }
 
 /**
- * The plan's text with a picture's line taken out again, as Undo takes back
- * Add to plan: its last paragraph of that line alone, and the blank line
- * before it; nothing where the line no longer stands as its own paragraph.
+ * The plan's text with a picture's line at its end, a paragraph of its own.
+ * Note that the text before it is kept byte for byte, because a trailing
+ * space is a Markdown line break and a blank line is the developer's own;
+ * only the line breaks the paragraph needs are added.
  */
-export function withoutPictureLine(text: string, line: string): string | undefined {
-  const paragraph = `\n\n${line}\n`;
-  const at = text.lastIndexOf(paragraph);
-  if (at >= 0) return `${text.slice(0, at)}\n${text.slice(at + paragraph.length)}`;
-  return text === `${line}\n` ? "" : undefined;
+export function withPictureLine(text: string, line: string): PictureAddition {
+  const breaks = text === "" || text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
+  const added = `${breaks}${line}\n`;
+  return { text: `${text}${added}`, added };
+}
+
+/**
+ * The plan's text with an addition taken back out, as Undo takes back Add
+ * to plan: its last occurrence, exactly; nothing where it no longer stands.
+ */
+export function withoutPictureLine(text: string, added: string): string | undefined {
+  const at = text.lastIndexOf(added);
+  if (at < 0) return undefined;
+  return `${text.slice(0, at)}${text.slice(at + added.length)}`;
 }

@@ -89,22 +89,32 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
   );
 });
 
-test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes that paragraph back out", () => {
+test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
   const line = planPictureLine(
     "Members [after]",
     "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
   );
-  const plan = "# Teammate invitations\n\nInvite by email.\n";
-
   assert.equal(line, "![Members \\[after\\]](https://tryluke.dev/acme/plan/5d8e/files/\\(3c9e\\))");
-  const added = withPictureLine(plan, line);
-  assert.equal(added, `# Teammate invitations\n\nInvite by email.\n\n${line}\n`);
-  assert.equal(withoutPictureLine(added, line), plan);
-  assert.equal(withPictureLine("", line), `${line}\n`);
-  assert.equal(withoutPictureLine(`${line}\n`, line), "");
+
+  for (const plan of [
+    "# Teammate invitations\n\nInvite by email.\n",
+    "First line  \n",
+    "Ends on blank lines\n\n\n",
+    "No line break at its end",
+    "",
+  ]) {
+    const addition = withPictureLine(plan, line);
+    assert.ok(
+      addition.text.startsWith(plan),
+      `the text before is kept byte for byte: ${JSON.stringify(plan)}`,
+    );
+    assert.ok(addition.text.endsWith(`${line}\n`));
+    assert.match(addition.text, /(^|\n\n)!\[/u, "the picture stands as a paragraph of its own");
+    assert.equal(withoutPictureLine(addition.text, addition.added), plan);
+  }
   assert.equal(
-    withoutPictureLine("# Moved\n\nThe line was edited away.\n", line),
+    withoutPictureLine("# Moved\n\nThe line was edited away.\n", `\n${line}\n`),
     undefined,
-    "a line no longer standing alone is left for the developer to take out",
+    "an addition no longer standing is left for the developer to take out",
   );
 });

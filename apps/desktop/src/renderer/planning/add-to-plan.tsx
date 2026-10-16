@@ -93,7 +93,7 @@ export function useAddToPlan(): ViewerAction | undefined {
   const { act } = useAct();
   const toast = useToast();
   return useMemo(() => {
-    if (page === undefined || page.workspace === "") return undefined;
+    if (page === undefined || page.planId === "" || page.workspace === "") return undefined;
     const { planId, workspace } = page;
     const failed = (words: string) =>
       toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
@@ -118,10 +118,22 @@ export function useAddToPlan(): ViewerAction | undefined {
       const line = planPictureLine(wordsOf(chip), address);
       // Note that the edit is written on the plan's words as the page last read
       // them, and a conflict answers the text as it stands for the next.
-      const added = await edited(save, (text) => withPictureLine(text, line), page.text());
-      if (added === undefined) return failed(ADD_WORDS.NOT_SAVED);
+      // Note that what was added is kept from the edit that saved, since a
+      // retry on a moved text may add other line breaks than the first try.
+      let addition = "";
+      const saved = await edited(
+        save,
+        (text) => {
+          const next = withPictureLine(text, line);
+          addition = next.added;
+          return next.text;
+        },
+        page.text(),
+      );
+      if (saved === undefined) return failed(ADD_WORDS.NOT_SAVED);
+      const added = addition;
       const undo = async () => {
-        const undone = await edited(save, (text) => withoutPictureLine(text, line), added);
+        const undone = await edited(save, (text) => withoutPictureLine(text, added), saved);
         toast(
           undone === undefined
             ? { words: ADD_WORDS.NOT_UNDONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }

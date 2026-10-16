@@ -213,3 +213,10 @@ test("a transcript off a plan's page offers no Add to plan", async () => {
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
   assert.equal(viewerButton("Add to plan"), undefined);
 });
+
+test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to plan", async () => {
+  await opened(await drawn({ ...PAGE, planId: "", doors: { ...PAGE.doors, planId: "" } }));
+
+  assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
+  assert.equal(viewerButton("Add to plan"), undefined);
+});

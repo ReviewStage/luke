@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { PICTURE_OMISSION } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
+import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -76,13 +77,18 @@ function finished(parts: readonly WireRecord[]): CodingAgentMessage {
 }
 
 /** The message drawn as an agent's turn is, under a door recording each picture it is asked to read. */
-async function drawn(message: CodingAgentMessage, moving = false) {
+async function drawn(
+  message: CodingAgentMessage,
+  moving = false,
+  answer: (id: string) => Promise<PictureAnswer> = () =>
+    Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
+) {
   const read: string[] = [];
   const door: AgentPictureDoor = {
     owner: "agent-7",
     read: (_owner, id) => {
       read.push(id);
-      return Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" });
+      return answer(id);
     },
   };
   const container = document.createElement("div");
@@ -260,4 +266,46 @@ test("a finished turn that ends on its pictures, with no words after them, keeps
 
   assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
   assert.match(container.textContent ?? "", /1 tool call/u);
+});
+
+test("a set shown beside reasoning alone, with its words after, stands apart from the reasoning in a finished turn", async () => {
+  const { container } = await drawn(
+    finished([
+      { type: "reasoning", text: "Show the page as it renders now." },
+      shown("call-reasoned", [picture(1200, 720), picture(390, 700)]),
+      text("Here it is."),
+    ]),
+  );
+
+  assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
+});
+
+test("the viewer opened on the first picture to land reaches the rest as their reads land", async () => {
+  const pictures = [picture(800, 450), picture(800, 450), picture(800, 450)];
+  const [first] = pictures;
+  assert.ok(first);
+  const held: (() => void)[] = [];
+  const { container } = await drawn(
+    finished([shown("call-staggered", pictures), text("Three.")]),
+    false,
+    (id) =>
+      id === first.id
+        ? Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" })
+        : new Promise((resolve) => {
+            held.push(() => resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }));
+          }),
+  );
+  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  assert.ok(tile);
+
+  await act(async () => tile.click());
+  assert.equal(
+    document.querySelector(".attachment-viewer-place")?.textContent ?? "1 of 1",
+    "1 of 1",
+  );
+  await act(async () => {
+    for (const release of held) release();
+  });
+
+  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
 });
