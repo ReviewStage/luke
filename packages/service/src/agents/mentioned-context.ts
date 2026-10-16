@@ -51,15 +51,18 @@ import type { Task } from "@luke/features/task-wire";
  * not among its connections joins at its next turn. An agent with no plan
  * is handed the notes alone.
  *
- * A page an agent showed on the plan, or another of the plan's coding
- * agents, is named by its id, read at the send off the agent's own plan
- * (`mentioned-reads.ts`) and handed here as `MentionedReads`; one of another
- * plan is handed nothing, as a section of one is. An agent is handed as
- * where its work stands on GitHub, its branch and its pull request, which
- * the agent reads with `gh` and `git`, and never its conversation, which is
- * its starter's. A page has no read of its own, so its HTML is handed as
- * it stood, cut to its bound, beside its id, which `show_page` writes its
- * next version under.
+ * A page an agent showed on the plan is named by its id, read at the send
+ * off the agent's own plan (`mentioned-reads.ts`) and handed here as
+ * `MentionedReads`; one of another plan is handed nothing, as a section of
+ * one is. A coding agent is named by its id too, and read on any task of
+ * the agent's workspace or on none, as the sender could open it; one the
+ * send did not find there, of another workspace or gone, is named as not
+ * found. An agent is handed as its task and where its work stands on
+ * GitHub, its branch and its pull request, which the agent reads with `gh`
+ * and `git`, and as the id `message_agent` reaches it by, and never its
+ * conversation, which is its starter's. A page has no read of its own, so
+ * its HTML is handed as it stood, cut to its bound, beside its id, which
+ * `show_page` writes its next version under.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -73,11 +76,13 @@ export const MENTIONED_BOUNDS = {
   PART_CHARS: 24_000,
 } as const;
 
-/** One of the plan's coding agents a message mentions, as the send read it: what names it, and where its work stands on GitHub. */
+/** One of the workspace's coding agents a message mentions, as the send read it: what names it, its task, and where its work stands on GitHub. */
 export interface MentionedAgent {
   readonly id: string;
   /** Its title, or its model's id where it has none yet. */
   readonly name: string;
+  /** The task it works on, and whether that task is archived, which takes its agents no message; null for an agent on none. */
+  readonly task: { readonly id: string; readonly name: string; readonly archived: boolean } | null;
   readonly repository: string;
   /** The branch its last turn ended on; null before one ended, or where it stood detached. */
   readonly branch: string | null;
@@ -86,7 +91,7 @@ export interface MentionedAgent {
   readonly archived: boolean;
 }
 
-/** What the send read of the pages and agents a message mentions on the agent's own plan, each by its id; one it did not find is absent. */
+/** What the send read of the pages a message mentions on the agent's own plan and the agents it mentions in its workspace, each by its id; one it did not find is absent. */
 export interface MentionedReads {
   readonly pages: ReadonlyMap<string, PageVersion>;
   readonly agents: ReadonlyMap<string, MentionedAgent>;
@@ -243,17 +248,35 @@ function readingOf(agent: MentionedAgent, repository: string | null): string {
     : ` Read its work, once pushed, with \`git fetch origin ${agent.branch}\` and \`git diff HEAD...FETCH_HEAD\`.`;
 }
 
-/** What a mention of another of the plan's agents is handed as: its name, its id, and where its work stands on GitHub; never its conversation. */
-function agentNoteOf(agentId: string, name: string, reads: MentionedReads, plan: Task): string {
-  const agent = reads.agents.get(agentId);
-  if (agent === undefined) return `The coding agent "${name}": no longer on this task.`;
+/** Where a mentioned agent works, beside the plan of the agent it is handed to. */
+function taskWords(agent: MentionedAgent, plan: Task | undefined): string {
+  if (agent.task === null) return "on no task";
+  if (agent.task.id === plan?.id) return "on this task";
+  return `on the task "${agent.task.name}"`;
+}
+
+/** What a mention of another of the workspace's agents is handed as: its name, its id to message it by, its task, and where its work stands on GitHub; never its conversation. */
+function agentNoteOf(
+  agentId: string,
+  name: string,
+  reads: MentionedReads,
+  plan: Task | undefined,
+): string {
+  // The store holds an id in lower case, whatever case the link spelled it in.
+  const agent = reads.agents.get(agentId.toLowerCase());
+  if (agent === undefined) return `The coding agent "${name}": not found in your workspace.`;
   const archived = agent.archived ? ", archived," : "";
   const branch = agent.branch === null ? "" : ` on the branch \`${agent.branch}\``;
   const pullRequest =
     agent.pullRequest === null
       ? ""
       : `, whose pull request is #${agent.pullRequest.number} (${agent.pullRequest.url})`;
-  return `The developer pointed you at another coding agent on this task, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, plan.repository)} Its conversation is not yours to read.`;
+  const message = agent.archived
+    ? ""
+    : agent.task?.archived === true
+      ? " Its task is archived, so it takes no message."
+      : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
+  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, plan)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, plan?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
 /** What a mention of a file's lines is handed as: the lines, the commit they were read at, and how to read just those; nothing for a whole file. */
@@ -283,14 +306,14 @@ function noteOf(mention: ServerMention): string {
   return `The developer pointed you at the tool \`${mention.tool}\` of ${server} for this message: run it with \`${CONNECTION_TOOL.EXECUTE}\` in preference to other tools. ${joins}`;
 }
 
-/** The mention as the part hands it, where it hands it anything: one of another plan, or of a plan where the agent has none, is handed nothing. */
+/** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing, but for a coding agent, which is read across the workspace. */
 function handedMention(mention: Mention, plan: Task | undefined): Handed | undefined {
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
     case MENTION_KIND.PAGE:
-    case MENTION_KIND.AGENT:
       return mention.taskId === plan?.id ? mention : undefined;
+    case MENTION_KIND.AGENT:
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
@@ -336,7 +359,10 @@ function sameMention(first: Handed, second: Handed): boolean {
     case MENTION_KIND.PAGE:
       return second.kind === MENTION_KIND.PAGE && first.pageId === second.pageId;
     case MENTION_KIND.AGENT:
-      return second.kind === MENTION_KIND.AGENT && first.agentId === second.agentId;
+      return (
+        second.kind === MENTION_KIND.AGENT &&
+        first.agentId.toLowerCase() === second.agentId.toLowerCase()
+      );
   }
 }
 
@@ -353,7 +379,7 @@ function handedAs(
     case MENTION_KIND.PAGE:
       return pageNoteOf(mention.pageId, name, reads);
     case MENTION_KIND.AGENT:
-      return plan === undefined ? "" : agentNoteOf(mention.agentId, name, reads, plan);
+      return agentNoteOf(mention.agentId, name, reads, plan);
     case MENTION_KIND.FILE:
       return linesNoteOf(mention);
     case MENTION_KIND.SERVER:
@@ -363,20 +389,20 @@ function handedAs(
   }
 }
 
-/** The pages and agents of a plan words mention, by id. */
+/** The pages of a plan and the agents words mention, by id. */
 export interface MentionedIds {
   readonly pages: readonly string[];
   readonly agents: readonly string[];
 }
 
-/** The pages and agents of the plan the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
-export function mentionedOfPlan(words: string, plan: Task): MentionedIds {
+/** The pages of the plan, where there is one, and the agents on any task or none, that the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
+export function mentionedIds(words: string, plan: Task | undefined): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
-  for (const { mention } of mentionsIn(words, plan.repository)) {
-    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan.id) pages.add(mention.pageId);
-    if (mention.kind === MENTION_KIND.AGENT && mention.taskId === plan.id)
-      agents.add(mention.agentId);
+  for (const { mention } of mentionsIn(words, plan?.repository ?? null)) {
+    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan?.id)
+      pages.add(mention.pageId);
+    if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
   }
   return { pages: [...pages], agents: [...agents] };
 }
@@ -397,10 +423,10 @@ export function mentionedServers(words: string, repository: string | null): read
 /**
  * The part a message hands its agent beside its words: the plan or each of
  * its sections the words mention, as it stands in `plan`, the agent's own
- * plan as the send read it, each of its pages and agents they mention, as
- * the send read them into `reads`, and a note for each MCP server or tool
- * they mention; nothing where they mention none of these. An agent with no
- * plan is handed the notes alone.
+ * plan as the send read it, each of its pages and each of the workspace's
+ * agents they mention, as the send read them into `reads`, and a note for
+ * each MCP server or tool they mention; nothing where they mention none of
+ * these. An agent with no plan is handed the notes and the agents alone.
  */
 export function mentionedContext(
   words: string,

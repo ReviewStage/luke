@@ -202,7 +202,7 @@ test("a bare link to a place the window knows is called by its name, the task's 
     ["place", "Keep expired links?"],
     ["place", "Message from Expire old invitations"],
     ["place", "Sam Okafor"],
-    ["place", "Triage new Sentry issues"],
+    ["agent", "Triage new Sentry issues"],
     ["place", "Nightly triage"],
   ]);
   assert.deepEqual(
