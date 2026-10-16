@@ -1158,7 +1158,7 @@ VoiceOver, since CI can't see the Mac.
 | 8 | The Skills group in the `@` list | merged, #2664 |
 | 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
 | links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
-| 10 | The task's pages and other agents in the `@` list, by their Luke links | this PR |
+| 10 | The task's pages and other agents in the `@` list, by their Luke links | #3031 |
 
 ## 9. Risks
 
