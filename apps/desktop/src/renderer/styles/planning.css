@@ -129,7 +129,8 @@
 }
 
 /* A run a link named in an automation's runs (automation-runs-panel.tsx):
-   lit once, as a fresh edit of the plan is, and marked current. */
+   lit once, as a fresh edit of the plan is, and marked current. Note that it
+   names Luke's own ink, because no `--accent` is set above an automation. */
 [data-run-linked] {
   position: relative;
   isolation: isolate;
@@ -140,7 +141,7 @@
   z-index: -1;
   inset: 0;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;

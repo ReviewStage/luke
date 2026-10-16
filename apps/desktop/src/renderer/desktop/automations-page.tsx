@@ -368,7 +368,7 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
-        linkedRun={place.kind === AUTOMATIONS_PAGE.EDIT ? place.runId : undefined}
+        linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
         leaveGuard={plans.leaveGuard}
         onCreated={(automationId) => {
           setMade(automationId);

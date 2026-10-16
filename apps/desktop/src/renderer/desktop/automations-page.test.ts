@@ -594,6 +594,8 @@ let openFactory: () => void = () => undefined;
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
+/** Sends the window to a place among the automations, as a link opened there does. */
+let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
 let moveTo: (workspace: Workspace) => void = () => undefined;
 
@@ -606,6 +608,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
   places = [start];
   function Pages() {
     const [place, setPlace] = useState(start);
+    sendTo = setPlace;
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
@@ -1794,7 +1797,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   ]);
 });
 
-test("a link to a run shows the Runs panel a reader folded, its run marked current, and the fold after it stands", async () => {
+test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
   window.localStorage.clear();
   runs = [
     {
@@ -1821,9 +1824,18 @@ test("a link to a run shows the Runs panel a reader folded, its run marked curre
   await settle();
   const current = page.querySelector(".automation-run")?.getAttribute("aria-current");
   act(() => button("Hide runs").click());
+  const folded = page.querySelector("aside[aria-label='Runs']");
+  act(() =>
+    sendTo({
+      kind: AUTOMATIONS_PAGE.EDIT,
+      automationId: SWEEP.id,
+      runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+    }),
+  );
 
   assert.equal(current, "true");
-  assert.equal(page.querySelector("aside[aria-label='Runs']"), null, "the fold after it stands");
+  assert.equal(folded, null, "the fold after it stands");
+  assert.ok(page.querySelector("aside[aria-label='Runs']"), "the same link opened again shows it");
   window.localStorage.clear();
 });
 

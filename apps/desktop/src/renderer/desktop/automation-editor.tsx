@@ -1339,7 +1339,7 @@ export function AutomationEditor({
   onBack,
   onCreated,
   onOpenAgent,
-  linkedRun,
+  linked,
   leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
@@ -1352,12 +1352,18 @@ export function AutomationEditor({
   onCreated: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
-  /** The run a link named, which its runs mark and bring into view; none where no link named one. */
-  linkedRun?: string | undefined;
+  /**
+   * The page as the window was last sent to it, by a link or a press: the
+   * run a link named, which its runs mark and bring into view, none where
+   * no link named one. Each sending is a new value, so a link opened again
+   * shows the runs again.
+   */
+  linked?: { readonly runId?: string | undefined } | undefined;
   /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
   leaveGuard: LeaveGuard;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
+  const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: windowZone(),
@@ -1391,12 +1397,12 @@ export function AutomationEditor({
   const runsPanel = useRunsPanel();
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
-  // A link to a run shows the Runs panel it is listed in, once per run it names, so a fold after it stands.
+  // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
   const showRuns = useRef(runsPanel.onShow);
   showRuns.current = runsPanel.onShow;
   useEffect(() => {
-    if (linkedRun !== undefined) showRuns.current();
-  }, [linkedRun]);
+    if (linked?.runId !== undefined) showRuns.current();
+  }, [linked]);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
