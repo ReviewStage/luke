@@ -90,7 +90,7 @@ tasks in sidebar**, which calls #2899's `onCreatedBy`. ⋯ holds:
 | Who is pressed | What opens |
 |---|---|
 | A teammate | Their page in the listed workspace |
-| You | Your page, with You, "Waiting on you", and Edit profile (Settings › Profile) |
+| You | Your page, with You and "Waiting on you". It has no Edit profile: Dean later decided there is nothing on it to edit |
 | A former member | Their page, read-only: Former member, whatever of theirs is still in the workspace, no email, and ⋯ holding only Copy link |
 | A GitHub user who isn't a member | Their GitHub profile in the browser (↗), by the login GitHub names them by |
 | A GitHub login linked to a member | That member's page (`githubActor` already resolves the `userId`) |
@@ -187,8 +187,8 @@ check that each event's item is one the viewer may open.
 1. **Direction.** B (or A, C, D).
 2. **What presses.** Named people and a card's people rows. Piles and row
    faces don't, and no hover card carries an Open button (Dean, later).
-3. **Pressing yourself.** Your own page, whose Edit profile opens Settings ›
-   Profile (or go straight to Settings › Profile).
+3. **Pressing yourself.** Your own page. Dean later dropped its Edit profile,
+   since there is nothing on it to edit.
 4. **Scope.** The listed workspace only.
 5. **A former member.** A read-only page (or no press).
 6. **A GitHub user who isn't a member.** The press opens GitHub.

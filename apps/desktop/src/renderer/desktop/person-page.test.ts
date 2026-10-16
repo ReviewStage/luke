@@ -456,17 +456,16 @@ test("a workspace of one offers no sidebar filter, since its sidebar filters by 
   assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
 });
 
-test("the reader's own page offers Edit profile, which opens Settings' Profile, and a teammate's does not", async () => {
-  const own = mount(DEAN.userId);
+test("the reader's own page offers nothing to edit: its toolbar lists their tasks in the sidebar and ⋯ alone", async () => {
+  const { page } = mount(DEAN.userId);
   await settle();
-  button(own.page, "Edit profile").click();
-  assert.deepEqual(own.opened.settings, [{ page: SETTINGS_VIEW.ACCOUNT }]);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
 
-  const teammate = mount(CHARLES.userId);
-  await settle();
-  assert.doesNotMatch(teammate.page.textContent ?? "", /Edit profile/u);
+  assert.deepEqual(
+    [...page.querySelectorAll(".desktop-toolbar-actions button")].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    ),
+    ["My tasks in sidebar", "More"],
+  );
 });
 
 test("More offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
