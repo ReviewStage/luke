@@ -59,7 +59,7 @@ import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
-import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { type AgentPlace, useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { OpenLinkProvider } from "./planning/use-open-link";
@@ -318,17 +318,16 @@ export function App(): React.JSX.Element {
   showAgent.current = plans.onShowAgent;
   const showAgentPage = useRef(plans.agentView.onOpen);
   showAgentPage.current = plans.agentView.onOpen;
-  useEffect(
-    () =>
-      window.luke.onShowAgent(({ planId, agentId }) =>
-        guardLeave(() => {
-          changeTab(PANEL_TAB.PLANS);
-          if (planId === null) showAgentPage.current(agentId);
-          else showAgent.current(planId, agentId);
-        })(),
-      ),
+  const openAgent = useCallback(
+    ({ planId, agentId }: AgentPlace) =>
+      guardLeave(() => {
+        changeTab(PANEL_TAB.PLANS);
+        if (planId === null) showAgentPage.current(agentId);
+        else showAgent.current(planId, agentId);
+      })(),
     [changeTab, guardLeave],
   );
+  useEffect(() => window.luke.onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -390,14 +389,7 @@ export function App(): React.JSX.Element {
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
-  useAgentEndToasts(
-    (planId, agentId) =>
-      guardLeave(() => {
-        changeTab(PANEL_TAB.PLANS);
-        showAgent.current(planId, agentId);
-      })(),
-    state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
-  );
+  useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
   const showInbox = useRef(plans.onShowInbox);
   showInbox.current = plans.onShowInbox;

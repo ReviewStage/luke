@@ -9,6 +9,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
@@ -16,6 +17,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type PlanlessAgent,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { linkLabels } from "@luke/features/mention-link";
@@ -35,7 +37,11 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * by one read of its own: while any agent in the ledger is starting or
  * running, its plan's agents are listed again every `WATCH_INTERVAL`, the
  * panel's own list read on a clock rather than a second kind of read, so an
- * agent on a plan the developer has left is still watched. The ledger
+ * agent on a plan the developer has left is still watched. An agent an
+ * automation started with no plan is held from the plan list, which carries
+ * the account's own beside the plans, and from any answer naming it, and
+ * while it works it is read again by itself on the same clock, as its page
+ * reads it, having no plan to be listed with. The ledger
  * keys an agent's run by the turn its status is read from (`turnId`): a
  * status that moves from still writing to ended under one turn is that
  * turn's end, announced once, and as the agent's unseen dot, until its tab
@@ -60,9 +66,12 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * account again and keeps the ledger, or an agent running across the
  * renewal would be first seen again already ended and never announced.
  *
- * The notification says the plan's name, the agent's title or else its
- * model's name, and how the turn ended, and nothing of the transcript; the
- * toast says the same but the plan's name. A turn that completed is announced
+ * The notification says the plan's name, or the automation's for an agent
+ * with no plan, the agent's title or else its model's name, and how the turn
+ * ended, and nothing of the transcript; the toast says the same, the plan's
+ * or the automation's name under it, and its View goes where the
+ * notification's click does: the plan on the agent's tab, or the agent's own
+ * page for one with no plan. A turn that completed is announced
  * as the pull request it opened where one is found: each end is queued
  * from the ledger's own synchronous path and a fiber on the notices' scope
  * takes it, reads what the agent published once, and posts; an end whose
@@ -138,7 +147,7 @@ export interface AgentPlace {
   agentId: string;
 }
 
-/** A turn's end as the window's own toast says it: the words, the plan's name under them, whether the turn failed, and where its View goes. */
+/** A turn's end as the window's own toast says it: the words, the plan's or the automation's name under them, whether the turn failed, and where its View goes. */
 export interface AgentEndToast {
   place: AgentPlace;
   words: string;
@@ -174,8 +183,10 @@ export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNot
 ) {}
 
 export interface AgentNoticesDependencies {
-  /** The plan's agents with their status, as the host answers them: the watch's one read. */
+  /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
   listAgents: (planId: string) => Effect.Effect<CodingAgentListAnswer>;
+  /** One agent as its own page reads it: the watch's read of an agent with no plan. */
+  readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** The plan as a notice's title names it (`noticePlanTitle`), or nothing for a plan main holds no name for. */
@@ -218,6 +229,8 @@ export interface AgentNoticesDependencies {
 export interface AgentNotices {
   /** Agents as an answer carried them: a plan's list, or the one a Start or a Stop answered. */
   observeAgents(agents: readonly CodingAgentSummary[]): void;
+  /** The agents with no plan as the plan list last carried them: the account's own are held, each with its automation's name. */
+  observePlanless(agents: readonly PlanlessAgent[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
   observeStatus(agentId: string, status: CodingAgentStatus): void;
   /** One agent's title as a transcript page carried it, which the list that named the agent may have read before the title landed; said whatever the agent's standing. */
@@ -238,7 +251,8 @@ export interface AgentNotices {
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
 interface HeldAgent {
-  planId: string;
+  /** The plan it works on; null for one an automation started with no plan. */
+  planId: string | null;
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
@@ -270,13 +284,6 @@ export function noticePlanTitle(
   return workspace === undefined ? plan.name : `${workspace.name} · ${plan.name}`;
 }
 
-/** Whether the agent works on a plan, which every read this ledger keeps names. */
-function onPlan(
-  agent: CodingAgentSummary,
-): agent is CodingAgentSummary & { readonly planId: string } {
-  return agent.planId !== null;
-}
-
 /** One turn's end as the ledger saw it, waiting to be announced, and whether the window was focused as it ended. */
 interface TurnEnd {
   agentId: string;
@@ -305,14 +312,14 @@ function samePublished(
 }
 
 /**
- * What the notification says, built in one place: the plan's name over
- * the agent's title, or its model's name until it has one, and the word for
- * how the turn ended, or the pull request it opened once a reader of the
- * agent's pull request hands one in. Nothing for a status that is not a
- * turn's end, or for a Stop.
+ * What the notification says, built in one place: the plan's name, or the
+ * automation's for an agent with no plan, over the agent's title, or its
+ * model's name until it has one, and the word for how the turn ended, or the
+ * pull request it opened once a reader of the agent's pull request hands one
+ * in. Nothing for a status that is not a turn's end, or for a Stop.
  */
 function noticeText(input: {
-  planName: string | undefined;
+  subject: string | undefined;
   model: string;
   title: string | null;
   status: CodingAgentStatus;
@@ -328,7 +335,7 @@ function noticeText(input: {
     input.pullRequest !== undefined && status === CODING_AGENT_STATUS.COMPLETED
       ? `opened #${input.pullRequest}`
       : ENDED_WORD[status];
-  return { title: input.planName ?? UNNAMED_PLAN_TITLE, body: `${name} ${ended}` };
+  return { title: input.subject ?? UNNAMED_PLAN_TITLE, body: `${name} ${ended}` };
 }
 
 /**
@@ -486,6 +493,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const { listAgents, readPullRequest, planName, open, onUnseenChanged, report } = dependencies;
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
+    /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
+    const planlessSubjects = new Map<string, string>();
     /** What each agent was last read to have published, by agent. */
     const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
@@ -561,7 +570,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const end = yield* Queue.take(ends);
       const pullRequest = yield* pullRequestOf(end);
       const text = noticeText({
-        planName: planName(end.agent.planId),
+        subject:
+          end.agent.planId === null
+            ? planlessSubjects.get(end.agentId)
+            : planName(end.agent.planId),
         model: end.agent.model,
         title: end.agent.title,
         status: end.agent.status,
@@ -762,13 +774,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       dependencies.onPlanAgentsMoved();
     }
 
-    /** Lets go of every agent `keep` refuses, their dots with them, as a plan deleted or an account left has no tab to clear one. */
-    function forget(keep: (agent: HeldAgent) => boolean): void {
+    /** Lets go of every agent `keep` refuses, their dots with them, as a plan or an agent deleted or an account left has no tab to clear one. */
+    function forget(keep: (agent: HeldAgent, agentId: string) => boolean): void {
       let dotted = false;
       for (const [agentId, agent] of ledger) {
-        if (keep(agent)) continue;
+        if (keep(agent, agentId)) continue;
         ledger.delete(agentId);
         published.delete(agentId);
+        planlessSubjects.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
       if (dotted) publishUnseen();
@@ -779,21 +792,31 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       publishUnseen();
     }
 
-    /** The plans with an agent still writing, or one awaiting the turn a message opens, each listed again on the watch's clock. */
+    /** Whether the agent is still writing, or awaits the turn a message opens, which keeps it watched. */
+    function watched(agent: HeldAgent): boolean {
+      return stillWriting(agent.status) || agent.awaiting;
+    }
+
+    /** The plans with an agent watched, each listed again on the watch's clock. */
     function watchedPlans(): readonly string[] {
       const plans = new Set<string>();
       for (const agent of ledger.values()) {
-        if (stillWriting(agent.status) || agent.awaiting) plans.add(agent.planId);
+        if (agent.planId !== null && watched(agent)) plans.add(agent.planId);
       }
       return [...plans];
     }
 
-    /**
-     * The agent as the ledger holds it, where it works on a plan. Note that an
-     * agent with no plan is held by none of the plan reads this ledger keeps,
-     * so the answers that name one are passed over here.
-     */
-    function heldOf(agent: CodingAgentSummary & { readonly planId: string }): HeldAgent {
+    /** The agents with no plan watched, each read again by itself on the watch's clock. */
+    function watchedPlanless(): readonly string[] {
+      return [...ledger]
+        .filter(([, agent]) => agent.planId === null && watched(agent))
+        .map(([agentId]) => agentId);
+    }
+
+    /** The agent as the ledger holds it, on a plan or with none. */
+    function heldOf(
+      agent: Pick<CodingAgentSummary, "planId" | "model" | "title" | "status" | "turnId">,
+    ): HeldAgent {
       return {
         planId: agent.planId,
         model: agent.model,
@@ -805,12 +828,47 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
+    /**
+     * Whether the ledger holds the agent: one on a plan as every plan read
+     * names it, and one with no plan only where the account started it.
+     * Note that a teammate's is left to its starter, because it asks its
+     * starter, whose key it runs on, and the plan list carries every
+     * member's, as an act on a teammate's agent's page answers it.
+     */
+    function heldHere(agent: Pick<CodingAgentSummary, "planId" | "startedBy">): boolean {
+      const accountId = dependencies.accountId();
+      return (
+        agent.planId !== null || accountId === undefined || agent.startedBy?.userId === accountId
+      );
+    }
+
+    /** Keeps what an agent with no plan is announced under, where the answer names its automation. */
+    function noteSubject(
+      agent: Pick<CodingAgentSummary, "id" | "planId" | "automationName">,
+    ): void {
+      if (agent.planId === null && agent.automationName !== undefined) {
+        planlessSubjects.set(agent.id, agent.automationName);
+      }
+    }
+
     const notices: AgentNotices = {
       observeAgents: (agents) => {
-        for (const agent of agents) if (onPlan(agent)) observe(agent.id, heldOf(agent));
+        for (const agent of agents) {
+          if (!heldHere(agent)) continue;
+          noteSubject(agent);
+          observe(agent.id, heldOf(agent));
+        }
+      },
+      observePlanless: (agents) => {
+        for (const agent of agents) {
+          if (!heldHere(agent)) continue;
+          planlessSubjects.set(agent.id, agent.automationName ?? agent.repository);
+          observe(agent.id, heldOf(agent));
+        }
       },
       observeMessaged: (agent) => {
-        if (!onPlan(agent)) return;
+        if (!heldHere(agent)) return;
+        noteSubject(agent);
         observe(agent.id, heldOf(agent));
         // The line awaits the turn it opens: the plan is watched until that turn names itself.
         const held = ledger.get(agent.id);
@@ -842,18 +900,31 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
     };
 
-    /** One tick of the watch: each watched plan listed again, read as the panel's own list is. */
+    /** One tick of the watch: each watched plan listed again, read as the panel's own list is, and each watched agent with no plan read as its page is. */
     const tick = Effect.suspend(() =>
-      Effect.forEach(
-        watchedPlans(),
-        (planId) =>
-          Effect.map(listAgents(planId), (answer) => {
-            if ("agents" in answer) notices.observeAgents(answer.agents);
-            else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-              notices.observePlanGone(planId);
-            }
-          }),
-        { discard: true },
+      Effect.andThen(
+        Effect.forEach(
+          watchedPlans(),
+          (planId) =>
+            Effect.map(listAgents(planId), (answer) => {
+              if ("agents" in answer) notices.observeAgents(answer.agents);
+              else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
+                notices.observePlanGone(planId);
+              }
+            }),
+          { discard: true },
+        ),
+        Effect.forEach(
+          watchedPlanless(),
+          (agentId) =>
+            Effect.map(dependencies.readAgent(agentId), (answer) => {
+              if ("agent" in answer) observe(agentId, heldOf(answer.agent));
+              else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
+                forget((_agent, held) => held !== agentId);
+              }
+            }),
+          { discard: true },
+        ),
       ),
     );
     // A tick that died is reported rather than left to end the watch: a
