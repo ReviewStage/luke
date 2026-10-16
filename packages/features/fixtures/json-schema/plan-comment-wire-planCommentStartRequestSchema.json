@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "clientKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "words",
+        "block"
+      ]
+    },
+    "quote": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "anchor": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "number",
+          "minimum": 0
+        },
+        "to": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 200000
+    },
+    "words": {
+      "type": "string",
+      "maxLength": 8000
+    }
+  },
+  "required": [
+    "clientKey",
+    "scope",
+    "quote",
+    "anchor",
+    "text",
+    "words"
+  ],
+  "additionalProperties": false
+}

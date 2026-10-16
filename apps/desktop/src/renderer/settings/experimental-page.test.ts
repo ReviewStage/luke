@@ -1,17 +1,27 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { VIDEO_AVATAR, VIDEO_AVATAR_COVER_ORIGIN } from "@luke/features/video-avatar";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { EXPERIMENT, EXPERIMENTS, type Experiment, NO_EXPERIMENTS } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
+import {
+  type AppSettingField,
+  EXPERIMENT,
+  EXPERIMENTS,
+  type Experiment,
+  type ExperimentChoices,
+  NO_EXPERIMENTS,
+} from "@luke/settings";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenFeedbackProvider } from "../open-feedback";
 import { ExperimentalPage } from "./experimental-page";
+import type { SettingsWrites } from "./writes";
 
 /**
  * Settings › Experimental as the panel draws it: a switch per experiment
@@ -24,11 +34,22 @@ import { ExperimentalPage } from "./experimental-page";
 let sent: Act[] = [];
 /** Which experiment each Send feedback opened the dialog about. */
 let feedbackAbout: Experiment[] = [];
+/** Each stored setting a row wrote, with the value it wrote. */
+let written: [AppSettingField, unknown][] = [];
+const writes: SettingsWrites = {
+  setting: (field, value) => {
+    written.push([field, value]);
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  },
+  reset: () => Promise.reject(new Error("the Experimental page resets nothing")),
+};
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installScrollIntoView();
   sent = [];
   feedbackAbout = [];
+  written = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -49,7 +70,18 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function draw(props: Parameters<typeof ExperimentalPage>[0]): HTMLElement {
+/** What the schema rows are judged from, signed in, with these experiments on. */
+function rowsInput(experiments: ExperimentChoices) {
+  return {
+    settings: settingsView({ experiments }),
+    voiceControlsDrawn: false,
+    accountDrawn: true,
+  };
+}
+
+function draw(
+  props: Omit<Parameters<typeof ExperimentalPage>[0], "writes"> & { writes?: SettingsWrites },
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -61,7 +93,7 @@ function draw(props: Parameters<typeof ExperimentalPage>[0]): HTMLElement {
         createElement(
           OpenFeedbackProvider,
           { value: (about: Experiment) => feedbackAbout.push(about) },
-          createElement(ExperimentalPage, props),
+          createElement(ExperimentalPage, { writes, ...props }),
         ),
       ),
     ),
@@ -80,7 +112,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Video calls"));
+  assert.ok(page.textContent?.startsWith("Chat"));
 
   await act(async () => factory.click());
   assert.deepEqual(sent, [
@@ -98,22 +130,85 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
     EXPERIMENT.AUTOMATIONS,
     EXPERIMENT.FACTORY,
   ]);
 });
 
-test("with no experiment standing, the page draws the empty state with its title", () => {
+test("with no experiment standing, the page draws the empty state", () => {
   const page = draw({ entries: [], experiments: NO_EXPERIMENTS, signedIn: true });
 
   assert.equal(page.querySelector('[role="switch"]'), null);
-  assert.equal(page.querySelector("h3")?.textContent, "No experiments right now");
-  assert.ok(page.textContent?.includes("New features show up here to try before they ship."));
+  assert.equal(page.textContent, "No experiments");
 });
 
 test("signed out, the page says to sign in rather than drawing switches no account holds", () => {
   const page = draw({ entries: EXPERIMENTS, experiments: NO_EXPERIMENTS, signedIn: false });
 
   assert.equal(page.textContent, "Sign in to try experiments.");
+});
+
+test("with Video calls on, its avatar is chosen in its card beneath its switch, each with its face, and the choice is written to this Mac", async () => {
+  const experiments = experimentsOn(EXPERIMENT.VIDEO_CALLS);
+  const page = draw({
+    entries: EXPERIMENTS,
+    experiments,
+    signedIn: true,
+    view: rowsInput(experiments),
+  });
+
+  const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Default"]');
+  assert.ok(chip, "the avatar is a choice, the deployment's own at first");
+  // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
+  const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
+    [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
+  );
+  assert.deepEqual(cards, [["Chat"], ["Video calls", "Avatar"], ["Automations"], ["Factory"]]);
+
+  await act(async () => chip.click());
+  const options = [...document.querySelectorAll('[role="option"]')];
+  // A row's words, without the letter its face stands in with until the photo loads.
+  const names = options.map((option) =>
+    [...option.children]
+      .filter((part) => !part.classList.contains("menu-item-glyph"))
+      .map((part) => part.textContent)
+      .join(""),
+  );
+  assert.deepEqual(names, [
+    "Default",
+    "Atlas",
+    "Caspian",
+    "Cassidy",
+    "Celia",
+    "Cosmo",
+    "Lyra",
+    "Orion",
+    "Selene",
+  ]);
+  // Each stock avatar shows its face from Keyframe's storage; the deployment's default, which has none, its letter.
+  const pictures = options.map((option) => option.querySelector("img")?.getAttribute("src"));
+  assert.equal(pictures[0], undefined);
+  assert.equal(options[0]?.querySelector(".actor-face")?.textContent, "D");
+  assert.equal(pictures.slice(1).length, 8);
+  for (const picture of pictures.slice(1)) {
+    assert.ok(picture?.startsWith(`${VIDEO_AVATAR_COVER_ORIGIN}/personas/`), String(picture));
+  }
+  const celia = options[names.indexOf("Celia")];
+  assert.ok(celia instanceof HTMLElement);
+  await act(async () => celia.click());
+  assert.deepEqual(written, [["videoAvatar", VIDEO_AVATAR.CELIA]]);
+});
+
+test("with Video calls off, no avatar is offered", () => {
+  const page = draw({
+    entries: EXPERIMENTS,
+    experiments: NO_EXPERIMENTS,
+    signedIn: true,
+    view: rowsInput(NO_EXPERIMENTS),
+  });
+
+  assert.equal(page.querySelector('[aria-label^="Avatar"]'), null);
+  assert.equal(page.querySelectorAll(".settings-card").length, EXPERIMENTS.length);
 });

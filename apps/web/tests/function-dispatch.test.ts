@@ -16,8 +16,8 @@ function recording() {
 }
 
 test("the route key picks the member and the request is restored to the route's own path", async () => {
-  const plan = recording();
-  const dispatcher = dispatchRoutes(new Map([["plans/plan", plan.route]]));
+  const task = recording();
+  const dispatcher = dispatchRoutes(new Map([["plans/plan", task.route]]));
   const response = await dispatcher.fetch(
     new Request(
       `https://luke.test/api/default.js?${DISPATCH_QUERY.ROUTE}=plans/plan&id=t1&wait=1`,
@@ -26,7 +26,7 @@ test("the route key picks the member and the request is restored to the route's 
   );
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "hello");
-  const seen = plan.requests[0];
+  const seen = task.requests[0];
   assert.ok(seen);
   const url = new URL(seen.url);
   assert.equal(url.pathname, "/api/plans/plan");

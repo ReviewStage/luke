@@ -13,8 +13,9 @@ import { countedNumber } from "./service-wire.js";
  * named everywhere by its full name, `owner/name` as GitHub spells it, which
  * is the one form a plan stores and a coding agent checks out. One pull
  * request of such a repository is read the same way, by its number, and
- * travels as no more than a link to it draws: its number, title, page, and
- * where it stands; and so is one issue, by its number, open, closed as
+ * travels as no more than a link to it draws: its number, title, page,
+ * where it stands, and the lines it adds and removes; and so is one issue,
+ * by its number, open, closed as
  * done, or closed as not planned.
  */
 
@@ -88,7 +89,9 @@ export const githubPullRequestNumberSchema = EffectSchema.Int.check(
 /**
  * One pull request of a repository as a link to it is drawn: its number,
  * its title, its own page on GitHub, and where it stands, merged before
- * closed and draft before open, as an agent's pill reads it.
+ * closed and draft before open, as an agent's pill reads it; and the lines
+ * it adds and removes, as GitHub counts them, which an older service does
+ * not answer, so a link it read draws none.
  */
 export const githubPullRequestSummarySchema = EffectSchema.Struct({
   number: githubPullRequestNumberSchema,
@@ -96,6 +99,10 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   /** The pull request's own page on GitHub. */
   url: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
+  additions: EffectSchema.optionalKey(countedNumber),
+  deletions: EffectSchema.optionalKey(countedNumber),
 });
 
 export type GitHubPullRequestSummary = typeof githubPullRequestSummarySchema.Type;
@@ -132,6 +139,8 @@ export const githubIssueSummarySchema = EffectSchema.Struct({
   /** The issue's own page on GitHub. */
   url: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
+  /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type GitHubIssueSummary = typeof githubIssueSummarySchema.Type;

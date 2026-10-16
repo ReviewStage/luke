@@ -15,8 +15,10 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -40,19 +42,19 @@ import { handState } from "#testing/app-state";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
-import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
+import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
-import { AUTOMATIONS_PAGE, type InboxChoice } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: PLAN_ID,
+  planId: TASK_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Alerts",
@@ -62,7 +64,7 @@ const AGENT: CodingAgentSummary = {
 };
 
 const BILLING: TaskSummary = {
-  id: PLAN_ID,
+  id: TASK_ID,
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
   createdAt: 1,
@@ -148,11 +150,11 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 /** Moves main's list of the plans holding items, as its read of the account would. */
 let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
 /** Moves the account's list of plans, as an archive on another Mac would. */
-let setPlans: (plans: readonly TaskSummary[]) => void = () => undefined;
+let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
-let setPlanless: (planless: readonly AppInboxTasklessItem[]) => void = () => undefined;
+let setTaskless: (taskless: readonly AppInboxTasklessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
 /** Whether a read of a plan's agents is held open, never answering. */
@@ -166,9 +168,9 @@ interface ReadOutcome {
 }
 
 /** How the next held read of a plan, one past the cursor, answers: held open while nothing changes unless a test says. */
-let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
+let heldRead: (taskId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
 /** How a read of a plan from the start answers, where a test holds it in its own hands. */
-let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
+let startRead: ((taskId: string) => Promise<ReadOutcome> | undefined) | undefined;
 /** Each agent with no plan's items, as its own inbox read answers them. */
 let agentInboxes = new Map<string, readonly InboxItem[]>();
 /** Every agent whose own inbox was read from the start, in order. */
@@ -180,6 +182,8 @@ let automations: readonly AutomationSummary[] = [];
 let copied: string[] = [];
 /** Each agent with no plan as a read of its own page answers it. */
 let pageAgents = new Map<string, CodingAgentSummary>();
+/** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
+let imageReads: (() => void)[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -199,6 +203,7 @@ beforeEach(() => {
   automations = [];
   copied = [];
   pageAgents = new Map();
+  imageReads = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -241,6 +246,16 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
         }
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+          return new Promise((resolve) =>
+            imageReads.push(() =>
+              resolve({
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+              }),
+            ),
+          );
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
           const { agentId, after } = request.payload;
           if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
@@ -258,10 +273,10 @@ beforeEach(() => {
           return done({ items, cursor: "1" });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { taskId: planId, after } = request.payload;
+          const { taskId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return heldRead(planId);
-          return startRead?.(planId) ?? done({ items: inboxes.get(planId) ?? [], cursor: "1" });
+          if (after !== INBOX_CURSOR_START) return heldRead(taskId);
+          return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
@@ -278,7 +293,7 @@ afterEach(() => {
 
 /** What the Inbox was asked to open, leaving it. */
 interface Asked {
-  readonly shownPlans: string[];
+  readonly shownTasks: string[];
   readonly shownAgents: [string, string][];
   /** The automations whose pages it was asked to open. */
   readonly shownAutomations: string[];
@@ -287,28 +302,28 @@ interface Asked {
 }
 
 /** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
-function mount(firstPlanless: readonly AppInboxTasklessItem[] = []) {
-  const asked: Asked = { shownPlans: [], shownAgents: [], shownAutomations: [], closed: 0 };
+function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
+  const asked: Asked = { shownTasks: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
-    const [planless, setWaiting] = useState(firstPlanless);
-    setPlanless = setWaiting;
-    setPlans = setListed;
+    const [taskless, setWaiting] = useState(firstTaskless);
+    setTaskless = setWaiting;
+    setTasks = setListed;
     return createElement(DesktopInbox, {
-      plans: plansControl({
+      tasks: tasksControl({
         me: READER.userId,
         workspace: listedWorkspace,
-        plans: listed,
+        tasks: listed,
         inbox: [
           { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
           { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
-        inboxPlans: holding,
-        inboxPlanless: planless,
+        inboxTasks: holding,
+        inboxTaskless: taskless,
         inboxView: {
           open: true,
           chosen,
@@ -318,7 +333,7 @@ function mount(firstPlanless: readonly AppInboxTasklessItem[] = []) {
           },
           onChoose: setChosen,
         },
-        onShowPlan: (planId) => asked.shownPlans.push(planId),
+        onShowTask: (planId) => asked.shownTasks.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
         automationsView: {
           open: false,
@@ -360,13 +375,13 @@ function needsYouMark(row: HTMLElement): string {
 
 /** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 function listed(page: HTMLElement): string[] {
-  const list = page.querySelector(".inbox-plans");
+  const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll(".sidebar-repository-name, .sidebar-plan")].map((node) => {
-    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-plan")) {
+  return [...list.querySelectorAll(".sidebar-repository-name, .sidebar-task")].map((node) => {
+    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-task")) {
       return `# ${node.textContent}`;
     }
-    const name = node.querySelector(".sidebar-plan-name")?.textContent ?? "";
+    const name = node.querySelector(".sidebar-task-name")?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -381,8 +396,8 @@ function wordsOf(element: Element | null | undefined): string | null {
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find(
-    (each) => each.querySelector(".sidebar-plan-name")?.textContent === title,
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find(
+    (each) => each.querySelector(".sidebar-task-name")?.textContent === title,
   );
   assert.ok(row, `no row for ${title}`);
   return row;
@@ -393,7 +408,7 @@ test("the Inbox's list fades under its bar, and the chosen item's thread under i
   await settle();
   const sheets = layFades();
   try {
-    const list = page.querySelector(".inbox-plans-scroll") ?? assert.fail("the items are listed");
+    const list = page.querySelector(".inbox-tasks-scroll") ?? assert.fail("the items are listed");
     const thread = page.querySelector(".inbox-board") ?? assert.fail("the chosen item stands");
     assert.deepEqual(fadedEdges(list), { top: true, bottom: false });
     assert.deepEqual(fadedEdges(thread), { top: true, bottom: true });
@@ -596,9 +611,9 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     crumbs.map((crumb) => crumb.textContent),
     ["Billing usage alerts", "Alerts"],
   );
-  const [plan, agent] = crumbs;
+  const [task, agent] = crumbs;
   assert.equal(
-    plan?.querySelector(".tab-icon")?.innerHTML,
+    task?.querySelector(".tab-icon")?.innerHTML,
     renderToStaticMarkup(createElement(DocumentIcon)),
     "the plan's crumb wears its tab's document glyph",
   );
@@ -606,7 +621,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.equal(page.querySelectorAll(".inbox-view-items .desktop-toolbar button").length, 2);
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
-  assert.deepEqual(asked.shownPlans, [BILLING.id]);
+  assert.deepEqual(asked.shownTasks, [BILLING.id]);
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
@@ -632,6 +647,58 @@ test("the keyboard's ring on a crumb of the pane's path and on an option of the 
     );
   }
   styles.remove();
+});
+
+test("an image an item shows is drawn as a plan's picture is, no wider than its card and no taller than a screenful, and a press opens it over the window", async () => {
+  const styles = await layWindowStyles();
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
+    alt: "The pull request tab",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [shot] }, RETRY]);
+  const { page } = mount();
+  await settle();
+  // The image lands once its item's own read does, as the pane's read holds the items it is kept for.
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  const picture = page.querySelector<HTMLImageElement>("[data-inbox-image] img");
+  assert.ok(picture, "the item draws its image");
+  assert.equal(picture.alt, "The pull request tab");
+  const drawn = getComputedStyle(picture);
+  assert.deepEqual([drawn.maxWidth, drawn.maxHeight], ["100%", "520px"]);
+  const press = page.querySelector<HTMLButtonElement>(
+    'button[aria-label="Enlarge The pull request tab"]',
+  );
+  assert.ok(press, "the image is pressed to enlarge it");
+  act(() => press.click());
+  assert.equal(
+    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+    "The pull request tab.png",
+  );
+  styles.remove();
+});
+
+test("an image that lands before its item's own read does is drawn all the same", async () => {
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c71",
+    alt: "The sandbox's window",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [shot] }, RETRY]);
+  // The list's read of the plan answers, while the pane's own read of it is held.
+  let billingReads = 0;
+  startRead = (taskId) =>
+    taskId === BILLING.id && billingReads++ > 0 ? new Promise(() => undefined) : undefined;
+  const { page } = mount();
+  await settle();
+  assert.ok(page.querySelector("[data-inbox-image]"), "the item is drawn from the list's read");
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
+    "The sandbox's window",
+  );
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
@@ -771,7 +838,7 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     const line = BILLING.agents?.agents[0];
     assert.ok(line && BILLING.agents, "the plan's row names its agent");
     const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
-    act(() => setPlans([{ ...BILLING, agents }, INVITES]));
+    act(() => setTasks([{ ...BILLING, agents }, INVITES]));
     const mark = rowNamed(page, "How is a failed email retried?").querySelector("[data-agent-ref]");
     assert.ok(mark, "the row's mark is the agent's reference");
     act(() => {
@@ -888,7 +955,7 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
   await settle();
   const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-repository-toggle"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
   ];
   for (const header of headers()) act(() => header.click());
   assert.deepEqual(
@@ -910,7 +977,7 @@ function layOut(page: HTMLElement, width: number): void {
 
 /** The edge the list is resized by, while it stands. */
 function listEdge(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+  return page.querySelector<HTMLElement>('.inbox-tasks [role="separator"]');
 }
 
 test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {
@@ -952,7 +1019,7 @@ test("the list is resized from its edge between its bounds, and keeps its width 
 
 /** Which of the Inbox's columns a reader finds standing: the list, the item, or both. */
 function columnsShown(page: HTMLElement): string[] {
-  const list = page.querySelector(".inbox-plans");
+  const list = page.querySelector(".inbox-tasks");
   const item = page.querySelector(".inbox-view-items");
   return [
     ...(list === null || list.hasAttribute("hidden") ? [] : ["list"]),
@@ -982,16 +1049,16 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   await settle();
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   assert.deepEqual(
-    [emptyStateIn(page, ".inbox-plans"), emptyStateIn(page, ".inbox-view-items")],
+    [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
     [null, "Nothing needs you"],
   );
 
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(emptyStateIn(page, ".inbox-plans"), "Nothing needs you");
+  assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });
 
-test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape leaves the Inbox", async () => {
+test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   layOut(page, 800);
@@ -1019,10 +1086,12 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   );
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
-  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  act(() => runAppCommand(APP_COMMAND.INBOX_LIST));
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0]);
-  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
-  assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
+  act(() => {
+    assert.equal(runAppCommand(APP_COMMAND.INBOX_LIST), false, "the list offers no Escape");
+  });
+  assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
 test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {
@@ -1090,7 +1159,7 @@ function readTitle(page: HTMLElement): string | null | undefined {
 
 /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
 function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
-  const empty = page.querySelector(".inbox-plans:not([hidden]) .empty-state");
+  const empty = page.querySelector(".inbox-tasks:not([hidden]) .empty-state");
   if (empty === null) return null;
   return [
     empty.querySelector("h3")?.textContent,
@@ -1137,7 +1206,7 @@ test("with only settled items, Needs you pressed on lists no row, the item read 
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
 
-  const showAll = page.querySelector<HTMLButtonElement>(".inbox-plans .empty-state button");
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
   act(() => showAll.click());
   assert.equal(button().getAttribute("aria-pressed"), "false");
@@ -1590,7 +1659,7 @@ test("a chosen item whose plan leaves the account's list, archived on another Ma
     ["▸ *Alert at 80%?"],
   );
   act(() => {
-    setPlans([INVITES]);
+    setTasks([INVITES]);
     setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
@@ -1617,11 +1686,36 @@ test("once the chosen plan's own held read fails, the list's read of that plan s
   assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
 });
 
+test("once the chosen plan's own held read fails, an image the list's read draws since still lands", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const { page } = mount();
+  await settle();
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72",
+    alt: "The retry schedule",
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, blocks: [shot] }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
+    "The retry schedule",
+  );
+});
+
 test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {
   const first = pending();
   const second = pending();
   const reads = [first, second];
-  startRead = (planId) => (planId === INVITES.id ? reads.shift()?.promise : undefined);
+  startRead = (taskId) => (taskId === INVITES.id ? reads.shift()?.promise : undefined);
   const { page } = mount();
   await settle();
   act(() =>
@@ -1635,7 +1729,7 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
   await settle();
   first.settle({ items: [EXPIRY], cursor: "1" });
   await settle();
-  const note = page.querySelector<HTMLElement>('.inbox-plans [role="alert"]');
+  const note = page.querySelector<HTMLElement>('.inbox-tasks [role="alert"]');
   assert.match(note?.textContent ?? "", /Some items could not be read\./u);
   assert.equal(
     listed(page).includes("*Expire after 7 days?"),
@@ -1679,7 +1773,7 @@ test("an item of an agent with no plan stands under the automation that started 
   const crumbs = page.querySelector(".inbox-crumbs")?.textContent ?? "";
   assert.match(crumbs, /Nightly flake sweep/u);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
-  assert.deepEqual(asked.shownPlans, [], "the automation's crumb opens no plan");
+  assert.deepEqual(asked.shownTasks, [], "the automation's crumb opens no plan");
 });
 
 /** The automation that started the agent with no plan, as its workspace's list reads it. */
@@ -1710,7 +1804,7 @@ const BUMP: InboxItem = {
 /** The header of a group in the list, by its name. */
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-repository-toggle"),
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
   ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
   assert.ok(header, `no header for ${name}`);
   return header;
@@ -1738,8 +1832,8 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     [STRAY_AGENT, [BUMP]],
   ]);
   const { page, asked } = mount([
-    { ...waitingPlanless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
-    { ...waitingPlanless(BUMP), automationId: null, automationName: null },
+    { ...waitingTaskless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
+    { ...waitingTaskless(BUMP), automationId: null, automationName: null },
   ]);
   await settle();
 
@@ -1760,6 +1854,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
+  assert.ok(
+    others.querySelector(".sidebar-repository-glyph .lucide-factory"),
+    "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
+  );
 
   const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
   assert.ok(mark, "the planless agent's row hangs its card");
@@ -1791,6 +1889,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     stray?.querySelector(".lucide-clock") === null,
     "the crumb of the agents no automation names wears no automation's clock",
   );
+  assert.ok(
+    stray?.querySelector(".lucide-factory"),
+    "it wears the Factory's glyph, as its group does",
+  );
 });
 
 /** Another agent with no plan the same automation started, whose two questions wait. */
@@ -1805,7 +1907,7 @@ const THIRD_ASK: InboxItem = {
 };
 
 /** One waiting item of an agent with no plan, as main's read lists it. */
-function waitingPlanless(asked: InboxItem): AppInboxTasklessItem {
+function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
@@ -1824,12 +1926,12 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
     [SWEEP_AGENT, [QUARANTINE]],
     [SECOND_AGENT, [SECOND_ASK, THIRD_ASK]],
   ]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
   await settle();
   assert.ok(listed(page).includes("*Skip the slow suite?"));
 
   agentInboxes.set(SECOND_AGENT, [{ ...SECOND_ASK, status: INBOX_STATUS.ANSWERED }, THIRD_ASK]);
-  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  act(() => setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
   await settle();
 
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
@@ -1837,33 +1939,33 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
 
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
   await settle();
 
   agentReadFails = true;
-  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  act(() => setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
   await settle();
   assert.match(
-    page.querySelector(".inbox-plans")?.textContent ?? "",
+    page.querySelector(".inbox-tasks")?.textContent ?? "",
     /Some items could not be read\./u,
   );
   const before = agentReads.filter((agentId) => agentId === SECOND_AGENT).length;
 
   agentReadFails = false;
   act(() =>
-    [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans button")]
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")]
       .find((button) => button.textContent === "Retry")
       ?.click(),
   );
   await settle();
 
   assert.ok(agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
-  assert.doesNotMatch(page.querySelector(".inbox-plans")?.textContent ?? "", /could not be read/u);
+  assert.doesNotMatch(page.querySelector(".inbox-tasks")?.textContent ?? "", /could not be read/u);
 });
 
 test("an agent whose waiting items come back to what it was read for lets go of the read asked between, so its late answer draws nothing", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
   await settle();
   // The read asked for the items between is held, to land only after they came back.
   let landBetween: () => void = () => undefined;
@@ -1872,11 +1974,11 @@ test("an agent whose waiting items come back to what it was read for lets go of 
   holdAgentRead = (respond) => {
     landBetween = respond;
   };
-  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  act(() => setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
   await settle();
   holdAgentRead = undefined;
   agentInboxes = answered;
-  act(() => setPlanless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  act(() => setTaskless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless)));
   await settle();
   act(() => landBetween());
   await settle();
@@ -1886,7 +1988,7 @@ test("an agent whose waiting items come back to what it was read for lets go of 
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
   await settle();
   layOut(page, 700);
   await settle();
@@ -1910,7 +2012,7 @@ test("an item chosen by a notification's click, in an Inbox showing its list alo
 
 test("an untitled agent an automation started goes by its automation's name in the Inbox, as on its own page", async () => {
   agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
-  const { page } = mount([waitingPlanless(QUARANTINE)]);
+  const { page } = mount([waitingTaskless(QUARANTINE)]);
   await settle();
 
   const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
@@ -1947,7 +2049,7 @@ test("an item a link names that no read holds, of a task the reader cannot read,
   await settle();
   act(() =>
     chooseFromOutside({
-      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      taskId: "0f0e0d0c-0000-4000-8000-00000000dead",
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
@@ -1958,7 +2060,7 @@ test("an item a link names that no read holds, of a task the reader cannot read,
     page.querySelector(".inbox-view-items")?.textContent ?? "",
     /Not foundThis Inbox item doesn't exist, or you don't have access to it\./u,
   );
-  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
 test("a link to a settled item of an agent with no plan, none of whose items waits any more, lists the agent by its own read and shows the item", async () => {
@@ -1972,7 +2074,7 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
     "Bump the Node image?",
   );
 });
@@ -1990,7 +2092,7 @@ test("an item a link names is not found though another task's read failed, and i
   layOut(page, 600);
   act(() =>
     chooseFromOutside({
-      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      taskId: "0f0e0d0c-0000-4000-8000-00000000dead",
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
@@ -2008,7 +2110,7 @@ test("an item a link names is not found though another task's read failed, and i
   assert.equal(page.querySelector<HTMLElement>(".inbox-view-items")?.hidden, true);
   assert.ok(
     document.activeElement instanceof HTMLElement &&
-      document.activeElement.closest(".inbox-plans") !== null,
+      document.activeElement.closest(".inbox-tasks") !== null,
     "the keyboard lands on the list, not the hidden notice",
   );
 });
@@ -2026,7 +2128,7 @@ test("an item a link names under an agent that is not there, deleted or another'
   await settle();
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
 test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
@@ -2034,10 +2136,10 @@ test("an item a link names under a task with no agent and nothing in its Inbox i
   listedAgents = [];
   const { page } = mount();
   await settle();
-  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() => setTasks([BILLING, INVITES, quiet]));
   act(() =>
     chooseFromOutside({
-      planId: quiet.id,
+      taskId: quiet.id,
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
@@ -2045,7 +2147,7 @@ test("an item a link names under a task with no agent and nothing in its Inbox i
   await settle();
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
 test("an item a link names that its task's Inbox read does not hold is not found, though the task's agents are still being read", async () => {
@@ -2054,7 +2156,7 @@ test("an item a link names that its task's Inbox read does not hold is not found
   await settle();
   act(() =>
     chooseFromOutside({
-      planId: BILLING.id,
+      taskId: BILLING.id,
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
@@ -2062,7 +2164,7 @@ test("an item a link names that its task's Inbox read does not hold is not found
   await settle();
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
 test("a link to an item newer than its task's last read waits for the read of it, saying no Not found, and then shows it", async () => {
@@ -2086,7 +2188,7 @@ test("a link to an item newer than its task's last read waits for the read of it
       { taskId: INVITES.id, items: 2, updatedAt: 7_000 },
     ]),
   );
-  act(() => chooseFromOutside({ planId: INVITES.id, itemId: posted.id, opened: true }));
+  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: posted.id, opened: true }));
   await settle();
   const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
   land();
@@ -2094,7 +2196,7 @@ test("a link to an item newer than its task's last read waits for the read of it
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
     "Page on-call too?",
   );
 });
@@ -2110,30 +2212,30 @@ test("an item a link names under a task whose own read fails is kept asked for, 
       : undefined;
   const { page } = mount();
   await settle();
-  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() => setTasks([BILLING, INVITES, quiet]));
   act(() =>
     chooseFromOutside({
-      planId: quiet.id,
+      taskId: quiet.id,
       itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
       opened: true,
     }),
   );
   await settle();
 
-  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
 test("a link to an agent's item newer than the agent's last read waits for the read of it, saying no Not found, and then shows it", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
   pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
-  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  const { page } = mount([SECOND_ASK].map(waitingTaskless));
   await settle();
   const held: (() => void)[] = [];
   holdAgentRead = (respond) => {
     held.push(respond);
   };
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  act(() => setPlanless([SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  act(() => setTaskless([SECOND_ASK, THIRD_ASK].map(waitingTaskless)));
   act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: THIRD_ASK.id, opened: true }));
   await settle();
   const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
@@ -2143,7 +2245,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
     "Retry the flaky job?",
   );
 });
@@ -2151,10 +2253,10 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 test("an item a link names under an agent nothing waits on any more, read before, is not found by that read though the agent's own read fails", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
   pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
-  const { page } = mount([SECOND_ASK].map(waitingPlanless));
+  const { page } = mount([SECOND_ASK].map(waitingTaskless));
   await settle();
   agentReadFails = true;
-  act(() => setPlanless([]));
+  act(() => setTaskless([]));
   act(() =>
     chooseFromOutside({
       agentId: SECOND_AGENT,

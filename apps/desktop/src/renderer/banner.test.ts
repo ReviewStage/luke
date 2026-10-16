@@ -5,8 +5,8 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
-import { PlanBanner } from "./desktop/plan-banner";
-import { ArchivedBanner, ArchivedComposerNote } from "./planning/archived-plan";
+import { TaskBanner } from "./desktop/task-banner";
+import { ArchivedBanner, ArchivedComposerNote } from "./tasks/archived-task";
 
 /**
  * banner.test.ts -- a plan's notices at the widths a column or the side panel leaves them: narrow, the presses take a line of their own beneath the words, each as wide as the line, and the words wrap rather than being squeezed or cut; wide, words and presses share one line.
@@ -106,19 +106,19 @@ test("an archived task's agent's composer row puts Stop and Unarchive beneath it
 });
 
 test("a plan's slim banner wraps its words and drops its press beneath them in the narrowest column, and keeps one cut line in a wide one", () => {
-  const banner = createElement(PlanBanner, {
+  const banner = createElement(TaskBanner, {
     action: { label: "Move to Northwind Platform Infrastructure", onPress: () => undefined },
     children: "This task's repository belongs to Northwind Platform Infrastructure",
   });
   const narrow = drawnAt(STRIP.LINE_IN_NARROWEST_COLUMN, banner);
-  const words = narrow.querySelector<HTMLElement>(".plan-banner-words");
+  const words = narrow.querySelector<HTMLElement>(".task-banner-words");
   assert.ok(words, "the banner has its words");
   assert.equal(getComputedStyle(words).whiteSpace, "normal");
   assert.equal(pressesBeneath(narrow), true);
   act(() => root?.unmount());
   style?.remove();
   const wide = drawnAt(STRIP.WIDE, banner);
-  const line = wide.querySelector<HTMLElement>(".plan-banner-words");
+  const line = wide.querySelector<HTMLElement>(".task-banner-words");
   assert.ok(line, "the banner has its words");
   assert.equal(getComputedStyle(line).whiteSpace, "nowrap");
   assert.equal(pressesBeneath(wide), false);

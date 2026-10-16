@@ -338,3 +338,61 @@ export function switchedServers(
   const others = disabled.filter((each) => each !== connection);
   return on ? others : [...others, connection];
 }
+
+/** How the developer's words reach the agent they are written to: they open its turn, or reach one already under way. */
+export const SERVER_HANDED = {
+  OPENS: "opens",
+  STEERS: "steers",
+} as const;
+
+export type ServerHanded = (typeof SERVER_HANDED)[keyof typeof SERVER_HANDED];
+
+/** What a server's card says of what a mention of it does. */
+export const SERVER_MENTION_NOTE = {
+  ON: "On for this agent.",
+  ON_NAMED: "On for this agent, and this message names it.",
+  OFF: "Off for this agent.",
+  OFF_OPENS:
+    "Off for this agent. This message hands it to the turn it opens alone; the switch stays off.",
+  OFF_STEERS:
+    "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
+  NOT_CONNECTED: "Not connected, so no agent is handed it.",
+  EXPIRED: "Its sign-in expired, so a call to it asks for it to be reconnected first.",
+} as const;
+
+/**
+ * What a server's card says of a mention of it, from its row and the agent
+ * the words are written to, if any, and how they reach it: an agent with
+ * the server on has it anyway, and one with it off is handed it for one
+ * turn, the one the words open or, where they reached a turn under way, the
+ * next, its switch untouched (the service's `mentionedServers`); a server
+ * not connected is handed to no agent, and one whose sign-in expired is
+ * handed all the same, its calls asking for it to be reconnected. Nothing
+ * where the row already says it, a problem of its server's or a sign-in
+ * under way, or nothing is read yet.
+ */
+export function serverMentionNote(
+  row: ServerRow,
+  agent: { readonly handed: ServerHanded | undefined } | undefined,
+): string | undefined {
+  switch (row.kind) {
+    case SERVER_ROW.CONNECT:
+    case SERVER_ROW.TRY_AGAIN:
+      return SERVER_MENTION_NOTE.NOT_CONNECTED;
+    case SERVER_ROW.RECONNECT:
+      return row.problem === undefined ? SERVER_MENTION_NOTE.EXPIRED : undefined;
+    case SERVER_ROW.SIGNING_IN:
+    case SERVER_ROW.QUIET:
+    case SERVER_ROW.RETRY:
+      return undefined;
+    case SERVER_ROW.SWITCH:
+      if (agent === undefined) return undefined;
+      if (row.on) {
+        return agent.handed === undefined ? SERVER_MENTION_NOTE.ON : SERVER_MENTION_NOTE.ON_NAMED;
+      }
+      if (agent.handed === undefined) return SERVER_MENTION_NOTE.OFF;
+      return agent.handed === SERVER_HANDED.STEERS
+        ? SERVER_MENTION_NOTE.OFF_STEERS
+        : SERVER_MENTION_NOTE.OFF_OPENS;
+  }
+}

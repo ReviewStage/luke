@@ -1,7 +1,7 @@
 import {
-  CODE_REVIEW_DESCRIPTION,
+  type AutomationPresetName,
+  automationPreset,
   type CodeReviewSettings,
-  codeReviewPreset,
   readCodeReviewSettings,
   withCodeReviewSettings,
 } from "@luke/features/automation-code-review";
@@ -64,7 +64,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ChevronRightIcon, GitPullRequestIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
@@ -76,12 +76,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { AgentModelChip } from "../planning/agent-model-chip";
-import { AgentServersButton } from "../planning/agent-servers";
-import { ModelMenu } from "../planning/model-menu";
-import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
-import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
-import type { LeaveAsk, LeaveGuard } from "../planning/use-plans-tab";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
@@ -89,6 +83,12 @@ import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
+import { AgentModelChip } from "../tasks/agent-model-chip";
+import { AgentServersButton } from "../tasks/agent-servers";
+import { ModelMenu } from "../tasks/model-menu";
+import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip";
+import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
+import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
@@ -96,6 +96,7 @@ import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
+import { PaneGlide } from "./pane-motion";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
@@ -345,7 +346,7 @@ function ServersRow({
           <strong>MCP servers</strong>
           <small>
             {disabled.length === 0
-              ? "Its creator's connected servers, every one."
+              ? "All of its creator's connected servers."
               : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
           </small>
         </span>
@@ -728,8 +729,7 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   {
     value: PULL_REQUEST_MOMENT.PUSHED,
     label: "When pushed to",
-    detail:
-      "A push by Luke's own agents never starts a run, so a run that pushes cannot start itself.",
+    detail: "A push by Luke's own agents never starts a run.",
   },
 ];
 
@@ -839,13 +839,13 @@ function CodeReviewGroup({
     <SettingsGroup title="Code review">
       <SwitchRow
         label="Comment when no issues are found"
-        detail="A first review that finds nothing says so. A later one that finds nothing new posts nothing."
+        detail="Only on a pull request's first review."
         checked={settings.commentWhenClean}
         onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
       />
       <SelectRow
         label="Most findings"
-        detail="The most one review posts, the most severe first."
+        detail="Per review, most severe first."
         value={settings.mostFindings}
         options={MOST_FINDINGS}
         parse={mostFindingsOf}
@@ -1007,7 +1007,6 @@ function WebhookRows({
         <div className="settings-row">
           <span className="settings-copy">
             <strong>Secret</strong>
-            <small>A new secret stops the one before.</small>
           </span>
           <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
             New secret
@@ -1177,8 +1176,8 @@ function AgentRow({
     <>
       <strong>Agent</strong>
       <small>
-        Each run goes to that agent as a message, as if you'd typed it, even mid-turn, and it keeps
-        its own model and effort.
+        Each run is sent to that agent as a message, even mid-turn. It keeps its own model and
+        effort.
       </small>
     </>
   );
@@ -1221,11 +1220,11 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <div className="plan-compose-menu-note">
+          <div className="task-compose-menu-note">
             <Spinner label="Loading agents" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="plan-compose-menu-note">No agents of this workspace work in it yet.</p>
+          <p className="task-compose-menu-note">No agents of this workspace work in it yet.</p>
         ) : undefined
       }
       noMatch={NO_MATCH}
@@ -1244,7 +1243,7 @@ function RunsGroup({
   savedAgentId,
   workspace,
   problems,
-  planBacked,
+  taskBacked,
   repositories,
   onDraft,
 }: {
@@ -1255,7 +1254,7 @@ function RunsGroup({
   savedAgentId: string | null;
   workspace: Workspace | undefined;
   problems: DraftProblems;
-  planBacked: boolean;
+  taskBacked: boolean;
   repositories: RepositoryChooser;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
@@ -1272,13 +1271,13 @@ function RunsGroup({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Repository</strong>
-          {planBacked ? (
+          {taskBacked ? (
             <small>Its task's repository.</small>
           ) : also.length === 0 ? null : (
             <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
           )}
         </span>
-        {planBacked ? null : (
+        {taskBacked ? null : (
           <RepositoryChip
             key={repositories.scope}
             place={CHIP_PLACE.FIELD}
@@ -1313,7 +1312,7 @@ function RunsGroup({
           />
           <SwitchRow
             label="Archive successful runs"
-            detail="A run's agent is archived once it finishes without failing. Its transcript and pull request stay reachable."
+            detail="Its transcript and pull request are kept."
             checked={draft.archiveSuccessful}
             onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
           />
@@ -1339,21 +1338,20 @@ function EditorForm({
   automation,
   writes,
   problems,
-  planBacked,
+  taskBacked,
   workspace,
   offersOwner,
   repositories,
   shownSecret,
   onSecret,
   savedAgentId,
-  onStartFromCodeReview,
   onDraft,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
   problems: DraftProblems;
-  planBacked: boolean;
+  taskBacked: boolean;
   workspace: Workspace | undefined;
   offersOwner: boolean;
   repositories: RepositoryChooser;
@@ -1361,8 +1359,6 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
-  /** Fills the draft in from the code review preset; offered only while the automation is new. */
-  onStartFromCodeReview: (() => void) | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
@@ -1385,24 +1381,6 @@ function EditorForm({
           />
         </SettingsGroup>
       ) : null}
-      {onStartFromCodeReview === undefined ? null : (
-        <SettingsGroup title="Start from">
-          <div className="settings-row">
-            <span className="settings-copy">
-              <strong>Code review</strong>
-              <small>{CODE_REVIEW_DESCRIPTION}</small>
-            </span>
-            <button
-              type="button"
-              className="toolbar-button bordered-button"
-              onClick={onStartFromCodeReview}
-            >
-              <GitPullRequestIcon />
-              Start from Code review
-            </button>
-          </div>
-        </SettingsGroup>
-      )}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -1422,7 +1400,7 @@ function EditorForm({
           <>
             <SelectRow
               label="Event"
-              detail="Heard through the workspace's GitHub App, in the repositories below."
+              detail="Heard through the workspace's GitHub App."
               value={draft.githubEvent}
               options={GITHUB_EVENTS}
               parse={githubEventOf}
@@ -1454,7 +1432,7 @@ function EditorForm({
         <textarea
           className="automation-prompt"
           aria-label="Prompt"
-          placeholder="What the agent is told each run: find the flakiest test in CI this week and fix it."
+          placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
           onKeyDown={releaseOnEscape}
           onChange={(event) => onDraft({ prompt: event.target.value })}
@@ -1467,7 +1445,7 @@ function EditorForm({
         savedAgentId={savedAgentId}
         workspace={workspace}
         problems={problems}
-        planBacked={planBacked}
+        taskBacked={taskBacked}
         repositories={repositories}
         onDraft={onDraft}
       />
@@ -1477,22 +1455,28 @@ function EditorForm({
 
 /**
  * One automation's page, or a new one's where none is given. A new one,
- * once made, is handed to `onCreated`, which stands its own page where
- * this one stood; a deleted one goes back to the list.
+ * opened from a suggestion on the list, starts filled in from its preset;
+ * once made, it is handed to `onCreated`, which stands its own page where
+ * this one stood. A deleted one is handed to `onDeleted`, which goes back
+ * to the list.
  */
 export function AutomationEditor({
   automation,
+  preset,
   workspace,
   offersOwner,
   repositories,
   writes,
   onBack,
   onCreated,
+  onDeleted,
   onOpenAgent,
   linked,
   leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
+  /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
+  preset?: AutomationPresetName | undefined;
   workspace: Workspace | undefined;
   /** Whether the workspace is shared, so an automation in it may be the workspace's rather than its maker's. */
   offersOwner: boolean;
@@ -1500,6 +1484,7 @@ export function AutomationEditor({
   writes: AutomationWrites;
   onBack: () => void;
   onCreated: (automationId: string) => void;
+  onDeleted: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
   /**
@@ -1519,19 +1504,23 @@ export function AutomationEditor({
     timezone: windowZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
-  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
-  const [start] = useState(() =>
-    automation === undefined
-      ? { ...automationDraft(undefined, defaults), repository: repositories.recent[0] ?? null }
-      : automationDraft(automation, defaults),
-  );
+  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,
+  // filled in from the preset of the suggestion it was opened from.
+  const [start] = useState(() => {
+    if (automation !== undefined) return automationDraft(automation, defaults);
+    const blank = {
+      ...automationDraft(undefined, defaults),
+      repository: repositories.recent[0] ?? null,
+    };
+    return preset === undefined ? blank : presetDraft(blank, automationPreset(preset));
+  });
   const [draft, setDraft] = useState(start);
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // The webhook secret a write just minted, shown once on this page and gone when it is left.
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
-  const planBacked = automation !== undefined && automation.planId !== null;
+  const taskBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
@@ -1545,6 +1534,8 @@ export function AutomationEditor({
   // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
+  // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
+  const editorLayout = useRef<HTMLDivElement>(null);
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
@@ -1553,11 +1544,7 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const problems = draftProblems(draft, planBacked, new Date());
-  const startFromCodeReview = () => {
-    setDraft((was) => presetDraft(was, codeReviewPreset()));
-    setRefusal(undefined);
-  };
+  const problems = draftProblems(draft, taskBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -1633,7 +1620,7 @@ export function AutomationEditor({
             reason: SAVE_REFUSAL_WORDS[answer.failure],
           };
         }
-        leaveGuard.pass(onBack);
+        leaveGuard.pass(() => onDeleted(automation.id));
         return ACCEPTED;
       });
     },
@@ -1652,7 +1639,7 @@ export function AutomationEditor({
         onRunNow={runNow}
         runsPanel={runsPanel}
       />
-      <div className="automation-editor-layout">
+      <div ref={editorLayout} className="automation-editor-layout">
         <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
             <input
@@ -1678,14 +1665,13 @@ export function AutomationEditor({
               automation={automation}
               writes={writes}
               problems={shownProblems ? problems : {}}
-              planBacked={planBacked}
+              taskBacked={taskBacked}
               workspace={workspace}
               offersOwner={offersOwner}
               repositories={repositories}
               shownSecret={shownSecret}
               onSecret={setShownSecret}
               savedAgentId={savedAgentId}
-              onStartFromCodeReview={automation === undefined ? startFromCodeReview : undefined}
               onDraft={editDraft}
             />
           </div>
@@ -1700,15 +1686,12 @@ export function AutomationEditor({
           onRetry={runs.reload}
           onOpenAgent={onOpenAgent}
         />
+        <PaneGlide root={editorLayout} layout={{ runsOpen: runsPanel.open }} />
       </div>
       <ConfirmDialog
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
-          body:
-            automation === undefined
-              ? "This automation isn't created yet, and what you wrote here is lost."
-              : "What you changed here is lost.",
           verb: "Leave",
           running: "Leaving",
         }}

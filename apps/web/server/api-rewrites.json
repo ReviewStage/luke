@@ -64,6 +64,14 @@
     "dest": "/api/default.js?route=plans/edit&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/comments/([^/]+)",
+    "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
+  },
+  {
+    "src": "/api/plans/([^/]+)/comments",
+    "dest": "/api/default.js?route=plans/comments&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/attachments/([^/]+)",
     "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
   },
@@ -140,6 +148,14 @@
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/overview",
+    "dest": "/api/default.js?route=agents/overview&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/github-image",
+    "dest": "/api/default.js?route=agents/github-image&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/inbox",
     "dest": "/api/default.js?route=agents/inbox&id=$1"
   },
@@ -186,6 +202,10 @@
   {
     "src": "/api/automations/([^/]+)",
     "dest": "/api/default.js?route=automations/automation&id=$1"
+  },
+  {
+    "src": "/api/issues/([^/]+)",
+    "dest": "/api/default.js?route=issues/issue&id=$1"
   },
   {
     "src": "/api/account/delete",
@@ -306,6 +326,10 @@
   {
     "src": "/api/inbox",
     "dest": "/api/default.js?route=inbox"
+  },
+  {
+    "src": "/api/issues",
+    "dest": "/api/default.js?route=issues"
   },
   {
     "src": "/api/mac-commands",

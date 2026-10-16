@@ -43,10 +43,10 @@ const WEB = join(import.meta.dirname, "..");
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
-const plan = await functionBundlePlan(WEB);
+const task = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
-const result = await build({ ...plan.options, write: true });
+const result = await build({ ...task.options, write: true });
 
 /** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
 const ESBUILD_RUNTIME = "<runtime>";
@@ -54,7 +54,7 @@ const undeclared = new Set<string>();
 for (const input of Object.values(result.metafile.inputs)) {
   for (const imported of input.imports) {
     if (!imported.external || imported.path === ESBUILD_RUNTIME) continue;
-    if (!plan.externalPackages.has(packageNameOf(imported.path))) undeclared.add(imported.path);
+    if (!task.externalPackages.has(packageNameOf(imported.path))) undeclared.add(imported.path);
   }
 }
 if (undeclared.size > 0) {
@@ -86,7 +86,7 @@ if (externals.length > 0) {
 }
 
 const durationOf = new Map(
-  plan.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
+  task.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
 );
 for (const [file, output] of Object.entries(result.metafile.outputs)) {
   const maxDuration = durationOf.get(join(WEB, file));
@@ -101,7 +101,7 @@ const emitted = await emitBuildOutput({
   staticDirectory: join(WEB, SITE_DIRECTORY),
   functions: [
     ...(await Promise.all(
-      plan.functions.map(async (definition) => ({
+      task.functions.map(async (definition) => ({
         path: functionPublicPath(definition),
         contents: await readFile(join(WEB, bundlePath(definition))),
         maxDuration: definition.maxDuration,

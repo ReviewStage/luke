@@ -40,7 +40,13 @@ message box.
    wide)"): any agent of the sender's workspace, on any task or none, is
    mentioned and handed with its task and the id `message_agent` reaches it
    by; one of another workspace is handed nothing.
-6. **No person mentions yet.**
+6. **No person mentions yet.** Superseded by the task "Add ability to
+   @-mention people": a member of the workspace is mentioned by their
+   page's Luke link, `https://tryluke.dev/<workspace>/person/<userId>`,
+   picked from a People group in the `@` list, drawn as a chip wearing
+   their picture that opens their page, and handed to a coding agent as
+   their name and role in the agent's workspace, never their email.
+   Nobody is notified of a mention yet; that is its own change.
 7. **The plan document takes mentions too** (§5).
 8. **The message box moves to TipTap**, the rich editor the plan already
    uses (#3): "I am interested in migrating the message box to the richer
@@ -450,7 +456,7 @@ reach at all. That is the test the category applied when it removed kinds
 | 7 | **Another agent of the plan** | High for handoffs, but useless until a coding agent can read or message one. | Waits for coding-agent tools (Dean, decision 2). | Later |
 | 8 | **A past call or turn** | Low for a coder. The plan already distils the calls, and Cascade removed conversation mentions. | Lists exist. | Not planned |
 | 9 | **A URL** | A pasted URL already reaches the model. Pasting a known kind's URL (GitHub PR, Linear issue) can turn it into its chip. | Small. | With integration objects |
-| 10 | **A person** | Not yet (Dean, decision 3). | — | Not planned |
+| 10 | **A person** | Who owns or reviews the work. Superseded decision 6. | The members read the window already holds; the agent is handed name and role. | Shipped, without notifications |
 | — | **A skill** | Stays `/name`. Under the TipTap route it becomes a chip in the same editor (§7). | — | Unchanged |
 
 ## 4. Mechanics (both places)
@@ -1163,7 +1169,9 @@ VoiceOver, since CI can't see the Mac.
 | 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
 | links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
 | 10 | The task's pages and other agents in the `@` list, by their Luke links | merged, #3031 |
-| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | this PR |
+| 12 | An agent mention resolves across the sender's workspace, and names `message_agent` | #3064 |
+| 13 | `read_page`; a page mention hands its reference and `read_page`, never its HTML | merged, #3088 |
+| 14 | People: the People group, the person chip, and a person handed by name and role | this PR |
 
 ## 9. Risks
 

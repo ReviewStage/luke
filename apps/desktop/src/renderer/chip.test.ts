@@ -5,12 +5,12 @@ import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { plansControl } from "#testing/plans-control";
+import { tasksControl } from "#testing/tasks-control";
 import { CHIP_LOOK } from "./chip";
-import { AgentModelChip } from "./planning/agent-model-chip";
-import { ChangesChip, PublishedChip, type PublishedDoors } from "./planning/agent-published";
-import { CHIP_PLACE, type ChipPlace, RepositoryChip } from "./planning/repository-chip";
 import { PickerRow } from "./settings/picker-row";
+import { AgentModelChip } from "./tasks/agent-model-chip";
+import { ChangesChip, PublishedChip, type PublishedDoors } from "./tasks/agent-published";
+import { CHIP_PLACE, type ChipPlace, RepositoryChip } from "./tasks/repository-chip";
 
 /**
  * The chips as each place draws them: the chips that stand in one role are
@@ -60,7 +60,7 @@ function repositoryChip(place: ChipPlace): HTMLButtonElement {
     createElement(RepositoryChip, {
       place,
       value: null,
-      chooser: plansControl().repositories,
+      chooser: tasksControl().repositories,
       onChoose: () => undefined,
     }),
   );

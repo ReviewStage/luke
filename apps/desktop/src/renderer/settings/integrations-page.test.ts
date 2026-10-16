@@ -334,7 +334,7 @@ function menuOf(row: Element): MenuRead {
   if (ellipsis === null) return { items: [], heading: undefined } satisfies MenuRead;
   act(() => ellipsis.click());
   const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
-  const heading = document.querySelector(".plan-menu-heading")?.textContent ?? undefined;
+  const heading = document.querySelector(".task-menu-heading")?.textContent ?? undefined;
   act(() => ellipsis.click());
   return { items, heading } satisfies MenuRead;
 }
@@ -1112,10 +1112,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   openRow(page, "Vercel");
 
   assert.equal(page.querySelector(".integration-tool-description"), null);
-  assert.equal(
-    page.querySelector(".integration-tool-silent")?.textContent,
-    "Vercel's server says nothing of what this tool does.",
-  );
+  assert.equal(page.querySelector(".integration-tool-silent")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
 });

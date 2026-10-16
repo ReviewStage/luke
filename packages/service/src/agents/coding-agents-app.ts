@@ -39,6 +39,7 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "@luke/features/coding-agent-wire";
+import { githubImageOf } from "@luke/features/github-image";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -58,9 +59,10 @@ import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } fr
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { changesPeople } from "../github/github-people.js";
+import { githubImage } from "../github/github-images.js";
+import { changesPeople, namedOverview } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
-import { pullRequestFiles } from "../github/pull-requests.js";
+import { pullRequestFiles, pullRequestOverview } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -91,7 +93,12 @@ import {
   withPublishedCache,
 } from "./coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentPage, codingAgentSummary, pageAccounts } from "./coder-host/status.js";
+import {
+  codingAgentPage,
+  codingAgentSummary,
+  pageAccounts,
+  summaryAccounts,
+} from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
   type EveReach,
@@ -173,7 +180,13 @@ import {
  * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
  * the pull request that answer names, read from GitHub afresh on each ask
  * (`github/pull-requests.ts`), each with its patch, or none where the
- * agent has opened none yet.
+ * agent has opened none yet. Its overview (`GET /api/agents/{id}/overview`),
+ * which its Pull request tab draws, is the same pull request's description,
+ * branches, mergeability, checks one by one, reviewers, and conversation,
+ * read afresh on each ask on the same terms, its words as GitHub renders
+ * them. An image those words name (`GET /api/agents/{id}/github-image`) is
+ * read on a token for the agent's repository too, an upload re-signed by its
+ * asset's id (`github/github-images.ts`), and answered as bytes.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
@@ -200,6 +213,10 @@ const AGENTS_PATH = {
   PULL_REQUEST: "/api/agents/pull-request",
   /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
   CHANGES: "/api/agents/changes",
+  /** GET reads the agent's pull request's overview, as its Pull request tab draws it; the rewrite moves the path's agent id into the `id` query. */
+  OVERVIEW: "/api/agents/overview",
+  /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
+  GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
@@ -229,6 +246,7 @@ const QUERY = {
   CALL: "call",
   ATTACHMENT: "attachment",
   PICTURE: "picture",
+  SRC: "src",
 } as const;
 
 /**
@@ -395,7 +413,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
-  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
       agent,
@@ -432,9 +450,7 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
     listCodingAgents(userId, taskId, { includeArchived: listsArchived(request) }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(
-    readAccountNames(agents.map((agent) => agent.userId)),
-  );
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
@@ -445,9 +461,11 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
 
 /**
  * GET lists a workspace's agents, on a plan or with none, newest started
- * first, the archived ones left out, narrowed to one repository where the
- * query names one, as the plan list answers them; a workspace the account
- * is not in is not found, as a plan is.
+ * first, the archived ones left out unless `archived=include` asks,
+ * narrowed to one repository where the query names one and to agents whose
+ * title or task's name holds the query's words where it names some, as the plan list
+ * answers them; a workspace the account is not in is not found, as a plan
+ * is.
  */
 const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -460,7 +478,13 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const query = new URL(request.url).searchParams;
   const workspaceId = query.get(CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID) ?? "";
   const repository = query.get(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY) ?? undefined;
-  if (workspaceId === "" || repository === "") {
+  const words = query.get(CODING_AGENT_WORKSPACE_QUERY.WORDS)?.trim();
+  if (
+    workspaceId === "" ||
+    repository === "" ||
+    words === "" ||
+    (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
+  ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const userId = yield* resolvedUserId(seams, request);
@@ -469,13 +493,13 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   const agents = yield* hostedStoreOrUnavailable(
     listWorkspaceCodingAgents(userId, workspaceId, {
       ...(repository === undefined ? undefined : { repository }),
+      ...(words === undefined ? undefined : { words }),
+      includeArchived: listsArchived(request),
       limit: WORKSPACE_AGENTS_LIMIT,
     }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(
-    readAccountNames(agents.map((agent) => agent.userId)),
-  );
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
@@ -639,7 +663,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   const pin = readEither(codingAgentPinRequestSchema)(body);
   if (Result.isSuccess(pin)) {
     const pinned = yield* hostedStoreOrUnavailable(
-      pinCodingAgent(userId, agent.id, pin.success.pinned),
+      pinCodingAgent(userId, agent.id, pin.success.pinned, pin.success.position),
     );
     if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
@@ -792,6 +816,89 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
       ...listed,
       ...(agent.author === null ? undefined : { writtenAs: agent.author }),
     },
+  });
+});
+
+/**
+ * GET reads the agent's pull request's overview: the pull request its kept
+ * published answer names, read whole from GitHub afresh on a token minted
+ * for the agent's repository, its people named against the workspace's
+ * members (`github-people.ts`), with who its row says it writes as; none
+ * where it names no pull request yet, or the repository no longer holds it.
+ */
+const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* reachedAgent(seams, request);
+  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
+  const overview = yield* Effect.gen(function* () {
+    const { token } = yield* agentPullRequestReach(userId, agent);
+    const read = yield* pullRequestOverview(token, agent.repository, pullRequest.number);
+    return Option.isNone(read) ? null : yield* namedOverview(token, agent, read.value);
+  }).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "EffectDrizzleQueryError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubReadOrRefusal(Effect.fail(failure));
+      }
+    }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: overview });
+});
+
+/**
+ * GET reads one image the agent's pull request's overview names, by the
+ * address GitHub's rendering spelled (`src`): an upload re-signed on a token
+ * minted for the agent's repository, or a public image on GitHub's image
+ * proxy (`github/github-images.ts`); refused as invalid for any address that
+ * is neither, and not found where GitHub answers no image the window draws.
+ */
+const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const image = githubImageOf(new URL(request.url).searchParams.get(QUERY.SRC) ?? "");
+  if (image === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { userId, agent } = yield* reachedAgent(seams, request);
+  const read = yield* Effect.gen(function* () {
+    const { token } = yield* agentPullRequestReach(userId, agent);
+    return yield* githubImage(token, agent.repository, image);
+  }).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "EffectDrizzleQueryError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubReadOrRefusal(Effect.fail(failure));
+      }
+    }),
+  );
+  if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(read.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: read.value.contentType,
+    headers: ATTACHMENT_HEADERS,
   });
 });
 
@@ -1041,6 +1148,16 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.CHANGES,
           hostedRefusing(changesEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.OVERVIEW,
+          hostedRefusing(overviewEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.GITHUB_IMAGE,
+          hostedRefusing(githubImageEndpoint(seams)),
         ),
         HttpRouter.add(
           ANY_METHOD,

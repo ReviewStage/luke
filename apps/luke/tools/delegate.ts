@@ -21,7 +21,7 @@ import { defineWorkflowTool, type WorkflowServeReceive } from "eve/tools";
 /** The declared subagent the job goes to, by the name its directory gives it. */
 const WORKER = "worker";
 
-/** What one call carries, as the tool's schema holds it (`PLANNER_DELEGATE_TOOL`). */
+/** What one call carries, as the tool's schema holds it (`BRAIN_DELEGATE_TOOL`). */
 interface DelegateInput {
   readonly task: string;
 }

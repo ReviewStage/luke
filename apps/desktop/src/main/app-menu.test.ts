@@ -21,7 +21,8 @@ import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
  * command does not stand is not in its menu, and leaves no separator
  * stranded where it stood; and the one drawer redraws when the update item
  * or the account's experiments move, and only then; and no item a reader
- * can choose ends its name with an ellipsis.
+ * can choose ends its name with an ellipsis; and only a development build
+ * offers the developer tools.
  */
 
 /** The labels of one top-level menu's items, a separator as a dash. */
@@ -98,7 +99,9 @@ describe("Factory", () => {
 describe("the menu bar's drawer", () => {
   test("draws what it holds, and again only when the update item or the experiments move", () => {
     const drawn: MenuItemConstructorOptions[][] = [];
-    const show = menuBarDrawer("Luke", (template) => drawn.push(template));
+    const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
+      drawn.push(template),
+    );
 
     show();
     assert.equal(drawn.length, 1);
@@ -146,5 +149,60 @@ describe("the menu bar's names", () => {
       };
       assert.deepEqual(ellipsized(choosableLabels(appMenuTemplate("Luke", update))), [], act);
     }
+  });
+});
+
+/** Every item, every submenu walked. */
+function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
+  return items.flatMap((item) => [
+    item,
+    ...(Array.isArray(item.submenu) ? everyItem(item.submenu) : []),
+  ]);
+}
+
+const developerTools = { onOpenVoiceWindow: () => undefined, onOpenCallWindow: () => undefined };
+
+/** The menu bar a build draws once the windows have told it of their developer tools. */
+function drawnFor(packaged: boolean): MenuItemConstructorOptions[] {
+  let last: MenuItemConstructorOptions[] = [];
+  const show = menuBarDrawer({ appName: "Luke", packaged }, (template) => {
+    last = template;
+  });
+  show({ developerTools });
+  return last;
+}
+
+describe("the developer tools", () => {
+  test("a development build offers them under View, for the window chosen over and the two it cannot reach", () => {
+    const view = drawnFor(false).find((item) => item.label === "View");
+    const developer = Array.isArray(view?.submenu)
+      ? view.submenu.find((item) => item.label === "Developer")
+      : undefined;
+    assert.ok(developer, "View has a Developer submenu");
+    assert.deepEqual(labelsOf([developer], "Developer"), [
+      "Developer Tools",
+      "-",
+      "Voice Window Developer Tools",
+      "Call Window Developer Tools",
+    ]);
+  });
+
+  test("a packaged build offers none, though the windows tell it of them", () => {
+    const items = everyItem(drawnFor(true));
+    assert.ok(!items.some((item) => item.role === "toggleDevTools"));
+    assert.deepEqual(
+      items.filter((item) => String(item.label ?? "").includes("Developer")),
+      [],
+    );
+  });
+
+  test("their chord is no window command's, so it shadows none of Luke's shortcuts", () => {
+    const tools = everyItem(drawnFor(false)).find((item) => item.role === "toggleDevTools");
+    assert.ok(tools?.accelerator, "the developer tools answer a chord");
+    assert.ok(
+      !KEYED_COMMANDS.some(
+        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === tools.accelerator,
+      ),
+    );
   });
 });

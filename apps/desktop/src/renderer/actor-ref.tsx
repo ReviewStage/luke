@@ -28,10 +28,10 @@ import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
 import { useActorDoor } from "./person-door";
-import { useMinute } from "./planning/plan-time";
-import { RelativeTime } from "./planning/relative-time";
-import { AgentMark } from "./planning/tab-look";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
+import { RelativeTime } from "./tasks/relative-time";
+import { AgentMark } from "./tasks/tab-look";
+import { useMinute } from "./tasks/task-time";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -75,7 +75,7 @@ export const ACTOR_SIZE = {
   PAGE: "page",
 } as const;
 
-type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
+export type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
 /** How many CSS pixels across each size draws its disc, which `desktop.css`'s `--actor-size` says for the same size. */
 export const ACTOR_PIXELS = {
@@ -266,6 +266,39 @@ export function ActorMark({
 }
 
 /**
+ * A face that is no actor's, drawn as a person's is: its picture on a circle
+ * once it loads, and the first letter of its name on the hue read off `id`
+ * until then and where it fails or there is none. For a picker whose options
+ * have faces, such as the avatars Luke appears as on video, so its rows and
+ * chip read as the window's other faces do. Hidden from a screen reader, as
+ * every mark is, since its name stands beside it.
+ */
+export function PictureMark({
+  id,
+  name,
+  pictureUrl,
+  size = ACTOR_SIZE.INLINE,
+}: {
+  /** What the hue is read off: the option's own token. */
+  id: string;
+  /** Whose letter stands until the picture loads. */
+  name: string;
+  pictureUrl: string | undefined;
+  size?: ActorSize;
+}): React.JSX.Element {
+  return (
+    <span className="actor-mark" data-kind={ACTOR_KIND.PERSON} data-size={size} aria-hidden="true">
+      <PictureFace
+        id={id}
+        pictureUrl={pictureUrl}
+        size={size}
+        stand={{ letter: identityLetter(name) }}
+      />
+    </span>
+  );
+}
+
+/**
  * What a screen reader hears of a teammate's task's creator, whose face the
  * row draws at its time: "(created by Charles Pan)". Note that a row says it
  * outside its time's slot, because the slot steps out while the row is
@@ -382,9 +415,9 @@ export function LukeCard({
 
 /** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
-  [SOMEONE_REASON.FORMER]: "No longer in this workspace. Their edits stay in the plan's history.",
+  [SOMEONE_REASON.FORMER]: "No longer in this workspace.",
   [SOMEONE_REASON.UNNAMED]: "Luke can't say who made this change.",
-  [SOMEONE_REASON.EARLIER]: "The plan as it stood before its history began.",
+  [SOMEONE_REASON.EARLIER]: "The plan before its history began.",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
@@ -394,13 +427,15 @@ function SomeoneCard({
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
+  // Note that a named former member's head already says "Former member".
+  const note = former && actor.name !== undefined ? undefined : SOMEONE_NOTES[actor.reason];
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
-      <CardNote>{SOMEONE_NOTES[actor.reason]}</CardNote>
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }
@@ -496,7 +531,7 @@ export function AutomationCard({
 }
 
 /** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
-function actorCard(actor: Actor): ReactNode {
+export function actorCard(actor: Actor): ReactNode {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return <PersonCard actor={actor} />;

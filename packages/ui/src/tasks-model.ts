@@ -21,6 +21,7 @@ import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { VoiceView } from "@luke/voice/voice-view";
+import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
  * tasks-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
@@ -132,6 +133,46 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
+/** How many of a workspace's Linear issues New task offers under its name field at once. */
+export const ISSUE_MATCH_LIMIT = 6;
+
+/**
+ * How closely an issue answers what was typed, nearest first: its key or
+ * its number typed whole, then every word typed at the start of a word of
+ * its title, then every word anywhere in its title or key.
+ */
+function issueNearness(
+  issue: Pick<LinearIssueSummary, "identifier" | "title">,
+  tokens: readonly string[],
+): number {
+  const key = issue.identifier.toLowerCase();
+  const number = key.slice(key.lastIndexOf("-") + 1);
+  if (tokens.some((token) => token === key || token === number)) return 0;
+  const words = issue.title.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  if (tokens.every((token) => words.some((word) => word.startsWith(token)))) return 1;
+  return 2;
+}
+
+/**
+ * The issues New task offers for the name typed so far: those whose title or
+ * key holds every word typed, case aside, nearest first and otherwise in the
+ * order Linear listed them, at most `ISSUE_MATCH_LIMIT` of them; none for a
+ * blank name, which leaves the field a plain name.
+ */
+export function matchingIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
+  issues: readonly Issue[],
+  typed: string,
+): readonly Issue[] {
+  const tokens = searchTokens(typed);
+  if (tokens.length === 0) return [];
+  return issues
+    .filter((issue) => matchesTokens([issue.title, issue.identifier], tokens))
+    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens) }))
+    .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
+    .slice(0, ISSUE_MATCH_LIMIT)
+    .map(({ issue }) => issue);
+}
+
 /**
  * The other workspace a plan's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
@@ -158,15 +199,19 @@ export function repositoryPageUrl(repository: string): string {
 }
 
 /**
- * The picture of a repository's owner on GitHub, an organization's logo or a
- * person's avatar, which is drawn wherever a repository is named or picked:
- * asked of github.com, which redirects to the picture's address, because the
- * picture host answers an organization's name with GitHub's default face.
- * Asked at twice the largest size it is drawn, for a Retina screen.
+ * The picture of a GitHub account by its login, an organization's logo or a
+ * person's avatar: asked of github.com, which redirects to the picture's
+ * address, because the picture host answers an organization's name with
+ * GitHub's default face. Asked at twice the largest size it is drawn, for a
+ * Retina screen.
  */
+export function githubAccountPictureUrl(login: string): string {
+  return `https://github.com/${encodeURIComponent(login)}.png?size=32`;
+}
+
+/** The picture of a repository's owner on GitHub, which is drawn wherever a repository is named or picked. */
 export function repositoryOwnerPictureUrl(repository: string): string {
-  const owner = repository.slice(0, repository.indexOf("/"));
-  return `https://github.com/${encodeURIComponent(owner)}.png?size=32`;
+  return githubAccountPictureUrl(repository.slice(0, repository.indexOf("/")));
 }
 
 /** What the New plan dialog says when the service answered no plan. */
@@ -186,7 +231,7 @@ export function repositoryFailureNote(failure: RepositoryCallFailure): string {
 
 /** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
 const LINEAR_START_FAILED_NOTE =
-  "Linear could not be read for that issue. It may be disconnected from this workspace; an owner or admin can connect it again in Settings › Workspace.";
+  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
 
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
@@ -318,17 +363,18 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin and archive drawn in place of what it carries. */
+/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
-): Omit<Row, keyof MarkStamps> & MarkStamps {
-  const { pinnedAt, archivedAt, ...rest } = row;
+): Omit<Row, keyof MarkStamps | "pinPosition"> & MarkStamps & Pick<TaskSummary, "pinPosition"> {
+  const { pinnedAt, pinPosition, archivedAt, ...rest } = row;
   const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
   const archived = stampAfter(archivedAt, mark?.archivedAt);
   return {
     ...rest,
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
+    ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
     ...(archived === undefined ? undefined : { archivedAt: archived }),
   };
 }
@@ -464,6 +510,70 @@ export function unsettledAgentPins(
   return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 
+/** What the toast says when the service refused a pin's new place, which is put back. */
+export const PIN_MOVE_FAILED_NOTE = "The pin could not be moved. Try again.";
+
+/** One pin dragged to a new place in the sidebar's Pinned section: a plan's or an agent's with no plan, and the position it takes (`@luke/features/pin-order`). */
+export interface PinMove {
+  readonly agent: boolean;
+  readonly id: string;
+  readonly position: string;
+}
+
+/** A place a drag here gave a pin: the position, and whether the service has answered the write. */
+interface PendingPinPosition {
+  readonly position: string;
+  readonly answered: boolean;
+}
+
+/** Where pins dragged here stand until main's view carries them, by the plan's or the agent's id. */
+export type PendingPinPositions = ReadonlyMap<string, PendingPinPosition>;
+
+/** A row of the list with the place a drag here gave its pin drawn over the one it carries. */
+function placed<Row extends { readonly id: string; readonly pinPosition?: string }>(
+  row: Row,
+  pending: PendingPinPositions,
+): Row {
+  const place = pending.get(row.id);
+  return place === undefined ? row : { ...row, pinPosition: place.position };
+}
+
+/** The view with each pin dragged here drawn at its new place, the plans' and the agents' with no plan alike, so a drop stands at once. */
+export function positionedView(view: TasksView, pending: PendingPinPositions): TasksView {
+  if (pending.size === 0) return view;
+  const agents = view.tasklessAgents;
+  return {
+    ...view,
+    tasks: view.tasks.map((task) => placed(task, pending)),
+    ...(agents === undefined
+      ? undefined
+      : { tasklessAgents: agents.map((agent) => placed(agent, pending)) }),
+  };
+}
+
+/**
+ * The dragged places the view still contradicts. One it now carries has
+ * landed, one of a pin it no longer holds has nothing left to place, and one
+ * the service already answered is let go too, since the host wrote what it
+ * answered before it answered: a view that still differs is newer word, a
+ * drag on another Mac since, which the pin then follows.
+ */
+export function unsettledPinPositions(
+  pending: PendingPinPositions,
+  view: TasksView,
+): PendingPinPositions {
+  const rows: readonly {
+    readonly id: string;
+    readonly pinnedAt?: number;
+    readonly pinPosition?: string;
+  }[] = [...view.tasks, ...(view.tasklessAgents ?? [])];
+  const unsettled = [...pending].filter(([id, place]) => {
+    const row = rows.find((each) => each.id === id);
+    return !place.answered && row?.pinnedAt !== undefined && row.pinPosition !== place.position;
+  });
+  return unsettled.length === pending.size ? pending : new Map(unsettled);
+}
+
 /** The plans the sidebar lists, each in its place. */
 export interface SidebarTasks {
   /** The pinned plans, newest pinned first. */
@@ -475,7 +585,9 @@ export interface SidebarTasks {
 }
 
 /**
- * The account's plans sorted into the sidebar's places. Note that an
+ * The account's plans sorted into the sidebar's places, the pinned ones
+ * newest pinned first until the Pinned section orders them with the rest of
+ * its pins (`@luke/features/pin-order`). Note that an
  * archived plan is drawn only among the archived, pinned or not, because its
  * pin is kept for when it is brought back rather than shown while it is away.
  */

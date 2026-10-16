@@ -1,4 +1,9 @@
 import {
+  AUTOMATION_PRESET,
+  type AutomationPresetName,
+  automationPreset,
+} from "@luke/features/automation-code-review";
+import {
   AUTOMATION_NEXT,
   type AutomationGroup,
   automationGroups,
@@ -12,7 +17,7 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { PlusIcon, ZapIcon } from "lucide-react";
+import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -20,11 +25,11 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { momentText, useMinute } from "../planning/plan-time";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
+import { momentText, useMinute } from "../tasks/task-time";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ActionMenu, useActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
@@ -46,7 +51,10 @@ import { useAutomations } from "./use-automations";
  * and an automation turned off reads "Off" where its next run would. It is
  * an experiment (`EXPERIMENT.AUTOMATIONS`): every door to it is gated on the
  * account's switch, and its toolbar says so with a quiet badge and Send
- * feedback.
+ * feedback. Under the list, or under the line saying there is none yet,
+ * stand the suggested automations, Code review among them: a press opens a
+ * new automation's page filled in from the suggestion's preset, to look
+ * over and Create.
  */
 
 /** What an automation's row's right-click menu is called. */
@@ -54,6 +62,12 @@ const ROW_ACTIONS = "Automation actions";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
+
+/** The presets the list suggests, in its order, each by the glyph of what fires it. */
+const SUGGESTIONS: readonly {
+  readonly name: AutomationPresetName;
+  readonly glyph: React.ReactNode;
+}[] = [{ name: AUTOMATION_PRESET.CODE_REVIEW, glyph: <GitPullRequestIcon /> }];
 
 /** Why a switch did not move, as its toast says it. */
 function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
@@ -197,19 +211,62 @@ function AutomationList({
   );
 }
 
+/**
+ * The automations Luke suggests, under a heading of their own, each a card:
+ * the glyph of what fires it, its name over what it does, and a plus, the
+ * whole card one press that opens a new automation's page filled in from
+ * its preset.
+ */
+function SuggestedAutomations({
+  disabled,
+  onStart,
+}: {
+  disabled: boolean;
+  onStart: (preset: AutomationPresetName) => void;
+}): React.JSX.Element {
+  return (
+    <section className="settings-group automation-suggestions" aria-label="Suggested">
+      <h2 className="settings-group-title">Suggested</h2>
+      <div className="automation-suggestion-cards">
+        {SUGGESTIONS.map(({ name, glyph }) => {
+          const preset = automationPreset(name);
+          return (
+            <button
+              key={name}
+              type="button"
+              className="automation-suggestion"
+              disabled={disabled}
+              onClick={() => onStart(name)}
+            >
+              <span className="automation-suggestion-head">
+                <span className="automation-suggestion-glyph" aria-hidden="true">
+                  {glyph}
+                </span>
+                <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
+              </span>
+              <span className="automation-suggestion-name">{preset.name}</span>
+              <span className="automation-suggestion-detail">{preset.description}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
-  plans,
+  tasks,
   automations,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   automations: ReturnType<typeof useAutomations>;
 }): React.JSX.Element {
-  const view = plans.automationsView;
+  const view = tasks.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const toast = useToast();
   const now = useMinute();
-  const workspace = plans.workspace;
+  const workspace = tasks.workspace;
   const { read, reload, toggle } = automations;
   const onToggle = (automation: AutomationSummary, enabled: boolean) => {
     toggle(automation.id, enabled).then((answer) => {
@@ -220,6 +277,8 @@ function ListPage({
     });
   };
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
+  const openSuggested = (preset: AutomationPresetName) =>
+    view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   return (
@@ -246,20 +305,23 @@ function ListPage({
         {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : groups.length === 0 ? (
-          <EmptyState icon={<ZapIcon />} title="No automations yet">
-            An automation starts a coding agent on a schedule, for you alone or for everyone in{" "}
-            {workspace?.name ?? "the workspace"}.
-          </EmptyState>
+          <div className="automations-empty">
+            <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
+            <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
+          </div>
         ) : (
-          <AutomationList
-            groups={groups}
-            workspace={workspace}
-            now={now}
-            onOpen={(automation) =>
-              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
-            }
-            onToggle={onToggle}
-          />
+          <>
+            <AutomationList
+              groups={groups}
+              workspace={workspace}
+              now={now}
+              onOpen={(automation) =>
+                view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
+              }
+              onToggle={onToggle}
+            />
+            <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
+          </>
         )}
       </div>
     </section>
@@ -318,17 +380,17 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.
  */
-export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+export function AutomationsPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose automations they are.
   return (
     <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-      <AutomationsPages plans={plans} />
+      <AutomationsPages tasks={plans} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
-function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element {
+function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);
@@ -337,7 +399,7 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
-    return <ListPage plans={plans} automations={automations} />;
+    return <ListPage tasks={plans} automations={automations} />;
   }
   const { read, reload } = automations;
   if (read !== undefined && "failure" in read) {
@@ -357,6 +419,7 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+  const preset = place.kind === AUTOMATIONS_PAGE.NEW ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   return (
     // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
@@ -364,17 +427,21 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
       <AutomationEditor
         key={editing}
         automation={opened}
+        preset={preset}
         workspace={workspace}
         offersOwner={offersOwner}
-        repositories={plans.newPlan.repositoriesIn(workspace?.id)}
+        repositories={plans.newTask.repositoriesIn(workspace?.id)}
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
         linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
         leaveGuard={plans.leaveGuard}
+        onDeleted={(automationId) =>
+          view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
+        }
         onCreated={(automationId) => {
           setMade(automationId);
-          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId, created: true });
         }}
       />
     </Fragment>

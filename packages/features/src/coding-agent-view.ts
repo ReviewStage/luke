@@ -1,11 +1,13 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
@@ -15,6 +17,7 @@ import {
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
@@ -188,6 +191,14 @@ export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  /** Only the agents whose title or task's name holds these words, whatever their case. */
+  words: EffectSchema.optionalKey(
+    EffectSchema.NonEmptyString.check(
+      EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS),
+    ),
+  ),
+  /** Lists the archived agents among the rest, each carrying its `archivedAt`. */
+  includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;
@@ -326,6 +337,14 @@ export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
+/** One agent's pull request as its Pull request tab draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewAnswerView = typeof codingAgentOverviewAnswerViewSchema.Type;
+
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;
 
@@ -419,3 +438,32 @@ export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentInboxAttachmentView = typeof codingAgentInboxAttachmentViewSchema.Type;
+
+/** One image an agent's pull request's overview names, as the window asks for it: the agent, and the address GitHub's rendering spelled. */
+export const codingAgentGitHubImageParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  src: EffectSchema.NonEmptyString.check(
+    EffectSchema.isMaxLength(GITHUB_IMAGE_BOUNDS.MAX_URL_CHARS),
+  ),
+});
+
+export type CodingAgentGitHubImageParams = typeof codingAgentGitHubImageParamsSchema.Type;
+
+/** The media types an image read from GitHub may be. */
+export const githubImageTypeSchema = EffectSchema.Literals(Object.values(GITHUB_IMAGE_TYPE));
+
+/**
+ * That image, as the window hears it: its bytes in base64 under the type
+ * GitHub served, which the window draws from a `data:` URL of its own
+ * making, or why there is none. The service read it on the App's token, so
+ * the window holds no signed address and asks GitHub nothing itself.
+ */
+export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    contentType: githubImageTypeSchema,
+    base64: EffectSchema.String,
+  }),
+  failed,
+]);
+
+export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;

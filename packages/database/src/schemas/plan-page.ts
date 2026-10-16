@@ -1,4 +1,5 @@
-import { index, integer, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
+import type { PageShower } from "@luke/features/page-wire";
+import { index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { task } from "./plan.js";
 
@@ -9,7 +10,8 @@ import { task } from "./plan.js";
  * has no row of its own: its versions share its id, numbered from one, and
  * the newest names it. Each version is written once and never changed, so an
  * earlier one reads as it was shown. A version also has an id of its own, so
- * one version can be named alone, as a link to it would name it. The HTML is
+ * one version can be named alone, as a link to it would name it, and says who
+ * showed it, Luke or a coding agent by its id, named as it is read. The HTML is
  * stored as written, like the plan's own text, readable by an operator and
  * kept the developer's own by the plan it hangs off. Rows go with their plan.
  */
@@ -28,6 +30,8 @@ export const planPageVersion = pgTable(
     title: text("title").notNull(),
     /** The page's whole HTML document, as the agent wrote it. */
     html: text("html").notNull(),
+    /** Who showed the version, Luke or a coding agent by its id (`PageShower`); null for one shown before it was kept. */
+    shownBy: jsonb("shown_by").$type<PageShower>(),
     at: timestamptz("at").notNull(),
   },
   (table) => [

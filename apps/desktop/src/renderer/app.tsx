@@ -62,15 +62,15 @@ import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
-import { type AgentPlace, useAgentEndToasts } from "./planning/agent-end-toast";
-import { useInboxToasts } from "./planning/inbox-toast";
-import { MessageRevealProvider } from "./planning/message-links";
-import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
-import { OpenLinkProvider } from "./planning/use-open-link";
-import { useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
+import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
+import { useInboxToasts } from "./tasks/inbox-toast";
+import { MessageRevealProvider } from "./tasks/message-links";
+import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
+import { OpenLinkProvider } from "./tasks/use-open-link";
+import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
 import { useAppState, useExperiment } from "./use-app-state";
@@ -87,9 +87,9 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
 
 /** No plan holds an inbox item, as the document reads before main has answered. */
-const NO_PLANS_HOLDING: readonly AppInboxTaskHolding[] = [];
+const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
 /** Nothing waiting from agents with no plan, as one value across renders. */
-const NOTHING_PLANLESS: readonly AppInboxTasklessItem[] = [];
+const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
@@ -276,9 +276,9 @@ export function App(): React.JSX.Element {
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   // The Plans tab, drawn from the same voice report the strip reads, so a
   // planning call's words and levels are the shape's as any call's are.
-  const plans = usePlansTab({
+  const tasks = useTasksTab({
     acts: { act, tell },
-    planning: state?.tasks ?? IDLE_TASKS_VIEW,
+    tasks: state?.tasks ?? IDLE_TASKS_VIEW,
     run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     account: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined,
@@ -288,8 +288,8 @@ export function App(): React.JSX.Element {
     shown: tab === PANEL_TAB.TASKS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
-    inboxPlans: state?.inbox.tasks ?? NO_PLANS_HOLDING,
-    inboxPlanless: state?.inbox.taskless ?? NOTHING_PLANLESS,
+    inboxTasks: state?.inbox.tasks ?? NO_TASKS_HOLDING,
+    inboxTaskless: state?.inbox.taskless ?? NOTHING_TASKLESS,
     failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
@@ -299,18 +299,18 @@ export function App(): React.JSX.Element {
   });
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
-    listedId: plans.workspace?.id,
-    workspaces: plans.workspaces,
+    listedId: tasks.workspace?.id,
+    workspaces: tasks.workspaces,
     settingsShown: tab === PANEL_TAB.SETTINGS,
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
-    plans,
+    tasks,
     tab === PANEL_TAB.SETTINGS
       ? {
           view: settingsView,
-          workspace: plans.workspaces.find((each) => each.id === settingsWorkspace.shownId),
+          workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
         }
       : undefined,
     !accountGated,
@@ -321,12 +321,12 @@ export function App(): React.JSX.Element {
   // owed to the window, not to a render. Note that each way here the window
   // is moved by more than one step asks once, as a whole, while a page holds
   // unsaved work, so Leave takes every step and Cancel takes none.
-  const showAgent = useRef(plans.onShowAgent);
-  showAgent.current = plans.onShowAgent;
-  const showAgentPage = useRef(plans.agentView.onOpen);
-  showAgentPage.current = plans.agentView.onOpen;
+  const showAgent = useRef(tasks.onShowAgent);
+  showAgent.current = tasks.onShowAgent;
+  const showAgentPage = useRef(tasks.agentView.onOpen);
+  showAgentPage.current = tasks.agentView.onOpen;
   const openAgent = useCallback(
-    ({ planId, agentId }: AgentPlace) =>
+    ({ taskId: planId, agentId }: AgentPlace) =>
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
         if (planId === null) showAgentPage.current(agentId);
@@ -340,7 +340,7 @@ export function App(): React.JSX.Element {
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const toast = useToast();
   const openLukeLink = (link: ReadLink) => {
-    const route = linkRoute(link, { workspaces: plans.workspaces, factoryOn, automationsOn });
+    const route = linkRoute(link, { workspaces: tasks.workspaces, factoryOn, automationsOn });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
@@ -348,14 +348,14 @@ export function App(): React.JSX.Element {
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
-        plans.onOpenLink(link);
+        tasks.onOpenLink(link);
       })();
     }
   };
   // A Luke link the system handed the app opens once sign-in no longer stands in the way, and
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
-  const workspacesUnread = plans.workspaces.length === 0 && !plans.listFailed;
+  const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => window.luke.onShowLink(openLink), [openLink]);
   // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
@@ -372,14 +372,14 @@ export function App(): React.JSX.Element {
   useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
-  const showPlan = useRef(plans.onShowPlan);
-  showPlan.current = plans.onShowPlan;
+  const showTask = useRef(tasks.onShowTask);
+  showTask.current = tasks.onShowTask;
   useEffect(
     () =>
-      window.luke.onShowPlan(({ planId }) =>
+      window.luke.onShowTask(({ taskId: planId }) =>
         guardLeave(() => {
           changeTab(PANEL_TAB.TASKS);
-          showPlan.current(planId);
+          showTask.current(planId);
         })(),
       ),
     [changeTab, guardLeave],
@@ -388,18 +388,18 @@ export function App(): React.JSX.Element {
   // on screen: another plan, the home page, Settings, or the plan itself
   // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
-  const planShown = callBarTaskId({
+  const taskShown = callBarTaskId({
     tasksTab: tab === PANEL_TAB.TASKS,
-    documentPage: plans.page === TASKS_PAGE.DOCUMENT,
-    historyOpen: plans.history.open,
-    inboxOpen: plans.inboxView.open,
-    agentPageOpen: plans.agentView.agentId !== undefined,
-    sidePanelFullScreen: plans.sidePanel.fullScreen,
+    documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
+    historyOpen: tasks.history.open,
+    inboxOpen: tasks.inboxView.open,
+    agentPageOpen: tasks.agentView.agentId !== undefined,
+    sidePanelFullScreen: tasks.sidePanel.fullScreen,
     activeTaskId: state?.tasks.activeTaskId,
   });
   const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
-    !accountGated && callCardShown({ view: voiceView, focused, taskShown: planShown })
+    !accountGated && callCardShown({ view: voiceView, focused, taskShown: taskShown })
       ? {
           card: callCard({ view: voiceView, tasks: state?.tasks ?? IDLE_TASKS_VIEW }),
           speakerMuted: voiceView.speakerMuted,
@@ -414,8 +414,8 @@ export function App(): React.JSX.Element {
   // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
   useFailedRunToasts(openFailedRun);
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
-  const showInbox = useRef(plans.onShowInbox);
-  showInbox.current = plans.onShowInbox;
+  const showInbox = useRef(tasks.onShowInbox);
+  showInbox.current = tasks.onShowInbox;
   const openInbox = useCallback(
     (planId: string) =>
       guardLeave(() => {
@@ -424,11 +424,11 @@ export function App(): React.JSX.Element {
       })(),
     [changeTab, guardLeave],
   );
-  useEffect(() => window.luke.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
+  useEffect(() => window.luke.onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
   // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
   // in its own workspace's list, the item itself shown where the Inbox shows one column.
-  const inboxDoors = useRef(plans);
-  inboxDoors.current = plans;
+  const inboxDoors = useRef(tasks);
+  inboxDoors.current = tasks;
   useEffect(
     () =>
       window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) =>
@@ -448,7 +448,7 @@ export function App(): React.JSX.Element {
     openInbox,
     state?.inbox.waiting ?? NOTHING_WAITING,
     state?.version ?? 0,
-    plans.inboxShown,
+    tasks.inboxShown,
   );
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
@@ -458,7 +458,7 @@ export function App(): React.JSX.Element {
     onTabChange: changeTab,
     settingsView,
     onSettingsViewChange: setSettingsView,
-    plans,
+    tasks,
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
@@ -534,25 +534,37 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, the Inbox, an agent's or a person's page, Factory, or the Automations page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, or the Automations page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
-      // clearing, then letting go of the caret — so neither is a layer here.
+      // clearing, then letting go of the caret — so neither is a layer here,
+      // bar the caret Settings opens with, whose untouched Escape leaves it.
+      // The Inbox is the one page Escape never leaves: a narrow one's item
+      // steps back to its list, and there the press stops, rather than
+      // reaching the plan the Inbox stands over.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
-      if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
+      if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
-      plans.back();
+      tasks.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [signIn.cancelSignIn, signIn.signInWait, listening, plans.back, speaking, stopSpeaking]);
+  }, [
+    signIn.cancelSignIn,
+    signIn.signInWait,
+    listening,
+    tasks.back,
+    tasks.inboxView.open,
+    speaking,
+    stopSpeaking,
+  ]);
 
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);
@@ -601,29 +613,29 @@ export function App(): React.JSX.Element {
   };
   // The Workspace page shows the workspace the sidebar lists, or one a link named.
   const workspace = {
-    workspaces: plans.workspaces,
+    workspaces: tasks.workspaces,
     workspaceId: settingsWorkspace.shownId,
     // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
     onLeft: (workspaceId: string) => {
-      plans.onLeftWorkspace(workspaceId);
+      tasks.onLeftWorkspace(workspaceId);
       changeTab(PANEL_TAB.TASKS);
     },
-    listFailed: plans.listFailed,
-    onRetryList: plans.onRetryList,
+    listFailed: tasks.listFailed,
+    onRetryList: tasks.onRetryList,
   };
 
   // A remedy under a refused start or message mends the plan's repository through the Plans tab's doors.
   const repositoryRemedies: RepositoryRemedyDoors = {
-    openWorkspaceGitHub: plans.onOpenWorkspaceGitHub,
-    openGitHub: plans.repositories.openGitHub,
-    chooseRepository: plans.onChangeRepository,
-    movePlan: plans.onMovePlan,
+    openWorkspaceGitHub: tasks.onOpenWorkspaceGitHub,
+    openGitHub: tasks.repositories.openGitHub,
+    chooseRepository: tasks.onChangeRepository,
+    moveTask: tasks.onMoveTask,
   };
 
   // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
   const openPerson = (userId: string, name?: string, workspaceId?: string) => {
     changeTab(PANEL_TAB.TASKS);
-    plans.personView.onOpen(userId, name, workspaceId);
+    tasks.personView.onOpen(userId, name, workspaceId);
   };
 
   return (
@@ -635,12 +647,12 @@ export function App(): React.JSX.Element {
               <RepositoryRemedyProvider value={repositoryRemedies}>
                 <GitHubConnectProvider
                   value={{
-                    connection: plans.github,
-                    connect: plans.onConnectAccountGitHub,
-                    disconnect: plans.onDisconnectAccountGitHub,
+                    connection: tasks.github,
+                    connect: tasks.onConnectAccountGitHub,
+                    disconnect: tasks.onDisconnectAccountGitHub,
                   }}
                 >
-                  <ListedAutomations plans={plans} on={automationsOn}>
+                  <ListedAutomations tasks={tasks} on={automationsOn}>
                     <div
                       className="app-stage"
                       data-capture={String(state.run.captureMode)}
@@ -655,8 +667,8 @@ export function App(): React.JSX.Element {
                       <div className="desktop-stage">
                         <MessageRevealProvider
                           value={{
-                            reveal: plans.messageReveal,
-                            onRevealed: plans.onMessageRevealed,
+                            reveal: tasks.messageReveal,
+                            onRevealed: tasks.onMessageRevealed,
                           }}
                         >
                           <DesktopShell
@@ -670,7 +682,7 @@ export function App(): React.JSX.Element {
                             }}
                             tab={tab}
                             onTabChange={changeTab}
-                            plans={plans}
+                            tasks={tasks}
                             history={history}
                             sidebar={sidebar}
                             call={call}
@@ -736,7 +748,7 @@ export function App(): React.JSX.Element {
                         available={!accountGated}
                         tab={tab}
                         onTabChange={changeTab}
-                        plans={plans}
+                        tasks={tasks}
                         links={copyLink}
                         settings={{
                           rows: settingsRowsInput({

@@ -78,7 +78,9 @@ export type MessageActionsProps = ComponentProps<"div">;
  * top right corner on a small raised card, as a comment's toolbar does, so
  * a turn takes no room for a bar nobody is looking at and the column keeps
  * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
- * pointer either, so the words under it stay selectable.
+ * pointer either, so the words under it stay selectable. A sent message
+ * sets them back in a line under its bubble, beside who sent it
+ * (`agent-tab.tsx`'s `AgentMessage`).
  */
 export function MessageActions({ className, children, ...props }: MessageActionsProps): ReactNode {
   return (
@@ -114,7 +116,7 @@ export function MessageAction({
       type="button"
       aria-label={label}
       className={cn(
-        "flex size-6 cursor-default items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&>svg]:size-4",
+        "flex size-6 cursor-default items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&>svg]:size-4",
         className,
       )}
       {...props}

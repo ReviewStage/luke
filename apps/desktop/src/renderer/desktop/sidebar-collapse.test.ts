@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
+import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -129,7 +129,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       tab,
       onTabChange: setTab,
-      plans: plansControl({ page: TASKS_PAGE.HOME, onGoHome }),
+      tasks: tasksControl({ page: TASKS_PAGE.HOME, onGoHome }),
       history: {
         canGoBack: false,
         canGoForward: false,
@@ -247,6 +247,32 @@ test("in a narrow window the toggle and its chord float the sidebar over the wor
   assert.equal(window.localStorage.getItem(KEPT_FOLD), "false");
 });
 
+test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab walking out of it is brought back, until Escape hands it back", () => {
+  const page = mount(1000);
+  const button = toggle(page);
+  const work = page.querySelector<HTMLButtonElement>("main.desktop-main button");
+  assert.ok(work, "the work offers a press to hold the keyboard");
+  button.focus();
+  act(() => button.click());
+  const home = sidebarOf(page).querySelector("button.sidebar-home");
+  assert.ok(document.activeElement === home, "the keyboard lands on the place shown");
+
+  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  act(() => {
+    home?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    work.focus();
+  });
+  assert.ok(document.activeElement === home, "the keyboard is brought back into the sidebar");
+
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(standing(page), "away");
+  assert.ok(document.activeElement === button, "Escape hands the keyboard back");
+});
+
 test("the floating sidebar stays for a press inside it and goes at a press outside it, or once a choice in it is made", () => {
   let home = 0;
   const page = mount(1000, () => (home += 1));
@@ -265,7 +291,7 @@ test("the floating sidebar stays for a press inside it and goes at a press outsi
   assert.deepEqual([home, standing(page)], [1, "away"]);
 });
 
-test("the pointer at the window's left edge peeks the folded sidebar out, which goes once the pointer leaves it, though a press in it keeps it open; a wide window's toggle pins it from a peek", () => {
+test("the pointer at the window's left edge peeks the folded sidebar out, which goes once the pointer leaves it, a press in it or not, as Linear's does; a wide window's toggle pins it from a peek", () => {
   const page = mount(1000);
   const main = page.querySelector("main.desktop-main");
   assert.ok(main);
@@ -282,10 +308,9 @@ test("the pointer at the window's left edge peeks the folded sidebar out, which 
 
   pointerCross(main, edge());
   pressDown(sidebarOf(page));
+  assert.equal(standing(page), "floating", "a press in a peek is no press outside it");
   pointerCross(sidebarOf(page), main);
-  assert.equal(standing(page), "floating", "pressed, the peek is open");
-  pressDown(main);
-  assert.equal(standing(page), "away");
+  assert.equal(standing(page), "away", "a press keeps no peek open");
 
   resizeWindow(1450);
   act(() => toggle(page).click());
@@ -344,7 +369,7 @@ test("a dialog raised from the open sidebar takes Escape first, leaving the side
   assert.deepEqual([standing(page), press.defaultPrevented], ["floating", false]);
 });
 
-test("a peek opened by a press on no control keeps the keyboard in the work, and Escape there still puts it away", () => {
+test("a press on no control in a peek keeps the keyboard in the work, and Escape there still puts it away", () => {
   const page = mount(1000);
   const main = page.querySelector("main.desktop-main");
   const edge = page.querySelector("[data-sidebar-peek-edge]");
@@ -353,8 +378,8 @@ test("a peek opened by a press on no control keeps the keyboard in the work, and
   work.focus();
   pointerCross(main, edge);
   pressDown(sidebarOf(page).querySelector(".sidebar-rule") ?? sidebarOf(page));
-  pointerCross(sidebarOf(page), main);
-  assert.equal(standing(page), "floating", "pressed, the peek is open");
+  assert.equal(standing(page), "floating");
+  assert.ok(document.activeElement === work, "the keyboard stays in the work");
   const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   act(() => {
     work.dispatchEvent(press);

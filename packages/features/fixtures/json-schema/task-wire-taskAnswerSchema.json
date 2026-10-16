@@ -46,6 +46,9 @@
           "type": "number",
           "minimum": 0
         },
+        "pinPosition": {
+          "type": "string"
+        },
         "archivedAt": {
           "type": "number",
           "minimum": 0

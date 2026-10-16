@@ -5,12 +5,14 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
@@ -18,6 +20,7 @@ import {
   codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentGitHubImageParamsSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxParamsSchema,
@@ -94,6 +97,8 @@ export type CodingAgentClient = Pick<
   | "agentInbox"
   | "pullRequest"
   | "changes"
+  | "overview"
+  | "githubImage"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -382,6 +387,26 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.changes(agentId));
         return carried<CodingAgentChangesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request names one agent",
+        );
+        const answer = yield* asked(client.overview(agentId));
+        return carried<CodingAgentOverviewAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, src } = yield* read(
+          codingAgentGitHubImageParamsSchema,
+          params,
+          "reading an image of an agent's pull request names the agent and the image's address",
+        );
+        const answer = yield* asked(client.githubImage(agentId, src));
+        return carried<CodingAgentGitHubImageView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
       Effect.gen(function* () {

@@ -13,19 +13,20 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
-import { ChangesCard } from "../planning/agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import { changesOffers, changesTabOf } from "./side-panel";
+import { tasksControl } from "#testing/tasks-control";
+import { ChangesCard } from "../tasks/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel";
+import { changesOffers, changesTabOf, showPullRequest } from "./side-panel";
 
-const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** An agent at rest on the plan, named by its title. */
 function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
   return {
     id,
-    planId: PLAN,
+    planId: TASK,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
@@ -57,7 +58,7 @@ const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 function agents(): CodingAgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
-    ...plansControl().agents,
+    ...tasksControl().agents,
     agents: [FIRST, SECOND, THIRD],
     agentIds: [FIRST.id, SECOND.id, THIRD.id],
     pullRequests: new Map([
@@ -81,6 +82,24 @@ test('an agent\'s Changes chip opens the one tab the "+" offers for its pull req
   assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []), {
     changes: SECOND.id,
   });
+});
+
+test("an agent's chips open the one Pull request tab of its pull request: its pull request's chip on the overview, its Changes chip on the files", () => {
+  const control = agents();
+  const asked: unknown[] = [];
+  const panel = {
+    changes: [],
+    onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
+    onPullRequestView: (agentId: string, view: string) => asked.push(["view", agentId, view]),
+  };
+  showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.OVERVIEW);
+  showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.FILES);
+  assert.deepEqual(asked, [
+    ["view", FIRST.id, PULL_REQUEST_VIEW.OVERVIEW],
+    ["choose", { changes: FIRST.id }],
+    ["view", THIRD.id, PULL_REQUEST_VIEW.FILES],
+    ["choose", { changes: THIRD.id }],
+  ]);
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {

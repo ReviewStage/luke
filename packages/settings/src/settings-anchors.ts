@@ -46,6 +46,7 @@ export const SETTINGS_SEARCH_ROW = {
  * without one.
  */
 export const EXPERIMENT_ANCHOR = {
+  [EXPERIMENT.CHAT]: "experiment-chat",
   [EXPERIMENT.FACTORY]: "experiment-factory",
   [EXPERIMENT.AUTOMATIONS]: "experiment-automations",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",

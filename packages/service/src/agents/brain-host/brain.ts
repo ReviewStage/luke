@@ -3,6 +3,7 @@ import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-s
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
@@ -42,17 +43,23 @@ import { runShowCode, SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import {
+  ARCHIVE_AGENT_TOOL,
   type CodingAgentCall,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
+  READ_PAGE_TOOL,
+  runArchiveAgent,
   runListAgents,
   runListTasks,
   runMessageAgent,
   runReadAgent,
+  runReadPage,
   runStartAgent,
+  runUnarchiveAgent,
   START_AGENT_TOOL,
+  UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -222,6 +229,8 @@ On an instruction, send it when it is clear which agent is meant and what to say
 
 On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
 
+On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
+
 Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
 
 ### Available tools
@@ -239,10 +248,12 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
 - look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
+- read_page reads a page shown on any task of the workspace by its id, its HTML as it stands, before you revise it or tell the developer what it shows.
 - list_agents lists the coding agents of this task's workspace, or of one task of it (this task with thisTask, another by its taskId), each with its id, its title as the developer sees it, its status, what it last did, its task, and whether it is archived.
 - read_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
+- archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, and who started it, so an agent can be started on another task by its taskId.
 - end_call ends the voice call once the developer asks you to end it or has clearly said they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"), even right after another request such as starting a coding agent. Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
@@ -515,7 +526,7 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   },
   {
     ...SHOW_PAGE_TOOL,
-    run: (call, input) => runShowPage(call.task, input),
+    run: (call, input) => runShowPage(call.task, input, { kind: PAGE_SHOWER.LUKE }),
   },
   {
     ...LIST_AGENTS_TOOL,
@@ -534,8 +545,20 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     run: (call, input) => runStartAgent(call.agents, input),
   },
   {
+    ...ARCHIVE_AGENT_TOOL,
+    run: (call, input) => runArchiveAgent(call.agents, input),
+  },
+  {
+    ...UNARCHIVE_AGENT_TOOL,
+    run: (call, input) => runUnarchiveAgent(call.agents, input),
+  },
+  {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...READ_PAGE_TOOL,
+    run: (call, input) => runReadPage(call.agents, input),
   },
   {
     ...END_CALL_TOOL,

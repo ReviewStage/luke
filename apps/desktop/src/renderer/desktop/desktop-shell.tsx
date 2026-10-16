@@ -5,7 +5,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
@@ -13,30 +13,30 @@ import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { NewPlanDialog } from "../planning/new-plan-dialog";
-import { usePlanLooks } from "../planning/use-plan-looks";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  type PlansControl,
-} from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
+import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
+import { MentionedAgents } from "../tasks/mentioned-agent-card";
+import { NewTaskDialog } from "../tasks/new-task-dialog";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { useTaskLooks } from "../tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, type AutomationsPlace, type TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopFactory } from "./desktop-factory";
 import { DesktopInbox } from "./desktop-inbox";
-import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { DesktopTasks } from "./desktop-tasks";
+import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
+import { useFloatDismiss } from "./hover-pane";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
-import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
+import { taskCardOf } from "./task-card";
+import { useSummaryPin } from "./task-summary";
 import { useWindowTitle } from "./window-title";
 
 /**
@@ -127,7 +127,7 @@ function usePlaceCommands(
   pastGate: boolean,
   tab: PanelTab,
   onTabChange: (tab: PanelTab) => void,
-  plans: PlansControl,
+  tasks: TasksControl,
   settings: SettingsPanelProps,
   history: NavigationHistory,
 ): void {
@@ -137,30 +137,30 @@ function usePlaceCommands(
     pastGate && history.canGoForward ? history.onForward : undefined,
   );
   useAppCommand(
-    APP_COMMAND.NEW_PLAN,
-    pastGate && plans.signedIn
+    APP_COMMAND.NEW_TASK,
+    pastGate && tasks.signedIn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          plans.onNewPlan();
+          tasks.onNewTask();
         }
       : undefined,
   );
   useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
   useAppCommand(
     APP_COMMAND.HOME,
-    pastGate && plans.signedIn
+    pastGate && tasks.signedIn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          plans.onGoHome();
+          tasks.onGoHome();
         }
       : undefined,
   );
   useAppCommand(
     APP_COMMAND.INBOX,
-    pastGate && plans.signedIn
+    pastGate && tasks.signedIn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          plans.inboxView.onOpen();
+          tasks.inboxView.onOpen();
         }
       : undefined,
   );
@@ -168,10 +168,10 @@ function usePlaceCommands(
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   useAppCommand(
     APP_COMMAND.FACTORY,
-    pastGate && plans.signedIn && factoryOn
+    pastGate && tasks.signedIn && factoryOn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          plans.factoryView.onOpen();
+          tasks.factoryView.onOpen();
         }
       : undefined,
   );
@@ -179,17 +179,17 @@ function usePlaceCommands(
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
-    pastGate && plans.signedIn && automationsOn
+    pastGate && tasks.signedIn && automationsOn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          plans.automationsView.onOpen();
+          tasks.automationsView.onOpen();
         }
       : undefined,
   );
-  const { onReopenClosedTab } = plans;
+  const { onReopenClosedTab } = tasks;
   useAppCommand(
     APP_COMMAND.REOPEN_CLOSED_TAB,
-    pastGate && plans.signedIn && onReopenClosedTab !== undefined
+    pastGate && tasks.signedIn && onReopenClosedTab !== undefined
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           onReopenClosedTab();
@@ -215,15 +215,15 @@ function usePlaceCommands(
  * own. It asks for exactly what the sidebar's button asks for: the New plan
  * dialog, over whatever stands.
  */
-function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
+function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (
-    <Tooltip label="New task" command={APP_COMMAND.NEW_PLAN}>
+    <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
       <button
         type="button"
         className="icon-button"
         aria-label="New task"
-        disabled={!plans.signedIn}
-        onClick={plans.onNewPlan}
+        disabled={!tasks.signedIn}
+        onClick={tasks.onNewTask}
       >
         <ComposeIcon />
       </button>
@@ -232,38 +232,12 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
- * Puts the floating sidebar away at a press anywhere outside it and its
- * toggle, answering the handler they take the press with. Note that the
- * press is heard at the document as it bubbles, after the sidebar's own
- * handlers, so one inside it, a menu or a dialog it opened included, since
- * React carries their presses through the sidebar, is marked before the
- * document asks.
- */
-function useOverlayDismiss(sidebar: SidebarCollapse): () => void {
-  const within = useRef(false);
-  const floating = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const { onOverlay } = sidebar;
-  useEffect(() => {
-    if (!floating) return;
-    const press = () => {
-      if (!within.current) onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      within.current = false;
-    };
-    document.addEventListener("pointerdown", press);
-    return () => document.removeEventListener("pointerdown", press);
-  }, [floating, onOverlay]);
-  return () => {
-    within.current = true;
-  };
-}
-
-/**
  * Whether the open plan's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
  */
-function transcriptStreaming(plans: PlansControl): boolean {
-  const { sidePanel, transcript } = plans;
+function transcriptStreaming(tasks: TasksControl): boolean {
+  const { sidePanel, transcript } = tasks;
   return (
     sidePanel.open &&
     sidePanel.tab === SIDE_PANEL_TAB.CALL &&
@@ -279,26 +253,26 @@ function transcriptStreaming(plans: PlansControl): boolean {
  */
 function titleSubject(
   tab: PanelTab,
-  plans: PlansControl,
-  shownPlan: Task | undefined,
+  tasks: TasksControl,
+  shownTask: Task | undefined,
 ): Parameters<typeof useWindowTitle>[0] {
-  const { signedIn } = plans;
+  const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
-  if (plans.inboxView.open) return { signedIn, subject: "Inbox", workspace: plans.workspace };
-  if (plans.agentView.agentId !== undefined) {
-    return { signedIn, subject: "Agent", workspace: plans.workspace };
+  if (tasks.inboxView.open) return { signedIn, subject: "Inbox", workspace: tasks.workspace };
+  if (tasks.agentView.agentId !== undefined) {
+    return { signedIn, subject: "Agent", workspace: tasks.workspace };
   }
-  if (plans.personView.userId !== undefined) {
-    return { signedIn, subject: "Profile", workspace: plans.workspace };
+  if (tasks.personView.userId !== undefined) {
+    return { signedIn, subject: "Profile", workspace: tasks.workspace };
   }
-  if (plans.factoryView.open) return { signedIn, subject: "Factory", workspace: plans.workspace };
-  if (plans.automationsView.open) {
-    return { signedIn, subject: "Automations", workspace: plans.workspace };
+  if (tasks.factoryView.open) return { signedIn, subject: "Factory", workspace: tasks.workspace };
+  if (tasks.automationsView.open) {
+    return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
-  if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
+  if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
-  const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
-  return { signedIn, subject: shownPlan.name, workspace };
+  const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
+  return { signedIn, subject: shownTask.name, workspace };
 }
 
 /** Where on the Automations page a find stands: its list, a new automation, or one automation's editor, each a place of its own. */
@@ -318,17 +292,17 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * sidebar was, and leaves the same way; the Inbox stands in the plan's
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
- * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
+ * rather than by the plan's page (`use-task-looks.ts`). Folding the sidebar,
  * opening, shutting, or growing the side panel, or the plan's summary pinned
  * or folded to its rail, by a press or by its column's room
- * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). A
+ * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
  * press outside it and its toggle. Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
  * stands behind it. New plan's dialog stands over the plans or a version
- * history, whichever is drawn (`new-plan-dialog.tsx`). The live captions ride the call bar while the plan's
+ * history, whichever is drawn (`new-task-dialog.tsx`). The live captions ride the call bar while the plan's
  * column is drawn, and float at the window's foot wherever else a call can
  * still be heard; they hold back spoken words while the plan's Transcript
  * is on screen streaming the same ones.
@@ -337,7 +311,7 @@ export function DesktopShell({
   gates,
   tab,
   onTabChange,
-  plans,
+  tasks,
   history,
   sidebar,
   call,
@@ -347,7 +321,7 @@ export function DesktopShell({
   gates: DesktopGates;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
-  plans: PlansControl;
+  tasks: TasksControl;
   history: WindowHistory;
   sidebar: SidebarCollapse;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
@@ -357,44 +331,63 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
-  const keepOverlay = useOverlayDismiss(sidebar);
+  const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
-  usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
+  usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // Factory switched off while it stands, here or on another Mac, gives the plan's place back.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const { open: factoryShown, onClose: closeFactory } = plans.factoryView;
+  const { open: factoryShown, onClose: closeFactory } = tasks.factoryView;
   useEffect(() => {
     if (factoryShown && !factoryOn) closeFactory();
   }, [factoryShown, factoryOn, closeFactory]);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
-  const { open: automationsShown, onClose: closeAutomations } = plans.automationsView;
+  const { open: automationsShown, onClose: closeAutomations } = tasks.automationsView;
   useEffect(() => {
     if (automationsShown && !automationsOn) closeAutomations();
   }, [automationsShown, automationsOn, closeAutomations]);
-  const { region } = plans;
+  const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
-    plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.personView.userId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
+    tasks.sidePanel.fullScreen,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, or the Automations page standing in its place is not the plan.
   const standingIn =
-    plans.inboxView.open ||
-    plans.agentView.agentId !== undefined ||
-    plans.personView.userId !== undefined ||
-    plans.factoryView.open ||
-    plans.automationsView.open;
-  const shownPlan =
+    tasks.inboxView.open ||
+    tasks.agentView.agentId !== undefined ||
+    tasks.personView.userId !== undefined ||
+    tasks.factoryView.open ||
+    tasks.automationsView.open;
+  const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  useWindowTitle(titleSubject(tab, plans, shownPlan));
+  useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
-  const looks = usePlanLooks(shownPlan, plans.me);
+  const looks = useTaskLooks(shownTask, tasks.me);
+  const mentionedAgents = useMemo(
+    () => ({ models: tasks.agents.models, me: tasks.me }),
+    [tasks.agents.models, tasks.me],
+  );
+  // A chip naming a task hangs the task's card, as its sidebar row does.
+  const chipCards = {
+    taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
+      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
+      if (task === undefined) return undefined;
+      // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
+      const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+      const card = taskCardOf(tasks, task, now, focus);
+      return home === undefined ? (
+        card
+      ) : (
+        <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
+      );
+    },
+  };
   if (gated) {
     return (
       <div className="desktop-onboarding">
@@ -429,23 +422,28 @@ export function DesktopShell({
     );
   }
   // New plan asks over whatever stands, the plans or a version history.
-  const newPlanDialog = <NewPlanDialog newPlan={plans.newPlan} />;
+  const newTaskDialog = <NewTaskDialog newTask={tasks.newTask} />;
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the plan back as it found it.
-  if (plans.history.open) {
+  if (tasks.history.open) {
     return (
       <div className="desktop-shell">
-        <DesktopVersionHistory
-          sidebar={sidebar}
-          history={history}
-          subject={planVersionSubject(plans)}
-          account={account}
-          call={call}
-          onExit={history.canGoBack ? history.onBack : plans.history.onClose}
-          onRestored={history.onLeaveVersionHistory}
-        />
+        {/* A chip in a version's words hangs the cards the plan's own words do. */}
+        <MentionedAgents value={mentionedAgents}>
+          <ChipCards value={chipCards}>
+            <DesktopVersionHistory
+              sidebar={sidebar}
+              history={history}
+              subject={taskVersionSubject(tasks)}
+              account={account}
+              call={call}
+              onExit={history.canGoBack ? history.onBack : tasks.history.onClose}
+              onRestored={history.onLeaveVersionHistory}
+            />
+          </ChipCards>
+        </MentionedAgents>
         <CaptionStrip {...captions} />
-        {newPlanDialog}
+        {newTaskDialog}
       </div>
     );
   }
@@ -453,19 +451,19 @@ export function DesktopShell({
   // toolbar beneath it leaves the toggle room then and only then. The Inbox,
   // Factory, and the Automations page stand in the plan's place, so they draw
   // no panel to toggle; an agent's page draws the agent's own.
-  const inboxOpen = plans.inboxView.open;
-  const pageAgent = plans.agentView.agentId;
-  const pagePerson = plans.personView.userId;
-  const factoryOpen = plans.factoryView.open && factoryOn;
-  const automationsOpen = plans.automationsView.open && automationsOn;
-  const planToggle = plans.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const inboxOpen = tasks.inboxView.open;
+  const pageAgent = tasks.agentView.agentId;
+  const pagePerson = tasks.personView.userId;
+  const factoryOpen = tasks.factoryView.open && factoryOn;
+  const automationsOpen = tasks.automationsView.open && automationsOn;
+  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
-  const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
+  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
-  const captionsInColumn = planDrawn && !plans.sidePanel.fullScreen;
+  const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
   const captionStrip = (
-    <CaptionStrip {...captions} speechHidden={planDrawn && transcriptStreaming(plans)} />
+    <CaptionStrip {...captions} speechHidden={taskDrawn && transcriptStreaming(tasks)} />
   );
   return (
     <div
@@ -478,7 +476,7 @@ export function DesktopShell({
       <DesktopSidebar
         sidebar={sidebar}
         history={history}
-        plans={plans}
+        tasks={tasks}
         tab={tab}
         onTabChange={onTabChange}
         account={account}
@@ -488,46 +486,56 @@ export function DesktopShell({
         onPressWithin={keepOverlay}
       />
       <main className="desktop-main">
-        {inboxOpen ? (
-          <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
-            <DesktopInbox plans={plans} />
-          </PageFind>
-        ) : pageAgent !== undefined ? (
-          // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-          <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
-        ) : pagePerson !== undefined ? (
-          // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-          <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
-            <PersonPage
-              plans={plans}
-              userId={pagePerson}
-              name={plans.personView.name}
-              staged={sidebar.staged}
-            />
-          </PageFind>
-        ) : factoryOpen ? (
-          <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
-            <DesktopFactory plans={plans} />
-          </PageFind>
-        ) : automationsOpen ? (
-          <PageFind
-            page={FIND_PAGE.AUTOMATIONS}
-            at={automationsPlaceKey(plans.automationsView.place)}
-            active={plans.shown}
-          >
-            <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
-              <AutomationsPage plans={plans} />
-            </Suspense>
-          </PageFind>
-        ) : (
-          <DesktopPlans
-            plans={plans}
-            looks={looks}
-            captions={captionsInColumn ? captionStrip : undefined}
-            summary={summary}
-            accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-          />
-        )}
+        {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
+        <MentionedAgents value={mentionedAgents}>
+          <ChipCards value={chipCards}>
+            {inboxOpen ? (
+              <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
+                <DesktopInbox tasks={tasks} />
+              </PageFind>
+            ) : pageAgent !== undefined ? (
+              // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+              <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
+            ) : pagePerson !== undefined ? (
+              // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+              <PageFind
+                key={pagePerson}
+                page={FIND_PAGE.PERSON}
+                at={pagePerson}
+                active={tasks.shown}
+              >
+                <PersonPage
+                  tasks={tasks}
+                  userId={pagePerson}
+                  name={tasks.personView.name}
+                  staged={sidebar.staged}
+                />
+              </PageFind>
+            ) : factoryOpen ? (
+              <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
+                <DesktopFactory tasks={tasks} />
+              </PageFind>
+            ) : automationsOpen ? (
+              <PageFind
+                page={FIND_PAGE.AUTOMATIONS}
+                at={automationsPlaceKey(tasks.automationsView.place)}
+                active={tasks.shown}
+              >
+                <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
+                  <AutomationsPage tasks={tasks} />
+                </Suspense>
+              </PageFind>
+            ) : (
+              <DesktopTasks
+                tasks={tasks}
+                looks={looks}
+                captions={captionsInColumn ? captionStrip : undefined}
+                summary={summary}
+                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+              />
+            )}
+          </ChipCards>
+        </MentionedAgents>
       </main>
       {captionsInColumn ? null : captionStrip}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
@@ -546,23 +554,23 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls" onPointerDown={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
+        {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
       </div>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">
           <SidePanelToggle
-            panel={plans.sidePanel}
-            disabled={planToggle && plans.region.kind !== DOCUMENT_REGION.READY}
+            panel={tasks.sidePanel}
+            disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}
-      {newPlanDialog}
+      {newTaskDialog}
       <PaneGlide
         root={shell}
         layout={{
           sidebarCollapsed: sidebar.collapsed,
-          panelOpen: plans.sidePanel.open,
-          panelFullScreen: plans.sidePanel.fullScreen,
+          panelOpen: tasks.sidePanel.open,
+          panelFullScreen: tasks.sidePanel.fullScreen,
           summaryPinned: summary.pinned && summary.wide,
         }}
       />

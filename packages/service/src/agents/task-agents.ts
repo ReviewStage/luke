@@ -27,6 +27,7 @@ import {
   codingAgentPage,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
+  summaryAccounts,
 } from "./coder-host/status.js";
 
 /**
@@ -195,7 +196,8 @@ export function listTasklessAgents(
     // The agents were read through their workspaces' gate, and each conversation is its starter's.
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
-    const names = yield* readAccountNames(agents.map((agent) => agent.userId));
+    // The member each was archived by or for is named too, as the agent's own page names them.
+    const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
     const now = yield* Clock.currentTimeMillis;
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
@@ -205,6 +207,7 @@ export function listTasklessAgents(
         ...page,
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
+        ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
       };
     });
   });

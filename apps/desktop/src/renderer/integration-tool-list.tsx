@@ -26,7 +26,9 @@ import { Tooltip } from "./tooltip";
  * highlighted, and a press on a row opens it; where the owner keeps the
  * keys in a field of its own, as the MCP popover's filter does, it hands a
  * press-start that keeps the focus there, and otherwise the current row is
- * the list's one stop for Tab, as a listbox's is.
+ * the list's one stop for Tab, as a listbox's is. Where the owner opens
+ * nothing, as a server's hover card does (`planning/server-card.tsx`), each
+ * row is its words alone, with no press and no chevron.
  *
  * A tool's page is its head, the title and the name in the code face after
  * a back where its owner offers one, then every hint its server sent,
@@ -49,20 +51,13 @@ export function keepInView(list: HTMLElement | null, row: Element | null): void 
 }
 
 /** The badge a tool wears on its row and at the head of its page's hints. */
-function Badge({
-  tool,
-  server,
-}: {
-  tool: IntegrationTool;
-  server: string;
-}): React.JSX.Element | null {
+function Badge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
     <span
       className="integration-tool-badge"
       data-destructive={badge === TOOL_BADGE.DESTRUCTIVE ? "true" : undefined}
-      title={`${server}'s server marks this tool ${badge.toLowerCase()}`}
     >
       {badge}
     </span>
@@ -98,8 +93,8 @@ export function IntegrationToolList({
   idOf?: (tool: IntegrationTool) => string;
   /** The pointer came to rest on a row, where resting there moves the highlight. */
   onCurrent?: (tool: IntegrationTool) => void;
-  /** A row was pressed. */
-  onOpen: (tool: IntegrationTool) => void;
+  /** A row was pressed; none where a row opens nothing, and is drawn as its words alone. */
+  onOpen?: ((tool: IntegrationTool) => void) | undefined;
   /** A key on a row, where the rows hold the focus themselves. */
   onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>, tool: IntegrationTool) => void;
   /** A pointer's press on a row, before it lands: where the owner keeps the focus in a field of its own. */
@@ -111,6 +106,29 @@ export function IntegrationToolList({
     <ul className="integration-tool-list" aria-label={`${server} tools`}>
       {tools.map((tool) => {
         const isCurrent = tool.name === current;
+        const words = (
+          <>
+            <span className="integration-tool-name">
+              <span
+                className="integration-tool-title"
+                data-name={namedApart(tool) ? undefined : "true"}
+              >
+                <Highlighted text={toolTitle(tool)} tokens={tokens} />
+              </span>
+              {namedApart(tool) ? (
+                <span className="integration-tool-id">
+                  <Highlighted text={tool.name} tokens={tokens} />
+                </span>
+              ) : null}
+              <Badge tool={tool} />
+            </span>
+            {tool.description !== "" ? (
+              <span className="integration-tool-description">
+                <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+              </span>
+            ) : null}
+          </>
+        );
         return (
           <li
             key={tool.name}
@@ -118,40 +136,28 @@ export function IntegrationToolList({
             className="integration-tool"
             data-current={isCurrent ? "true" : undefined}
           >
-            <button
-              ref={rowRef === undefined ? undefined : (button) => rowRef(tool, button)}
-              type="button"
-              className="integration-tool-head"
-              tabIndex={onPressStart === undefined && !isCurrent ? -1 : undefined}
-              aria-current={isCurrent ? "true" : undefined}
-              onMouseDown={onPressStart}
-              onMouseMove={onCurrent === undefined || isCurrent ? undefined : () => onCurrent(tool)}
-              onClick={() => onOpen(tool)}
-              onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
-            >
-              <span className="integration-tool-name">
-                <span
-                  className="integration-tool-title"
-                  data-name={namedApart(tool) ? undefined : "true"}
-                >
-                  <Highlighted text={toolTitle(tool)} tokens={tokens} />
+            {onOpen === undefined ? (
+              <div className="integration-tool-head">{words}</div>
+            ) : (
+              <button
+                ref={rowRef === undefined ? undefined : (button) => rowRef(tool, button)}
+                type="button"
+                className="integration-tool-head"
+                tabIndex={onPressStart === undefined && !isCurrent ? -1 : undefined}
+                aria-current={isCurrent ? "true" : undefined}
+                onMouseDown={onPressStart}
+                onMouseMove={
+                  onCurrent === undefined || isCurrent ? undefined : () => onCurrent(tool)
+                }
+                onClick={() => onOpen(tool)}
+                onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
+              >
+                {words}
+                <span className="integration-tool-chevron" aria-hidden="true">
+                  <ChevronRightIcon />
                 </span>
-                {namedApart(tool) ? (
-                  <span className="integration-tool-id">
-                    <Highlighted text={tool.name} tokens={tokens} />
-                  </span>
-                ) : null}
-                <Badge tool={tool} server={server} />
-              </span>
-              {tool.description !== "" ? (
-                <span className="integration-tool-description">
-                  <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
-                </span>
-              ) : null}
-              <span className="integration-tool-chevron" aria-hidden="true">
-                <ChevronRightIcon />
-              </span>
-            </button>
+              </button>
+            )}
           </li>
         );
       })}
@@ -313,7 +319,7 @@ export function IntegrationToolDetail({
           </ul>
         ) : null}
         {tool.description === "" ? (
-          <p className="integration-tool-silent">{`${server}'s server says nothing of what this tool does.`}</p>
+          <p className="integration-tool-silent">No description.</p>
         ) : (
           <MarkdownMessage
             words={tool.description}

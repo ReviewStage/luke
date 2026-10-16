@@ -423,7 +423,7 @@ export function FeedbackDialog({
           >
             {draft.signed
               ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
-              : "Sending without your name"}
+              : null}
           </span>
         </div>
       ) : null}

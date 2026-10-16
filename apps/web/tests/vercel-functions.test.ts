@@ -31,10 +31,10 @@ test("the committed table is what the routes generate, and vercel.json's /api/ e
 test("every function bundle loads exactly the externals the record expects", {
   timeout: 60_000,
 }, async () => {
-  const plan = await functionBundlePlan(WEB);
-  const result = await build({ ...plan.options, write: false });
+  const task = await functionBundlePlan(WEB);
+  const result = await build({ ...task.options, write: false });
   const actual = externalsByBundle(result.metafile, WEB);
-  assert.deepEqual(Object.keys(actual).sort(), plan.functions.map((f) => `${f.file}.js`).sort());
+  assert.deepEqual(Object.keys(actual).sort(), task.functions.map((f) => `${f.file}.js`).sort());
   assert.deepEqual(externalsDrift(await expectedExternals(WEB), actual), []);
   // Inline-first leaves outside a bundle only Node's own modules and the named exceptions; a fourth external is a dependency that stopped inlining.
   const permitted = new Set<string>([

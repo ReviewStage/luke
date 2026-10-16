@@ -80,7 +80,8 @@ function ShortcutRow({
   onCapture,
 }: {
   title: string;
-  detail: string;
+  /** What the key does where its title alone would not say it. */
+  detail?: string | undefined;
   /** The id a pressed search result lands on. */
   anchor: string;
   /** The accelerator as registered, absent when no candidate answered. */
@@ -176,7 +177,7 @@ function ShortcutRow({
               mark only says pressing it does nothing yet. */}
           {attention ? <AttentionMark note={attention} /> : null}
         </span>
-        <small>{detail}</small>
+        {detail === undefined ? null : <small>{detail}</small>}
         {rejection ? (
           <p className="error-message" role="alert">
             {rejection}
@@ -315,7 +316,6 @@ export function ShortcutSection({
       <ShortcutRow
         title="Stop Luke"
         anchor={SETTINGS_SEARCH_ROW.STOP_KEY}
-        detail="Press to cut off a reply from any app."
         {...(shownStop ? { shown: shownStop } : undefined)}
         chosen={shortcuts.stopChosen}
         off={shortcuts.stopOff}

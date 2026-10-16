@@ -61,7 +61,7 @@ it.effect("a setting's value travels as the method's value field", () =>
 );
 
 it.effect(
-  "a plan's start carries the workspace it was started in to the host, and a start naming none carries no workspace field",
+  "a plan's start carries the workspace it was started in, and a start without planning says so, to the host; a start naming none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -73,6 +73,7 @@ it.effect(
         workspaceId: "workspace-acme",
       });
       yield* operator.tasksStart({ name: "Teammate invitations" });
+      yield* operator.tasksStart({ name: "Typo", planning: false });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -82,6 +83,7 @@ it.effect(
             { name: "Billing export", repository: "acme/ledger", workspaceId: "workspace-acme" },
           ],
           [GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" }],
+          [GATEWAY_METHOD.TASKS_START, { name: "Typo", planning: false }],
         ],
       );
     }),

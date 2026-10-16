@@ -18,6 +18,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
@@ -35,15 +36,16 @@ import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, useActionMenu } from "../desktop/action-menu";
-import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
+import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { dayAndTimeText } from "../planning/plan-time";
 import { SpinnerRegion } from "../spinner";
+import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
 import { ReadFailed, SettingsGroup } from "./settings-group";
@@ -68,13 +70,14 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
- * Connected or suspended; an owner or an admin connects the first with
- * Connect and another with Add connection, beside those standing, and
- * Manage's one item chooses repositories on GitHub, where which accounts and
- * repositories Luke reaches is managed, so nothing here disconnects one. A
- * member sees the same list, or is told to ask. Linear, which plans start
- * from: an owner or an admin connects it once for every member, and
- * disconnects it from Manage; a member sees whether it is connected. Last, anyone but the owner leaves, and the
+ * inset under GitHub's row with its picture on GitHub, Connected or suspended;
+ * an owner or an admin connects the first with Connect, and once one is,
+ * Manage on GitHub opens the one GitHub page that both adds an account and
+ * chooses an account's repositories, where which accounts and repositories
+ * Luke reaches is managed, so nothing here disconnects one. A member sees
+ * the same list, or is told to ask. Linear, which plans start from: an
+ * owner or an admin connects it once for every member, and disconnects it
+ * from its ⋯; a member sees whether it is connected. Last, anyone but the owner leaves, and the
  * owner hands the workspace to an admin first.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
@@ -122,11 +125,9 @@ const ROLE_DETAIL = {
 /** What an admin's role menu says under Admin, which only the owner invites. */
 const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 
-/** What the invitations say where none is pending: to the workspace's one member, and to a team. */
-const INVITATIONS_EMPTY = {
-  ALONE: "Only you so far. Invite someone by email, then send them the link Luke makes.",
-  NONE: "No invitations waiting. Luke sends no mail: copy each new invitation's link and send it yourself.",
-} as const;
+/** What the invitations say where none is pending, with the one fact a reader cannot guess: Luke mails no one. */
+const INVITATIONS_EMPTY =
+  "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
 
 /** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
 const READ_FAILED = {
@@ -144,12 +145,10 @@ const READ_FAILED = {
  */
 const LEAVE_WORDS = {
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
-  BODY: "You lose access to its tasks, agents, and Inbox until someone invites you again.",
-  PLANS: (name: string) => `Tasks you wrote stay in ${name}, for its members to keep.`,
-  AGENTS:
-    "Agents you started stay in its history, named as a former member, and any still working stop.",
+  PLANS: (name: string) => `Tasks you wrote stay in ${name}.`,
+  AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
-  INVITATIONS: "Invitations you sent stay valid: they're the workspace's.",
+  INVITATIONS: "Invitations you sent stay valid.",
   AUTOMATIONS_NAMED: (names: readonly string[]) =>
     names.length === 1
       ? `An automation you created stops running: ${names[0]}.`
@@ -175,7 +174,7 @@ const ROLE_ACT = {
 const TRANSFER_WORDS = {
   VERB: "Transfer ownership",
   RUNNING: "Transferring",
-  BODY: "The admin you choose becomes its owner, and you become an admin. You can leave once it's done.",
+  BODY: "The admin you choose becomes its owner, and you become an admin.",
   ONE_BODY: (name: string) =>
     `You become an admin. ${name} can then change anyone's role and remove anyone, you included.`,
 } as const;
@@ -195,8 +194,11 @@ const GITHUB_UNCONNECTED = {
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
 
-/** What the GitHub row says once an account is connected: where its access is changed. */
-const GITHUB_MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
+/** What the GitHub row says once an account is connected, by who is reading it: where its access is changed. */
+const GITHUB_CONNECTED_LINE = {
+  MANAGES: "Add accounts and choose repositories on GitHub.",
+  MEMBER: "Accounts and repositories are managed on GitHub.",
+} as const;
 
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
@@ -205,8 +207,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honouring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honouring this connection. Ask an owner or admin.",
+  EXPIRED: "Linear stopped honoring this connection. Connect again.",
+  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -532,7 +534,7 @@ function MemberLeave({
         confirm={leave}
         question={{
           title: `Leave ${workspace.name}?`,
-          body: LEAVE_WORDS.BODY,
+          body: LEAVE_WORDS.LINE,
           verb: `Leave ${workspace.name}`,
           running: "Leaving",
         }}
@@ -818,13 +820,10 @@ function RoleChip({
 function Invitations({
   workspaceId,
   owner,
-  alone,
 }: {
   workspaceId: string;
   /** Whether the reader owns the workspace, the one role that invites an admin. */
   owner: boolean;
-  /** Whether the reader is the workspace's one member, which the empty list's line says. */
-  alone: boolean;
 }): React.JSX.Element {
   const { act } = useAct();
   const copy = useCopyToast();
@@ -943,9 +942,7 @@ function Invitations({
       ) : pending === undefined ? (
         <Reading label="Loading the invitations" />
       ) : pending.length === 0 ? (
-        <p className="settings-card-line settings-note">
-          {alone ? INVITATIONS_EMPTY.ALONE : INVITATIONS_EMPTY.NONE}
-        </p>
+        <p className="settings-card-line settings-note">{INVITATIONS_EMPTY}</p>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
@@ -989,10 +986,26 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
   return workspace.github === null ? [] : [workspace.github];
 }
 
-/** One connected account's row: its login, and under it Connected, or that GitHub suspended or removed its installation. */
+/**
+ * One connected account's row, inset under GitHub's so it reads as one of
+ * GitHub's accounts rather than an integration of its own: its picture on
+ * GitHub, an organization's logo or a person's avatar, its login, and under
+ * it Connected, or that GitHub suspended or removed its installation. The
+ * tile is a workspace's, keyed by the login, so the login's letter stands
+ * until the picture loads and wherever it fails to.
+ */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
-    <div className="settings-row">
+    <div className="settings-row settings-row-nested">
+      <span className="settings-row-mark">
+        <WorkspaceTile
+          workspace={{
+            id: `github:${connection.login}`,
+            name: connection.login,
+            pictureUrl: githubAccountPictureUrl(connection.login),
+          }}
+        />
+      </span>
       <RowCopy
         name={connection.login}
         line={
@@ -1014,11 +1027,12 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
 /**
  * The workspace's GitHub, for an owner or an admin: Connect while none is,
  * which installs the Luke GitHub App on a GitHub account for this
- * workspace, and once one is, Add connection, which connects another beside
- * it, and Manage, whose one item chooses repositories on GitHub. Every
- * press opens the browser through the one connect, whose return to Luke
- * adds the installation to this workspace; a page that could not be opened
- * says why under the row.
+ * workspace, and once one is, Manage on GitHub, which opens the same page:
+ * GitHub lists every account there, to install the App on another or to
+ * configure one it is on, so one door does both. Either press opens the
+ * browser through the one connect, whose return to Luke adds the
+ * installation to this workspace; a page that could not be opened says why
+ * under the row.
  */
 function ManagedGitHub({
   workspace,
@@ -1037,23 +1051,27 @@ function ManagedGitHub({
     );
   };
   const connected = connections.length > 0;
-  const actions = connected
-    ? [[{ label: "Choose repositories on GitHub", icon: <ExternalLinkIcon />, onSelect: open }]]
-    : [];
   return (
     <>
-      <MenuRow label="GitHub actions" actions={actions} triggerLabel="Manage">
+      <div className="settings-row">
         <span className="settings-row-mark">
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
         </span>
         <RowCopy
           name="GitHub"
-          line={connected ? GITHUB_MANAGED_ON_GITHUB : GITHUB_UNCONNECTED.MANAGES}
+          line={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
         />
         <button type="button" className="toolbar-button bordered-button" onClick={open}>
-          {connected ? "Add connection" : "Connect"}
+          {connected ? (
+            <>
+              Manage on GitHub
+              <ExternalLinkIcon aria-hidden="true" />
+            </>
+          ) : (
+            "Connect"
+          )}
         </button>
-      </MenuRow>
+      </div>
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -1081,7 +1099,9 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           </span>
           <RowCopy
             name="GitHub"
-            line={connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_MANAGED_ON_GITHUB}
+            line={
+              connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
+            }
           />
         </div>
       )}
@@ -1126,9 +1146,10 @@ function LinearCopy({
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honouring it, which opens Linear's
+ * or Connect again once Linear stopped honoring it, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
- * under the row; and Manage once one stands, whose menu holds Disconnect, which asks first. A
+ * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
+ * a connected row quiet, whose menu holds Disconnect, which asks first. A
  * plan already started from an issue keeps what it read.
  */
 function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
@@ -1161,7 +1182,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
       : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
   return (
     <>
-      <MenuRow label="Linear actions" actions={actions} triggerLabel="Manage">
+      <MenuRow label="Linear actions" actions={actions}>
         <span className="settings-row-mark">
           <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
         </span>
@@ -1188,7 +1209,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           confirm={disconnect}
           question={{
             title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again. Plans already started from one keep what they read.",
+            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}
@@ -1375,7 +1396,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
         <span className="settings-copy">
           {editing ? (
-            <PlanNameField
+            <TaskNameField
               name={workspace.name}
               className="settings-input workspace-name-input"
               label="Workspace name"
@@ -1425,7 +1446,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
-          body: "Its members see its letter in its place until a photo is uploaded again.",
           verb: "Remove",
           running: "Removing",
         }}
@@ -1501,17 +1521,14 @@ function ShownWorkspace({
       </SettingsGroup>
       {managesWorkspace(workspace) ? (
         <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
-          <Invitations
-            workspaceId={workspace.id}
-            owner={workspace.role === WORKSPACE_ROLE.OWNER}
-            alone={(workspace.memberCount ?? 2) <= 1}
-          />
+          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
         </SettingsGroup>
       ) : null}
       <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
         <WorkspaceLinear workspace={workspace} />
       </SettingsGroup>
+      <MacRepositoriesGroup workspaceId={workspace.id} />
       <LeaveGroup
         workspace={workspace}
         members={members.read}

@@ -23,6 +23,9 @@ import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
+/** The link of the task an agent on one works on, as its instructions are handed it. */
+const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
+
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
 const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
@@ -133,8 +136,8 @@ test("an agent on a task is told of the task's links and pages, and one an autom
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const onTask = coderInstructions("Acme/Relay", brief, true);
-    const taskless = coderInstructions("Acme/Relay", brief, true, false);
+    const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
+    const taskless = coderInstructions("Acme/Relay", brief, true, null);
     assert.deepEqual([onTask.includes(TASK_LINK), onTask.includes(PAGES)], [true, true], brief);
     assert.deepEqual(
       [taskless.includes(TASK_LINK), taskless.includes(PAGES)],
@@ -161,7 +164,7 @@ test("an agent handed its task's plan is offered edit_plan and show_page, one ha
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
-      coderInstructions("Acme/Relay", brief, false).includes(
+      coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(
         "Never ask for a credential or a secret in a form",
       ),
       brief,
@@ -172,11 +175,29 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
+test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run", () => {
+  const READY = "ready for them to look at or review";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const taskLink of [TASK_ADDRESS, null]) {
+      const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split(
+        "## The developer's inbox",
+      )[1];
+      assert.ok(inbox?.includes(READY), brief);
+      assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
+      assert.ok(inbox?.includes("needs to test something by hand"), brief);
+    }
+  }
+  assert.ok(INBOX_TOOLS.POST.description.includes(READY));
+  assert.ok(
+    INBOX_TOOLS.POST.description.includes("testing by hand what you could not test yourself"),
+  );
+});
+
 test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const developer = coderInstructions("Acme/Relay", brief, true, true, TRAILER);
-    const app = coderInstructions("Acme/Relay", brief, true);
+    const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);
+    const app = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     assert.ok(developer.includes(`exactly as written: \`${TRAILER}\``), brief);
     assert.ok(!developer.includes("add a `Co-authored-by` trailer"), brief);
     assert.ok(app.includes("add a `Co-authored-by` trailer"), brief);
@@ -195,8 +216,8 @@ test("an agent writing as its developer is told to end every commit on the trail
 test("an agent whose credential reads its checks waits on them with sleep, which it is offered and its read-only worker is not", () => {
   const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    assert.ok(coderInstructions("Acme/Relay", brief, true).includes(WAIT), brief);
-    assert.ok(!coderInstructions("Acme/Relay", brief, false).includes(WAIT), brief);
+    assert.ok(coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS).includes(WAIT), brief);
+    assert.ok(!coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(WAIT), brief);
   }
   assert.deepEqual(
     [
@@ -225,7 +246,7 @@ test("one pause is held inside what is left of the GitHub credential its backgro
 test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const ciReadable of [true, false]) {
-      const instructions = coderInstructions("Acme/Relay", brief, ciReadable);
+      const instructions = coderInstructions("Acme/Relay", brief, ciReadable, TASK_ADDRESS);
       assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
       assert.ok(instructions.includes("before you end a turn on an open pull request"), brief);
     }
@@ -235,7 +256,12 @@ test("every agent is told that what happens on its pull request after its turn r
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
-      const instructions = coderInstructions("Acme/Relay", brief, true, onTask);
+      const instructions = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        onTask ? TASK_ADDRESS : null,
+      );
       assert.ok(instructions.includes("playwright screenshot"), brief);
       assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);

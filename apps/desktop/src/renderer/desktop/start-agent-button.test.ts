@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { focusByKeyboard, layWindowStyles, ringOf } from "#testing/focus-ring";
-import { codingAgentsControl } from "#testing/plans-control";
+import { codingAgentsControl } from "#testing/tasks-control";
 import { StartAgentButton } from "./start-agent-button";
 
 /**

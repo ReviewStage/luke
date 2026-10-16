@@ -3,11 +3,11 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
-import { choiceLabel } from "../planning/coding-agent-model";
-import { ModelMenu, settledChoice } from "../planning/model-menu";
-import { useRepositoryRemedy } from "../planning/repository-remedy";
-import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { BusyLabel } from "../spinner";
+import { choiceLabel } from "../tasks/coding-agent-model";
+import { ModelMenu, settledChoice } from "../tasks/model-menu";
+import { useRepositoryRemedy } from "../tasks/repository-remedy";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";
 
@@ -16,7 +16,7 @@ import { useDisclosure } from "../use-disclosure";
  *
  * The main part starts one on the account's default model and effort, and
  * says which on hover: "Opus 5.5 High Fast". The chevron drops
- * the shared model menu (`../planning/model-menu.tsx`), the default
+ * the shared model menu (`../tasks/model-menu.tsx`), the default
  * checked; what the menu chooses is kept as the account's default, which
  * is what the main part then starts on. The models and the default are
  * read as the button mounts and again as the menu opens, so the menu

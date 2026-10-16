@@ -29,6 +29,8 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageParams,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
@@ -41,6 +43,7 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
@@ -56,12 +59,14 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
+  codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOverviewAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   type DictationTranscribeAnswerView,
@@ -96,6 +101,11 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import {
+  type MacRepositoriesAnswer,
+  type MacRepository,
+  macRepositoriesAnswerSchema,
+} from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -269,6 +279,10 @@ interface HostSessionReplay {
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
+  /** Every repository with a run command on this Mac; none where the host could not answer. */
+  macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
+  /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
+  setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -491,6 +505,14 @@ export interface HostOperator {
   codingAgentChanges(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentChangesAnswerView>;
+  /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
+  codingAgentGitHubImage(
+    params: CodingAgentGitHubImageParams,
+  ): Effect.Effect<CodingAgentGitHubImageView>;
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them; or why there is none. */
+  codingAgentOverview(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -763,6 +785,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
       ),
+    macRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ),
+        terminalAnswer(macRepositoriesAnswerSchema),
+      ),
+    setMacRepository: (entry) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_REPOSITORY_SET, {
+          repository: entry.repository,
+          command: entry.command,
+        }),
+        terminalAnswer(macRepositoriesAnswerSchema),
+      ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AppSettings>(record(answer)?.settings)),
@@ -893,7 +928,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksPin: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN, { taskId: params.taskId, pinned: params.pinned }),
+        client.call(GATEWAY_METHOD.TASKS_PIN, {
+          taskId: params.taskId,
+          pinned: params.pinned,
+          ...(params.position === undefined ? undefined : { position: params.position }),
+        }),
         (answer) => record(answer)?.changed === true,
       ),
     tasksPinRepository: (params) =>
@@ -1249,6 +1288,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
+          ...("planning" in request ? { planning: request.planning } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok
@@ -1381,6 +1421,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_PIN, {
           agentId: params.agentId,
           pinned: params.pinned,
+          ...(params.position === undefined ? undefined : { position: params.position }),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -1433,6 +1474,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentChangesAnswerViewSchema),
+      ),
+    codingAgentGitHubImage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
+        codingAgentAnswer(codingAgentGitHubImageViewSchema),
+      ),
+    codingAgentOverview: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentOverviewAnswerViewSchema),
       ),
     providerKeysRead: () =>
       Effect.map(

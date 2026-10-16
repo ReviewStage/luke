@@ -26,8 +26,8 @@ import { ago } from "./clock";
 import {
   AGENT_2_TITLE,
   AGENT_TITLE,
-  PLAN_NAME,
-  PLAN_REPOSITORY,
+  TASK_NAME,
+  TASK_REPOSITORY,
   SHOT_DOCUMENT_TEXT,
   SHOT_ID,
 } from "./plan-document";
@@ -88,7 +88,7 @@ export function shotAgents(): CodingAgentSummary[] {
   return [
     {
       id: SHOT_ID.AGENT,
-      planId: SHOT_ID.PLAN,
+      taskId: SHOT_ID.TASK,
       model: MODEL.OPUS,
       effort: "high",
       title: AGENT_TITLE,
@@ -100,7 +100,7 @@ export function shotAgents(): CodingAgentSummary[] {
     },
     {
       id: SHOT_ID.AGENT_2,
-      planId: SHOT_ID.PLAN,
+      taskId: SHOT_ID.TASK,
       model: MODEL.SOL,
       effort: "high",
       title: AGENT_2_TITLE,
@@ -186,7 +186,7 @@ export function shotAgentMessages(): CodingAgentMessage[] {
     {
       id: "m-plan",
       role: "user",
-      parts: [{ type: "text", text: `# ${PLAN_NAME}\n\n${SHOT_DOCUMENT_TEXT}` }],
+      parts: [{ type: "text", text: `# ${TASK_NAME}\n\n${SHOT_DOCUMENT_TEXT}` }],
     },
     {
       id: "m-turn-1",
@@ -402,7 +402,7 @@ function transcriptPage(
 export function shotPullRequest(agentId: string): CodingAgentPullRequestAnswerView {
   if (agentId === SHOT_ID.AGENT_2) {
     return {
-      repository: PLAN_REPOSITORY,
+      repository: TASK_REPOSITORY,
       branch: "luke/invite-emails",
       pullRequest: {
         number: 216,
@@ -417,7 +417,7 @@ export function shotPullRequest(agentId: string): CodingAgentPullRequestAnswerVi
     };
   }
   return {
-    repository: PLAN_REPOSITORY,
+    repository: TASK_REPOSITORY,
     branch: "luke/teammate-invitations",
     pullRequest: {
       number: 214,
@@ -490,7 +490,7 @@ export function codingAgentAnswers(): ShotAnswers {
   const defaultChoice: CodingAgentDefaultAnswer = { choice: { model: MODEL.OPUS, effort: "high" } };
   return {
     [ACT_KIND.CODING_AGENTS_LIST]: (payload) =>
-      payload.planId === SHOT_ID.PLAN ? list : { agents: [] },
+      payload.taskId === SHOT_ID.TASK ? list : { agents: [] },
     [ACT_KIND.CODING_AGENTS_MESSAGES]: (payload) =>
       transcriptPage(payload.agentId, payload.after, payload.callId),
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (payload) => shotPullRequest(payload.agentId),

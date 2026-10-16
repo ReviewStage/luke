@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -111,6 +111,7 @@
     "./auth/bearer": "./src/auth/bearer.js",
     "./auth/browser-session": "./src/auth/browser-session.js",
     "./auth/oauth-clients": "./src/auth/oauth-clients.js",
+    "./issues/issues-app": "./src/issues/issues-app.js",
     "./automations/automation-github": "./src/automations/automation-github.js",
     "./automations/automation-runs": "./src/automations/automation-runs.js",
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",
@@ -163,6 +164,7 @@
     "./tasks/child-models": "./src/tasks/child-models.js",
     "./tasks/end-call": "./src/tasks/end-call.js",
     "./tasks/page-tool": "./src/tasks/page-tool.js",
+    "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",
     "./tasks/task-file": "./src/tasks/task-file.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",

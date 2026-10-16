@@ -1,5 +1,6 @@
 import { applyPatch, structuredPatch } from "diff";
 import { Schema as EffectSchema } from "effect";
+import { planCommentAnchorsSchema } from "./plan-comment-wire.js";
 import { TASK_BOUNDS, taskSchema } from "./task-wire.js";
 
 /**
@@ -31,9 +32,15 @@ const DOCUMENT_TEXT = EffectSchema.String.check(
   EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS),
 );
 
-/** The developer's edit of the plan's whole text (POST `/api/plans/{id}/edit`): the text the editor opened on, or their own last save since, and the text they wrote. */
+/**
+ * The developer's edit of the plan's whole text (POST `/api/plans/{id}/edit`):
+ * the text the editor opened on, or their own last save since, and the text
+ * they wrote; and where the editor's comment anchors stand in that text,
+ * from an editor that carries them (`plan-comment-wire.ts`).
+ */
 export const planEditRequestSchema = EffectSchema.Struct({
   document: EffectSchema.Struct({ base: DOCUMENT_TEXT, value: DOCUMENT_TEXT }),
+  comments: EffectSchema.optionalKey(planCommentAnchorsSchema),
 });
 
 export type PlanEditRequest = typeof planEditRequestSchema.Type;

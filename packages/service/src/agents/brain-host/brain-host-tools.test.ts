@@ -9,14 +9,20 @@ import {
 import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
+import { writePage } from "@luke/database/models/plan-pages";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
-import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ARCHIVER,
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+} from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -27,9 +33,14 @@ import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
+  sessionKey,
+  TURN_ORIGIN,
   unparsedWire,
   type WireRecord,
 } from "../../core.js";
@@ -50,12 +61,16 @@ import {
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
+  ARCHIVE_AGENT_REFUSAL,
+  ARCHIVE_AGENT_TOOL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
+  READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
@@ -659,4 +674,91 @@ test("end_call is the one planning tool eve is told ends its turn, so the model 
     .filter((tool) => tool.endsTurn === true)
     .map((tool) => tool.name);
   assert.deepEqual(endings, [END_CALL_TOOL.name]);
+});
+
+test("Luke archives an idle agent of the task's workspace, a teammate's, for the member on the call, recorded as Luke's with its reason, and refuses one still starting", async () => {
+  const opener = await database.createUser();
+  const teammate = await database.createUser();
+  const plan = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(plan.workspaceId, teammate));
+  const idle = await agentOn(teammate, plan.taskId);
+  const starting = await agentOn(teammate, plan.taskId);
+  // The idle agent's one turn ran and ended, as eve runs and ends one.
+  const coderWriter = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
+  const turn = { conversationId: sessionKey(idle.conversationId), turnId: randomUUID() };
+  await database.run(
+    Effect.gen(function* () {
+      yield* coderWriter.enqueueTurn(idle, {
+        turnId: turn.turnId,
+        origin: TURN_ORIGIN.TYPED,
+        eveTurnId: "turn_0",
+      });
+      yield* coderWriter.consume(idle, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      yield* coderWriter.consume(idle, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 2,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: 0,
+      });
+    }),
+  );
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const call = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+  const reason = "The developer asked to clean up the finished agents.";
+
+  const archived = await call(ARCHIVE_AGENT_TOOL.name, { agentId: idle.id, reason });
+  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
+  const row = Option.getOrThrow(await database.run(readCodingAgent(opener, idle.id)));
+  assert.ok(row.archivedAt !== null);
+  assert.deepEqual(row.archivedBy, { by: CODING_AGENT_ARCHIVER.LUKE, userId: opener, reason });
+  assert.deepEqual(await call(ARCHIVE_AGENT_TOOL.name, { agentId: starting.id }, "call-2"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ARCHIVE_AGENT_REFUSAL.WORKING,
+  });
+});
+
+test("Luke reads a page of the call's task by its id, as the member on the call, and nothing of another workspace's", async () => {
+  const opener = await database.createUser();
+  const plan = await taskConversation(opener, RELAY_FULL_NAME);
+  const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
+  const shown = Option.getOrThrow(
+    await database.run(
+      writePage(
+        opener,
+        plan.taskId,
+        { title: "Funnel", html: "<h1>Funnel</h1>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
+    ),
+  );
+  const theirs = Option.getOrThrow(
+    await database.run(
+      writePage(
+        stranger.userId,
+        stranger.taskId,
+        { title: "Theirs", html: "<p/>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
+    ),
+  );
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const call = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+
+  const read = await call(READ_PAGE_TOOL.name, { pageId: shown.id });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
+  assert.ok(isRecord(read.page));
+  assert.deepEqual([read.page.html, read.page.isYourTask], ["<h1>Funnel</h1>", true]);
+  assert.equal(
+    (await call(READ_PAGE_TOOL.name, { pageId: theirs.id })).status,
+    ACTION_RESULT_STATUS.REJECTED,
+  );
 });

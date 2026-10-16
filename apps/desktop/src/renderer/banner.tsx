@@ -4,7 +4,7 @@ import { type ReactNode, useId } from "react";
  * banner.tsx -- the one strip every notice about a plan is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
  *
  * A plan's notices come in three looks: the slim line across the plan's
- * column (a stranded repository's, `plan-banner.tsx`), the card over a
+ * column (a stranded repository's, `task-banner.tsx`), the card over a
  * document (an archived plan's, the plan template's), and the row in an
  * agent's composer's place (an archived plan's agent). They share one
  * layout, so they give way alike: each strip is a named container
@@ -31,7 +31,7 @@ type BannerLook = (typeof BANNER_LOOK)[keyof typeof BANNER_LOOK];
 
 /** The class each look wears beside the shared `banner`. */
 const LOOK_CLASS = {
-  [BANNER_LOOK.LINE]: "plan-banner",
+  [BANNER_LOOK.LINE]: "task-banner",
   [BANNER_LOOK.CARD]: "document-banner",
   [BANNER_LOOK.COMPOSER]: "agent-composer archived-composer",
 } as const satisfies Record<BannerLook, string>;

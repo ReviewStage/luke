@@ -217,8 +217,16 @@ const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(reached)) return null;
   const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
   if (Option.isNone(found)) return null;
-  const { title, url, state } = found.value;
-  return { number: found.value.number, title, url, state };
+  const { title, url, state, author, additions, deletions } = found.value;
+  return {
+    number: found.value.number,
+    title,
+    url,
+    state,
+    ...(author === undefined ? undefined : { author }),
+    additions,
+    deletions,
+  };
 });
 
 /** GET: one pull request of a repository the workspace's installation reaches, by its number, or none where there is none to draw. */

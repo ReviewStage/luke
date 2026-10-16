@@ -11,8 +11,10 @@ import {
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
+  archiveCodingAgent,
   readCodingAgent,
   readCodingAgentByKey,
+  renameCodingAgent,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
@@ -50,6 +52,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -74,6 +77,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -504,7 +508,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task: plan, eve, ask } = yield* openTask();
-        const shown = yield* writePage(owner, plan.id, { title: "Chart", html: "<h1>Chart</h1>" });
+        const shown = yield* writePage(
+          owner,
+          plan.id,
+          { title: "Chart", html: "<h1>Chart</h1>" },
+          { kind: PAGE_SHOWER.LUKE },
+        );
         assert.ok(Option.isSome(shown));
         const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: plan.repository })}.`;
         const idempotencyKey = randomUUID();
@@ -594,6 +603,73 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             (yield* listed(owner, {})).status,
           ],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.BAD_REQUEST],
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list leaves an archived agent out, and lists it marked as archived where archived=include asks",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const kept = yield* startedAgentOf(owner, task.id, ask);
+        const put = yield* startedAgentOf(owner, task.id, ask);
+        yield* archiveCodingAgent(owner, put.agent.id, true);
+        const listed = (query: Readonly<Record<string, string>>) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+                (agent) => [agent.id, agent.archivedAt !== undefined],
+              ),
+          );
+        };
+
+        assert.deepEqual(yield* listed({}), [[kept.agent.id, false]]);
+        assert.deepEqual(
+          (yield* listed({ archived: "include" })).toSorted(([first], [second]) =>
+            String(first).localeCompare(String(second)),
+          ),
+          [
+            [kept.agent.id, false],
+            [put.agent.id, true],
+          ].toSorted(([first], [second]) => String(first).localeCompare(String(second))),
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list finds the agents whose title or task's name holds the words, whatever their case, a wildcard in them matched as itself",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const titled = yield* startedAgentOf(owner, task.id, ask);
+        const other = yield* startedAgentOf(owner, task.id, ask);
+        yield* renameCodingAgent(owner, titled.agent.id, "Ledger 100% sweep");
+        yield* renameCodingAgent(owner, other.agent.id, "Unrelated");
+        const found = (words: string) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          url.searchParams.set("words", words);
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .agents.map((agent) => agent.id)
+                .toSorted(),
+          );
+        };
+
+        assert.deepEqual(yield* found("LEDGER"), [titled.agent.id]);
+        assert.deepEqual(yield* found("100%"), [titled.agent.id]);
+        assert.deepEqual(yield* found("10_%"), []);
+        assert.deepEqual(
+          yield* found("teammate invitations"),
+          [titled.agent.id, other.agent.id].toSorted(),
+          "the task's name finds every agent on it",
         );
       }),
   );
@@ -1039,6 +1115,29 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     });
 
   it.effect(
+    "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
+    () =>
+      Effect.gen(function* () {
+        const { other, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        yield* joinWorkspace(task.workspaceId, other);
+        const changed = (archived: boolean) =>
+          Effect.map(
+            ask(request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived } })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent,
+          );
+
+        const archived = yield* changed(true);
+        assert.ok(archived.archivedAt !== undefined);
+        assert.equal(archived.archivedBy?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(archived.archivedBy?.member?.userId, other);
+        assert.equal(archived.archivedBy?.agent, undefined);
+        const back = yield* changed(false);
+        assert.deepEqual([back.archivedAt, back.archivedBy], [undefined, undefined]);
+      }),
+  );
+
+  it.effect(
     "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
     () =>
       Effect.gen(function* () {
@@ -1333,6 +1432,36 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "the plan list names the teammate who archived an agent with no plan, as its own page does",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: task.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        yield* ask(
+          request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived: true } }),
+        );
+
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
+        );
+        const by = listed.planlessAgents?.find((each) => each.id === agent.id)?.archivedBy;
+        assert.equal(by?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(by?.member?.userId, other);
+        assert.ok((by?.member?.name ?? "") !== "", JSON.stringify(by));
+      }),
+  );
+
+  it.effect(
     "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
     () =>
       Effect.gen(function* () {
@@ -1435,6 +1564,37 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member's PATCH drags their pin of an agent with no plan to a position the list then carries, and one given with an unpin is refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task: plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const patch = (body: { pinned: boolean; position: string }) =>
+          ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
+        const listed = Effect.map(ask(request(TASKS, owner)), (answered) =>
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).planlessAgents?.find(
+            (each) => each.id === agent.id,
+          ),
+        );
+
+        const placed = yield* patch({ pinned: true, position: "a1" });
+        const refused = yield* patch({ pinned: false, position: "a2" });
+        const held = yield* listed;
+
+        assert.equal(placed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.equal(held?.pinPosition, "a1");
+        assert.notEqual(held?.pinnedAt, undefined);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {
@@ -1531,7 +1691,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "each member's line to an agent names them as its sender, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
+    "each member's line to an agent names them as its sender and when it was sent, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1546,15 +1706,18 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
         );
         yield* sent("Use seven days.");
+        // Charles answers a minute later, which the time each line names says.
+        yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
-        // Luke's line from a call and an automation's run's, written as their sends write them.
+        // Luke's line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -1584,9 +1747,22 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
+          // Another agent is marked as one beside its name, with no kind an older window would refuse.
+          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
+
+        // Every line names when it was sent, a minute apart where they were.
+        const sentAts = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        )
+          .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
+          .map((message) => message.sentAt);
+        assert.ok(sentAts.every((at) => at !== undefined));
+        assert.equal((sentAts[2] ?? 0) - (sentAts[1] ?? 0), Duration.toMillis(Duration.minutes(1)));
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
         assert.deepEqual((yield* sendersAs(owner))[2], [
@@ -1649,17 +1825,22 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a page and another agent of the plan hands eve the page by its id with its HTML and the agent by its id and branch, never its conversation",
+    "a message mentioning a page and another agent of the plan hands eve the page by its id and version with how to read it, never its HTML, and the agent by its id and branch, never its conversation",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, task: plan, ask, sent } = yield* startedAgent(eve, { running: true });
         const other = yield* startedAgentOf(owner, plan.id, ask);
         yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
-        const shown = yield* writePage(owner, plan.id, {
-          title: "Invites by week",
-          html: "<h1>Invites by week</h1>",
-        });
+        const shown = yield* writePage(
+          owner,
+          plan.id,
+          {
+            title: "Invites by week",
+            html: "<h1>Invites by week</h1>",
+          },
+          { kind: PAGE_SHOWER.LUKE },
+        );
         assert.ok(Option.isSome(shown));
         const place = { workspace: "acme", repository: plan.repository };
         const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: plan.id, agentId: other.agent.id }, "Store", place)}.`;
@@ -1675,10 +1856,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(
           part.text,
           new RegExp(
-            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*<h1>Invites by week</h1>`,
+            `the page "Invites by week" \\(id \`${shown.value.id}\`, version 1\\)[^]*with \`read_page\`, \`pageId: "${shown.value.id}"\`, and \`version: 1\``,
             "u",
           ),
         );
+        assert.ok(!part.text.includes("<h1>Invites by week</h1>"), part.text);
         assert.match(
           part.text,
           new RegExp(
@@ -1746,6 +1928,35 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.match(part.text, /The coding agent "Stranger": not found in your workspace\./u);
         assert.ok(!part.text.includes(`id \`${foreign.agent.id}\``), part.text);
+      }),
+  );
+
+  it.effect(
+    "a message mentioning people hands a member of the agent's workspace by their role, never their email, and someone of another workspace the sender is also in as not a member",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, sent } = yield* startedAgent(eve, { running: true });
+        // The sender and the other account share a second workspace, which is not the agent's.
+        const elsewhere = yield* openWorkspace(other);
+        yield* joinWorkspace(elsewhere, owner);
+        const place = { workspace: "acme", repository: task.repository };
+        const mention = (userId: string, name: string) =>
+          mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, name, place);
+        const words = `Ask ${mention(owner, "Me")} and ${mention(other, "Stranger")}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const part = message[1];
+        assert.ok(part?.type === "text");
+        assert.match(
+          part.text,
+          /The developer pointed you at [^\n]+, an owner of your workspace\./u,
+        );
+        assert.ok(!part.text.includes("@"), part.text);
+        assert.match(part.text, /The person "Stranger": not a member of your workspace\./u);
       }),
   );
 

@@ -7,6 +7,7 @@ import {
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -122,8 +123,10 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * the account's first workspace where none is, and the Linear issue it
  * starts from where one was picked, which the service reads through the
  * workspace's own Linear connection (`linear-wire.ts`); the document starts
- * as the untouched template. A name left out, or nothing but whitespace,
- * starts the plan as `UNTITLED_PLAN_NAME` until it is renamed.
+ * as the untouched template, or empty where `planning` is false: a task
+ * started without its planning phase, whose window opens no call on it
+ * either. A name left out, or nothing but whitespace, starts the plan as
+ * `UNTITLED_PLAN_NAME` until it is renamed.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -132,6 +135,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
+  planning: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
@@ -148,14 +152,22 @@ function updateNamesAChange(update: {
   name?: string;
   repository?: string | null;
   pinned?: boolean;
+  pinPosition?: string;
   archived?: boolean;
   workspaceId?: string;
 }): boolean {
   return Object.keys(update).length > 0;
 }
 
+/** Whether a position comes with the pin it places: a plan is given one only as it is pinned, never as it is unpinned. */
+function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): boolean {
+  return update.pinPosition === undefined || update.pinned === true;
+}
+
 /**
  * Changing a plan (PATCH): its name, its repository, whether it is pinned,
+ * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
+ * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, or any of them at once.
  * A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. A move is the plan's
@@ -166,9 +178,10 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
+  pinPosition: EffectSchema.optionalKey(pinPositionSchema),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
-}).check(EffectSchema.makeFilter(updateNamesAChange));
+}).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
@@ -237,6 +250,8 @@ const taskSummaryFields = {
   openedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the plan was pinned; absent while it is not, and from a service before pinning. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
   /** Epoch milliseconds the plan was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /**

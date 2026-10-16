@@ -126,6 +126,7 @@ type TranscriptMessage = StoredUIMessage &
     readonly startedAt?: number;
     readonly finishedAt?: number;
     readonly sentBy?: CodingAgentSender;
+    readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
   };
 
@@ -237,10 +238,11 @@ const SENDER_NAME = {
 /**
  * What sent a line, as the page names it and by its kind, so the window
  * draws Luke, an automation, and GitHub's login as themselves. Another agent
- * is named with no kind, because the window's schema reads the kind as one
- * of the words it knows, so a kind it was built before would refuse the
- * whole page; a name with no kind and no account is drawn by every build as
- * a sender it cannot place, under that name.
+ * is named with no kind and marked `agent`, because the window's schema reads
+ * the kind as one of the words it knows, so a kind it was built before would
+ * refuse the whole page, while a key it does not know is dropped: an older
+ * build draws it as a sender it cannot place, under its name, and a newer
+ * one as an agent.
  */
 function senderOf(sent: LineSent): CodingAgentSender {
   switch (sent.kind) {
@@ -255,7 +257,7 @@ function senderOf(sent: LineSent): CodingAgentSender {
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
-      return { name: sent.name };
+      return { name: sent.name, agent: true };
   }
 }
 
@@ -272,18 +274,19 @@ interface LinesRead {
   readonly places: ReadonlyMap<string, LinePlace>;
 }
 
-/** A row as the page carries it: its message, for a developer's line what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
+/** A row as the page carries it: its message, for a developer's line when and what sent it and where in a turn under way it arrived, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
   { senders, places }: LinesRead,
 ): TranscriptMessage {
-  const sent = senders.get(record.id);
-  const place = places.get(record.id);
-  if (sent !== undefined || place !== undefined) {
+  if (record.message.role === MESSAGE_ROLE.USER) {
+    const sent = senders.get(record.id);
+    const place = places.get(record.id);
     return {
       ...record.message,
       ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
+      sentAt: record.placedAt.getTime(),
       ...(place === undefined ? undefined : { arrivedIn: place }),
     };
   }

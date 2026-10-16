@@ -6,17 +6,16 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { LinesMenu } from "../planning/file-menu";
 import { SearchableMenu } from "../searchable-menu";
 import { MenuRow } from "../settings/menu-row";
+import { LinesMenu } from "../tasks/file-menu";
 import { ActionMenu, useActionMenu } from "./action-menu";
 
 /**
  * The window's menus as the developer opens them: a ⋯ that drops its menu
  * and closes it again, a right-click that hangs the same menu at the
  * pointer, or under the row where the menu key asked with no point of its
- * own, a row that names its door opening the same menu from a labelled
- * button, and every menu, the window's own and the searchable picker alike,
+ * own, a row's acts in groups ruled apart, and every menu, the window's own and the searchable picker alike,
  * drawn on one surface with one row.
  */
 
@@ -160,33 +159,25 @@ test("the window's menu and the searchable picker stand on one surface and draw 
   }
 });
 
-test("a Settings row naming its door draws one hairlined Manage with its chevron in the ⋯'s place, opening the same menu, its groups ruled apart", () => {
+test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {
   const container = mount(
     createElement(MenuRow, {
       label: "GitHub actions",
-      triggerLabel: "Manage",
       actions: [ACTIONS, [{ label: "Disconnect", danger: true, onSelect: ignore }]],
       children: "GitHub",
     }),
   );
   const row = container.querySelector<HTMLElement>(".settings-row");
   assert.ok(row, "the row is drawn");
-  const doors = [...row.querySelectorAll<HTMLButtonElement>("button")];
-  assert.deepEqual(
-    doors.map((door) => door.textContent),
-    ["Manage"],
-    "the row's one control is Manage",
-  );
-  const manage = doors[0] ?? assert.fail("no Manage");
-  assert.ok(manage.classList.contains("bordered-button"), "Manage wears the row buttons' hairline");
-  assert.ok(manage.querySelector("svg.settings-chevron"), "and the menu's chevron after its word");
-  assert.equal(row.querySelector('button[aria-label="GitHub actions"]'), null, "no ⋯ beside it");
-  assert.equal(manage.getAttribute("aria-haspopup"), "menu");
+  const ellipsis =
+    row.querySelector<HTMLButtonElement>('button[aria-label="GitHub actions"]') ??
+    assert.fail("no ⋯");
+  assert.equal(ellipsis.getAttribute("aria-haspopup"), "menu");
 
-  press(manage);
+  press(ellipsis);
   const menu = openMenu();
   assert.equal(menu?.getAttribute("aria-label"), "GitHub actions", "the menu keeps its name");
-  assert.equal(manage.getAttribute("aria-expanded"), "true");
+  assert.equal(ellipsis.getAttribute("aria-expanded"), "true");
   assert.deepEqual(
     [...(menu?.children ?? [])].map((child) =>
       child.tagName === "HR" ? "rule" : (child.textContent ?? ""),
@@ -198,8 +189,8 @@ test("a Settings row naming its door draws one hairlined Manage with its chevron
   assert.equal(document.activeElement?.textContent, "Disconnect", "Down walks past the rule");
   act(() => menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   assert.equal(openMenu(), null, "Escape closes it");
-  assert.equal(manage.getAttribute("aria-expanded"), "false");
-  assert.equal(document.activeElement, manage, "and focus is back on Manage");
+  assert.equal(ellipsis.getAttribute("aria-expanded"), "false");
+  assert.equal(document.activeElement, ellipsis, "and focus is back on the ⋯");
 
   rightClick(row, { x: 300, y: 200 });
   assert.equal(openMenu()?.getAttribute("aria-label"), "GitHub actions", "a right-click opens it");
@@ -209,14 +200,14 @@ test("a Settings row naming its door draws one hairlined Manage with its chevron
     ),
   );
   assert.equal(openMenu(), null, "Tab closes it");
-  assert.equal(document.activeElement, manage, "handing focus to Manage, the keyboard's door");
+  assert.equal(document.activeElement, ellipsis, "handing focus to the ⋯, the keyboard's door");
 
-  press(manage);
+  press(ellipsis);
   act(() => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
   assert.equal(openMenu(), null, "a press elsewhere closes it");
 });
 
-test("a Settings row naming no door keeps its muted ⋯, named for its menu, and More on the pointer", () => {
+test("a Settings row keeps its muted ⋯, named for its menu, and More on the pointer", () => {
   const container = mount(
     createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
   );
@@ -228,7 +219,6 @@ test("a Settings row naming no door keeps its muted ⋯, named for its menu, and
 
   assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
   assert.equal(ellipsis.textContent, "", "with no words of its own");
-  assert.equal(container.querySelector(".chip"), null, "and no labelled door");
   assert.equal(document.querySelector(".tooltip")?.textContent, "More");
 });
 

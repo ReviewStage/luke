@@ -19,19 +19,32 @@
  * large to send, and the file says which rather than reading as unchanged.
  * Who a pull request names is read beside its files: who opened it, its
  * reviewers and where each stands, who authored its commits, and its
- * reviews that said something, each the first page GitHub answers.
+ * reviews that said something, each the first page GitHub answers. And a
+ * review's inline comments are read, by file and line, for the message
+ * that tells the agent on the pull request of that review (`agent-wakes.ts`).
+ * A pull request's overview, which its Pull request tab draws, is read in
+ * one go: the pull request whole, its description and its mergeability
+ * among it, then at once every check on its head, one by one, its comments,
+ * and its reviews, the two made one conversation in time order.
  */
 
 import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
+  CHECK_STATE,
   CHECK_SUMMARY,
   type ChangedFileStatus,
+  type CheckState,
   type CheckSummary,
+  CONVERSATION_ENTRY,
   type CodingAgentChangedFile,
+  MERGE_STATE,
+  type MergeState,
+  OVERVIEW_BOUNDS,
   PATCH_OMITTED,
   PULL_REQUEST_STATE,
+  type PullRequestCheck,
   type PullRequestState,
   REVIEW_STATE,
   type ReviewState,
@@ -59,6 +72,8 @@ export interface GitHubPullRequest {
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
+  /** The login of who opened it, where GitHub named one. */
+  readonly author?: string;
 }
 
 /** What a read fails with: GitHub unreachable or answering off its shape. */
@@ -104,6 +119,8 @@ const PullRequestSchema = Schema.Struct({
   deletions: Schema.Number,
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
+  /** Who opened it; null where their account is gone. */
+  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -163,6 +180,8 @@ const ReviewsSchema = Schema.Array(
     state: Schema.String,
     body: Schema.NullOr(Schema.String),
     submitted_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    html_url: Schema.optionalKey(Schema.String),
+    body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
 );
 
@@ -257,6 +276,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     additions: record.additions,
     deletions: record.deletions,
     changedFiles: record.changed_files,
+    ...(record.user == null ? undefined : { author: record.user.login }),
   };
 }
 
@@ -587,11 +607,13 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   path: string,
   schema: Schema.Codec<readonly A[], unknown>,
   maxPages: number,
+  rendered = false,
 ) {
   const listed: A[] = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const request = githubRead(path, token).pipe(
       HttpClientRequest.setUrlParams({ per_page: String(PEOPLE_PER_PAGE), page: String(page) }),
+      rendered ? withRendering : (each) => each,
     );
     const read = Option.getOrElse(yield* readOptional(request, schema), () => []);
     listed.push(...read);
@@ -636,4 +658,398 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
     ),
     comments: commentsOf(reviews),
   };
+});
+
+/** One inline comment of a review: the file and the line it is on, where GitHub still places it, its words, and its page. */
+export interface GitHubReviewLineComment {
+  readonly path: string;
+  readonly line: number | undefined;
+  readonly body: string;
+  readonly url: string;
+}
+
+/** A review's inline comments, as GitHub lists them; a comment on a line since changed away keeps the line it was made on. */
+const ReviewLineCommentsSchema = Schema.Array(
+  Schema.Struct({
+    path: Schema.String,
+    line: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    original_line: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    body: Schema.String,
+    html_url: Schema.String,
+  }),
+);
+
+/**
+ * The most pages of a review's inline comments read, a hundred to a page:
+ * three hundred comments outrun any message they are told in, so a review
+ * longer still is cut there with the note that sends the agent to `gh`.
+ */
+const REVIEW_COMMENTS_MAX_PAGES = 3;
+
+/**
+ * The inline comments of one review of a pull request, in the order GitHub
+ * lists them, each by its file and line, read page by page up to the bound;
+ * none where the repository holds no such review.
+ */
+export const reviewLineComments = /* @__PURE__ */ Effect.fn("web/reviewLineComments")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+  reviewId: number,
+): Effect.fn.Return<
+  readonly GitHubReviewLineComment[],
+  PullRequestReadFailure,
+  HttpClient.HttpClient
+> {
+  const comments = yield* everyPage(
+    token,
+    `${repositoryPath(fullName)}/pulls/${number}/reviews/${reviewId}/comments`,
+    ReviewLineCommentsSchema,
+    REVIEW_COMMENTS_MAX_PAGES,
+  );
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line ?? comment.original_line ?? undefined,
+    body: comment.body,
+    url: comment.html_url,
+  }));
+});
+
+/**
+ * GitHub's media type that answers a body beside its own rendering of it
+ * (`body_html`): the markdown rendered as github.com renders it, mentions,
+ * references, and emoji included, its uploads named by their assets.
+ */
+const FULL_MEDIA_TYPE = "application/vnd.github.full+json";
+
+/** A read asking for GitHub's rendering of every body it answers, beside the body. */
+function withRendering(
+  request: HttpClientRequest.HttpClientRequest,
+): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.setHeader(request, "accept", FULL_MEDIA_TYPE);
+}
+
+/** A pull request read whole for its overview: what its pill says, and its description, branches, times, mergeability, and people. */
+const OverviewPullSchema = Schema.Struct({
+  ...PullRequestSchema.fields,
+  body: Schema.NullOr(Schema.String),
+  body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  base: Schema.Struct({ ref: Schema.String }),
+  created_at: Schema.String,
+  merged_at: Schema.NullOr(Schema.String),
+  mergeable_state: Schema.optionalKey(Schema.String),
+  user: Schema.NullOr(GitHubAccountSchema),
+  requested_reviewers: Schema.optionalKey(Schema.Array(GitHubAccountSchema)),
+});
+
+/** A head's check runs, each read for its row. */
+const ListedCheckRunsSchema = Schema.Struct({
+  check_runs: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      status: Schema.String,
+      conclusion: Schema.NullOr(Schema.String),
+      html_url: Schema.NullOr(Schema.String),
+      details_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      started_at: Schema.NullOr(Schema.String),
+      completed_at: Schema.NullOr(Schema.String),
+      app: Schema.NullOr(Schema.Struct({ name: Schema.String })),
+    }),
+  ),
+});
+
+/** A head's commit statuses, the newest of each context, each read for its row. */
+const ListedStatusesSchema = Schema.Struct({
+  statuses: Schema.Array(
+    Schema.Struct({
+      context: Schema.String,
+      state: Schema.String,
+      target_url: Schema.NullOr(Schema.String),
+      created_at: Schema.String,
+      updated_at: Schema.String,
+    }),
+  ),
+});
+
+/** A pull request's comments, oldest first, as GitHub lists an issue's. */
+const IssueCommentsSchema = Schema.Array(
+  Schema.Struct({
+    user: Schema.NullOr(GitHubAccountSchema),
+    body: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    created_at: Schema.String,
+    html_url: Schema.String,
+  }),
+);
+
+/**
+ * The most pages of a pull request's comments read. GitHub lists them
+ * oldest first, so the newest are read by reading to the end, bounded where
+ * no pull request goes, a thousand comments.
+ */
+const COMMENTS_MAX_PAGES = 10;
+
+/** GitHub's own words for whether a pull request would merge; any it adds, and `unknown` itself, read as not yet worked out. */
+const GITHUB_MERGE_STATE = new Map<string, MergeState>([
+  ["clean", MERGE_STATE.CLEAN],
+  ["has_hooks", MERGE_STATE.CLEAN],
+  ["unstable", MERGE_STATE.UNSTABLE],
+  ["blocked", MERGE_STATE.BLOCKED],
+  ["behind", MERGE_STATE.BEHIND],
+  ["dirty", MERGE_STATE.CONFLICTS],
+  ["draft", MERGE_STATE.DRAFT],
+]);
+
+/** A check run's conclusions that pass nothing and fail nothing. */
+const SKIPPED_CONCLUSIONS: ReadonlySet<string> = new Set(["skipped", "neutral", "stale"]);
+
+const SUCCESS = "success";
+
+/** A pull request's overview as GitHub holds it, every account as GitHub names it. */
+export interface GitHubOverview {
+  readonly pullRequest: GitHubPullRequest;
+  readonly html: string;
+  readonly base: string;
+  readonly head: string;
+  readonly createdAt: number;
+  readonly mergedAt: number | null;
+  readonly merge: MergeState;
+  readonly checks: readonly PullRequestCheck[];
+  readonly author: GitHubAccount | undefined;
+  readonly reviewers: readonly GitHubReviewer[];
+  readonly conversation: readonly GitHubConversationEntry[];
+  /** How many earlier entries the bounds left on GitHub. */
+  readonly earlier: number;
+}
+
+/** One entry of a pull request's conversation, its author as GitHub names them. */
+interface GitHubConversationEntry {
+  readonly kind: (typeof CONVERSATION_ENTRY)[keyof typeof CONVERSATION_ENTRY];
+  readonly account: GitHubAccount;
+  readonly state: ReviewState | undefined;
+  readonly html: string | null;
+  readonly body: string;
+  readonly at: number;
+  readonly url: string;
+}
+
+/** A time GitHub spells, in epoch milliseconds; none where it spells none or nothing a date reads. */
+function timeOf(spelled: string | null | undefined): number | null {
+  const at = Date.parse(spelled ?? "");
+  return Number.isNaN(at) ? null : at;
+}
+
+/** A name cut to the bound a read carries. */
+function nameOf(name: string): string {
+  return name.slice(0, OVERVIEW_BOUNDS.MAX_NAME_CHARS);
+}
+
+/** Where a check run stands: running until it completes, then by its conclusion, a conclusion GitHub adds reading as failed. */
+function runStateOf(status: string, conclusion: string | null): CheckState {
+  if (status !== COMPLETED || conclusion === null) return CHECK_STATE.PENDING;
+  if (conclusion === SUCCESS) return CHECK_STATE.PASSED;
+  return SKIPPED_CONCLUSIONS.has(conclusion) ? CHECK_STATE.SKIPPED : CHECK_STATE.FAILED;
+}
+
+/** Where a commit status stands. */
+function statusStateOf(state: string): CheckState {
+  if (state === SUCCESS) return CHECK_STATE.PASSED;
+  return FAILING_STATUS_STATES.has(state) ? CHECK_STATE.FAILED : CHECK_STATE.PENDING;
+}
+
+/** Where a check stands in the order the bound keeps them by: what asks for a look first. */
+const CHECK_RANK = {
+  [CHECK_STATE.FAILED]: 0,
+  [CHECK_STATE.PENDING]: 1,
+  [CHECK_STATE.PASSED]: 2,
+  [CHECK_STATE.SKIPPED]: 3,
+} as const satisfies Record<CheckState, number>;
+
+/**
+ * A head's checks one by one: its check runs and its commit statuses, those
+ * that failed first, then those still running, up to the bound. Note that
+ * they are ordered before they are cut, because a head with a hundred
+ * passing runs would otherwise leave out the one status that failed.
+ */
+function checksOf(
+  token: Redacted.Redacted,
+  fullName: string,
+  sha: string,
+): Read<readonly PullRequestCheck[]> {
+  const commit = `${repositoryPath(fullName)}/commits/${segment(sha)}`;
+  const perPage = HttpClientRequest.setUrlParams({ per_page: CHECKS_PER_PAGE });
+  const runs = readListed(
+    "check runs",
+    githubRead(`${commit}/check-runs`, token).pipe(perPage),
+    ListedCheckRunsSchema,
+    (answer): readonly PullRequestCheck[] =>
+      answer.check_runs.map((run) => ({
+        name: nameOf(run.name),
+        app: run.app === null ? null : nameOf(run.app.name),
+        state: runStateOf(run.status, run.conclusion),
+        url: run.html_url ?? run.details_url ?? null,
+        startedAt: timeOf(run.started_at),
+        completedAt: timeOf(run.completed_at),
+      })),
+  );
+  const statuses = readListed(
+    "commit statuses",
+    githubRead(`${commit}/status`, token).pipe(perPage),
+    ListedStatusesSchema,
+    (answer): readonly PullRequestCheck[] =>
+      answer.statuses.map((status) => {
+        const state = statusStateOf(status.state);
+        return {
+          name: nameOf(status.context),
+          app: null,
+          state,
+          url: status.target_url,
+          startedAt: timeOf(status.created_at),
+          completedAt: state === CHECK_STATE.PENDING ? null : timeOf(status.updated_at),
+        };
+      }),
+  );
+  return Effect.map(Effect.all([runs, statuses], { concurrency: "unbounded" }), ([a, b]) =>
+    [...a, ...b]
+      .sort((one, other) => CHECK_RANK[one.state] - CHECK_RANK[other.state])
+      .slice(0, OVERVIEW_BOUNDS.MAX_CHECKS),
+  );
+}
+
+/** A head's checks of one kind, or none where the App may not read them, said once in the log. */
+function readListed<A>(
+  what: string,
+  request: HttpClientRequest.HttpClientRequest,
+  schema: Schema.Codec<A, unknown>,
+  listed: (answer: A) => readonly PullRequestCheck[],
+): Read<readonly PullRequestCheck[]> {
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response: HttpClientResponse.HttpClientResponse) => {
+      if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Effect.succeed([]);
+      if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
+        return Effect.as(
+          Effect.logWarning(`the GitHub App may not read a head's ${what}; none are listed`),
+          [],
+        );
+      }
+      return Effect.map(readBody(response, schema), listed);
+    }),
+  );
+}
+
+/** An entry's words as a read carries them, whole: GitHub's rendering, or the markdown where GitHub sent none. */
+interface EntryWords {
+  readonly html: string | null;
+  readonly body: string;
+  /** Whether the entry said anything at all. */
+  readonly said: boolean;
+}
+
+/** An entry's words, whole: GitHub's rendering where it sent one, else the markdown. */
+function wordsOf(body: string | null | undefined, html: string | null | undefined): EntryWords {
+  const words = body?.trim() ?? "";
+  const rendered = html?.trim() ?? "";
+  return rendered === ""
+    ? { html: null, body: words, said: words !== "" }
+    : { html: rendered, body: "", said: words !== "" };
+}
+
+/** The conversation as a read carries it: its newest entries, oldest first, and how many earlier ones were left. */
+interface KeptConversation {
+  readonly conversation: readonly GitHubConversationEntry[];
+  readonly earlier: number;
+}
+
+/**
+ * The conversation: every comment that says something and every review
+ * that decides or says something, in time order, the newest kept up to the
+ * bound and the earlier ones counted. A
+ * review that only commented and said nothing is the wrapper GitHub makes
+ * for comments on lines, which this read does not list, and a draft review
+ * is its author's alone, so neither is an entry.
+ */
+function conversationOf(
+  comments: typeof IssueCommentsSchema.Type,
+  reviews: typeof ReviewsSchema.Type,
+  pageUrl: string,
+): KeptConversation {
+  const said = comments.flatMap((comment): GitHubConversationEntry[] => {
+    const { said, ...words } = wordsOf(comment.body, comment.body_html);
+    if (comment.user === null || !said) return [];
+    return [
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        account: accountOf(comment.user),
+        state: undefined,
+        ...words,
+        at: timeOf(comment.created_at) ?? 0,
+        url: comment.html_url,
+      },
+    ];
+  });
+  const reviewed = reviews.flatMap((review): GitHubConversationEntry[] => {
+    const state = GITHUB_REVIEW_STATE.get(review.state);
+    const { said, ...words } = wordsOf(review.body, review.body_html);
+    if (review.user === null || state === undefined) return [];
+    if (state === REVIEW_STATE.COMMENTED && !said) return [];
+    return [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        account: accountOf(review.user),
+        state,
+        ...words,
+        at: timeOf(review.submitted_at) ?? 0,
+        url: review.html_url ?? pageUrl,
+      },
+    ];
+  });
+  const entries = [...said, ...reviewed].sort((a, b) => a.at - b.at);
+  const conversation = entries.slice(-OVERVIEW_BOUNDS.MAX_ENTRIES);
+  return { conversation, earlier: entries.length - conversation.length };
+}
+
+/**
+ * A pull request's overview, read on the token: the pull request whole,
+ * then at once its head's checks, every page of its comments, and every
+ * page of its reviews, which both name where each reviewer stands and join
+ * its comments as its conversation. None where the repository holds no
+ * such pull request.
+ */
+export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOverview")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.fn.Return<Option.Option<GitHubOverview>, PullRequestReadFailure, HttpClient.HttpClient> {
+  const path = `${repositoryPath(fullName)}/pulls/${number}`;
+  const read = yield* readOptional(withRendering(githubRead(path, token)), OverviewPullSchema);
+  if (Option.isNone(read)) return Option.none();
+  const pull = read.value;
+  const [checks, comments, reviews] = yield* Effect.all(
+    [
+      checksOf(token, fullName, pull.head.sha),
+      everyPage(
+        token,
+        `${repositoryPath(fullName)}/issues/${number}/comments`,
+        IssueCommentsSchema,
+        COMMENTS_MAX_PAGES,
+        true,
+      ),
+      everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS, true),
+    ],
+    { concurrency: "unbounded" },
+  );
+  const pullRequest = pullRequestOf(pull);
+  return Option.some({
+    pullRequest,
+    html: pull.body_html?.trim() ?? "",
+    base: nameOf(pull.base.ref),
+    head: nameOf(pull.head.ref),
+    createdAt: timeOf(pull.created_at) ?? 0,
+    mergedAt: timeOf(pull.merged_at),
+    merge: GITHUB_MERGE_STATE.get(pull.mergeable_state ?? "") ?? MERGE_STATE.UNKNOWN,
+    checks,
+    author: pull.user === null ? undefined : accountOf(pull.user),
+    reviewers: reviewersOf(reviews, (pull.requested_reviewers ?? []).map(accountOf)),
+    ...conversationOf(comments, reviews, pullRequest.url),
+  });
 });

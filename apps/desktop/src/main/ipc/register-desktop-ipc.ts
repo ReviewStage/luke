@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { startMacTerminal } from "@luke/host/mac-terminal";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { BrowserWindow, clipboard, dialog, ipcMain, MessageChannelMain } from "electron";
@@ -17,8 +19,9 @@ import { automationActRows } from "./automation-acts";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
-import { planningActRows } from "./planning-acts";
+import { macTerminalActRows } from "./mac-terminal-acts";
 import { settingsActRows } from "./settings-rows";
+import { tasksActRows } from "./tasks-acts";
 import { terminalActRows, whenPageGone } from "./terminal-acts";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
@@ -105,13 +108,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...avatarActRows({ avatar }),
-    ...planningActRows({
+    ...tasksActRows({
       host: operator.host,
       openExternal: config.openExternal,
       serviceBaseUrl: config.hostedServiceBaseUrl,
-      activePlanId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutPlan: (planId) => {
-        voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      activeTaskId: () => state.snapshot().tasks.activeTaskId,
+      talkAboutTask: (taskId) => {
+        voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
       },
       voiceReady: () => {
         const snapshot = state.snapshot();
@@ -124,6 +127,24 @@ export function registerDesktopIpc(services: DesktopServices): void {
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
+    ...macTerminalActRows({
+      host: operator.host,
+      stateRoot: config.stateRoot,
+      ports: {
+        open: (sender, ticket) => {
+          const { port1, port2 } = new MessageChannelMain();
+          sender.postMessage(MAC_TERMINAL_PORT_CHANNEL, ticket, [port2]);
+          port1.start();
+          return {
+            post: (message) => port1.postMessage(message),
+            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
+            close: () => port1.close(),
+          };
+        },
+        whenGone: whenPageGone,
+      },
+      start: startMacTerminal,
+    }),
     ...terminalActRows({
       host: operator.host,
       ports: {

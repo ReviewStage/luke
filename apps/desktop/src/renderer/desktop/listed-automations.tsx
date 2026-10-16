@@ -1,7 +1,7 @@
 import { type ReactNode, useCallback } from "react";
 import { AutomationDirectory } from "../automation-directory";
-import { listedIn } from "../planning/inbox-model";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
+import { listedIn } from "../tasks/inbox-model";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 
 /**
  * listed-automations.tsx -- the listed workspace's automations, read around the whole window, so an agent's card on Home's rows or in ⌘K names the automation that started it as the plan's own does.
@@ -14,38 +14,38 @@ import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
  * (`automation-directory.tsx`).
  */
 
-/** Whether an agent the window lists names the automation that started it: a listed plan's row's, the open plan's, or one with no plan whose question waits in the listed workspace, as Home's rows name it. */
-function namesAutomation(plans: PlansControl): boolean {
-  const lines = plans.plans.flatMap((plan) => plan.agents?.agents ?? []);
-  const agents = [...(plans.agents.agents ?? []), ...(plans.agents.archived ?? [])];
+/** Whether an agent the window lists names the automation that started it: a listed task's row's, the open task's, or one with no task whose question waits in the listed workspace, as Home's rows name it. */
+function namesAutomation(tasks: TasksControl): boolean {
+  const lines = tasks.tasks.flatMap((task) => task.agents?.agents ?? []);
+  const agents = [...(tasks.agents.agents ?? []), ...(tasks.agents.archived ?? [])];
   return (
     [...lines, ...agents].some((agent) => agent.automationId !== undefined) ||
-    plans.inboxPlanless.some(
-      (waiting) => waiting.automationId !== null && listedIn(waiting, plans.workspace?.id),
+    tasks.inboxTaskless.some(
+      (waiting) => waiting.automationId !== null && listedIn(waiting, tasks.workspace?.id),
     )
   );
 }
 
 /** The listed workspace's automations for everything inside, while `on` (`EXPERIMENT.AUTOMATIONS`). */
 export function ListedAutomations({
-  plans,
+  tasks,
   on,
   children,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   on: boolean;
   children: ReactNode;
 }): React.JSX.Element {
-  const { onOpen } = plans.automationsView;
+  const { onOpen } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpen],
   );
   return (
     <AutomationDirectory
-      workspace={plans.workspace}
+      workspace={tasks.workspace}
       on={on}
-      wanted={namesAutomation(plans)}
+      wanted={namesAutomation(tasks)}
       onOpen={openAutomation}
     >
       {children}

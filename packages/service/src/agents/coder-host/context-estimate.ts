@@ -6,10 +6,13 @@ import loadSkill from "eve/tools/load_skill";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
+  ARCHIVE_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
+  READ_PAGE_TOOL,
   START_AGENT_TOOL,
+  UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
@@ -118,6 +121,14 @@ const AUTHORED_TOOLS = {
     description: START_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
   },
+  [CODER_TOOL.ARCHIVE_AGENT]: {
+    description: ARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UNARCHIVE_AGENT]: {
+    description: UNARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
+  },
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
@@ -126,6 +137,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_PAGE]: {
+    description: READ_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(READ_PAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.RUN_ON_MAC]: {
     description: RUN_ON_MAC_TOOL.description,

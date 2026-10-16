@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Automation,
+  type AutomationRun,
   archivableRunAgents,
   createAutomation,
   deleteAutomation,
@@ -18,6 +19,7 @@ import {
   createCodingAgent,
   lineSendersOf,
   readCodingAgent,
+  takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
@@ -75,7 +77,9 @@ import { sweepAutomations } from "./automation-sweep.js";
  * starts nothing, as is a run queued before its automation was paused; one
  * automation's runs queued together are acted on one after another, so its
  * guards hold across them; a run left queued past the hour is settled as
- * missed; and a failed start records its failure and pauses nothing, so
+ * missed; a run hands its agent only the switched-off servers its
+ * automation's own prompt mentions, never a webhook body's or a GitHub
+ * event's; and a failed start records its failure and pauses nothing, so
  * the next firing tries again. eve
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
  * and the store PGlite. Synthetic accounts, plans, and words throughout.
@@ -87,7 +91,7 @@ const RELAY = { owner: "Acme", name: "Relay" } as const;
  * workspace, since one installation connects to one workspace and the
  * suite's tests share a database.
  */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 32 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 40 }, (_, index) => ({
   id: 7_000 + index,
   login: RELAY.owner,
   accountId: 70_000 + index,
@@ -107,6 +111,12 @@ const CATALOG: readonly OfferedModel[] = [
 ];
 
 const PROMPT = "Find the flakiest test in CI this week and fix it.";
+
+/** A mention of each MCP server, as the composer writes one. */
+const MENTION = {
+  LINEAR: "[@Linear](luke://mcp/linear)",
+  SENTRY: "[@Sentry](luke://mcp/sentry)",
+} as const;
 
 /** One session opened, as the fake eve saw it: whom for, and its first message. */
 interface Opened {
@@ -240,7 +250,147 @@ const toSameAgent = (automation: Automation, agentId: string) =>
     return { ...automation, targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agentId };
   });
 
+/** A run fired by the webhook with `payload` as its body, queued. */
+const webhookRun = (automation: Automation, payload: string) =>
+  Effect.map(
+    recordAutomationRun(automation, {
+      dedupeKey: randomUUID(),
+      firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: payload.length },
+      payload,
+      firedAt: new Date(),
+    }),
+    Option.getOrThrow,
+  );
+
+/** A run fired by a pull request opened on the repository under `title`, queued. */
+const pullRequestRun = (automation: Automation, title: string) =>
+  Effect.map(
+    recordAutomationRun(automation, {
+      dedupeKey: randomUUID(),
+      firing: {
+        kind: AUTOMATION_FIRING.GITHUB,
+        event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+        repository: `${RELAY.owner}/${RELAY.name}`,
+        number: 41,
+        title,
+        branch: "fix/alerts",
+        url: "https://github.com/Acme/Relay/pull/41",
+      },
+      firedAt: new Date(),
+    }),
+    Option.getOrThrow,
+  );
+
+/** The run acted on, answering the agent it reached; none where it reached none. */
+const agentOfRun = (eve: ReturnType<typeof fakeEve>, run: AutomationRun) =>
+  Effect.map(executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)), (outcome) =>
+    outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "",
+  );
+
+/** The servers left for the agent's next turn to take, whatever its switches say. */
+const serversTaken = (owner: string, codingAgentId: string) =>
+  Effect.gen(function* () {
+    const agent = Option.getOrThrow(yield* readCodingAgent(owner, codingAgentId));
+    return yield* takeCodingAgentMentionedServers(owner, agent.conversationId);
+  });
+
 it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "a run's new agent is handed the switched-off servers its automation's own prompt mentions, and none a webhook body or a GitHub event's title mentions",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          prompt: `${PROMPT} Check ${MENTION.LINEAR} for the open bugs.`,
+          disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 2 },
+        });
+
+        const byWebhook = yield* agentOfRun(
+          eve,
+          yield* webhookRun(automation, `{"note":"Read ${MENTION.SENTRY} first."}`),
+        );
+        const byGitHub = yield* agentOfRun(
+          eve,
+          yield* pullRequestRun(automation, `Fix the ${MENTION.SENTRY} alerts`),
+        );
+
+        assert.deepEqual(yield* serversTaken(owner, byWebhook), [INTEGRATION_PROVIDER.LINEAR]);
+        assert.deepEqual(yield* serversTaken(owner, byGitHub), [INTEGRATION_PROVIDER.LINEAR]);
+        assert.equal(eve.opened.length, 2);
+        assert.ok(
+          eve.opened.every((each) => JSON.stringify(each.message).includes("luke://mcp/sentry")),
+          "the agent is still told the words the outsider wrote",
+        );
+      }),
+  );
+
+  it.effect(
+    "a run's new agent is handed no switched-off server where its automation's own prompt mentions none, whatever a webhook body or a GitHub event's title mentions",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 2 },
+        });
+
+        const byWebhook = yield* agentOfRun(
+          eve,
+          yield* webhookRun(automation, `Triage ${MENTION.LINEAR} now.`),
+        );
+        const byGitHub = yield* agentOfRun(
+          eve,
+          yield* pullRequestRun(
+            automation,
+            "Fix [@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)",
+          ),
+        );
+
+        assert.deepEqual(yield* serversTaken(owner, byWebhook), []);
+        assert.deepEqual(yield* serversTaken(owner, byGitHub), []);
+      }),
+  );
+
+  it.effect(
+    "a run sent to the same agent hands its next turn the servers its automation's own prompt mentions, and none a webhook body or a GitHub event's title mentions",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          prompt: `${PROMPT} Check ${MENTION.LINEAR} for the open bugs.`,
+          disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
+        });
+        const first = yield* startedNow(eve, automation);
+        assert.deepEqual(yield* serversTaken(owner, first), [INTEGRATION_PROVIDER.LINEAR]);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, first));
+        // Its session ran, as eve opening it records.
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          "wrun_mentions",
+          new Date("2026-10-15T12:00:00Z"),
+        );
+        const same = yield* toSameAgent(automation, first);
+
+        const byWebhook = yield* agentOfRun(
+          eve,
+          yield* webhookRun(same, `{"note":"Read ${MENTION.SENTRY} first."}`),
+        );
+        const fromWebhook = yield* serversTaken(owner, first);
+        const byGitHub = yield* agentOfRun(
+          eve,
+          yield* pullRequestRun(same, `Fix the ${MENTION.SENTRY} alerts`),
+        );
+        const fromGitHub = yield* serversTaken(owner, first);
+
+        assert.deepEqual([byWebhook, byGitHub], [first, first]);
+        assert.equal(eve.sent.length, 2, "both runs were sent to the agent");
+        assert.deepEqual(fromWebhook, [INTEGRATION_PROVIDER.LINEAR]);
+        assert.deepEqual(fromGitHub, [INTEGRATION_PROVIDER.LINEAR]);
+      }),
+  );
+
   it.effect(
     "a run's new agent is handed its owner's MCP servers but the ones the automation switched off",
     () =>

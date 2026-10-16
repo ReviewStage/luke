@@ -13,24 +13,24 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { runAppCommand } from "../app-commands";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { isAgentTab } from "../planning/tab-strip-model";
-import type { SidePanelTab } from "../planning/use-side-panel";
+import type { SidePanelTab } from "../tasks/use-side-panel";
 import { armPaletteQuery } from "./palette-query";
 import { currentShot } from "./shot-profiles";
 import type { ShotSpec, ShotStageContext, ShotStep } from "./shot-spec";
 
 /** The open plan, once it is drawn; none before. */
-function drawnPlan(context: ShotStageContext): string | undefined {
-  const { plans } = context;
-  return plans.region.kind === DOCUMENT_REGION.READY ? plans.activePlanId : undefined;
+function drawnTask(context: ShotStageContext): string | undefined {
+  const { tasks } = context;
+  return tasks.region.kind === DOCUMENT_REGION.READY ? tasks.activeTaskId : undefined;
 }
 
 /** Whether a side panel tab can be chosen yet: a Changes tab once the agents are read, a page's once the plan names it. */
 function tabReady(context: ShotStageContext, tab: SidePanelTab): boolean {
-  const { plans } = context;
+  const { tasks } = context;
   if (typeof tab === "object" && "changes" in tab)
-    return plans.agents.agentIds?.includes(tab.changes) ?? false;
+    return tasks.agents.agentIds?.includes(tab.changes) ?? false;
   if (typeof tab === "object" && "page" in tab)
-    return (plans.pages ?? []).some((page) => page.id === tab.page);
+    return (tasks.pages ?? []).some((page) => page.id === tab.page);
   return true;
 }
 
@@ -75,10 +75,10 @@ function layoutSteps(shot: ShotSpec): ShotStep[] {
   if (history !== undefined) {
     steps.push({
       key: "history",
-      ready: (context) => drawnPlan(context) !== undefined,
+      ready: (context) => drawnTask(context) !== undefined,
       run: (context) => {
-        const planId = drawnPlan(context);
-        if (planId !== undefined) context.plans.history.onReturn(planId, history);
+        const taskId = drawnTask(context);
+        if (taskId !== undefined) context.tasks.history.onReturn(taskId, history);
       },
     });
   }
@@ -86,13 +86,13 @@ function layoutSteps(shot: ShotSpec): ShotStep[] {
     steps.push({
       key: "main-tab",
       ready: (context) =>
-        drawnPlan(context) !== undefined &&
-        (!isAgentTab(mainTab) || (context.plans.agents.agentIds?.includes(mainTab.agent) ?? false)),
+        drawnTask(context) !== undefined &&
+        (!isAgentTab(mainTab) || (context.tasks.agents.agentIds?.includes(mainTab.agent) ?? false)),
       run: (context) => {
-        const planId = drawnPlan(context);
-        if (planId === undefined) return;
-        if (isAgentTab(mainTab)) context.plans.onShowAgent(planId, mainTab.agent);
-        else context.plans.onShowInbox(planId);
+        const taskId = drawnTask(context);
+        if (taskId === undefined) return;
+        if (isAgentTab(mainTab)) context.tasks.onShowAgent(taskId, mainTab.agent);
+        else context.tasks.onShowInbox(taskId);
       },
     });
   }
@@ -100,25 +100,25 @@ function layoutSteps(shot: ShotSpec): ShotStep[] {
     steps.push({
       key: "side-panel-tabs",
       ready: (context) =>
-        drawnPlan(context) !== undefined && sidePanelTabs.every((tab) => tabReady(context, tab)),
-      run: ({ plans }) => {
-        for (const tab of sidePanelTabs) plans.sidePanel.onChoose(tab);
+        drawnTask(context) !== undefined && sidePanelTabs.every((tab) => tabReady(context, tab)),
+      run: ({ tasks }) => {
+        for (const tab of sidePanelTabs) tasks.sidePanel.onChoose(tab);
       },
     });
   }
   if (sidePanelFile !== undefined) {
     steps.push({
       key: "side-panel-file",
-      ready: (context) => drawnPlan(context) !== undefined,
-      run: ({ plans }) => plans.sidePanel.onBrowseFile(sidePanelFile, sidePanelFile, true),
+      ready: (context) => drawnTask(context) !== undefined,
+      run: ({ tasks }) => tasks.sidePanel.onBrowseFile(sidePanelFile, sidePanelFile, true),
     });
   }
   if (layout.sidePanelFullScreen === true) {
     steps.push({
       key: "full-screen",
-      ready: (context) => drawnPlan(context) !== undefined && context.plans.sidePanel.open,
-      run: ({ plans }) => {
-        if (!plans.sidePanel.fullScreen) plans.sidePanel.onToggleFullScreen();
+      ready: (context) => drawnTask(context) !== undefined && context.tasks.sidePanel.open,
+      run: ({ tasks }) => {
+        if (!tasks.sidePanel.fullScreen) tasks.sidePanel.onToggleFullScreen();
       },
     });
   }
@@ -126,7 +126,7 @@ function layoutSteps(shot: ShotSpec): ShotStep[] {
     steps.push({
       key: "palette",
       ready: (context) =>
-        drawnPlan(context) !== undefined && context.plans.agents.agentIds !== undefined,
+        drawnTask(context) !== undefined && context.tasks.agents.agentIds !== undefined,
       run: () => {
         armPaletteQuery(palette.query);
         runAppCommand(APP_COMMAND.COMMAND_PALETTE);

@@ -5,7 +5,9 @@
  * `avatar.stop`, each naming the request id the host minted, and this
  * answers every start with that id echoed: `avatar.started` carrying a grant
  * minted for this ask alone, since a grant joins once and is never kept, or
- * `avatar.unavailable` with why. The grant goes to the device socket and
+ * `avatar.unavailable` with why. A start names the avatar the developer
+ * chose by its key, and this mints that stock persona, or the deployment's
+ * own where it names none or the default. The grant goes to the device socket and
  * nowhere else; the one word the log keeps of it is the host of the room.
  *
  * Each session Keyframe mints is a `voice_avatar_sessions` row, opened only
@@ -25,6 +27,7 @@ import {
   openAvatarSession,
 } from "@luke/database/models/voice-avatar-sessions";
 import { AVATAR_END_REASON, type AvatarEndReason } from "@luke/database/voice-vocabulary";
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import { catchAllButInterrupt, serialQueue } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result, type Scope } from "effect";
 import {
@@ -40,7 +43,12 @@ import {
   unparsedWire,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
-import { KEYFRAME_FAILURE, type KeyframeFailure, type KeyframeService } from "./keyframe.js";
+import {
+  KEYFRAME_FAILURE,
+  KEYFRAME_STOCK_PERSONA_ID,
+  type KeyframeFailure,
+  type KeyframeService,
+} from "./keyframe.js";
 import { LOG_EVENT, type Log } from "./log.js";
 
 /** Why a row closes, for each reason the desktop stops the avatar with. */
@@ -57,10 +65,15 @@ const UNAVAILABLE_REASON_OF_FAILURE = {
   [KEYFRAME_FAILURE.UPSTREAM]: AVATAR_UNAVAILABLE_REASON.ERROR,
 } as const satisfies Record<KeyframeFailure, AvatarUnavailableReason>;
 
-/** The deployment's Keyframe client and the persona it mints, both configured or the avatar is not. */
+/** The deployment's Keyframe client and the persona it mints by default, both configured or the avatar is not. */
 export interface AvatarProvider {
   readonly keyframe: KeyframeService;
   readonly personaId: string;
+}
+
+/** Keyframe's persona for the avatar a start asked for: the deployment's own for the default. */
+function personaOf(avatar: VideoAvatar, provider: AvatarProvider): string {
+  return avatar === VIDEO_AVATAR.DEFAULT ? provider.personaId : KEYFRAME_STOCK_PERSONA_ID[avatar];
 }
 
 export interface CallAvatarOptions {
@@ -130,11 +143,11 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
 
   // Note that whatever the call already shows is closed before Keyframe is
   // asked, so a start that then fails leaves no row of the old one open.
-  const start = (requestId: string, call: string, avatar: AvatarProvider) =>
+  const start = (requestId: string, call: string, avatar: AvatarProvider, personaId: string) =>
     Effect.gen(function* () {
       yield* closeOpen(call, AVATAR_END_REASON.USER);
       held = undefined;
-      const minted = yield* Effect.result(avatar.keyframe.createSession());
+      const minted = yield* Effect.result(avatar.keyframe.createSession(personaId));
       if (Result.isFailure(minted)) {
         const { failure, status } = minted.failure;
         return yield* unavailable(requestId, UNAVAILABLE_REASON_OF_FAILURE[failure], status);
@@ -153,7 +166,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       const opened = yield* openAvatarSession({
         userId,
         voiceSessionId: call,
-        personaId: avatar.personaId,
+        personaId,
         startedAt,
       });
       if (Option.isNone(opened)) {
@@ -164,7 +177,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       log({ event: LOG_EVENT.AVATAR_STARTED, host: new URL(frame.serverUrl).host });
     });
 
-  const answerStart = (requestId: string) =>
+  const answerStart = (requestId: string, asked: VideoAvatar) =>
     Effect.gen(function* () {
       if (!(yield* options.deviceOpen)) return;
       if (provider === undefined) {
@@ -174,7 +187,8 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
         return yield* unavailable(requestId, AVATAR_UNAVAILABLE_REASON.ERROR);
       }
       // A write that failed is still a start the device waits on an answer for.
-      yield* catchAllButInterrupt(start(requestId, voiceSessionId, provider), () =>
+      const personaId = personaOf(asked, provider);
+      yield* catchAllButInterrupt(start(requestId, voiceSessionId, provider, personaId), () =>
         Effect.andThen(failed, unavailable(requestId, AVATAR_UNAVAILABLE_REASON.ERROR)),
       );
     });
@@ -210,7 +224,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
     request: (frame) => {
       queue.offerUnsafe(
         frame.type === VOICE_SERVICE_FRAME.AVATAR_START
-          ? answerStart(frame.requestId)
+          ? answerStart(frame.requestId, frame.avatar ?? VIDEO_AVATAR.DEFAULT)
           : written(answerStop(frame)),
       );
     },

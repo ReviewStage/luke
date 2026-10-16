@@ -23,10 +23,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
+import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
-import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopFactory } from "./desktop-factory";
 
 const NOW = Date.now();
@@ -34,7 +34,7 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const AGENT_ID = "a0000000-0000-4000-8000-000000000001";
 
-function plan(n: number, name: string, ago: number, patch: Partial<TaskSummary> = {}): TaskSummary {
+function task(n: number, name: string, ago: number, patch: Partial<TaskSummary> = {}): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -46,8 +46,8 @@ function plan(n: number, name: string, ago: number, patch: Partial<TaskSummary> 
   };
 }
 
-const DRAFT = plan(1, "Usage alerts", 2 * HOUR);
-const SEARCH = plan(2, "Search across plans", 5 * HOUR, {
+const DRAFT = task(1, "Usage alerts", 2 * HOUR);
+const SEARCH = task(2, "Search across plans", 5 * HOUR, {
   agents: {
     total: 1,
     working: 1,
@@ -65,7 +65,7 @@ const SEARCH = plan(2, "Search across plans", 5 * HOUR, {
     pullRequests: [],
   },
 });
-const BILLING = plan(3, "Mercury payouts", 2 * HOUR, {
+const BILLING = task(3, "Mercury payouts", 2 * HOUR, {
   agents: {
     total: 1,
     working: 0,
@@ -82,7 +82,7 @@ const BILLING = plan(3, "Mercury payouts", 2 * HOUR, {
     pullRequests: [],
   },
 });
-const INVITES = plan(4, "Workspace invites", HOUR, {
+const INVITES = task(4, "Workspace invites", HOUR, {
   agents: {
     total: 1,
     working: 0,
@@ -121,7 +121,7 @@ afterEach(() => {
 
 /** Every door the page opens, in order. */
 interface Opened {
-  readonly plans: string[];
+  readonly tasks: string[];
   readonly inbox: (InboxChoice | "inbox")[];
   readonly github: string[];
   readonly agents: string[];
@@ -129,13 +129,13 @@ interface Opened {
 }
 
 /** Factory over `listed`, what waits, and the call, every door it opens recorded. */
-function mount(listed: readonly TaskSummary[], overrides: Partial<PlansControl> = {}) {
-  const opened: Opened = { plans: [], inbox: [], github: [], agents: [], feedback: [] };
-  const base = plansControl();
-  const plans = plansControl({
-    plans: listed,
-    listed: { plans: listed, archived: [], inbox: [], inboxPlans: [] },
-    onSelect: (planId) => opened.plans.push(planId),
+function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> = {}) {
+  const opened: Opened = { tasks: [], inbox: [], github: [], agents: [], feedback: [] };
+  const base = tasksControl();
+  const plans = tasksControl({
+    tasks: listed,
+    listed: { tasks: listed, archived: [], inbox: [], inboxTasks: [] },
+    onSelect: (planId) => opened.tasks.push(planId),
     onShowAgent: (_planId, agentId) => opened.agents.push(agentId),
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
     inboxView: {
@@ -152,7 +152,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<PlansControl> 
   document.body.append(container);
   root = createRoot(container);
   const registry = AtomRegistry.make();
-  const draw = (drawn: PlansControl) =>
+  const draw = (drawn: TasksControl) =>
     act(() =>
       root?.render(
         onRegistry(
@@ -160,17 +160,17 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<PlansControl> 
           createElement(
             OpenFeedbackProvider,
             { value: (about: Experiment) => opened.feedback.push(about) },
-            createElement(DesktopFactory, { plans: drawn }),
+            createElement(DesktopFactory, { tasks: drawn }),
           ),
         ),
       ),
     );
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
-  const redraw = (patch: Partial<PlansControl>) => draw({ ...plans, ...patch });
+  const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
   /** The same page drawn again over another read of the plan list. */
   const rerender = (next: readonly TaskSummary[]) =>
-    draw({ ...plans, plans: next, listed: { ...plans.listed, plans: next } });
+    draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
 }
 
@@ -178,8 +178,8 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<PlansControl> 
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
   assert.ok(region, `${step} stands`);
-  return [...region.querySelectorAll(".sidebar-plan")].map((row) => {
-    const words = row.querySelector(".sidebar-plan-name")?.textContent;
+  return [...region.querySelectorAll(".sidebar-task")].map((row) => {
+    const words = row.querySelector(".sidebar-task-name")?.textContent;
     const context = row.querySelector(".home-row-context")?.textContent;
     const waits = row.getAttribute("data-unread") === "true" ? " (waits)" : "";
     return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
@@ -187,8 +187,8 @@ function rows(page: HTMLElement, step: string): string[] {
 }
 
 function row(page: HTMLElement, words: string): HTMLButtonElement {
-  const found = [...page.querySelectorAll<HTMLButtonElement>(".sidebar-plan")].find(
-    (each) => each.querySelector(".sidebar-plan-name")?.textContent === words,
+  const found = [...page.querySelectorAll<HTMLButtonElement>(".sidebar-task")].find(
+    (each) => each.querySelector(".sidebar-task-name")?.textContent === words,
   );
   assert.ok(found, `${words} stands`);
   return found;
@@ -238,7 +238,7 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.deepEqual(rows(page, "ship"), ["#2505 ready to merge · Workspace invites (waits)"]);
   // What waits stands in a list of its own, ahead of the work.
   const build = page.querySelector('section[data-step="build"]');
-  assert.equal(build?.querySelector("[data-needs] .sidebar-plan-name")?.textContent, QUESTION);
+  assert.equal(build?.querySelector("[data-needs] .sidebar-task-name")?.textContent, QUESTION);
   // The working agent wears the working mark; the stalled one its own mark at rest.
   const working = '.state-glyph[data-state="working"]';
   assert.ok(row(page, "Plan index").querySelector(working));
@@ -267,20 +267,20 @@ test("a question opens the Inbox on its item, an agent its page, a pull request 
   assert.ok(feedback);
   act(() => feedback.click());
   assert.deepEqual(opened.feedback, [EXPERIMENT.FACTORY]);
-  assert.deepEqual(opened.inbox, ["inbox", { planId: BILLING.id, itemId: "i1" }]);
+  assert.deepEqual(opened.inbox, ["inbox", { taskId: BILLING.id, itemId: "i1" }]);
   assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2505"]);
-  assert.deepEqual(opened.plans, [DRAFT.id]);
+  assert.deepEqual(opened.tasks, [DRAFT.id]);
   assert.deepEqual(opened.agents, [AGENT_ID]);
 });
 
 test("the task on the call stands in Talk however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
-  const old = plan(5, "Factory tab", 10 * 24 * HOUR);
+  const old = task(5, "Factory tab", 10 * 24 * HOUR);
   const call = mount([old], { callTaskId: old.id });
   assert.deepEqual(rows(call.page, "talk"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state h3")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
   assert.equal(page.querySelector(".factory-scroll button"), null);
 });
@@ -312,7 +312,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
 
 test("an agent whose turn failed waits first in Build wearing the failed mark and opens its page, and failing checks wait first in Ship and open on GitHub", () => {
   const failedAgent = "a0000000-0000-4000-8000-000000000009";
-  const pooling = plan(6, "Connection pooling", HOUR, {
+  const pooling = task(6, "Connection pooling", HOUR, {
     agents: {
       total: 1,
       working: 0,
@@ -363,7 +363,7 @@ test("an agent whose turn failed waits first in Build wearing the failed mark an
 
 test("what merged in the last day stands in Ship, every one of it and the latest first, and is counted in the summary", () => {
   const shipped = (n: number, name: string, ago: number) =>
-    plan(10 + n, name, ago, {
+    task(10 + n, name, ago, {
       agents: {
         total: 0,
         working: 0,
@@ -432,7 +432,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
   );
 
   const face = (words: string) =>
-    row(page, words).querySelector(".sidebar-plan-time .actor-mark")?.textContent ?? null;
+    row(page, words).querySelector(".sidebar-task-time .actor-mark")?.textContent ?? null;
   assert.equal(face(DRAFT.name), "C");
   assert.equal(face("Plan index"), null);
   assert.equal(face("Plan UI"), "C");
@@ -448,7 +448,7 @@ test("a refresh that fails over a list read before keeps the line standing, and 
     },
   });
   // The agent at work on the task read before still stands in Build.
-  assert.ok(page.querySelector('section[data-step="build"] .sidebar-plan'));
+  assert.ok(page.querySelector('section[data-step="build"] .sidebar-task'));
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
@@ -519,10 +519,10 @@ test("a question a teammate's agent asks, which main does not count as the reade
     // Main's own count holds nothing: the agent is a teammate's.
     inbox: [],
     listed: {
-      plans: [SEARCH, BILLING],
+      tasks: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxTasks: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -566,10 +566,10 @@ test("a question answered since main last counted it leaves Build once the Inbox
       },
     ],
     listed: {
-      plans: [SEARCH, BILLING],
+      tasks: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxTasks: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -586,10 +586,10 @@ test("questions that could not be read say so with Retry, and the reader's own s
       },
     ],
     listed: {
-      plans: [SEARCH, BILLING],
+      tasks: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxTasks: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -608,7 +608,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
   const counted = answerInbox((planId) => (planId === BILLING.id ? [] : undefined));
-  const other = plan(7, "Invites", HOUR);
+  const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
       {
@@ -617,10 +617,10 @@ test("one plan's failed Inbox read keeps main's count for that plan alone: a que
       },
     ],
     listed: {
-      plans: [SEARCH, BILLING, other],
+      tasks: [SEARCH, BILLING, other],
       archived: [],
       inbox: [],
-      inboxPlans: [
+      inboxTasks: [
         { taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR },
         { taskId: other.id, items: 1, updatedAt: NOW - HOUR },
       ],
@@ -641,10 +641,10 @@ test("a question read that fails says so even while a refresh of the task list h
     listFailed: true,
     listRead: false,
     listed: {
-      plans: [SEARCH, BILLING],
+      tasks: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxTasks: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -657,10 +657,10 @@ test("a question main counts after a plan's last read stands while that plan's r
   let fail = false;
   answerInbox(() => (fail ? undefined : []));
   const listed = (updatedAt: number) => ({
-    plans: [SEARCH, BILLING],
+    tasks: [SEARCH, BILLING],
     archived: [],
     inbox: [],
-    inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt }],
+    inboxTasks: [{ taskId: BILLING.id, items: 1, updatedAt }],
   });
   const asked = {
     taskId: BILLING.id,
@@ -683,7 +683,7 @@ test("↓ from the window reaches the first row and moves on through the station
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   const focused = () =>
-    document.activeElement?.querySelector(".sidebar-plan-name")?.textContent ?? null;
+    document.activeElement?.querySelector(".sidebar-task-name")?.textContent ?? null;
   press("ArrowDown");
   assert.equal(focused(), "Usage alerts");
   press("ArrowDown");
@@ -703,7 +703,7 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
   act(() => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   });
-  const name = () => document.activeElement?.querySelector(".sidebar-plan-name")?.textContent;
+  const name = () => document.activeElement?.querySelector(".sidebar-task-name")?.textContent;
   assert.equal(name(), "Plan index");
   const working = SEARCH.agents;
   assert.ok(working);
@@ -891,7 +891,7 @@ test("where three stations side by side could not each hold a readable row they 
 test("a row's time ends the row whether or not it names a task beside its words, so the times stand in one column", () => {
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES]);
   const style = layContainersAt({});
-  const times = [...page.querySelectorAll<HTMLElement>(".factory-row .sidebar-plan-time")];
+  const times = [...page.querySelectorAll<HTMLElement>(".factory-row .sidebar-task-time")];
   assert.ok(times.length > 0);
   for (const time of times) assert.equal(getComputedStyle(time).marginLeft, "auto");
   style.remove();

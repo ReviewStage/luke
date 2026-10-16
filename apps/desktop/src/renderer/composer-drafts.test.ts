@@ -25,27 +25,27 @@ import {
 } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { useDraftsOwner } from "./composer-drafts";
-import { DesktopPlans } from "./desktop/desktop-plans";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
-import { SidebarPlan } from "./desktop/plan-actions";
+import { DesktopTasks } from "./desktop/desktop-tasks";
+import { SidebarTask } from "./desktop/task-actions";
 import { DRAFT_WORD } from "./draft-mark";
 import {
   type AgentComposerControl,
   type MessageSender,
   useAgentComposer,
-} from "./planning/use-agent-composer";
-import { MAIN_TAB, type MainTab } from "./planning/use-main-tabs";
-import { type PlanInboxControl, usePlanInbox } from "./planning/use-plan-inbox";
-import { NO_LOOKS } from "./planning/use-plan-looks";
+} from "./tasks/use-agent-composer";
+import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs";
+import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox";
+import { NO_LOOKS } from "./tasks/use-task-looks";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
  * wait there while another task is open and while the agent's tab is away,
- * which its task's sidebar row and its tab mark with the Draft pencil
- * meanwhile, and only meanwhile, the box in sight showing them itself,
+ * which its task's sidebar row marks with the Draft pencil while another
+ * task is open, and only then, no tab of the task open marking its own,
  * outlast a reload of the window, and go with the message that sends them;
  * and an inbox card's answer, kept the same way, until the agent changes
  * the item it answers.
@@ -139,21 +139,21 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   const show = async (
     open: typeof INVITES,
     {
-      onPlan = false,
+      onTask = false,
       send = NEVER_ANSWERED,
       account,
-    }: { onPlan?: boolean; send?: MessageSender; account?: Identity } = {},
+    }: { onTask?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
     const agentTab = { agent: open.agent.id };
-    const plans = plansControl({
+    const plans = tasksControl({
       page: TASKS_PAGE.DOCUMENT,
-      plans: [INVITES.plan, BILLING.plan],
-      activePlanId: open.plan.id,
+      tasks: [INVITES.plan, BILLING.plan],
+      activeTaskId: open.plan.id,
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
-        ...plansControl().mainTabs,
+        ...tasksControl().mainTabs,
         tabs: [MAIN_TAB.PLAN, agentTab],
-        tab: onPlan ? MAIN_TAB.PLAN : agentTab,
+        tab: onTask ? MAIN_TAB.PLAN : agentTab,
         openAgents: [open.agent.id],
       },
       agents: codingAgentsControl({
@@ -164,10 +164,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       }),
     });
     const rows = [INVITES.plan, BILLING.plan].map((plan) =>
-      createElement(SidebarPlan, {
+      createElement(SidebarTask, {
         key: plan.id,
-        plans,
-        plan,
+        tasks: plans,
+        task: plan,
         current: plan.id === open.plan.id,
         unread: false,
         now: 3,
@@ -183,10 +183,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
             null,
             createElement(SignedIn, { account }),
             createElement("ul", null, rows),
-            createElement(DesktopPlans, {
+            createElement(DesktopTasks, {
               summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
-              plans,
+              tasks: plans,
             }),
           ),
         ),
@@ -196,7 +196,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   };
   /** The sidebar's row of a task. */
   const row = (name: string) =>
-    [...container.querySelectorAll<HTMLElement>(".sidebar-plan-item")].find((each) =>
+    [...container.querySelectorAll<HTMLElement>(".sidebar-task-item")].find((each) =>
       each.textContent?.includes(name),
     ) ?? assert.fail(`the sidebar lists ${name}`);
   return {
@@ -230,7 +230,7 @@ test("words typed in one task's agent's box wait there while another task is ope
   assert.equal(app.rowDrafted(INVITES.plan.name), true, "the draft is marked while away");
   assert.equal(app.rowDrafted(BILLING.plan.name), false, "only the task holding it is marked");
 
-  await app.show(INVITES, { onPlan: true });
+  await app.show(INVITES, { onTask: true });
   assert.equal(app.rowDrafted(INVITES.plan.name), false, "nor while another of its tabs is chosen");
 
   await app.show(INVITES);
@@ -238,18 +238,16 @@ test("words typed in one task's agent's box wait there while another task is ope
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
 });
 
-test("an agent's tab wears the Draft pencil while another tab is chosen, and not while its own box is in sight", async () => {
+test("an agent's tab wears no Draft pencil, whichever of its task's tabs is chosen", async () => {
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES);
   typeInComposer(app.container, "Expire invites after a week");
   await settle();
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its box shows its words");
 
-  await app.show(INVITES, { onPlan: true });
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), true, "the draft is marked while away");
-
-  await app.show(INVITES);
-  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
+  await app.show(INVITES, { onTask: true });
+  assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false, "its task is still the one open");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false);
 });
 
 test("a draft outlasts a reload of the window, words and mark alike", async () => {
@@ -282,7 +280,7 @@ test("a message sent takes its words out of the draft, so the box comes back emp
 
   await app.show(BILLING);
   assert.equal(app.rowDrafted(INVITES.plan.name), false, "the mark goes with the words");
-  await app.show(INVITES, { onPlan: true });
+  await app.show(INVITES, { onTask: true });
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
   await app.show(INVITES);
   assert.equal(app.box(), "");
@@ -299,7 +297,7 @@ test("a box emptied by hand lets its draft go, and its mark with it", async () =
   await settle();
   await app.show(BILLING);
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
-  await app.show(INVITES, { onPlan: true });
+  await app.show(INVITES, { onTask: true });
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
@@ -417,15 +415,15 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     configurable: true,
     value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
   });
-  const pin = { plan: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
-  const plans = plansControl({
+  const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    plans: [INVITES.plan, BILLING.plan],
-    activePlanId: open.plan.id,
+    tasks: [INVITES.plan, BILLING.plan],
+    activeTaskId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
-    sidePanel: { ...plansControl().sidePanel, pins: pinned ? [pin] : [] },
+    sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
     mainTabs: {
-      ...plansControl().mainTabs,
+      ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
@@ -443,8 +441,8 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   await settle();
   return (name: string) =>
     (
-      [...container.querySelectorAll<HTMLElement>(".sidebar-plan")].find(
-        (row) => row.querySelector(".sidebar-plan-name")?.textContent === name,
+      [...container.querySelectorAll<HTMLElement>(".sidebar-task")].find(
+        (row) => row.querySelector(".sidebar-task-name")?.textContent === name,
       ) ?? assert.fail(`the sidebar lists ${name}`)
     ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
@@ -474,13 +472,13 @@ const DRAFT_KEY = "draft-invites";
  * drafts are what storage holds.
  */
 async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVITES.agent) {
-  const plans = plansControl({
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    plans: [INVITES.plan],
-    activePlanId: INVITES.plan.id,
+    tasks: [INVITES.plan],
+    activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
-      ...plansControl().mainTabs,
+      ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, ...tabs],
       tab: chosen,
       openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
@@ -515,16 +513,16 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
           createElement(
             "ul",
             null,
-            createElement(SidebarPlan, {
-              plans,
-              plan: INVITES.plan,
+            createElement(SidebarTask, {
+              tasks: plans,
+              task: INVITES.plan,
               current: true,
               unread: false,
               now: 3,
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
         ),
       ),
     ),
@@ -532,7 +530,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    rowDrafted: () => container.querySelector(`.sidebar-plan ${pencil}`) !== null,
+    rowDrafted: () => container.querySelector(`.sidebar-task ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".tab")].find(
@@ -545,7 +543,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
   };
 }
 
-test("an inbox card's answer and a draft agent's first message mark their tabs while another is chosen, and their open task's row not at all", async () => {
+test("an inbox card's answer and a draft agent's first message mark neither their tabs nor their open task's row", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -568,23 +566,16 @@ test("an inbox card's answer and a draft agent's first message mark their tabs w
     ]),
   );
   const tabs = [MAIN_TAB.INBOX, { draft: DRAFT_KEY }];
-  const onPlan = await columnOn(tabs, MAIN_TAB.PLAN);
-  assert.equal(onPlan.tabDrafted(TAB_WORDS.INBOX), true);
-  assert.equal(onPlan.tabDrafted(TAB_WORDS.NEW_AGENT), true);
-  assert.equal(onPlan.rowDrafted(), false, "its tabs mark both");
-  onPlan.unmount();
-
-  const onInbox = await columnOn(tabs, MAIN_TAB.INBOX);
-  assert.equal(onInbox.tabDrafted(TAB_WORDS.INBOX), false, "the Inbox shows its answer");
-  assert.equal(onInbox.tabDrafted(TAB_WORDS.NEW_AGENT), true);
-  onInbox.unmount();
-
-  const onDraft = await columnOn(tabs, { draft: DRAFT_KEY });
-  assert.equal(onDraft.tabDrafted(TAB_WORDS.NEW_AGENT), false, "its box shows its words");
-  assert.equal(onDraft.tabDrafted(TAB_WORDS.INBOX), true);
+  for (const chosen of [MAIN_TAB.PLAN, MAIN_TAB.INBOX, { draft: DRAFT_KEY }]) {
+    const column = await columnOn(tabs, chosen);
+    assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
+    assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
+    assert.equal(column.rowDrafted(), false);
+    column.unmount();
+  }
 });
 
-test("a draft behind no open tab of its task's, or behind a failed agent's, keeps the task's row marked while it is open", async () => {
+test("a draft behind no open tab of its task's, or behind a failed agent's, leaves the task's row unmarked while it is open", async () => {
   window.localStorage.setItem(
     "luke.composerDrafts",
     JSON.stringify([
@@ -592,18 +583,13 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, keep
     ]),
   );
   const closed = await columnOn([], MAIN_TAB.PLAN);
-  assert.equal(closed.rowDrafted(), true, "the agent's tab is closed, so the row marks it");
+  assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
-
-  const open = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.PLAN);
-  assert.equal(open.rowDrafted(), false, "its open tab marks it instead");
-  assert.equal(open.tabDrafted(INVITES.agent.title ?? ""), true);
-  open.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
   const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.PLAN, failed);
-  assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false, "its failure's mark stands");
-  assert.equal(marked.rowDrafted(), true, "so the row marks the draft");
+  assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
+  assert.equal(marked.rowDrafted(), false);
 });
 
 /** An item of the Teammate invitations agent's, open and asking for an approval, at `revision`. */
@@ -634,13 +620,13 @@ async function inboxOn(item: InboxItem) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const plans = plansControl({
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    plans: [INVITES.plan],
-    activePlanId: INVITES.plan.id,
+    tasks: [INVITES.plan],
+    activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
-      ...plansControl().mainTabs,
+      ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
       tab: MAIN_TAB.INBOX,
     },
@@ -663,16 +649,16 @@ async function inboxOn(item: InboxItem) {
           createElement(
             "ul",
             null,
-            createElement(SidebarPlan, {
-              plans,
-              plan: INVITES.plan,
+            createElement(SidebarTask, {
+              tasks: plans,
+              task: INVITES.plan,
               current: false,
               unread: false,
               now: 3,
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
         ),
       ),
     ),
@@ -696,7 +682,7 @@ async function inboxOn(item: InboxItem) {
       await settle();
     },
     drafted: () =>
-      container.querySelector(`.sidebar-plan [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
+      container.querySelector(`.sidebar-task [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
     reload: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
       container.remove();
@@ -727,10 +713,10 @@ function planlessItem(agentId: string, id: string, revision: number): InboxItem 
 
 /** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
 async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
-  let control: PlanInboxControl | undefined;
+  let control: TaskInboxControl | undefined;
   function Probe(): null {
-    control = usePlanInbox({
-      planId: agentId,
+    control = useTaskInbox({
+      taskId: agentId,
       reader: (after) =>
         after === INBOX_CURSOR_START
           ? Promise.resolve({ items, cursor: "1" })
@@ -805,7 +791,7 @@ test("files attached in this window stay as its draft when another window lets t
     useDraftsOwner(DEAN);
     composer = useAgentComposer({
       agentId: INVITES.agent.id,
-      planId: INVITES.plan.id,
+      taskId: INVITES.plan.id,
       messages: [],
       send: NEVER_ANSWERED,
       onStatus: () => undefined,

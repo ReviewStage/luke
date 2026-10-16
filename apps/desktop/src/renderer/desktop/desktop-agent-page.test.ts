@@ -15,13 +15,16 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPage,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -34,16 +37,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { runAppCommand } from "../app-commands";
-import { archiveWords } from "../planning/coding-agent-model";
-import type { PlansControl } from "../planning/use-plans-tab";
-import { useSidePanel } from "../planning/use-side-panel";
+import { archiveWords } from "../tasks/coding-agent-model";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
@@ -136,6 +140,8 @@ let told: Act[] = [];
 let published: CodingAgentPullRequestAnswer | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
+/** What the workspace's list of agents answers, whatever it was asked. */
+let workspace: readonly CodingAgentSummary[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -148,6 +154,7 @@ beforeEach(() => {
   published = undefined;
   openedOnGitHub = [];
   copied = [];
+  workspace = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -173,9 +180,14 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
           archives.push(request.payload);
+          // The agent answered is the one the page read, brought back, which names no archive.
+          const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
+          const { archivedAt: _archived, ...back } = shown;
+          // Brought back, the agent is read so from then on.
+          if (!archiveRefused) pages = [{ agent: back }];
           const value = archiveRefused
             ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { agent: { ...PAGE, archivedAt: undefined } };
+            : { agent: back };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
@@ -204,6 +216,9 @@ beforeEach(() => {
           copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
+        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
           const value = pages.length > 1 ? pages.shift() : pages[0];
@@ -222,7 +237,7 @@ afterEach(() => {
 });
 
 /** The page of the agent, standing in the plan's place, as the window's plans control holds it. */
-function mount(plans: PlansControl = plansControl({})): HTMLElement {
+function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -233,7 +248,7 @@ function mount(plans: PlansControl = plansControl({})): HTMLElement {
         createElement(
           Fragment,
           null,
-          createElement(DesktopAgentPage, { plans, agentId: AGENT_ID }),
+          createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
           createElement(ToastHost),
         ),
       ),
@@ -286,6 +301,9 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
 });
 
 /** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
+/** The side panel the page last drew, whose toggle the shell's button presses. */
+let drawnPanel: SidePanelControl | undefined;
+
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
@@ -297,8 +315,9 @@ function PanelPage(): React.JSX.Element {
     [],
     agents,
   );
+  drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
-    plans: { ...plansControl({}), sidePanel },
+    tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
   });
 }
@@ -368,7 +387,93 @@ async function mountPanelPage(): Promise<HTMLElement> {
   return container;
 }
 
-test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
+test("its last tab closed shuts the panel, and shown again it offers in place every row its + offers, under the + menu's headings, each opening what it names", async () => {
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { task: "Find the flakiest test." },
+            output: "Started task delegate-7k2m9q.",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = await mountPanelPage();
+  const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
+  assert.ok(row, "the delegation's row opens its worker");
+  act(() => row.click());
+  await settle();
+  const panel = container.querySelector("aside.side-panel") ?? assert.fail("the panel opens");
+  const add = panel.querySelector<HTMLButtonElement>("button[aria-label='Open a tab']");
+  assert.ok(add, "the panel offers its +");
+  act(() => add.click());
+  await settle();
+  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+    (each) => each.textContent,
+  );
+  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
+    each.getAttribute("aria-label"),
+  );
+  act(() => add.click());
+  await settle();
+  const close = panel.querySelector<HTMLButtonElement>(".tab-close");
+  assert.ok(close, "the worker's tab closes");
+  act(() => close.click());
+  await settle();
+  assert.equal(container.querySelector("aside.side-panel"), null, "the panel shuts");
+
+  act(() => drawnPanel?.onToggle());
+  await settle();
+  const shown = container.querySelector("aside.side-panel") ?? assert.fail("the toggle shows it");
+  const well = shown.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
+  const rows = [...well.querySelectorAll<HTMLButtonElement>("button")];
+  assert.deepEqual(
+    rows.map((each) => each.textContent),
+    offered,
+  );
+  assert.deepEqual(
+    [...well.querySelectorAll("section")].map((each) => each.getAttribute("aria-label")),
+    headings,
+  );
+  assert.deepEqual(headings, ["Pull requests", "Terminal"]);
+  const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
+  assert.ok(changes, "the empty panel offers the agent's pull request");
+  act(() => changes.click());
+  await settle();
+  assert.ok(
+    [...shown.querySelectorAll("[role='tab']")].some((tab) =>
+      (tab.textContent ?? "").includes("Pull request"),
+    ),
+    "the Pull request tab stands in the panel",
+  );
+});
+
+test("an archived agent's pull request, picked from the panel's +, opens in a Pull request tab standing beside its page", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   published = {
     repository: "acme/relay",
@@ -401,8 +506,8 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
   );
 
   assert.ok(
-    tabs.some((label) => label.includes("Changes")),
-    `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
 
@@ -499,6 +604,64 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
 });
 
+/** The task open beneath the page. */
+const OPEN_TASK = "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b";
+
+test("an agent of the open task brought back on its page has the task's agents read again, so its tab and ⌘K stand where it does, and one of another task's has none", async () => {
+  /** How many times the open task's agents are read again around an Unarchive on the page of an agent of `planId`. */
+  const readsAround = async (planId: string): Promise<number> => {
+    let reads = 0;
+    pages = [{ agent: { ...PAGE, planId, archivedAt: 2 } }];
+    const page = mount(
+      tasksControl({
+        activeTaskId: OPEN_TASK,
+        agents: codingAgentsControl({ onRetryList: () => (reads += 1) }),
+      }),
+    );
+    await settle();
+    const drawn = reads;
+    const unarchive = [...page.querySelectorAll("button")].find(
+      (each) => each.textContent === "Unarchive",
+    );
+    assert.ok(unarchive, "the archived agent offers Unarchive");
+    act(() => unarchive.click());
+    await settle();
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    assert.equal(drawn, 0, "drawing the page reads nothing of the task");
+    return reads;
+  };
+
+  assert.equal(await readsAround(OPEN_TASK), 1);
+  assert.equal(await readsAround("6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d9e"), 0);
+});
+
+test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {
+  pages = [
+    {
+      agent: {
+        ...PAGE,
+        archivedAt: 2,
+        archivedBy: {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          member: { userId: "user-dean", name: "Dean Stratakos" },
+          agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
+          reason: "Its pull request merged.",
+        },
+      },
+    },
+  ];
+  const page = mount();
+  await settle();
+
+  assert.equal(
+    page.querySelector(".archived-composer-by")?.textContent,
+    "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+  );
+  assert.ok([...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"));
+});
+
 test("an Unarchive the service refuses says why, and the agent stays archived", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   archiveRefused = true;
@@ -547,7 +710,7 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
     title: null,
   };
   const page = mount(
-    plansControl({
+    tasksControl({
       me: "user-dean",
       workspaces: [
         {
@@ -601,7 +764,7 @@ interface OpenedOrigin {
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
-  const head = card.querySelector<HTMLElement>("[data-plan-card] > summary");
+  const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
   return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
 }
@@ -611,7 +774,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
   const opened: unknown[] = [];
-  const plans = plansControl({ workspaces: [ACME] });
+  const plans = tasksControl({ workspaces: [ACME] });
   const page = mount({
     ...plans,
     automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
@@ -632,7 +795,7 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
   transcript = handedTranscript();
-  const page = mount(plansControl({ workspaces: [ACME] }));
+  const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
 
   const { sender } = origin(page);
@@ -643,7 +806,7 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
 test("with the Automations experiment off, an automation's agent names it plainly, with nothing to open", async () => {
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
-  const page = mount(plansControl({ workspaces: [ACME] }));
+  const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
 
   const { sender } = origin(page);
@@ -666,7 +829,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
     },
   ];
   transcript = handedTranscript();
-  const page = mount(plansControl({ me: "user-dean" }));
+  const page = mount(tasksControl({ me: "user-dean" }));
   await settle();
 
   const { sender } = origin(page);
@@ -690,7 +853,7 @@ test("too narrow for the line naming who sent it, it breaks between the automati
   ];
   transcript = handedTranscript();
   const styles = layContainersAt({});
-  const page = mount(plansControl({ me: "user-dean" }));
+  const page = mount(tasksControl({ me: "user-dean" }));
   await settle();
 
   const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
@@ -731,7 +894,7 @@ test("an automation's agent the model has not named yet is titled by its automat
 
 test("the page's ⋯ copies the agent's link, under its workspace, and says Link copied", async () => {
   const page = mount(
-    plansControl({
+    tasksControl({
       workspaces: [
         {
           id: "workspace-1",
@@ -755,4 +918,46 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  installScrollIntoView();
+  const billing: Task = {
+    id: "2b2b2b2b-0000-4000-8000-000000000000",
+    workspaceId: PAGE.workspaceId,
+    name: "Billing",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    document: { body: "", assumptions: [] },
+  };
+  workspace = [
+    {
+      id: "3c3c3c3c-0000-4000-8000-000000000000",
+      planId: billing.id,
+      model: PAGE.model,
+      effort: PAGE.effort,
+      title: "Bill by seat",
+      createdAt: 1,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      turnId: null,
+      archivedAt: 3,
+    },
+  ];
+  const page = mount(tasksControl({ archived: [billing] }));
+  await settle();
+
+  typeInComposer(page, "Ask @billing");
+  await settle();
+
+  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => [
+      row.querySelector(".task-compose-menu-name")?.textContent,
+      row.querySelector(".mention-row-detail")?.textContent,
+    ]),
+    [["Bill by seat", "Billing · Archived"]],
+  );
 });

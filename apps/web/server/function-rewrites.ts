@@ -72,6 +72,12 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
   {
+    src: "/api/plans/([^/]+)/comments/([^/]+)",
+    route: "plans/comment-thread",
+    query: "id=$1&thread=$2",
+  },
+  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1" },
+  {
     src: "/api/plans/([^/]+)/attachments/([^/]+)",
     route: "plans/attachment",
     query: "id=$1&attachment=$2",
@@ -122,6 +128,8 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/overview", route: "agents/overview", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",
@@ -142,6 +150,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },
   { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1" },
   { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1" },
+  { src: "/api/issues/([^/]+)", route: "issues/issue", query: "id=$1" },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */

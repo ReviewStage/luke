@@ -7,6 +7,8 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
+import type { PageLine } from "@luke/features/page-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,21 +17,22 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { conversationOf, worker, workerCall, workTurn } from "#testing/plan-work";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MAIN_TAB } from "../planning/use-main-tabs";
-import { NO_LOOKS } from "../planning/use-plan-looks";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
-import { DesktopPlans } from "./desktop-plans";
+import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
+import { MAIN_TAB } from "../tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { NO_LOOKS } from "../tasks/use-task-looks";
+import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
  * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, and the plan's own tab hangs the plan's card.
+ * that strip's "+" menu wears, the plan's own tab hangs the plan's card, and
+ * a page's tab hangs a card previewing the page.
  */
 
-const PLAN: Task = {
+const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -40,12 +43,12 @@ const PLAN: Task = {
 };
 
 const SUMMARY: TaskSummary = {
-  id: PLAN.id,
-  workspaceId: PLAN.workspaceId,
-  name: PLAN.name,
-  createdAt: PLAN.createdAt,
-  updatedAt: PLAN.updatedAt,
-  repository: PLAN.repository,
+  id: TASK.id,
+  workspaceId: TASK.workspaceId,
+  name: TASK.name,
+  createdAt: TASK.createdAt,
+  updatedAt: TASK.updatedAt,
+  repository: TASK.repository,
   agents: {
     total: 1,
     working: 1,
@@ -71,7 +74,7 @@ function agent(
 ): CodingAgentSummary {
   return {
     id,
-    planId: PLAN.id,
+    planId: TASK.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
@@ -94,6 +97,14 @@ const DONE = agent(
 
 const DRAFT = "draft-1";
 
+/** A page an agent showed on the plan, at its third version. */
+const FUNNEL: PageLine = {
+  id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+  title: "Invite funnel",
+  version: 3,
+  at: 1_800_000_000_000,
+};
+
 /** A planning worker still at work, on a model whose harness Luke knows. */
 const READER = worker("w", "Read the invite emails.", {
   state: TASK_WORK_STATE.RUNNING,
@@ -113,18 +124,18 @@ afterEach(() => {
 /**
  * The plan open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with a working subagent's tab, the done
- * agent's Changes tab, and the working agent's Terminal tab.
+ * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const base = plansControl();
-  const plans = plansControl({
+  const base = tasksControl();
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    plans: [SUMMARY],
-    activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
+    tasks: [SUMMARY],
+    activeTaskId: TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: WORKING.id }, { draft: DRAFT }],
@@ -138,7 +149,9 @@ function mount(): HTMLElement {
       subagents: [{ subagent: READER.callId }],
       changes: [{ changes: DONE.id }],
       terminals: [{ terminal: WORKING.id }],
+      pages: [{ page: FUNNEL.id }],
     },
+    pages: [FUNNEL],
     work: {
       ...base.work,
       conversation: conversationOf([
@@ -171,7 +184,7 @@ function mount(): HTMLElement {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
       ),
     ),
   );
@@ -200,7 +213,7 @@ function rowLooks(column: Element): Map<string, Look> {
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
-    const label = row.querySelector(".plan-compose-menu-name")?.textContent ?? "";
+    const label = row.querySelector(".task-compose-menu-name")?.textContent ?? "";
     return [label, { glyph: row.querySelector(".menu-item-glyph")?.innerHTML, label }] as const;
   });
   act(() => add.click());
@@ -219,31 +232,36 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the side panel's + offers a working subagent and an agent's Changes in the look their tabs wear", () => {
+test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear", () => {
   const panel = mount().querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
-  for (const name of [READER.title, `Changes: ${DONE.title}`]) {
+  for (const name of [READER.title, `Pull request: ${DONE.title}`]) {
     assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }
   assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
+  assert.match(
+    tabs.get(`Pull request: ${DONE.title}`)?.glyph ?? "",
+    /data-pull-request-state="open"/u,
+    "the Pull request tab wears its pull request's mark for where it stands",
+  );
 });
 
 test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", () => {
   const column = mount().querySelector(".main-tabs");
   const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.equal(tab?.textContent, PLAN.name);
+  assert.equal(tab?.textContent, TASK.name);
   act(() => {
     tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-plan-card]");
+  const card = document.querySelector(".tooltip-card [data-task-card]");
   assert.ok(card, "the plan's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, PLAN.name);
+  assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
   // The card is the plan as the list names it, its agents among it.
-  assert.equal(card.querySelector("[data-plan-card-agent]")?.textContent, "Invite flow");
+  assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
 });
 
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", () => {
@@ -265,4 +283,29 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
     [...card.querySelectorAll(".card-note")].at(-1)?.textContent,
     "Terminal in this agent’s sandbox",
   );
+});
+
+test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", () => {
+  const panel = mount().querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
+  );
+  assert.ok(tab, "the strip has the page's tab");
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-page-card]");
+  assert.ok(card, "the page's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, FUNNEL.title);
+  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 3");
+  const frame = card.querySelector("iframe");
+  assert.ok(frame, "the card previews the page");
+  assert.equal(
+    frame.getAttribute("src"),
+    pageFrameUrl({ taskId: TASK.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  );
+  assert.equal(frame.getAttribute("sandbox"), "allow-scripts");
+  assert.equal(frame.tabIndex, -1);
+  assert.equal(frame.getAttribute("aria-hidden"), "true");
+  assert.ok(frame.closest(".ph-no-capture"), "the preview is left out of the recording");
 });

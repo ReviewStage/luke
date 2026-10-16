@@ -1,7 +1,7 @@
 /**
  * fixture-rebase.ts -- the planning fixture's own data with every timestamp moved to just before launch, for a shot that reuses it.
  *
- * Throwaway (`README.md`). `planning-fixture.ts` stamps its plans 1 and 2 ms
+ * Throwaway (`README.md`). `tasks-fixture.ts` stamps its plans 1 and 2 ms
  * past the epoch and its calls and turns on 2026-10-07, which drew
  * "Dec 31, 1969" in the sidebar and "Working… 146h" on the Call tab. A shot
  * reusing it reads it through {@link rebased}, which moves every timestamp

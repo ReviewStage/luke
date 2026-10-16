@@ -8,7 +8,7 @@ import { useEffect } from "react";
  */
 
 /** The rows the arrow keys move through: every row drawn as the sidebar draws one. */
-const ROWS = ".sidebar-plan";
+const ROWS = ".sidebar-task";
 
 /**
  * ↑ and ↓ from the window itself, or from one of the page's rows, move the

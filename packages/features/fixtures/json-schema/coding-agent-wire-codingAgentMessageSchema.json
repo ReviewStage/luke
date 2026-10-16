@@ -86,12 +86,22 @@
             "automation",
             "github"
           ]
+        },
+        "agent": {
+          "type": "boolean",
+          "enum": [
+            true
+          ]
         }
       },
       "required": [
         "name"
       ],
       "additionalProperties": false
+    },
+    "sentAt": {
+      "type": "number",
+      "minimum": 0
     },
     "arrivedIn": {
       "type": "object",

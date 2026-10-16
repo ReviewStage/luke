@@ -13,7 +13,7 @@ import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorLayout } from "#testing/composer";
-import { retargetedMention } from "../planning/mention-chip";
+import { retargetedMention } from "../tasks/mention-chip";
 import type { ComposerTrigger, MentionNode, PlanEditorHandle } from "./contract";
 import { mountPlanEditor } from "./plan-editor";
 
@@ -26,13 +26,13 @@ import { mountPlanEditor } from "./plan-editor";
  * mentions of it. Synthetic plan.
  */
 
-const PLAN_ID = "pl_1";
+const TASK_ID = "pl_1";
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/checkout" };
 
 /** A mention of the section an anchor names, written with the name given. */
 const named = (anchor: string, name: string) =>
-  mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor }, name, PLACE);
+  mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor }, name, PLACE);
 
 const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", heading);
 
@@ -82,7 +82,7 @@ function mounted(markdown: string) {
         drawn.push(mention);
         return () => undefined;
       },
-      retarget: (target, change) => retargetedMention(PLAN_ID, PLACE, target, change),
+      retarget: (target, change) => retargetedMention(TASK_ID, PLACE, target, change),
       namesMention: () => false,
       // The panel reads the one page of an integration's this plan is pasted.
       pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
@@ -150,79 +150,79 @@ function mounted(markdown: string) {
 }
 
 test("a mention in the text opens as its node, drawn by the panel, and writes back as the link it was read from", () => {
-  const plan = mounted(TEXT);
+  const task = mounted(TEXT);
 
-  plan.typeAfter("says.", " Today.");
+  task.typeAfter("says.", " Today.");
 
-  assert.deepEqual(plan.drawn, [
-    { name: "Rollout", target: `https://tryluke.dev/acme/plan/${PLAN_ID}#rollout` },
+  assert.deepEqual(task.drawn, [
+    { name: "Rollout", target: `https://tryluke.dev/acme/plan/${TASK_ID}#rollout` },
   ]);
   assert.equal(
-    plan.last(),
+    task.last(),
     `## Goal\n\nShip as ${section("Rollout")} says. Today.\n\n## Rollout\n\nStore first.\n`,
   );
 });
 
 test("an @ word the caret ends is reported with what follows it, and a pick writes the mention and a space in its place", () => {
-  const plan = mounted(TEXT);
+  const task = mounted(TEXT);
 
-  plan.typeAfter("Store first.", " See @go");
-  const reported = plan.triggers.at(-1);
-  plan.handle.chooseMention({
+  task.typeAfter("Store first.", " See @go");
+  const reported = task.triggers.at(-1);
+  task.handle.chooseMention({
     name: "Goal",
-    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+    target: `https://tryluke.dev/acme/plan/${TASK_ID}#goal`,
   });
 
   assert.equal(reported?.query, "go");
-  assert.ok(plan.last().includes(`Store first. See ${section("Goal")}`), plan.last());
+  assert.ok(task.last().includes(`Store first. See ${section("Goal")}`), task.last());
 });
 
 test("an @ inside a word, or inside code, opens nothing", () => {
-  const plan = mounted("## Goal\n\nWrite to dean\n\n```\ncode\n```\n");
+  const task = mounted("## Goal\n\nWrite to dean\n\n```\ncode\n```\n");
 
-  plan.typeAfter("dean", "@acme");
-  plan.typeAfter("code", " @a");
+  task.typeAfter("dean", "@acme");
+  task.typeAfter("code", " @a");
 
-  assert.ok(plan.triggers.every((trigger) => trigger === undefined));
+  assert.ok(task.triggers.every((trigger) => trigger === undefined));
 });
 
 test("renaming a heading in the editor renames the text's own mentions of it, in the same edit", () => {
-  const plan = mounted(TEXT);
+  const task = mounted(TEXT);
 
-  plan.typeAfter("Rollout", " plan");
+  task.typeAfter("Rollout", " plan");
 
   assert.equal(
-    plan.last(),
+    task.last(),
     `## Goal\n\nShip as ${named("rollout-plan", "Rollout")} says.\n\n## Rollout plan\n\nStore first.\n`,
   );
 });
 
 test("renaming a heading renames a mention of it written before the link was settled, into the settled form", () => {
-  const plan = mounted(
-    `## Goal\n\nShip as [@Rollout](luke://plan/${PLAN_ID}#Rollout) says.\n\n## Rollout\n\nStore first.\n`,
+  const task = mounted(
+    `## Goal\n\nShip as [@Rollout](luke://plan/${TASK_ID}#Rollout) says.\n\n## Rollout\n\nStore first.\n`,
   );
 
-  plan.typeAfter("Rollout", " plan");
+  task.typeAfter("Rollout", " plan");
 
-  assert.ok(plan.last().includes(named("rollout-plan", "Rollout")), plan.last());
+  assert.ok(task.last().includes(named("rollout-plan", "Rollout")), task.last());
 });
 
 test("a heading laid in above another of the same words moves that one's mentions onto its new anchor", () => {
-  const plan = mounted(`## Goal\n\nShip.\n\n## Notes\n\nSee ${named("notes", "Notes")}.\n`);
+  const task = mounted(`## Goal\n\nShip.\n\n## Notes\n\nSee ${named("notes", "Notes")}.\n`);
 
-  plan.layHeadingAfter("Ship.", "Notes");
+  task.layHeadingAfter("Ship.", "Notes");
 
-  assert.ok(plan.last().includes(`## Notes\n\nSee ${named("notes-1", "Notes")}.`), plan.last());
+  assert.ok(task.last().includes(`## Notes\n\nSee ${named("notes-1", "Notes")}.`), task.last());
 });
 
 test("renaming a heading written with its own formatting still renames its mentions, read from the heading's source", () => {
-  const plan = mounted(
+  const task = mounted(
     `## Ship _today_\n\nStore first.\n\n## Notes\n\nSee ${section("Ship _today_")}.\n`,
   );
 
-  plan.typeAfter("today", " now");
+  task.typeAfter("today", " now");
 
-  const draft = plan.last();
+  const draft = task.last();
   const anchors = new Set(sectionAnchors(planSections(draft).map((each) => each.heading)));
   const found = mentionsIn(draft, PLACE.repository).map(({ mention }) =>
     mention.kind === MENTION_KIND.SECTION ? mention.anchor : "",
@@ -235,53 +235,53 @@ test("renaming a heading written with its own formatting still renames its menti
 });
 
 test("a key an input method is composing with goes to the input method, never to the list or the editor's own keys", () => {
-  const plan = mounted(TEXT);
-  plan.typeAfter("Store first.", " See @go");
-  plan.offered.length = 0;
+  const task = mounted(TEXT);
+  task.typeAfter("Store first.", " See @go");
+  task.offered.length = 0;
 
-  plan.press({ key: "Enter", isComposing: true });
-  plan.press({ key: "Enter", keyCode: 229 });
-  plan.press({ key: "Escape", isComposing: true });
-  plan.press({ key: "Enter", metaKey: true, keyCode: 229 });
+  task.press({ key: "Enter", isComposing: true });
+  task.press({ key: "Enter", keyCode: 229 });
+  task.press({ key: "Escape", isComposing: true });
+  task.press({ key: "Enter", metaKey: true, keyCode: 229 });
 
-  assert.deepEqual(plan.offered, []);
-  assert.equal(plan.finished(), 0);
+  assert.deepEqual(task.offered, []);
+  assert.equal(task.finished(), 0);
 });
 
 test("a pick with the caret inside the word replaces the word through its end", () => {
-  const plan = mounted(TEXT);
+  const task = mounted(TEXT);
 
-  plan.typeAfter("Store first.", " See @goal");
-  plan.back(2);
-  plan.handle.chooseMention({
+  task.typeAfter("Store first.", " See @goal");
+  task.back(2);
+  task.handle.chooseMention({
     name: "Goal",
-    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+    target: `https://tryluke.dev/acme/plan/${TASK_ID}#goal`,
   });
 
-  assert.ok(plan.last().endsWith(`Store first. See ${section("Goal")}\n`), plan.last());
+  assert.ok(task.last().endsWith(`Store first. See ${section("Goal")}\n`), task.last());
 });
 
 test("a pick right before a chip replaces the word alone, and the chip stays", () => {
-  const plan = mounted(`## Goal\n\nSee ${section("Rollout")}\n\n## Rollout\n\nStore first.\n`);
+  const task = mounted(`## Goal\n\nSee ${section("Rollout")}\n\n## Rollout\n\nStore first.\n`);
 
-  plan.typeAfter("See ", "@go");
-  plan.handle.chooseMention({
+  task.typeAfter("See ", "@go");
+  task.handle.chooseMention({
     name: "Goal",
-    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+    target: `https://tryluke.dev/acme/plan/${TASK_ID}#goal`,
   });
 
-  assert.ok(plan.last().includes(`See ${section("Goal")} ${section("Rollout")}`), plan.last());
+  assert.ok(task.last().includes(`See ${section("Goal")} ${section("Rollout")}`), task.last());
 });
 
 test("a page of an integration's pasted whole is laid in as its mention, written back as its link", () => {
-  const plan = mounted(TEXT);
+  const task = mounted(TEXT);
 
-  plan.typeAfter("Store first.", " See ");
-  plan.paste(ISSUE_URL);
+  task.typeAfter("Store first.", " See ");
+  task.paste(ISSUE_URL);
 
   assert.ok(
-    plan.last().includes(`Store first. See [@LUKE-142/fix-the-thing](${ISSUE_URL})`),
-    plan.last(),
+    task.last().includes(`Store first. See [@LUKE-142/fix-the-thing](${ISSUE_URL})`),
+    task.last(),
   );
-  assert.ok(plan.drawn.some((mention) => mention.target === ISSUE_URL));
+  assert.ok(task.drawn.some((mention) => mention.target === ISSUE_URL));
 });

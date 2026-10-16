@@ -29,17 +29,17 @@ import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { DOCUMENT_TASK } from "#testing/document-task";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { usePlanLooks } from "../planning/use-plan-looks";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB, type SidePanelControl } from "../planning/use-side-panel";
+import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel";
+import { useTaskLooks } from "../tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -80,7 +80,7 @@ function WindowPalette({
 }: Omit<Parameters<typeof CommandPalette>[0], "links"> & {
   page?: { agentId: string; workspaceId: string } | undefined;
 }): React.JSX.Element {
-  const links = useCopyLink(props.plans, undefined, true);
+  const links = useCopyLink(props.tasks, undefined, true);
   return createElement(
     PageWorkspaceProvider,
     { value: links.onPageWorkspace },
@@ -91,8 +91,8 @@ function WindowPalette({
 
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
-  plans: PlansControl = plansControl(),
-  readFiles: (planId: string) => Promise<TasksTreeAnswer> = () =>
+  tasks: TasksControl = tasksControl(),
+  readFiles: (taskId: string) => Promise<TasksTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
 ): Sent {
@@ -107,7 +107,7 @@ function openPalette(
         available: true,
         tab: PANEL_TAB.TASKS,
         onTabChange: (tab) => sent.tabs.push(tab),
-        plans,
+        tasks,
         settings: {
           rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
           onViewChange: (view) => sent.views.push(view),
@@ -124,19 +124,19 @@ function openPalette(
 }
 
 /** The window's look at `looked`, as its shell takes one while the plan is on screen, and none while it is covered. */
-function Looker({ looked }: { looked: typeof DOCUMENT_PLAN | undefined }): null {
-  usePlanLooks(looked, undefined);
+function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null {
+  useTaskLooks(looked, undefined);
   return null;
 }
 
 /** The palette over `DOCUMENT_PLAN` drawn, looked at or covered as `looked` says, redrawn by the answer. */
-function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
+function paletteOverPlan(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const registry = AtomRegistry.make();
-  const plans = plansControl({
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
-    activePlanId: DOCUMENT_PLAN.id,
+  const plans = tasksControl({
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    activeTaskId: DOCUMENT_TASK.id,
   });
   return (looked) =>
     act(() =>
@@ -151,7 +151,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
               available: true,
               tab: PANEL_TAB.TASKS,
               onTabChange: () => undefined,
-              plans,
+              tasks: plans,
               settings: {
                 rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
                 onViewChange: () => undefined,
@@ -181,7 +181,7 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  draw(DOCUMENT_PLAN);
+  draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
   assert.deepEqual(markRows(), ["Mark as read"]);
@@ -386,9 +386,9 @@ test("the footer names the keys that step the filters now: ← → while the fie
 test("an agent's row hangs its tab's card beside it while the pointer rests on it, and choosing it opens the agent's tab", () => {
   const shown: [string, string][] = [];
   openPalette(
-    plansControl({
-      activePlanId: "plan-1",
-      plans: [
+    tasksControl({
+      activeTaskId: "plan-1",
+      tasks: [
         {
           id: "plan-1",
           workspaceId: "workspace-personal",
@@ -413,7 +413,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
         ],
         agentIds: ["agent-7"],
       }),
-      onShowAgent: (planId, agentId) => shown.push([planId, agentId]),
+      onShowAgent: (taskId, agentId) => shown.push([taskId, agentId]),
     }),
   );
   chooseFilter("Agents");
@@ -431,6 +431,53 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+});
+
+test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
+  const shown: string[] = [];
+  const agent = (id: string, title: string) => ({
+    id,
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  });
+  const base = tasksControl();
+  openPalette(
+    tasksControl({
+      activeTaskId: "plan-1",
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: null,
+        },
+      ],
+      agents: codingAgentsControl({
+        agents: [agent("agent-7", "Invoice export")],
+        archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
+        agentIds: ["agent-7"],
+      }),
+      agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
+    }),
+  );
+  chooseFilter("Agents");
+  assert.deepEqual(rows(), [
+    "Inbox · Billing usage alerts",
+    "Invoice export · Billing usage alerts",
+    "Refund export · Archived · Billing usage alerts",
+  ]);
+
+  type("refund");
+  assert.deepEqual(rows(), ["Refund export · Archived · Billing usage alerts"]);
+  press("Refund export · Archived · Billing usage alerts");
+  assert.deepEqual(shown, ["agent-8"]);
 });
 
 test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window while the experiment is on, and none read while it is off", async () => {
@@ -464,8 +511,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       },
     },
   });
-  const plans = plansControl({
-    activePlanId: "plan-1",
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
     workspace: {
       id: "workspace-acme",
       name: "Acme",
@@ -473,7 +520,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       role: WORKSPACE_ROLE.MEMBER,
       github: null,
     },
-    plans: [
+    tasks: [
       {
         id: "plan-1",
         workspaceId: "workspace-acme",
@@ -509,14 +556,14 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       available: true,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
-      plans,
+      tasks,
       settings: {
         rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
         onViewChange: () => undefined,
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
     });
-    act(() => root.render(createElement(ListedAutomations, { plans, on, children: palette })));
+    act(() => root.render(createElement(ListedAutomations, { tasks, on, children: palette })));
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
@@ -544,7 +591,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   assert.deepEqual(listed, []);
 });
 
-test("an agent's Changes row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
+test("an agent's Pull request row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
   const agent = {
     id: "agent-7",
     planId: "plan-1",
@@ -556,9 +603,9 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
     turnId: null,
   };
   openPalette(
-    plansControl({
-      activePlanId: "plan-1",
-      plans: [
+    tasksControl({
+      activeTaskId: "plan-1",
+      tasks: [
         {
           id: "plan-1",
           workspaceId: "workspace-personal",
@@ -589,7 +636,7 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
       }),
     }),
   );
-  const changes = "Changes: Invoice export · #42 · Billing usage alerts";
+  const changes = "Pull request: Invoice export · #42 · Billing usage alerts";
   type("#42");
   assert.ok(rows().includes(changes), "found by its pull request's number");
   type("CSV");
@@ -607,22 +654,22 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
     status: CODING_AGENT_STATUS.COMPLETED,
     turnId: null,
   };
-  const control = plansControl({});
+  const control = tasksControl({});
   const read: string[] = [];
   openPalette(
-    plansControl({
-      activePlanId: DOCUMENT_PLAN.id,
-      plans: [
+    tasksControl({
+      activeTaskId: DOCUMENT_TASK.id,
+      tasks: [
         {
-          id: DOCUMENT_PLAN.id,
-          workspaceId: DOCUMENT_PLAN.workspaceId,
-          name: DOCUMENT_PLAN.name,
+          id: DOCUMENT_TASK.id,
+          workspaceId: DOCUMENT_TASK.workspaceId,
+          name: DOCUMENT_TASK.name,
           createdAt: 1,
           updatedAt: 2,
           repository: "acme/relay",
         },
       ],
-      region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
+      region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
       agents: codingAgentsControl({
         agents: [agent],
@@ -651,7 +698,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   );
 
   type("#42");
-  const changes = rows().filter((row) => row.startsWith("Changes"));
+  const changes = rows().filter((row) => row.startsWith("Pull request"));
   type("Show board");
   const board = rows().filter((row) => row.startsWith("Show board"));
   chooseFilter("Files");
@@ -680,15 +727,15 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
     },
   };
   const opened: unknown[][] = [];
-  const base = plansControl();
+  const base = tasksControl();
   const sidePanel: SidePanelControl = {
     ...base.sidePanel,
     files: [{ path, range: { startLine: 3, endLine: 5 }, opened: 1 }],
     onOpenFile: (...asked) => opened.push(asked),
   };
-  const plans = plansControl({
-    activePlanId: "plan-1",
-    plans: [
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
       {
         id: "plan-1",
         workspaceId: "workspace-personal",
@@ -701,7 +748,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
     sidePanel,
     shownCode: [showing],
   });
-  openPalette(plans, () =>
+  openPalette(tasks, () =>
     Promise.resolve({
       folder: {
         path: "",
@@ -760,7 +807,7 @@ test("Search lists the listed workspace's plans first, then every other workspac
     role: WORKSPACE_ROLE.MEMBER,
     github: null,
   };
-  const plan = (id: string, workspaceId: string, repository: string | null) => ({
+  const task = (id: string, workspaceId: string, repository: string | null) => ({
     id,
     workspaceId,
     name: id,
@@ -769,12 +816,12 @@ test("Search lists the listed workspace's plans first, then every other workspac
     repository,
   });
   openPalette(
-    plansControl({
+    tasksControl({
       workspaces: [personal, northwind],
       workspace: personal,
-      plans: [
-        plan("Checkout retries", northwind.id, "northwind/shop"),
-        plan("Dotfiles sync", personal.id, null),
+      tasks: [
+        task("Checkout retries", northwind.id, "northwind/shop"),
+        task("Dotfiles sync", personal.id, null),
       ],
     }),
   );
@@ -805,9 +852,9 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
     createdBy: by,
   });
   openPalette(
-    plansControl({
+    tasksControl({
       me: dean.userId,
-      plans: [task("Retry budget", charles), task("Rate limits", dean)],
+      tasks: [task("Retry budget", charles), task("Rate limits", dean)],
     }),
   );
   chooseFilter("Tasks");
@@ -884,22 +931,22 @@ function drawToasts(): void {
 const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** A task drawn in Acme, its agent's tab chosen in the work column and the agent named. */
-const ON_AGENT_TAB: PlansControl = plansControl({
+const ON_AGENT_TAB: TasksControl = tasksControl({
   page: TASKS_PAGE.DOCUMENT,
-  activePlanId: DOCUMENT_PLAN.id,
+  activeTaskId: DOCUMENT_TASK.id,
   region: {
     kind: DOCUMENT_REGION.READY,
-    task: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
+    task: { ...DOCUMENT_TASK, workspaceId: "workspace-acme" },
   },
   workspaces: [
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
   ],
-  mainTabs: { ...plansControl().mainTabs, tab: { agent: LINKED_AGENT } },
+  mainTabs: { ...tasksControl().mainTabs, tab: { agent: LINKED_AGENT } },
   agents: codingAgentsControl({
     agents: [
       {
         id: LINKED_AGENT,
-        planId: DOCUMENT_PLAN.id,
+        planId: DOCUMENT_TASK.id,
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         title: "Expire old invites",
@@ -924,11 +971,11 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
 
   assert.deepEqual(listed, [
     "Copy link to agent · Expire old invites",
-    `Copy link to task · ${DOCUMENT_PLAN.name}`,
+    `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
   assert.equal(chord, "⌥⌘C");
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
+    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
   ]);
   assert.equal(newestToastSays(), "Link copied");
 });
@@ -937,7 +984,7 @@ test("an action's name keeps its width beside the task it acts on, and the task'
   document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
   openPalette(ON_AGENT_TAB);
   type("copy link");
-  const at = rows().indexOf(`Copy link to task · ${DOCUMENT_PLAN.name}`);
+  const at = rows().indexOf(`Copy link to task · ${DOCUMENT_TASK.name}`);
   const row =
     document.querySelectorAll(".menu-item")[at] ?? assert.fail("Copy link to task is listed");
   const name = row.querySelector(".command-palette-name") ?? assert.fail("the row's name");
@@ -969,23 +1016,23 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
   for (const plans of [
     ON_AGENT_TAB,
-    plansControl({
+    tasksControl({
       ...listed,
       inboxView: {
-        ...plansControl().inboxView,
+        ...tasksControl().inboxView,
         open: true,
         chosen: { agentId: LINKED_AGENT, itemId },
       },
     }),
-    plansControl({
+    tasksControl({
       ...listed,
       automationsView: {
-        ...plansControl().automationsView,
+        ...tasksControl().automationsView,
         open: true,
         place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
       },
     }),
-    plansControl({ ...listed, factoryView: { ...plansControl().factoryView, open: true } }),
+    tasksControl({ ...listed, factoryView: { ...tasksControl().factoryView, open: true } }),
   ]) {
     openPalette(plans);
     act(() => {
@@ -999,7 +1046,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
+    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
     `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
     `https://tryluke.dev/acme/automation/${automationId}`,
     "https://tryluke.dev/acme/factory",
@@ -1010,12 +1057,12 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
   openPalette(
-    plansControl({
+    tasksControl({
       workspaces: ON_AGENT_TAB.workspaces,
       workspace: acme,
-      inboxView: { ...plansControl().inboxView, open: true },
+      inboxView: { ...tasksControl().inboxView, open: true },
       personView: {
-        ...plansControl().personView,
+        ...tasksControl().personView,
         userId: "user-charles",
         workspaceId: acme?.id,
       },
@@ -1031,7 +1078,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
 });
 
 test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
-  openPalette(plansControl());
+  openPalette(tasksControl());
   type("copy link");
 
   assert.deepEqual(
@@ -1044,7 +1091,7 @@ test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K li
 test("with the side panel filling the window over an agent's tab, ⌥⌘C copies the panel's tab, which is what shows", async () => {
   const copied = installClipboard();
   openPalette(
-    plansControl({
+    tasksControl({
       ...ON_AGENT_TAB,
       sidePanel: {
         ...ON_AGENT_TAB.sidePanel,
@@ -1060,7 +1107,7 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/call`]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/call`]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⌥⌘C, as ⌥⌘C there copies", () => {
@@ -1069,7 +1116,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
   const field = panel.appendChild(document.createElement("button"));
   field.focus();
   openPalette(
-    plansControl({
+    tasksControl({
       ...ON_AGENT_TAB,
       sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
     }),
@@ -1082,7 +1129,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
     [
       "Copy link to call",
       "Copy link to agent · Expire old invites",
-      `Copy link to task · ${DOCUMENT_PLAN.name}`,
+      `Copy link to task · ${DOCUMENT_TASK.name}`,
     ],
   );
   assert.equal(chord, "⌥⌘C");
@@ -1091,7 +1138,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
 test("on an agent's page in another workspace than the one listed, ⌥⌘C names the agent's workspace, which the page read", async () => {
   const copied = installClipboard();
   openPalette(
-    plansControl({
+    tasksControl({
       workspaces: [
         ...ON_AGENT_TAB.workspaces,
         {
@@ -1103,7 +1150,7 @@ test("on an agent's page in another workspace than the one listed, ⌥⌘C names
         },
       ],
       workspace: ON_AGENT_TAB.workspaces[0],
-      agentView: { ...plansControl().agentView, agentId: LINKED_AGENT },
+      agentView: { ...tasksControl().agentView, agentId: LINKED_AGENT },
     }),
     undefined,
     { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
@@ -1144,9 +1191,9 @@ test("People lists the listed workspace's members by name and role, the reader a
     },
   });
   const opened: string[] = [];
-  const base = plansControl();
+  const base = tasksControl();
   const sent = openPalette(
-    plansControl({
+    tasksControl({
       me: "user-dean",
       workspace: { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
       personView: { ...base.personView, onOpen: (userId) => opened.push(userId) },
@@ -1188,7 +1235,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
     });
     document.body.innerHTML = "";
     openPalette(
-      plansControl({
+      tasksControl({
         agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
         listedAgents: { standing, archived },
         onPinAgent: (agentId, pinned) => asked.push(`${agentId}:${String(pinned)}`),
@@ -1208,14 +1255,14 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
-  const [listed, setListed] = useState<Task>(DOCUMENT_PLAN);
-  const plans = plansControl({
-    plans: [listed],
+  const [listed, setListed] = useState<Task>(DOCUMENT_TASK);
+  const plans = tasksControl({
+    tasks: [listed],
     region: { kind: DOCUMENT_REGION.READY, task: listed },
-    activePlanId: listed.id,
-    onMarkPlan: (planId, mark) => {
+    activeTaskId: listed.id,
+    onMarkTask: (planId, mark) => {
       assert.equal(planId, listed.id);
-      setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_PLAN, pinnedAt: 5 } : DOCUMENT_PLAN);
+      setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_TASK, pinnedAt: 5 } : DOCUMENT_TASK);
     },
   });
   return createElement(
@@ -1227,7 +1274,7 @@ function PinnableTask(): React.JSX.Element {
       available: true,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
-      plans,
+      tasks: plans,
       settings: {
         rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
         onViewChange: () => undefined,
@@ -1240,7 +1287,7 @@ function PinnableTask(): React.JSX.Element {
 /** The names the sidebar's Pinned section lists, none while it stands nowhere. */
 function pinnedNames(): (string | null)[] {
   const section = document.querySelector('nav[aria-label="Pinned"]');
-  return [...(section?.querySelectorAll(".sidebar-plan-name") ?? [])].map(
+  return [...(section?.querySelectorAll(".sidebar-task-name") ?? [])].map(
     (name) => name.textContent,
   );
 }
@@ -1270,7 +1317,7 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
 
   assert.deepEqual(pinRows(), ["Pin task"]);
   press("Pin task");
-  assert.deepEqual(pinnedNames(), [DOCUMENT_PLAN.name]);
+  assert.deepEqual(pinnedNames(), [DOCUMENT_TASK.name]);
   assert.deepEqual(pinRows(), ["Unpin task"]);
   press("Unpin task");
   assert.deepEqual(pinnedNames(), []);

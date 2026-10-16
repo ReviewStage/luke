@@ -29,15 +29,15 @@ import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { useOpenSettings } from "../open-settings";
-import { lineSubject } from "../planning/agent-ref";
-import { InboxItemRow } from "../planning/inbox-list";
-import { holderName, INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
-import { useMinute } from "../planning/plan-time";
-import { RelativeTime } from "../planning/relative-time";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
-import { useWaitingItems } from "../planning/use-waiting-items";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { lineSubject } from "../tasks/agent-ref";
+import { InboxItemRow } from "../tasks/inbox-list";
+import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
+import { RelativeTime } from "../tasks/relative-time";
+import { useMinute } from "../tasks/task-time";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
+import { useWaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
@@ -98,7 +98,7 @@ function PersonSection({
         {title}
         <span className="home-section-count">{count}</span>
       </h2>
-      <ul className="sidebar-plans">{children}</ul>
+      <ul className="sidebar-tasks">{children}</ul>
     </section>
   );
 }
@@ -106,30 +106,30 @@ function PersonSection({
 /** One of their agents as a row: its tile, its name, the task it works on, and when it last moved; a press opens its tab. */
 function AgentRow({
   each,
-  plans,
+  tasks: plans,
   now,
 }: {
   each: PersonAgent;
-  plans: PlansControl;
+  tasks: TasksControl;
   now: number;
 }): React.JSX.Element {
   const { plan, agent } = each;
   const subject = lineSubject(agent, plans.agents.models, plans.me);
   return (
-    <li className="sidebar-plan-item home-row">
+    <li className="sidebar-task-item home-row">
       <button
         type="button"
-        className="sidebar-plan"
+        className="sidebar-task"
         onClick={() => plans.onShowAgent(plan.id, agent.id)}
       >
-        <span className="sidebar-plan-line">
+        <span className="sidebar-task-line">
           <span className="home-row-picture">
             <ActorMark actor={subject.tile} />
           </span>
-          <span className="sidebar-plan-name">{subject.name}</span>
+          <span className="sidebar-task-name">{subject.name}</span>
           <span className="home-row-context">{plan.name}</span>
           {agent.at === undefined ? null : (
-            <span className="sidebar-plan-time">
+            <span className="sidebar-task-time">
               <RelativeTime at={agent.at} now={now} />
             </span>
           )}
@@ -148,13 +148,13 @@ const MORE = "More";
  * member and the workspace's members in Settings for its owners and admins.
  */
 function PersonActions({
-  plans,
+  tasks: plans,
   userId,
   person,
   shared,
   onShowTasks,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   userId: string;
   person: Actor;
   /** Whether the workspace is shared, which alone filters the sidebar by creator. */
@@ -272,13 +272,13 @@ function AutomationRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <li className="sidebar-plan-item home-row">
-      <button type="button" className="sidebar-plan" onClick={onOpen}>
-        <span className="sidebar-plan-line">
+    <li className="sidebar-task-item home-row">
+      <button type="button" className="sidebar-task" onClick={onOpen}>
+        <span className="sidebar-task-line">
           <span className="home-row-picture">
             <ActorMark actor={automationActor(automation)} />
           </span>
-          <span className="sidebar-plan-name">{automation.name}</span>
+          <span className="sidebar-task-name">{automation.name}</span>
           <span className="home-row-context">
             {automationTriggerText(automation.trigger, automation.repositories ?? [])}
           </span>
@@ -307,18 +307,18 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
 
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
-  plans,
+  tasks: plans,
   userId,
   name: opened,
   staged,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   userId: string;
   name: string | undefined;
   staged: boolean;
 }): React.JSX.Element {
   const now = useMinute();
-  const listed = plans.listed.plans;
+  const listed = plans.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
   const { members, readerId, former } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
@@ -349,14 +349,14 @@ function PersonColumn({
   // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
   const waiting = read.items.filter(
     ({ holder, item }) =>
-      holder.kind === INBOX_HOLDER.PLAN && agentStarter(holder.plan, item.agentId) === userId,
+      holder.kind === INBOX_HOLDER.TASK && agentStarter(holder.task, item.agentId) === userId,
   );
   const { inboxView } = plans;
   const openItem = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
     inboxView.onChoose(
-      holder.kind === INBOX_HOLDER.PLAN
-        ? { planId: holder.plan.id, itemId: item.id }
+      holder.kind === INBOX_HOLDER.TASK
+        ? { taskId: holder.task.id, itemId: item.id }
         : { agentId: item.agentId, itemId: item.id },
     );
   };
@@ -381,7 +381,7 @@ function PersonColumn({
           <h1 className="desktop-toolbar-title">{name}</h1>
         </div>
         <PersonActions
-          plans={plans}
+          tasks={plans}
           userId={userId}
           person={person}
           shared={shared}
@@ -394,7 +394,7 @@ function PersonColumn({
           {page.working.length === 0 ? null : (
             <PersonSection title="Working now" count={page.working.length}>
               {page.working.map((each) => (
-                <AgentRow key={each.agent.id} each={each} plans={plans} now={now} />
+                <AgentRow key={each.agent.id} each={each} tasks={plans} now={now} />
               ))}
             </PersonSection>
           )}
@@ -422,7 +422,7 @@ function PersonColumn({
               {page.created.slice(0, PERSON_TASKS_SHOWN).map((plan) => (
                 <RecentRow
                   key={plan.id}
-                  plan={plan}
+                  task={plan}
                   pictures={plans.repositories.pictures}
                   now={now}
                   face={false}
@@ -441,7 +441,7 @@ function PersonColumn({
           {page.agents.length === 0 ? null : (
             <PersonSection title="Agents" count={page.agents.length}>
               {page.agents.map((each) => (
-                <AgentRow key={each.agent.id} each={each} plans={plans} now={now} />
+                <AgentRow key={each.agent.id} each={each} tasks={plans} now={now} />
               ))}
             </PersonSection>
           )}
@@ -496,12 +496,12 @@ function PersonColumn({
 
 /** A person's page, in the plan's place, read against the listed workspace's members. */
 export function PersonPage({
-  plans,
+  tasks: plans,
   userId,
   name,
   staged = false,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   userId: string;
   /** The name the place that opened the page knew them by: someone who left, whom only an edit names. */
   name?: string | undefined;
@@ -511,7 +511,7 @@ export function PersonPage({
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, plans.personView.onClose);
   return (
     <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <PersonColumn plans={plans} userId={userId} name={name} staged={staged} />
+      <PersonColumn tasks={plans} userId={userId} name={name} staged={staged} />
     </MemberDirectory>
   );
 }

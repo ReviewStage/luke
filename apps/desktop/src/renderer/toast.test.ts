@@ -8,7 +8,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
 import { TOAST_TONE, ToastHost, type ToastNotice, useToast } from "./toast";
 
 /**
@@ -88,14 +87,6 @@ function resizeTo(height: number): void {
   act(() => window.dispatchEvent(new Event("resize")));
 }
 
-/** The box each element stands in, by the class that names it, every other at none. */
-function layOut(boxes: Readonly<Record<string, DOMRect>>): void {
-  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    const named = Object.keys(boxes).find((name) => this.classList.contains(name));
-    return named === undefined ? new DOMRect() : (boxes[named] ?? new DOMRect());
-  });
-}
-
 test("a window too short for three toasts stands the two newest, and the one set aside stands again once the window is tall enough", () => {
   mount(WINDOW.SHORT);
 
@@ -135,42 +126,30 @@ test("a window made too short for three toasts sets the oldest aside, without di
   assert.ok(standing().includes("Retry the webhook finished"), "the toast set aside comes back");
 });
 
-test("the stack stands clear of a call bar docked at the window's foot under it, and in its corner beside a bar that is not", () => {
+test("the stack stands on the highest dock at the window's foot by the stylesheet alone, watching nothing of the window, and a column hidden under the side panel docks nothing", () => {
   document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  const bar = document.body.appendChild(document.createElement("div"));
-  bar.className = "desktop-call-bar";
-  // The plan's column fills the window, its call bar 60px tall across it.
-  layOut({
-    "toast-stack": new DOMRect(404, 504, 340, 0),
-    "desktop-call-bar": new DOMRect(0, 460, 760, 60),
+  const watched = vi.spyOn(MutationObserver.prototype, "observe");
+  const sized = vi.spyOn(ResizeObserver.prototype, "observe");
+  const column = document.body.appendChild(document.createElement("div"));
+  column.className = "desktop-task-main";
+  const docks = ["desktop-call-bar", "agent-composer", "agent-todos-dock"].map((name) => {
+    const dock = column.appendChild(document.createElement("div"));
+    dock.className = name;
+    return dock;
   });
   mount(WINDOW.SHORT);
 
   act(() => show?.(persisting("Retry the webhook finished")));
   const stack = document.querySelector<HTMLElement>(".toast-stack") ?? assert.fail("the stack");
-  const over = stack.style.getPropertyValue("--toast-dock");
-  // The side panel opens, and the bar now runs under the plan's column alone.
-  layOut({
-    "toast-stack": new DOMRect(404, 504, 340, 0),
-    "desktop-call-bar": new DOMRect(0, 460, 380, 60),
-  });
-  act(relayout);
+  const foot = getComputedStyle(stack).bottom;
+  const named = docks.map((dock) => getComputedStyle(dock).getPropertyValue("anchor-name"));
+  column.hidden = true;
+  const hidden = docks.map((dock) => getComputedStyle(dock).getPropertyValue("anchor-name"));
 
-  const beside = stack.style.getPropertyValue("--toast-dock");
-  // The bar spans the window again, but its column is hidden under a side panel filling the window.
-  layOut({
-    "toast-stack": new DOMRect(404, 504, 340, 0),
-    "desktop-call-bar": new DOMRect(0, 460, 760, 60),
-  });
-  bar.style.visibility = "hidden";
-  act(relayout);
-
-  assert.equal(over, "60px");
-  assert.equal(beside, "0px");
-  assert.equal(stack.style.getPropertyValue("--toast-dock"), "0px", "a hidden bar is not under it");
-  assert.match(
-    getComputedStyle(stack).bottom,
-    /var\(--toast-dock/u,
-    "the stack stands on the dock",
-  );
+  for (const anchor of ["--dock-call", "--dock-composer", "--dock-todos"]) {
+    assert.ok(foot.includes(`anchor(${anchor}`), `the stack's foot stands on ${anchor}`);
+  }
+  assert.deepEqual(named, ["--dock-call", "--dock-composer", "--dock-todos"]);
+  assert.deepEqual(hidden, ["none", "none", "none"]);
+  assert.deepEqual([...watched.mock.calls, ...sized.mock.calls], [], "the stack watches nothing");
 });

@@ -7,8 +7,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { LINK_COPY, useCopyToast } from "./copy-feedback";
-import { AUTOMATIONS_PAGE, type PlansControl } from "./planning/use-plans-tab";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./planning/use-side-panel";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel";
+import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab";
 
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
@@ -39,7 +39,7 @@ const LINK_THING = {
   CALL: "call",
   AGENT: "agent",
   WORKER: "worker",
-  CHANGES: "changes",
+  CHANGES: "pull request",
   INBOX: "Inbox",
   INBOX_ITEM: "Inbox item",
   AUTOMATIONS: "Automations",
@@ -119,18 +119,18 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
 }
 
 /** The links of the task drawn: its version chosen, its tabs', and its own, the most specific first. */
-function taskLinks(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
-  const { region } = plans;
+function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
+  const { region } = tasks;
   if (region.kind !== DOCUMENT_REGION.READY) return [];
   const { task: plan } = region;
-  const workspace = slugOf(plans.workspaces, plan.workspaceId);
+  const workspace = slugOf(tasks.workspaces, plan.workspaceId);
   const task: LinkAtHand = {
     link: { workspace, place: { kind: LINK_PLACE.TASK, planId: plan.id } },
     thing: LINK_THING.TASK,
     name: plan.name,
   };
-  if (plans.history.open) {
-    const revision = plans.history.selected;
+  if (tasks.history.open) {
+    const revision = tasks.history.selected;
     return revision === undefined
       ? [task]
       : [
@@ -141,7 +141,7 @@ function taskLinks(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
           task,
         ];
   }
-  const shown = plans.mainTabs.tab;
+  const shown = tasks.mainTabs.tab;
   const agentId = isAgentTab(shown) ? shown.agent : undefined;
   const agent: LinkAtHand | undefined =
     agentId === undefined
@@ -149,57 +149,57 @@ function taskLinks(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
       : {
           link: { workspace, place: { kind: LINK_PLACE.AGENT, planId: plan.id, agentId } },
           thing: LINK_THING.AGENT,
-          name: plans.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
+          name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = plans.sidePanel.open ? panelTabPlace(plan.id, plans.sidePanel.tab) : undefined;
+  const held = tasks.sidePanel.open ? panelTabPlace(plan.id, tasks.sidePanel.tab) : undefined;
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined
       ? undefined
       : { link: { workspace, place: held }, thing };
   // A panel filling the window hides the work column, so its tab is at hand whatever holds the keyboard.
-  const panelFirst = at.sidePanelFocused || plans.sidePanel.fullScreen;
+  const panelFirst = at.sidePanelFocused || tasks.sidePanel.fullScreen;
   const order = panelFirst ? [panel, agent, task] : [agent, panel, task];
   return order.filter((each): each is LinkAtHand => each !== undefined);
 }
 
 /** Every link the window can copy now, the most specific first; none on the home page. */
-function linksAtHand(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
-  const listed = slugOf(plans.workspaces, plans.workspace?.id);
+function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
+  const listed = slugOf(tasks.workspaces, tasks.workspace?.id);
   const at_ = (place: LinkPlace, thing: LinkThing, workspace = listed): LinkAtHand => ({
     link: { workspace, place },
     thing,
   });
   if (at.settings !== undefined) {
     const { view, workspace } = at.settings;
-    const slug = workspace === undefined ? listed : slugOf(plans.workspaces, workspace.id);
+    const slug = workspace === undefined ? listed : slugOf(tasks.workspaces, workspace.id);
     return [at_({ kind: LINK_PLACE.SETTINGS, page: view }, LINK_THING.SETTINGS, slug)];
   }
-  const { agentId } = plans.agentView;
+  const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
     const page = at.pageWorkspace;
-    const home = page?.agentId === agentId ? slugOf(plans.workspaces, page.workspaceId) : listed;
+    const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
     return [at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home)];
   }
   // A person's page is theirs in the workspace it opened in, which their link names.
-  const { userId, workspaceId } = plans.personView;
+  const { userId, workspaceId } = tasks.personView;
   if (userId !== undefined) {
-    const home = workspaceId === undefined ? listed : slugOf(plans.workspaces, workspaceId);
+    const home = workspaceId === undefined ? listed : slugOf(tasks.workspaces, workspaceId);
     return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
-  if (plans.inboxView.open) {
+  if (tasks.inboxView.open) {
     const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
-    const { chosen } = plans.inboxView;
+    const { chosen } = tasks.inboxView;
     if (chosen === undefined) return [inbox];
     const item: LinkPlace =
-      "planId" in chosen
-        ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.planId, itemId: chosen.itemId }
+      "taskId" in chosen
+        ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
     return [at_(item, LINK_THING.INBOX_ITEM), inbox];
   }
-  if (plans.automationsView.open) {
+  if (tasks.automationsView.open) {
     const list = at_({ kind: LINK_PLACE.AUTOMATIONS }, LINK_THING.AUTOMATIONS);
-    const { place } = plans.automationsView;
+    const { place } = tasks.automationsView;
     return place.kind === AUTOMATIONS_PAGE.EDIT
       ? [
           at_(
@@ -210,8 +210,8 @@ function linksAtHand(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
         ]
       : [list];
   }
-  if (plans.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
-  return taskLinks(plans, at);
+  if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
+  return taskLinks(tasks, at);
 }
 
 /**
@@ -247,7 +247,7 @@ export function usePageWorkspace(agentId: string, workspaceId: string | undefine
  * with their copy, for the command palette to offer each.
  */
 export function useCopyLink(
-  plans: PlansControl,
+  tasks: TasksControl,
   settings: WindowAt["settings"],
   enabled: boolean,
 ): CopyLink {
@@ -256,7 +256,7 @@ export function useCopyLink(
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
   const linksAt = (sidePanelFocused: boolean) =>
-    linksAtHand(plans, { settings, sidePanelFocused, pageWorkspace });
+    linksAtHand(tasks, { settings, sidePanelFocused, pageWorkspace });
   useAppCommand(
     APP_COMMAND.COPY_LINK,
     enabled && linksAt(false).length > 0

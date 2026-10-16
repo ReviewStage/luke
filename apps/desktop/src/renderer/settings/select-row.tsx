@@ -1,6 +1,7 @@
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
+import { ACTOR_SIZE, PictureMark } from "../actor-ref";
 import { ChangedMark } from "./marks";
 import { PickerRow } from "./picker-row";
 
@@ -26,7 +27,8 @@ export function SelectRow<Value extends string | number>({
   label: string;
   detail?: string | undefined;
   value: Value;
-  options: readonly { value: Value; label: string }[];
+  /** Each option's token and words, and the address of its picture where the set has faces. */
+  options: readonly { value: Value; label: string; picture?: string | undefined }[];
   parse: (raw: string) => Value | undefined;
   /** The id a pressed search result lands on: marked on the chip itself, which then takes the keyboard. */
   anchor?: string;
@@ -42,6 +44,7 @@ export function SelectRow<Value extends string | number>({
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value);
+  const pictured = options.some((option) => option.picture !== undefined);
   const detailId = useId();
   return (
     <>
@@ -59,7 +62,33 @@ export function SelectRow<Value extends string | number>({
         describedBy={detail ? detailId : undefined}
         value={String(value)}
         valueLabel={chosen?.label ?? String(value)}
-        rows={options.map((option) => ({ id: String(option.value), label: option.label }))}
+        valueIcon={
+          pictured && chosen !== undefined ? (
+            <PictureMark
+              id={String(chosen.value)}
+              name={chosen.label}
+              pictureUrl={chosen.picture}
+              size={ACTOR_SIZE.INLINE}
+            />
+          ) : undefined
+        }
+        rows={options.map((option) => ({
+          id: String(option.value),
+          label: option.label,
+          // A set with faces draws one on every row, the window's own face, its letter where it has no picture.
+          ...(pictured
+            ? {
+                icon: (
+                  <PictureMark
+                    id={String(option.value)}
+                    name={option.label}
+                    pictureUrl={option.picture}
+                    size={ACTOR_SIZE.ROW}
+                  />
+                ),
+              }
+            : undefined),
+        }))}
         noMatch={NO_MATCH}
         anchor={anchor}
         disabled={busy || Boolean(restBusy)}

@@ -1,7 +1,6 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { EllipsisIcon } from "@luke/ui";
 import { useRef } from "react";
-import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 
@@ -17,10 +16,7 @@ import { Tooltip } from "../tooltip";
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
- * A row whose acts are its whole business, a connected service managed from
- * one place, may name its door instead: a hairlined button carrying the
- * label and the menu's small chevron stands where the ⋯ would, the same door
- * to the same menu. Its acts may come in groups, a rule between each.
+ * Its acts may come in groups, a rule between each.
  */
 
 /** A row's acts: one list, or lists drawn with a rule between each. */
@@ -42,7 +38,6 @@ export function MenuRow({
   actions,
   heading,
   anchor,
-  triggerLabel,
   children,
 }: {
   /** What the menu is named: "Linear actions". */
@@ -52,8 +47,6 @@ export function MenuRow({
   heading?: string;
   /** The id a pressed search result lands on. */
   anchor?: string;
-  /** The words of a labelled door drawn in the ⋯'s place: "Manage". */
-  triggerLabel?: string;
   /** The row's words, and any control standing before the ⋯. */
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -72,11 +65,7 @@ export function MenuRow({
         onContextMenu={acting ? menu.contextMenu(door) : undefined}
       >
         {children}
-        {!acting ? null : triggerLabel !== undefined ? (
-          <Chip look={CHIP_LOOK.FIELD} chevron ref={door} {...menu.trigger()}>
-            {triggerLabel}
-          </Chip>
-        ) : (
+        {!acting ? null : (
           <Tooltip label="More">
             <button
               ref={door}

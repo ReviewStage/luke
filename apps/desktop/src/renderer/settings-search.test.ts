@@ -149,13 +149,16 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Automations", "on a schedule"]) {
     assert.deepEqual(experimentalFound(query, true), ["Automations"], query);
   }
+  for (const query of ["Chat", "direct messages"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Chat"], query);
+  }
   for (const query of ["Video calls", "Keyframe"]) {
     assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
   }
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Video calls", "Automations", "Factory"],
+      ["Chat", "Video calls", "Automations", "Factory"],
       query,
     );
   }

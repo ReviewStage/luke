@@ -1,0 +1,103 @@
+/* profiles.css -- the role values of each app: how tall a control stands, how type is set, and how far a page insets.
+
+   A profile is an attribute on an app's root and on every overlay portal it
+   draws (`data-luke-profile`), so a component reads one role name and is
+   drawn at the desktop's density in the window and the site's on the web.
+   Both profiles set every role; `tokens.test.ts` holds them to the same set.
+
+   Two widths cannot be tokens, because a container query cannot read a
+   custom property: a settings row's control wraps below its label under
+   380px, and a desktop page insets `--luke-page-inset-narrow` under 480px of
+   content. The pattern that draws each says so where it queries. */
+
+[data-luke-profile="desktop"] {
+  --luke-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  --luke-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* The window sets no display face of its own; its largest words are the system's. */
+  --luke-font-display: var(--luke-font-sans);
+
+  --luke-control-height: 30px;
+  --luke-control-radius: var(--luke-radius-8);
+  --luke-control-icon: 15px;
+  --luke-control-inset: var(--luke-space-12);
+  --luke-control-gap: var(--luke-space-8);
+  --luke-icon-gap: var(--luke-space-8);
+  --luke-field-gap: var(--luke-space-16);
+  --luke-section-gap: var(--luke-space-16);
+  --luke-page-inset: var(--luke-space-40);
+  --luke-page-inset-narrow: var(--luke-space-24);
+
+  --luke-type-body-size: 13px;
+  --luke-type-body-leading: 20px;
+  --luke-type-label-size: 13px;
+  --luke-type-label-leading: 18px;
+  --luke-type-caption-size: 12px;
+  --luke-type-caption-leading: 16px;
+  --luke-type-section-size: 13px;
+  --luke-type-section-leading: 18px;
+  --luke-type-dialog-size: 15px;
+  --luke-type-dialog-leading: 20px;
+  --luke-type-title-size: 22px;
+  --luke-type-title-leading: 30px;
+
+  --luke-settings-row-block: var(--luke-space-12);
+  --luke-settings-row-inline: var(--luke-space-16);
+
+  --luke-dialog-confirm-width: 400px;
+  --luke-dialog-inset: var(--luke-space-20);
+  --luke-dialog-radius: var(--luke-radius-14);
+  --luke-dialog-action-gap: var(--luke-space-8);
+  --luke-dialog-action-width: 80px;
+
+  --luke-menu-row-height: 32px;
+  --luke-menu-row-radius: var(--luke-radius-6);
+  --luke-menu-inset: var(--luke-space-4);
+  --luke-menu-radius: var(--luke-radius-10);
+}
+
+[data-luke-profile="web"] {
+  --luke-font-sans: "Geist Variable", -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
+  --luke-font-mono:
+    "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* The wordmark's face, which the marketing pages' display styles are set in. */
+  --luke-font-display: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
+
+  --luke-control-height: 44px;
+  --luke-control-radius: var(--luke-radius-8);
+  --luke-control-icon: 16px;
+  --luke-control-inset: var(--luke-space-16);
+  --luke-control-gap: var(--luke-space-8);
+  --luke-icon-gap: var(--luke-space-8);
+  --luke-field-gap: var(--luke-space-16);
+  --luke-section-gap: var(--luke-space-16);
+  --luke-page-inset: var(--luke-space-24);
+  --luke-page-inset-narrow: var(--luke-space-24);
+
+  --luke-type-body-size: 16px;
+  --luke-type-body-leading: 24px;
+  --luke-type-label-size: 14px;
+  --luke-type-label-leading: 20px;
+  --luke-type-caption-size: 12px;
+  --luke-type-caption-leading: 16px;
+  --luke-type-section-size: 16px;
+  --luke-type-section-leading: 24px;
+  --luke-type-dialog-size: 20px;
+  --luke-type-dialog-leading: 28px;
+  --luke-type-title-size: 28px;
+  --luke-type-title-leading: 36px;
+
+  --luke-settings-row-block: var(--luke-space-12);
+  --luke-settings-row-inline: var(--luke-space-16);
+
+  --luke-dialog-confirm-width: 400px;
+  --luke-dialog-inset: var(--luke-space-20);
+  --luke-dialog-radius: var(--luke-radius-14);
+  --luke-dialog-action-gap: var(--luke-space-8);
+  --luke-dialog-action-width: 80px;
+
+  /* A web menu's rows are its controls' height, a finger's target. */
+  --luke-menu-row-height: 44px;
+  --luke-menu-row-radius: var(--luke-radius-6);
+  --luke-menu-inset: var(--luke-space-4);
+  --luke-menu-radius: var(--luke-radius-10);
+}

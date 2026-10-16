@@ -28,6 +28,8 @@ interface PanelDuck {
 
 interface PanelManagerOptions {
   runMode: RunMode;
+  /** The named development instance this run is, which every window's title then carries; none for the plain one. */
+  instance?: string | undefined;
   mediaDuck: PanelDuck;
   preloadPath: string;
   rendererHtmlPath: string;
@@ -102,6 +104,7 @@ function desktopBounds(display: Display): Rectangle {
  */
 export class PanelManager {
   readonly #runMode: RunMode;
+  readonly #instance: string | undefined;
   readonly #mediaDuck: PanelDuck;
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
@@ -128,6 +131,7 @@ export class PanelManager {
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
+    this.#instance = options.instance;
     this.#mediaDuck = options.mediaDuck;
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
@@ -337,7 +341,7 @@ export class PanelManager {
       ...(placement.fullScreen ? { fullscreen: true } : undefined),
       minWidth: DESKTOP_WINDOW.MIN_WIDTH,
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
-      title: "Luke",
+      title: this.#instance === undefined ? "Luke" : `Luke (${this.#instance})`,
       show: false,
       backgroundColor: this.#background(),
       // The renderer draws its own title bar under the traffic lights, so the
@@ -381,6 +385,15 @@ export class PanelManager {
       event.preventDefault();
       window.hide();
     });
+    // A named instance's window says which instance it is wherever macOS
+    // lists it, after the title the page gives it.
+    const instance = this.#instance;
+    if (instance !== undefined) {
+      window.on("page-title-updated", (event, title) => {
+        event.preventDefault();
+        window.setTitle(`${title} (${instance})`);
+      });
+    }
     window.on("enter-full-screen", () => this.#onFullScreenChanged?.());
     window.on("leave-full-screen", () => this.#onFullScreenChanged?.());
     // Found by the window rather than the id it was born under, because a

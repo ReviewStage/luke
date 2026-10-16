@@ -174,6 +174,10 @@ export class AccountSessionManager {
   #cancelSignIn: (() => void) | undefined;
   #sessionRunning: Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>> | undefined;
   #cancelSession: (() => void) | undefined;
+  /** The sign-out a refused renewal started, which `refresh` and a sign-in wait on and no renewal does. */
+  #signingOut: Fiber.Fiber<AccountSnapshot> | undefined;
+  /** How many cancels were pressed while a sign-in waited on `#signingOut`. */
+  #waitCancels = 0;
 
   private constructor(
     options: AccountSessionManagerOptions,
@@ -286,6 +290,9 @@ export class AccountSessionManager {
       }
       if (!accessTokenNeedsRefresh(identity.failure)) return;
       yield* this.renewOnce();
+      // Note that the launch's refresh holds nothing a teardown needs, so it
+      // alone waits for the sign-out a refused renewal started.
+      if (this.#signingOut) yield* Fiber.await(this.#signingOut);
     });
   }
 
@@ -295,6 +302,11 @@ export class AccountSessionManager {
    * comes first: Better Auth answers a token it no longer holds with 400
    * `invalid_request` rather than a 401, and a read taking that as a token
    * still good would leave a dead one standing on every call after it.
+   *
+   * A refusal that signs out starts the sign-out and does not wait on it,
+   * because a renewal's caller may hold a lock the sign-out's capability stop
+   * needs: the Plans read holds the tasks lock while it waits here, and
+   * `tasks.reset` waits on that lock, so waiting would deadlock both.
    */
   #renew(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -307,7 +319,7 @@ export class AccountSessionManager {
           accountFailureAction(renewed.failure) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
           this.#isCurrent(generation)
         ) {
-          yield* this.signOut();
+          this.#signingOut = yield* Effect.forkDetach(this.signOut());
         }
         return;
       }
@@ -345,6 +357,23 @@ export class AccountSessionManager {
     // standing for the developer's own press, exactly as the held promise did.
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
+        // Note that a sign-out a refused renewal started is let finish first,
+        // because its capability stop and cleared account would otherwise
+        // land over the session this sign-in starts.
+        if (this.#signingOut) {
+          // A cancel pressed during the wait withdraws every press waiting,
+          // and still reaches a consent already standing, a sign-in again's.
+          const cancels = this.#waitCancels;
+          const standing = this.#cancelSignIn;
+          const cancel = () => {
+            this.#waitCancels += 1;
+            standing?.();
+          };
+          this.#cancelSignIn = cancel;
+          yield* restore(Fiber.await(this.#signingOut));
+          if (this.#cancelSignIn === cancel) this.#cancelSignIn = standing;
+          if (this.#waitCancels !== cancels) return this.#account;
+        }
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };

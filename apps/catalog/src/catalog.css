@@ -1,0 +1,209 @@
+/* catalog.css -- the catalog's own page, drawn in the shared tokens it shows,
+   so the index and the toolbar change density and palette with the example. */
+
+@import "@luke/ui/tokens.css";
+@import "@luke/ui/styles.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--luke-color-ground);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A brand whose one-colour mark is published in named inks wears them by
+   the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
+[data-luke-theme="dark"]
+:is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+  color: #fff;
+}
+
+[data-luke-theme="dark"] .integration-mark-mercury {
+  color: #f4f5f9;
+}
+
+[data-luke-theme="dark"] .integration-mark-neon {
+  color: #34d59a;
+}
+
+[data-luke-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
+  color: #000;
+}
+
+[data-luke-theme="light"] .integration-mark-mercury {
+  color: #272735;
+}
+
+[data-luke-theme="light"] .integration-mark-neon {
+  color: #37c38f;
+}
+
+[data-luke-theme="light"] .integration-mark-sentry {
+  color: #181225;
+}
+
+.catalog {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.catalog-index {
+  padding: var(--luke-space-24) var(--luke-space-16);
+  border-right: 1px solid var(--luke-color-border);
+}
+
+.catalog-index-title {
+  margin: 0 0 var(--luke-space-16);
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.catalog-index ul,
+.catalog-toolbar ul {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: var(--luke-space-4);
+}
+
+.catalog-index ul {
+  flex-direction: column;
+}
+
+.catalog-link {
+  display: block;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  text-decoration: none;
+}
+
+.catalog-link:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.catalog-link[aria-current="page"] {
+  background: var(--luke-color-fill-selected);
+  color: var(--luke-color-text);
+}
+
+.catalog-link:focus-visible {
+  outline: 2px solid var(--luke-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.catalog-stage {
+  min-width: 0;
+}
+
+.catalog-toolbar {
+  display: flex;
+  gap: var(--luke-space-24);
+  padding: var(--luke-space-12) var(--luke-page-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  text-transform: capitalize;
+}
+
+.catalog-example {
+  padding: var(--luke-space-24) var(--luke-page-inset) var(--luke-space-64);
+}
+
+.catalog-example h1 {
+  margin: 0 0 var(--luke-space-24);
+  font-size: var(--luke-type-title-size);
+  line-height: var(--luke-type-title-leading);
+  font-weight: var(--luke-weight-bold);
+}
+
+.catalog-section + .catalog-section {
+  margin-top: var(--luke-space-32);
+}
+
+.catalog-section-title {
+  margin: 0 0 var(--luke-space-12);
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.catalog-face {
+  width: 96px;
+  height: 96px;
+  color: var(--luke-color-working);
+}
+
+.catalog-face svg {
+  width: 100%;
+  height: 100%;
+}
+
+.catalog-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: var(--luke-space-8);
+}
+
+.catalog-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  min-width: 0;
+  padding: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-surface);
+}
+
+.catalog-glyph svg,
+.catalog-mark {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.catalog-tile-name {
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An example's column of samples, each a row of its own. */
+.catalog-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+}
+
+/* A column narrower than a phone, where long words have to wrap. */
+.catalog-narrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  width: 100%;
+  max-width: 240px;
+  padding: var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}

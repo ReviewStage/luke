@@ -17,6 +17,8 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
+import { Segmented } from "../segmented";
+import { SpinnerRegion } from "../spinner";
 import {
   choiceModelId,
   choiceOn,
@@ -34,10 +36,8 @@ import {
   unsearchedModels,
   windowLabel,
   windowOf,
-} from "../planning/coding-agent-model";
-import { useOpenLink } from "../planning/use-open-link";
-import { Segmented } from "../segmented";
-import { SpinnerRegion } from "../spinner";
+} from "../tasks/coding-agent-model";
+import { useOpenLink } from "../tasks/use-open-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
@@ -113,7 +113,7 @@ function modelRowNote(
   const name = PROVIDER_NAME[provider];
   return status === PROVIDER_KEY_STATUS.VERIFIED
     ? `Runs on your own ${name} key.`
-    : `Your ${name} key needs attention under API keys.`;
+    : `Your ${name} key needs attention.`;
 }
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */

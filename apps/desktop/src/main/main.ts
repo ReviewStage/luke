@@ -1,4 +1,5 @@
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
+import { closeEveryMacTerminal } from "@luke/host/mac-terminal";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
 import { reportToStderr, tolerateClosedStderr } from "@luke/host/stderr-report";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
@@ -66,7 +67,7 @@ const config = bootstrapDesktop({
   report: reportToStderr,
   openExternal: (url) => shell.openExternal(url),
   quit: () => app.quit(),
-  showMenuBar: menuBarDrawer(app.name, (template) =>
+  showMenuBar: menuBarDrawer({ appName: app.name, packaged: app.isPackaged }, (template) =>
     Menu.setApplicationMenu(Menu.buildFromTemplate(template)),
   ),
   initializeCrashReporting,
@@ -153,6 +154,8 @@ async function main(): Promise<void> {
  */
 function registerQuit(): void {
   app.on("before-quit", (event) => {
+    // Every terminal of this Mac Luke opened is hung up, with what it started, before anything else is let go.
+    closeEveryMacTerminal();
     if (quit.stage() === QUIT_STAGE.TORN_DOWN) return;
     event.preventDefault();
     // A quit a hold asks about first is asked for again once it is agreed to.

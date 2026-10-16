@@ -59,7 +59,7 @@ import { planMentions } from "./plan-mentions";
 /** The key code a browser gives a key an input method takes. */
 const COMPOSING_KEY_CODE = 229;
 
-/** The class the editor's own element wears beside the read view's, which `planning.css` styles. */
+/** The class the editor's own element wears beside the read view's, which `tasks.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
 
 /** The heading levels that open a section, as `planSections` counts them. */
@@ -76,7 +76,7 @@ const DocumentHeading = Heading.extend({
 /**
  * A paragraph that keeps a picture standing alone on its line as its one
  * inline child. Note that TipTap's own unwraps such a picture into a block,
- * which a plan's inline image cannot be, so the document opened invalid and
+ * which a task's inline image cannot be, so the document opened invalid and
  * the first edit beside the picture threw; every other paragraph reads as
  * TipTap's does.
  */
@@ -90,7 +90,7 @@ const DocumentParagraph = Paragraph.extend({
   },
 });
 
-/** The class a link whose target names a mention wears in the editor, which `planning.css` draws in a chip's light look. */
+/** The class a link whose target names a mention wears in the editor, which `tasks.css` draws in a chip's light look. */
 const MENTION_LINK_CLASS = "plan-mention-link";
 
 /**
@@ -232,6 +232,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
+    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`, `../index.html`) refuses; `planning.css` styles the text instead.
+    injectCSS: false,
     extensions: [
       ...extensions,
       Placeholder.configure({ placeholder: "Write the plan" }),
@@ -246,7 +248,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
-      // Note that image files pasted are laid in as pictures, and a page of an integration's pasted whole as its mention, as the box lays it in.
+      // Note that image files pasted are laid in as pictures, and an address of Luke's own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
         return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);

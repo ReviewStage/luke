@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   type PageLine,
+  type PageShower,
   type PageVersion,
   type PageWrite,
+  pageShowerSchema,
   pageWriteSchema,
 } from "@luke/features/page-wire";
 import { and, desc, eq } from "drizzle-orm";
@@ -16,7 +18,7 @@ import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
- * plan-pages.ts -- a plan's pages: write a page or its next version, list the plan's pages, and read one version.
+ * plan-pages.ts -- a plan's pages: write a page or its next version as who showed it, list the plan's pages, and read one version, by its plan or by the page's id alone.
  *
  * A write is a page's next version, taken under the plan row's own lock, so
  * two writes of one page never take one number and a plan deleted meanwhile
@@ -37,6 +39,7 @@ const PageLineRowSchema = Schema.Struct({
   title: Schema.String,
   version: Schema.Number,
   at: InstantColumnSchema,
+  shownBy: Schema.NullOr(pageShowerSchema),
 });
 
 const PAGE_LINE_COLUMNS = {
@@ -44,6 +47,7 @@ const PAGE_LINE_COLUMNS = {
   title: planPageVersion.title,
   version: planPageVersion.version,
   at: planPageVersion.at,
+  shownBy: planPageVersion.shownBy,
 };
 
 /** The plan's id under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
@@ -78,6 +82,7 @@ const insertVersion = SqlSchema.findOne({
     version: Schema.Number,
     title: Schema.String,
     html: Schema.String,
+    shownBy: pageShowerSchema,
     at: Schema.Date,
   }),
   Result: PageLineRowSchema,
@@ -128,20 +133,61 @@ const findVersion = SqlSchema.findOneOption({
     ),
 });
 
+/** A version of a page found by the page's id alone, its newest where none is named, with the task it stands on, gated on the account's membership of that task's workspace. */
+const findPageById = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    pageId: Schema.String,
+    version: Schema.NullOr(Schema.Number),
+  }),
+  Result: Schema.Struct({
+    ...PageLineRowSchema.fields,
+    html: Schema.String,
+    taskId: Schema.String,
+  }),
+  execute: ({ userId, pageId, version }) =>
+    Database.use((db) =>
+      db
+        .select({
+          ...PAGE_LINE_COLUMNS,
+          html: planPageVersion.html,
+          taskId: planPageVersion.taskId,
+        })
+        .from(planPageVersion)
+        .innerJoin(task, eq(task.id, planPageVersion.taskId))
+        .where(
+          and(
+            eq(planPageVersion.pageId, pageId),
+            taskReachableBy(userId),
+            version === null ? undefined : eq(planPageVersion.version, version),
+          ),
+        )
+        .orderBy(desc(planPageVersion.version))
+        .limit(1),
+    ),
+});
+
 function lineOf(row: typeof PageLineRowSchema.Type): PageLine {
-  return { id: row.pageId, title: row.title, version: row.version, at: row.at.getTime() };
+  return {
+    id: row.pageId,
+    title: row.title,
+    version: row.version,
+    at: row.at.getTime(),
+    ...(row.shownBy === null ? undefined : { shownBy: row.shownBy }),
+  };
 }
 
 /**
  * Writes the page's next version, or a new page's first where the write
- * names none; the page as it now stands. Nothing where the account reaches no
- * such plan, or the plan no such page, and a schema failure, with nothing
- * written, for a write past the wire's bounds.
+ * names none, as shown by `shownBy`; the page as it now stands. Nothing where
+ * the account reaches no such plan, or the plan no such page, and a schema
+ * failure, with nothing written, for a write past the wire's bounds.
  */
 export function writePage(
   userId: string,
   taskId: string,
   write: PageWrite,
+  shownBy: PageShower,
 ): TaskStoreEffect<Option.Option<PageLine>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -162,6 +208,7 @@ export function writePage(
           version: newest.value.version + 1,
           title: admitted.title,
           html: admitted.html,
+          shownBy,
           at,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
         return Option.some(lineOf(row));
@@ -186,4 +233,37 @@ export function readPageVersion(
     findVersion({ userId, taskId, pageId, version }),
     Option.map((row) => ({ ...lineOf(row), html: row.html })),
   );
+}
+
+/** A page read by its id alone: the task it stands on, the version asked for, and the newest version there is. */
+export interface FoundPage {
+  readonly taskId: string;
+  readonly page: PageVersion;
+  readonly newestVersion: number;
+}
+
+/**
+ * One version of the page by the page's id alone, the newest where none is
+ * named, with the task it stands on and its newest version; nothing where
+ * the account reaches no task holding such a page or version.
+ */
+export function readPageById(
+  userId: string,
+  pageId: string,
+  version: number | undefined,
+): TaskStoreEffect<Option.Option<FoundPage>> {
+  return Effect.gen(function* () {
+    const found = yield* findPageById({ userId, pageId, version: version ?? null });
+    if (Option.isNone(found)) return Option.none();
+    const { taskId, html, ...line } = found.value;
+    const newest = yield* findNewestVersion({ taskId, pageId });
+    return Option.some({
+      taskId,
+      page: { ...lineOf(line), html },
+      newestVersion: Option.match(newest, {
+        onNone: () => line.version,
+        onSome: (row) => row.version,
+      }),
+    });
+  });
 }

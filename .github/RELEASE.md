@@ -53,13 +53,23 @@ nothing.
    and the `changelog-screenshots` skill the method. Merge it through protected
    `main` like any other change.
 
+   Keep anything else out of the version PR. A change made of nothing but `CHANGELOG.md`,
+   the screenshots under `apps/web/public/changelog/`, and package `"version"` fields is
+   release-only (`scripts/release-only.mjs`): CI runs the TypeScript checks (the
+   repository checks, lint, typecheck, and the build that renders the changelog) and
+   web's tests, which parse the changelog, and its other test jobs and the Postgres job
+   report success without running, in the pull request and the merge queue alike. Any
+   other file in the change, or a manifest edit beyond its version, runs every check.
+
 2. **Confirm the hosted service is live.** The service deploys from `main` on merge while
    the desktop ships on the tag, so a build released ahead of its service answers 404
    where a feature expected an endpoint.
 
 3. **Tag the merged commit.** The tag must point at the squash-merged commit on `main`
    and its version must match `apps/desktop/package.json` exactly; the workflow refuses a
-   tag that does not.
+   tag that does not. The workflow also refuses a commit that is not on `main` or that has
+   not passed every status check `main`'s ruleset requires, because it builds the commit
+   on the strength of those checks rather than running them again.
 
    ```sh
    git fetch origin main
@@ -73,11 +83,19 @@ nothing.
    git push origin v0.1.0
    ```
 
-5. **Let Actions finish.** The run bootstraps the workspace, runs `./scripts/check.sh`,
-   imports the Developer ID certificate into a throwaway keychain, builds the signed and
-   notarized artifacts, validates them, and then creates a published, non-draft release
-   titled `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is
-   removed whether the run succeeds or fails.
+5. **Let Actions finish.** The run bootstraps the workspace, asks GitHub whether the
+   tagged commit is on `main` with every required check green
+   (`scripts/release/verify-ci.mjs`), runs `./scripts/repository-checks.sh`, imports the
+   Developer ID certificate into a throwaway keychain, builds the signed and notarized
+   artifacts, validates them, and then creates a published, non-draft release titled
+   `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is removed
+   whether the run succeeds or fails.
+
+   The run does not repeat `./scripts/check.sh`: the merge queue ran every check on this
+   exact commit before it reached `main`, and the required checks the workflow reads back
+   are the ones that let it through. Those checks run on Linux, so the suite's run on a
+   Mac is each developer's `pnpm check:affected`; dispatch a rehearsal with
+   **full_checks** to run the whole of `./scripts/check.sh` on the `macos-15` runner.
 
 Re-running the workflow on the same tag is safe: an existing release is reused and its
 assets are replaced with `gh release upload --clobber`. The release must stay non-draft
@@ -90,6 +108,10 @@ Run the **Release** workflow from the Actions tab with **Run workflow**. A manua
 runs the identical build, signing, notarization, and validation path but publishes
 nothing: no release is created and no assets are attached. The six artifacts are kept as a
 workflow artifact for 14 days instead.
+
+A rehearsal of a commit CI already passed on `main` skips `./scripts/check.sh` as a tag
+does. A rehearsal of any other commit, a branch's head among them, runs it before the
+build, and the **full_checks** box runs it whatever CI said.
 
 This is what to run after changing credentials, the signing or notarization setup, the
 packaging configuration, or the workflow itself — it proves the whole path works before a

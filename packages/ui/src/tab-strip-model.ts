@@ -26,20 +26,21 @@
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `planning/tab-look.tsx`): the plan's Inbox, a
  * draft agent's tab and the "+" row that opens one, an agent the window holds
- * nothing of, and an agent's Changes before its agent is read. The side panel's fixed kinds
+ * nothing of, and an agent's Pull request before its agent is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
   INBOX: "Inbox",
   NEW_AGENT: "New coding agent",
   CODING_AGENT: "Coding agent",
-  CHANGES: "Changes",
+  PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
+  MAC_TERMINAL: "This Mac",
 } as const;
 
-/** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
-export function changesLabelOf(agentLabel: string): string {
-  return `${TAB_WORDS.CHANGES}: ${agentLabel}`;
+/** A Pull request tab's name for its agent's: the agent's own, after the word for what it shows. */
+export function pullRequestLabelOf(agentLabel: string): string {
+  return `${TAB_WORDS.PULL_REQUEST}: ${agentLabel}`;
 }
 
 /** One coding agent's tab, named by the agent it shows. */
@@ -70,7 +71,12 @@ export interface FileStripTab {
   readonly file: string;
 }
 
-/** One agent's Changes tab, named by the agent whose changes it shows. */
+/**
+ * One agent's Pull request tab, named by the agent whose pull request it
+ * shows: its overview and its changed files. It is spelled `changes`, as
+ * the tab that showed the files alone was, so what an earlier version kept
+ * and pinned of it still reads.
+ */
 export interface ChangesStripTab {
   readonly changes: string;
 }
@@ -85,6 +91,17 @@ export interface PageStripTab {
   readonly page: string;
 }
 
+/**
+ * A terminal of this Mac run on an agent's pushed branch, named by the
+ * agent, with its repository and when Run was last pressed for it, which
+ * has the tab read the agent's branch again.
+ */
+export interface MacTerminalStripTab {
+  readonly macTerminal: string;
+  readonly repository: string;
+  readonly asked: number;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -94,7 +111,8 @@ export type StripTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | MacTerminalStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -127,6 +145,11 @@ export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
 /** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
+}
+
+/** Whether a tab is a terminal of this Mac. */
+export function isMacTerminalTab(tab: StripTab): tab is MacTerminalStripTab {
+  return tab instanceof Object && "macTerminal" in tab;
 }
 
 /** Whether a tab is one page's. */
@@ -172,6 +195,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
+  if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
   return a === b;
 }
 
@@ -201,6 +225,7 @@ function terminalKey(agentId: string): string {
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
+  if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;

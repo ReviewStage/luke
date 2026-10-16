@@ -2,6 +2,7 @@ import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -63,6 +64,10 @@ export const CODING_AGENT_BOUNDS = {
   MAX_LINE_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
+  /** The most characters the reason an agent was archived for may spell: a line of the archived agent's banner, never a report. */
+  MAX_ARCHIVE_REASON_CHARS: 500,
+  /** The most characters the words a workspace's agents are found by may spell. */
+  MAX_SEARCH_CHARS: 200,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
   MAX_SERVER_CHARS: 64,
@@ -408,12 +413,19 @@ export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.T
 /**
  * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
  * asking member's own and no one else's, as a plan's is; pinning one
- * already pinned keeps the instant it was first pinned. The answer is the
- * agent as it then stands.
+ * already pinned keeps the instant it was first pinned. A position, where
+ * the pin stands in the sidebar's Pinned section (`pin-order.ts`), comes
+ * only with a pin. The answer is the agent as it then stands.
  */
 export const codingAgentPinRequestSchema = EffectSchema.Struct({
   pinned: EffectSchema.Boolean,
-});
+  position: EffectSchema.optionalKey(pinPositionSchema),
+}).check(
+  EffectSchema.makeFilter(
+    (request: { pinned: boolean; position?: string }) =>
+      request.position === undefined || request.pinned,
+  ),
+);
 
 export type CodingAgentPinRequest = typeof codingAgentPinRequestSchema.Type;
 
@@ -437,16 +449,49 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, and the repository they are narrowed to, where one is named. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
+  WORDS: "words",
+  ARCHIVED: CODING_AGENT_LIST_QUERY.ARCHIVED,
 } as const;
 
 /** What the list's `archived` query may say. */
 export const CODING_AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
+
+/**
+ * Who archived an agent: a member from the window, Luke on a call for the
+ * member on it, or another coding agent of the workspace for the member who
+ * started that agent, through its `archive_agent` tool.
+ */
+export const CODING_AGENT_ARCHIVER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AGENT: "agent",
+} as const;
+
+export type CodingAgentArchiver =
+  (typeof CODING_AGENT_ARCHIVER)[keyof typeof CODING_AGENT_ARCHIVER];
+
+/**
+ * Who archived an agent, as its banner and card say it: a member, or Luke or
+ * another agent on a member's behalf, the member absent once their account
+ * is gone, the agent by its id and its title as it stood then, and the
+ * reason it was archived for where one was given.
+ */
+export const codingAgentArchivedBySchema = EffectSchema.Struct({
+  by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+  member: EffectSchema.optionalKey(memberRefSchema),
+  agent: EffectSchema.optionalKey(
+    EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
+  ),
+  reason: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
 
 /**
  * One agent as the tabs draw it: the plan it works on, its title, what it
@@ -495,6 +540,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /** Who archived the agent, and why where they said; absent while it is not archived, for an archive from before the record, and from a service before it. */
+  archivedBy: EffectSchema.optionalKey(codingAgentArchivedBySchema),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   /**
@@ -580,6 +627,8 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type TasklessAgent = typeof tasklessAgentSchema.Type;
@@ -786,6 +835,138 @@ export type CodingAgentChangesPeople = Pick<
 >;
 
 /**
+ * Whether an open pull request would merge as it stands, as GitHub works it
+ * out: ready, its checks short of passing though nothing requires them,
+ * blocked by a rule (a review or a check the branch requires), behind its
+ * base where the base must be merged in first, in conflict with its base, a
+ * draft, or not yet worked out, which GitHub does a moment after a push.
+ */
+export const MERGE_STATE = {
+  CLEAN: "clean",
+  UNSTABLE: "unstable",
+  BLOCKED: "blocked",
+  BEHIND: "behind",
+  CONFLICTS: "conflicts",
+  DRAFT: "draft",
+  UNKNOWN: "unknown",
+} as const;
+
+export type MergeState = (typeof MERGE_STATE)[keyof typeof MERGE_STATE];
+
+/** Where one check on a pull request's head stands: running or queued, passed, failed, or skipped or neutral, which passes nothing and fails nothing. */
+export const CHECK_STATE = {
+  PENDING: "pending",
+  PASSED: "passed",
+  FAILED: "failed",
+  SKIPPED: "skipped",
+} as const;
+
+export type CheckState = (typeof CHECK_STATE)[keyof typeof CHECK_STATE];
+
+/** What one entry of a pull request's conversation is: a comment on it, or a review. */
+export const CONVERSATION_ENTRY = {
+  COMMENT: "comment",
+  REVIEW: "review",
+} as const;
+
+export const OVERVIEW_BOUNDS = {
+  /** The most checks one read lists; a head with more lists its first. */
+  MAX_CHECKS: 100,
+  /** The most entries of the conversation one read carries, the newest kept, the rest counted. */
+  MAX_ENTRIES: 100,
+  /** The most characters of a check's or a branch's name a read carries. */
+  MAX_NAME_CHARS: 255,
+} as const;
+
+/** A name GitHub gives a check or a branch, as a read carries it. */
+const overviewName = EffectSchema.String.check(
+  EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_NAME_CHARS),
+);
+
+/**
+ * One check on a pull request's head: a check run, named by its run and the
+ * App that runs it, or a commit status, named by its context and by no App;
+ * where it stands; its page, where GitHub names one; and when it started and
+ * ended, in epoch milliseconds, where it has.
+ */
+const pullRequestCheckSchema = EffectSchema.Struct({
+  name: overviewName,
+  app: EffectSchema.NullOr(overviewName),
+  state: EffectSchema.Literals(Object.values(CHECK_STATE)),
+  url: EffectSchema.NullOr(EffectSchema.String),
+  startedAt: EffectSchema.NullOr(countedNumber),
+  completedAt: EffectSchema.NullOr(countedNumber),
+});
+
+export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
+
+/**
+ * One entry of a pull request's conversation: a comment on it, or a review
+ * and where it left its reviewer; who; their words whole, as GitHub renders
+ * them (`body_html`), or, where GitHub sent no rendering, null with their
+ * words as markdown in `body`, empty otherwise; when, in epoch
+ * milliseconds; and its page.
+ */
+const conversationEntrySchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
+  by: githubPersonSchema,
+  state: EffectSchema.optionalKey(reviewStateSchema),
+  html: EffectSchema.NullOr(EffectSchema.String),
+  body: EffectSchema.String,
+  at: countedNumber,
+  url: EffectSchema.String,
+});
+
+export type ConversationEntry = typeof conversationEntrySchema.Type;
+
+/**
+ * One agent's pull request as its Pull request tab draws it (GET): where it
+ * stands, its title, number, and page; its description as GitHub renders
+ * it (`body_html`), empty where it has none; the
+ * branch it merges into and the one it merges from; when it was opened, and
+ * merged where it was; whether it would merge as it stands; every check on
+ * its head; who opened it, who the agent writes as on GitHub, and its
+ * reviewers and where each stands; and its conversation, oldest first, its
+ * newest entries kept up to the bound, with how many earlier ones were left
+ * on GitHub (`earlier`). Null where the agent
+ * has opened none yet.
+ */
+export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(
+    EffectSchema.Struct({
+      number: countedNumber,
+      title: EffectSchema.String,
+      url: EffectSchema.String,
+      state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+      html: EffectSchema.String,
+      base: overviewName,
+      head: overviewName,
+      createdAt: countedNumber,
+      mergedAt: EffectSchema.NullOr(countedNumber),
+      merge: EffectSchema.Literals(Object.values(MERGE_STATE)),
+      checks: EffectSchema.Array(pullRequestCheckSchema).check(
+        EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_CHECKS),
+      ),
+      author: EffectSchema.optionalKey(githubPersonSchema),
+      writtenAs: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
+      ),
+      reviewers: EffectSchema.Array(pullRequestReviewerSchema).check(
+        EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+      ),
+      conversation: EffectSchema.Array(conversationEntrySchema).check(
+        EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_ENTRIES),
+      ),
+      earlier: countedNumber,
+    }),
+  ),
+});
+
+export type CodingAgentOverview = NonNullable<
+  (typeof codingAgentOverviewAnswerSchema.Type)["pullRequest"]
+>;
+
+/**
  * The tool an agent hands a slice of its work to a subagent with, by the
  * name its tool part carries in the transcript (`tool-delegate`). The call
  * blocks the agent's turn until the worker answers; the worker reads the
@@ -938,11 +1119,18 @@ export const CODING_AGENT_SENDER = {
  * service words it, and what kind of sender it is, so the window draws Luke
  * as Luke, an automation as one, and GitHub as the login named; the kind is
  * absent from a service older than it. The window names nobody over the reader's own.
+ * Another coding agent of the workspace is named with no kind and marked
+ * `agent` instead, because a window reads `kind` as one of the words it
+ * knows and would refuse the whole page over a word it was built before,
+ * while it drops a key it does not know: an older build draws the agent as a
+ * sender it cannot place, under its name, and a newer one as an agent.
  */
 const codingAgentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   userId: EffectSchema.optionalKey(EffectSchema.String),
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
+  /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
+  agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
@@ -1009,6 +1197,8 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /** Epoch milliseconds one of the developer's lines was sent, which the tab names under its bubble; absent on every other row, and from a service older than it. */
+  sentAt: EffectSchema.optionalKey(countedNumber),
   /**
    * Where in a turn under way one of the developer's lines arrived: the
    * journal of the turn that took it in, by its message id, and how many

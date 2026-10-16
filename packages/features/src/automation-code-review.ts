@@ -218,8 +218,8 @@ export function withCodeReviewSettings(prompt: string, settings: CodeReviewSetti
   return `${block}${found.rest}`;
 }
 
-/** What the editor says the code review does, under the button that starts one from its preset. */
-export const CODE_REVIEW_DESCRIPTION =
+/** What the Automations list says the code review does, on the suggestion that starts one from its preset. */
+const CODE_REVIEW_DESCRIPTION =
   "Reviews each pull request opened, marked ready, or pushed to, and posts one GitHub review as Luke: at most five findings that would make the author change the code, and nothing when there are none.";
 
 /** A preset as the editor offers it: the automation's own fields, filled in. */
@@ -229,7 +229,7 @@ export interface AutomationPreset {
   readonly prompt: string;
   readonly guards: AutomationGuards;
   readonly archiveSuccessful: boolean;
-  /** What the editor says the preset does, under its button. */
+  /** What the Automations list says the preset does, on its suggestion. */
   readonly description: string;
 }
 
@@ -258,4 +258,19 @@ export function codeReviewPreset(): AutomationPreset {
     archiveSuccessful: true,
     description: CODE_REVIEW_DESCRIPTION,
   };
+}
+
+/** The presets the Automations list suggests, each by the name a new automation's page is opened from it with. */
+export const AUTOMATION_PRESET = {
+  CODE_REVIEW: "code-review",
+} as const;
+
+export type AutomationPresetName = (typeof AUTOMATION_PRESET)[keyof typeof AUTOMATION_PRESET];
+
+/** The preset a suggestion names, its fields filled in afresh. */
+export function automationPreset(name: AutomationPresetName): AutomationPreset {
+  switch (name) {
+    case AUTOMATION_PRESET.CODE_REVIEW:
+      return codeReviewPreset();
+  }
 }

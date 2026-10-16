@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
+import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
@@ -39,6 +39,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
+import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -99,7 +100,7 @@ export interface WindowService extends DesktopService {
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
-  showInbox: (planId: string) => void;
+  showInbox: (taskId: string) => void;
   /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
   showInboxItem: (item: {
     readonly agentId: string;
@@ -168,6 +169,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const panels = new PanelManager({
     runMode,
+    instance: config.instance,
     mediaDuck: native.mediaDuck,
     preloadPath,
     rendererHtmlPath,
@@ -209,6 +211,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     placementPath: path.join(config.stateRoot, "call-window.json"),
   });
   const callPresence = new CallWindowPresence(callWindow);
+  /** What stops a development build's renderer errors reaching the terminal; nothing until the start begins it. */
+  let stopRendererErrors = (): void => undefined;
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -279,8 +283,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
   }
 
-  function showInbox(planId: string): void {
-    panels.broadcast(channels.onShowInbox, { planId });
+  function showInbox(taskId: string): void {
+    panels.broadcast(channels.onShowInbox, { taskId });
   }
 
   function showInboxItem(item: {
@@ -356,7 +360,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     pendingWaits.add(wait);
   }
   const hotkeys = new HotkeyRegistrar({
-    registersGlobalKeys: runMode.registersGlobalKeys,
+    // Note that a named development instance claims no system-wide key,
+    // because it runs beside the plain one and two Lukes cannot share a chord:
+    // whichever launched first would take it from the other.
+    registersGlobalKeys: runMode.registersGlobalKeys && config.instance === undefined,
     // A voice stands only when the host says one does.
     hasCredentials: () => operator.voiceAvailable(),
     host: {
@@ -364,7 +371,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The plan open in the panel is what a press with no call opens one
       // about, whether or not the panel still shows it; a standing call takes
       // the press whatever plan is open, and with neither the key opens nothing.
-      talkPlanId: () => state.snapshot().tasks.activeTaskId,
+      talkTaskId: () => state.snapshot().tasks.activeTaskId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
@@ -506,18 +513,30 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
         run(pageResponse(request.url, operator.host.tasksPage)),
       );
+      // A development build writes its windows' errors where the run's own
+      // lines go, from before the first window opens, and offers their
+      // developer tools; the menu bar draws none in a packaged build. Note
+      // that a capture run is offered none either, because its windows are
+      // opened without them (`hardenedWebPreferences`).
+      if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
+      if (runMode.takesFocus) {
+        config.showMenuBar({
+          developerTools: {
+            onOpenVoiceWindow: () =>
+              voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+            onOpenCallWindow: () =>
+              callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
+          },
+        });
+      }
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();
 
-      // macOS is asked to send the app's own scheme here rather than to another Luke claiming it, a live development run's among them.
-      const linkClaim = appLinkClaim({
-        packaged: config.packaged,
-        live: runMode.sendsNetwork,
-        executable: process.execPath,
-        appPath: app.getAppPath(),
-      });
-      if (linkClaim !== undefined) app.setAsDefaultProtocolClient(APP_LINK_SCHEME, ...linkClaim);
+      // A packaged Luke asks macOS for its own scheme; a live development run gives back a claim stock Electron holds, which would open a bare Electron.
+      const linkClaim = appLinkClaim({ packaged: config.packaged, live: runMode.sendsNetwork });
+      if (linkClaim === APP_LINK_CLAIM.CLAIM) app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
+      if (linkClaim === APP_LINK_CLAIM.RELEASE) app.removeAsDefaultProtocolClient(APP_LINK_SCHEME);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
       app.on("browser-window-focus", panelFocused);
@@ -531,6 +550,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     stop: async () => {
       config.appLinks.close();
+      stopRendererErrors();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
       app.removeListener("browser-window-focus", panelFocused);

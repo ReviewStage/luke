@@ -2,11 +2,11 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ArchiveIcon, UnarchiveIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
-import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
-import { AgentGlyph, agentEndMark } from "../planning/tab-look";
-import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
+import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model";
+import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
@@ -23,8 +23,9 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
  * again before it is archived unasked, because nothing follows an agent
  * whose tab is not shown, and a turn begun since, by Luke or another
  * window, is asked about first like any other. Archived, the agent leaves its tab, the
- * summary, the "+" menu, ⌘K, and the sidebar's card and marks, while its
- * transcript and its pull request are kept, and a toast offers Undo
+ * summary, the "+" menu, and the sidebar's card and marks, while its
+ * transcript and its pull request are kept, ⌘K still finds it, saying it is
+ * archived and opening its own page, and a toast offers Undo
  * (`use-coding-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the
@@ -130,28 +131,28 @@ function ArchivedAgentRow({
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
-    <li ref={item} className="plan-summary-archived-agent" onContextMenu={menu.contextMenu()}>
+    <li ref={item} className="task-summary-archived-agent" onContextMenu={menu.contextMenu()}>
       <Tooltip
         label={subject.name}
         card={<AgentCard subject={subject} models={agents.models} />}
         cardBeside
         cardRegion={item}
       >
-        <span className="plan-summary-row">
-          <span className="plan-summary-glyph">
+        <span className="task-summary-row">
+          <span className="task-summary-glyph">
             <AgentGlyph agent={agent} />
           </span>
-          <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
+          <span ref={words} className="task-summary-label" data-overflow={String(clipped)}>
             {subject.name}
           </span>
           {agentEndMark(agent, false)}
         </span>
       </Tooltip>
-      <span className="plan-summary-marks">
+      <span className="task-summary-marks">
         <Tooltip label={UNARCHIVE_LABEL}>
           <button
             type="button"
-            className="sidebar-plan-mark"
+            className="sidebar-task-mark"
             aria-label={UNARCHIVE_LABEL}
             onClick={unarchive}
           >
@@ -184,7 +185,7 @@ export function ArchivedAgents({
   const archived = agents.archived ?? [];
   if (archived.length === 0) return null;
   return (
-    <div className="plan-summary-archived">
+    <div className="task-summary-archived">
       <SidebarGroupHeader
         glyph={<ArchiveIcon />}
         name={ARCHIVED_LABEL}
@@ -194,7 +195,7 @@ export function ArchivedAgents({
         onToggle={() => setUnfolded((was) => !was)}
       />
       {unfolded ? (
-        <ul className="plan-summary-rows" aria-label="Archived agents">
+        <ul className="task-summary-rows" aria-label="Archived agents">
           {archived.map((agent) => (
             <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
           ))}
