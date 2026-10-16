@@ -7,6 +7,7 @@
   "exports": {
     "./core/effect-migration-folders": "./src/core/effect-migration-folders.js",
     "./core/migrator": "./src/core/migrator.js",
+    "./core/neon-compute-limit": "./src/core/neon-compute-limit.js",
     "./core/query": "./src/core/query.js",
     "./core/sql-client": "./src/core/sql-client.js",
     "./github-installation-vocabulary": "./src/github-installation-vocabulary.js",
