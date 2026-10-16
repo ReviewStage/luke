@@ -270,17 +270,20 @@ export function InboxItemRow({
             </span>
             <span className="sidebar-task-name">{title}</span>
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            {starter === undefined || !face ? null : (
-              <span className="inbox-row-face">
+            {starter === undefined || !face ? (
+              <RelativeTime
+                className="sidebar-task-time"
+                at={item.updatedAt}
+                now={now}
+                hint={false}
+              />
+            ) : (
+              // Note that the face stands in the time's own box, as a sidebar row's does, so it sits beside the time rather than the title.
+              <span className="sidebar-task-time">
                 <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+                <RelativeTime at={item.updatedAt} now={now} hint={false} />
               </span>
             )}
-            <RelativeTime
-              className="sidebar-task-time"
-              at={item.updatedAt}
-              now={now}
-              hint={false}
-            />
             {needsYou ? (
               <span className="inbox-row-dot">
                 <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
