@@ -9,6 +9,7 @@ import {
 import { test } from "vitest";
 import * as accountInboxWire from "./account-inbox-wire.js";
 import * as boardWire from "./board-wire.js";
+import * as chatWire from "./chat-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
@@ -60,6 +61,37 @@ const EFFECT_MODULE_SCHEMAS = {
     boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
+  "chat-wire": {
+    chatImageTypeSchema: chatWire.chatImageTypeSchema,
+    chatKeySchema: chatWire.chatKeySchema,
+    chatChannelNameSchema: chatWire.chatChannelNameSchema,
+    chatHandleSchema: chatWire.chatHandleSchema,
+    chatTargetSchema: chatWire.chatTargetSchema,
+    chatBlockSchema: chatWire.chatBlockSchema,
+    chatBlocksSchema: chatWire.chatBlocksSchema,
+    chatPostBlockSchema: chatWire.chatPostBlockSchema,
+    chatPostBlocksSchema: chatWire.chatPostBlocksSchema,
+    chatOptionSchema: chatWire.chatOptionSchema,
+    chatFieldSchema: chatWire.chatFieldSchema,
+    chatResponseSchema: chatWire.chatResponseSchema,
+    chatAskSchema: chatWire.chatAskSchema,
+    chatFieldValueSchema: chatWire.chatFieldValueSchema,
+    chatFormValueSchema: chatWire.chatFormValueSchema,
+    chatFormValuesSchema: chatWire.chatFormValuesSchema,
+    chatReplySchema: chatWire.chatReplySchema,
+    chatReadBlockSchema: chatWire.chatReadBlockSchema,
+    chatReadResponseSchema: chatWire.chatReadResponseSchema,
+    postChatInputSchema: chatWire.postChatInputSchema,
+    postChatAskInputSchema: chatWire.postChatAskInputSchema,
+    readChatInputSchema: chatWire.readChatInputSchema,
+    resolveAskInputSchema: chatWire.resolveAskInputSchema,
+    chatMemberSchema: chatWire.chatMemberSchema,
+    chatChannelSchema: chatWire.chatChannelSchema,
+    chatMessageAskSchema: chatWire.chatMessageAskSchema,
+    chatMessageSchema: chatWire.chatMessageSchema,
+    chatCursorSchema: chatWire.chatCursorSchema,
+    chatAnswerSchema: chatWire.chatAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof chatWire>,
   "coding-agent-wire": {
     contextWindowSchema: codingAgentWire.contextWindowSchema,
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,

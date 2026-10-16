@@ -16,6 +16,7 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   type AssistantMessageMetadata,
+  type ChatNoticeMetadata,
   isWireString,
   jsonRoundTrip,
   MESSAGE_AUTHOR,
@@ -29,6 +30,7 @@ import {
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
+  type TypedAskMetadata,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "@luke/wire";
@@ -336,7 +338,17 @@ interface AwaitingLineWrite {
   /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
   readonly sender: LineSender;
+  readonly metadata?: AwaitingLineMetadata | undefined;
 }
+
+/** Who an awaiting line says wrote it. */
+export type AwaitingLineMetadata = TypedAskMetadata | ChatNoticeMetadata;
+
+/** An awaiting line naming no author is the developer's typed ask. */
+const TYPED_LINE_METADATA: TypedAskMetadata = {
+  author: MESSAGE_AUTHOR.DEVELOPER,
+  channel: MESSAGE_CHANNEL.TYPED,
+};
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<
@@ -2059,7 +2071,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = yield* admitted(context, {
     id: clientId,
     role: MESSAGE_ROLE.USER,
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    metadata: line.metadata ?? TYPED_LINE_METADATA,
     parts: lineParts(line.text, line.attachments ?? [], line.mentioned),
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);

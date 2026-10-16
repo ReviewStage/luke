@@ -13,7 +13,7 @@ import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
-import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -43,7 +43,8 @@ import { CURSOR_START } from "./transcript.js";
  * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or
  * answers nothing writes nothing, and the tab shows the automation's name
  * meanwhile, where an automation's run started the agent, and the model's
- * otherwise. A subagent, a coding agent's worker or a planning worker, is
+ * otherwise. A line a chat notice steered in is no word of the
+ * developer's, so it names nothing. A subagent, a coding agent's worker or a planning worker, is
  * named by the same call over the task it was handed alone, and its title
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
@@ -112,6 +113,12 @@ function originWords(origin: StoredAutomationOrigin): string {
   return [...subject, origin.prompt.trim()].join("\n").slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
+/** A row of the developer's own words: a user row no chat notice wrote. */
+function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
+  if (message?.role !== MESSAGE_ROLE.USER) return false;
+  return !("channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.CHAT);
+}
+
 /**
  * What an agent is named from: the developer's first message, or an
  * automation's prompt alone where its run started the agent, their latest
@@ -140,9 +147,9 @@ function agentExchange(
     );
     const first = opening.read.ok ? opening.read.value[0] : undefined;
     const newest = recent.ok ? recent.value : [];
-    const said = newest.findLast((record) => record.message.role === MESSAGE_ROLE.USER);
+    const said = newest.findLast((record) => saidByDeveloper(record.message));
     const answered = newest.findLast((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
-    const opened = first?.message.role === MESSAGE_ROLE.USER ? first : undefined;
+    const opened = saidByDeveloper(first?.message) ? first : undefined;
     return [
       {
         speaker: SPEAKER.DEVELOPER,
