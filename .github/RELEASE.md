@@ -148,7 +148,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
 | `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
-| `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
+| `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Luke@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 
 ### Export the signing certificate
@@ -191,7 +191,7 @@ stored `luke-notary` notarytool profile
 ```sh
 export LUKE_CODESIGN_IDENTITY='Your Name (TEAMID)'
 export POSTHOG_PROJECT_API_KEY='phc_…'                  # from PostHog project settings
-export SENTRY_DSN='https://…'                            # from the luke-desktop project
+export SENTRY_DSN='https://…'                            # from the luke project
 export SENTRY_AUTH_TOKEN='sntrys_…'                     # source-map upload token
 pnpm release:macos                    # signs, notarizes, staples; writes the DMG, zip, and manifest
 git tag v0.1.1 && git push origin v0.1.1

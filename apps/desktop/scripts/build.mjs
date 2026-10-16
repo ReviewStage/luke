@@ -138,7 +138,7 @@ function sentryPlugins() {
     sentryEsbuildPlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "stage-review",
-      project: "luke-desktop",
+      project: "luke",
       release: { name: `Luke@${appVersion}` },
     }),
   ];
