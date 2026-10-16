@@ -3,7 +3,7 @@ import { FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
@@ -19,6 +19,7 @@ import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
 import { PlanStatusMark } from "./plan-card";
+import { useRowKeys } from "./use-row-keys";
 
 /**
  * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
@@ -43,9 +44,6 @@ import { PlanStatusMark } from "./plan-card";
 /** How many plans Recent lists. */
 const RECENT_COUNT = 6;
 
-/** The rows the arrow keys move through: every plan's and item's. */
-const HOME_ROWS = ".sidebar-plan";
-
 /** The greeting: the account's first name where it has one. */
 function greeting(name: string | undefined): string {
   const first = name?.trim().split(/\s+/u)[0];
@@ -55,33 +53,6 @@ function greeting(name: string | undefined): string {
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
 function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
   return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
-}
-
-/**
- * ↑ and ↓ from the window itself, or from one of the page's rows, move the
- * focus through the rows; the first press from the window reaches the first
- * row, or the last. A key with a modifier, or one pressed anywhere else, New
- * plan's button among them, is left alone.
- */
-function useRowKeys(page: HTMLElement | null, shown: boolean): void {
-  useEffect(() => {
-    if (page === null || !shown) return;
-    const step = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-      if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
-      const from = document.activeElement;
-      const rows = [...page.querySelectorAll<HTMLElement>(HOME_ROWS)];
-      const at = rows.findIndex((row) => row === from);
-      const fromWindow = from === null || from === document.body;
-      if (rows.length === 0 || (!fromWindow && at < 0)) return;
-      event.preventDefault();
-      const down = event.key === "ArrowDown";
-      const next = at < 0 ? (down ? 0 : rows.length - 1) : at + (down ? 1 : -1);
-      rows[Math.min(rows.length - 1, Math.max(0, next))]?.focus();
-    };
-    window.addEventListener("keydown", step);
-    return () => window.removeEventListener("keydown", step);
-  }, [page, shown]);
 }
 
 /** New plan, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
