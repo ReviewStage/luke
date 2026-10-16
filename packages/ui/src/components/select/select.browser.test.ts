@@ -122,6 +122,21 @@ test("a field that cannot be used opens no menu", async () => {
   expect(openMenu()).toBeNull();
 });
 
+test("a field with no value that can be chosen now is unavailable and opens no menu", async () => {
+  await mount(
+    createElement(Select<Theme>, {
+      label: "Theme",
+      options: [{ value: "Light", label: "Light", disabled: true }],
+      value: "Light",
+      onChange: () => undefined,
+    }),
+  );
+  const field = page.getByRole("button", { name: "Theme: Light" });
+  await expect.element(field).toBeDisabled();
+  await field.click({ force: true });
+  expect(openMenu()).toBeNull();
+});
+
 test("the menu hangs under the field from its leading edge, or from its trailing edge where asked", async () => {
   for (const align of [SELECT_ALIGN.START, SELECT_ALIGN.END]) {
     const { container } = await mount(createElement(ThemeSelect, { changes: [], align }));

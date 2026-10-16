@@ -59,10 +59,14 @@ export function Select<Value extends string>(
     value,
     onChange,
     describedBy,
-    disabled = false,
+    disabled: unavailable = false,
     align = SELECT_ALIGN.START,
     ...appAttributes
   } = props;
+  // Note that a field with no value it could change to is unavailable, because
+  // its menu would hold nothing to take the keyboard, and so nothing to hear
+  // the Escape or Tab that closes it.
+  const disabled = unavailable || !options.some((option) => option.disabled !== true);
   // A field that cannot be used now does not leave its menu standing.
   const menu = useMenu(!disabled);
   const chosen = options.find((option) => option.value === value);
