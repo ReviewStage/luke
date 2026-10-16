@@ -61,6 +61,8 @@ const EFFECT_MODULE_SCHEMAS = {
   "live-wire": {
     sealedLiveQuerySchema: liveWire.sealedLiveQuerySchema,
     accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
+    scopeInboxLiveAnswerSchema: liveWire.scopeInboxLiveAnswerSchema,
+    scopeInboxLiveRowsSchema: liveWire.scopeInboxLiveRowsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,

@@ -332,8 +332,16 @@
     "dest": "/api/default.js?route=issues"
   },
   {
+    "src": "/api/live/agent-inbox",
+    "dest": "/api/default.js?route=live/agent-inbox"
+  },
+  {
     "src": "/api/live/inbox",
     "dest": "/api/default.js?route=live/inbox"
+  },
+  {
+    "src": "/api/live/plan-inbox",
+    "dest": "/api/default.js?route=live/plan-inbox"
   },
   {
     "src": "/api/mac-commands",

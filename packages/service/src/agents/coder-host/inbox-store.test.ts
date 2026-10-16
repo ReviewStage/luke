@@ -27,7 +27,12 @@ import {
   INBOX_STATUS,
   type InboxPost,
 } from "@luke/features/inbox-wire";
-import { accountInboxLiveRowSchemas, accountInboxOfLiveRows } from "@luke/features/live-wire";
+import {
+  accountInboxLiveRowSchemas,
+  accountInboxOfLiveRows,
+  inboxOfLiveRows,
+  scopeInboxLiveRowsSchema,
+} from "@luke/features/live-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -38,9 +43,12 @@ import {
   answerInboxItem,
   closeInboxItem,
   type InboxAgent,
+  memberAgentInboxItems,
+  memberAgentInboxLiveStatements,
   postInboxItem,
   readInboxItem,
   taskInboxItems,
+  taskInboxLiveStatements,
   withdrawInboxAnswer,
 } from "../../inbox/inbox-store.js";
 import { accountInboxPast } from "./inbox-page.js";
@@ -164,6 +172,52 @@ const liveAnswerOf = (userId: string, readAt: number) =>
   });
 
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "open" })));
+        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
+        assert.ok(
+          Option.isSome(yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID())),
+        );
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
+
+        for (const reader of [agent.userId, teammate, outsider]) {
+          const plan = Option.getOrThrow(taskInboxLiveStatements(reader, agent.taskId ?? ""));
+          const ofAgent = Option.getOrThrow(memberAgentInboxLiveStatements(reader, agent.agentId));
+          const liveOf = (statements: typeof plan) =>
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const rows = yield* Effect.all({
+                items: sql.unsafe(statements.items.sql, [...statements.items.params]),
+              });
+              return inboxOfLiveRows(
+                yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows),
+              );
+            });
+          assert.deepEqual(yield* liveOf(plan), yield* taskInboxItems(reader, agent.taskId ?? ""));
+          assert.deepEqual(
+            yield* liveOf(ofAgent),
+            yield* memberAgentInboxItems(reader, agent.agentId),
+          );
+        }
+        const read = yield* taskInboxItems(teammate, agent.taskId ?? "");
+        assert.deepEqual(read.map((item) => item.status).toSorted(), [
+          INBOX_STATUS.ANSWERED,
+          INBOX_STATUS.CLOSED,
+          INBOX_STATUS.OPEN,
+        ]);
+      }),
+  );
+
   it.effect(
     "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
     () =>
