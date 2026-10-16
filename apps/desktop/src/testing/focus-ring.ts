@@ -6,7 +6,7 @@ import { Scanner } from "@tailwindcss/oxide";
 /**
  * focus-ring.ts -- the window's stylesheets as jsdom can read them, for a test of where the keyboard's ring is drawn.
  *
- * jsdom lays nothing out, and of a stylesheet it reads only what its style
+ * jsdom lays nothing out, keeps no ring of the engine's own, and of a stylesheet it reads only what its style
  * engine parses: it skips a cascade layer's rules, keeps a `var()` as the
  * words it is spelled in, drops the `outline` shorthand, and works out no
  * `calc` but a sum. `layWindowStyles` hands it the stylesheets in the order
@@ -36,6 +36,14 @@ const SHEETS = [
   "desktop.css",
   "call.css",
 ] as const;
+
+/**
+ * The engine's own ring, Chromium's user-agent rule, which jsdom's default
+ * stylesheet lacks: what a focused element wears where no rule of the
+ * window's draws or takes away its ring. Laid first, with no specificity,
+ * as an origin under every author rule.
+ */
+const ENGINE_RING = ":where(:focus-visible) { outline-style: auto; outline-width: 1px; }\n";
 
 /** Where the block opening at `open` closes, past its closing brace. */
 function blockEnd(css: string, open: number): number {
@@ -197,16 +205,20 @@ export async function layWindowStyles(): Promise<HTMLStyleElement> {
     ...rootTokens(written[SHEETS.indexOf("base.css")] ?? ""),
   ]);
   const style = document.head.appendChild(document.createElement("style"));
-  style.textContent = written
-    .map((css) =>
-      outlineLonghands(workedCalc(chromiumClipMargins(withTokens(unlayered(css), tokens)))),
-    )
-    .join("\n");
+  style.textContent =
+    ENGINE_RING +
+    written
+      .map((css) =>
+        outlineLonghands(workedCalc(chromiumClipMargins(withTokens(unlayered(css), tokens)))),
+      )
+      .join("\n");
   return style;
 }
 
 /** What a control draws once focused: its ring, or none. */
 export type Ring = {
+  /** `solid` for the window's own ring; `auto` is the engine's. */
+  readonly style: string;
   readonly width: number;
   /** How far past the control's edge it stands; negative where it is drawn inside. */
   readonly offset: number;
@@ -221,9 +233,15 @@ export function ringOf(element: Element): Ring | undefined {
     .getPropertyValue("outline-offset")
     .replace(`var(${CASCADING_TOKEN})`, style.getPropertyValue(CASCADING_TOKEN).trim());
   return {
+    style: style.outlineStyle,
     width: Number.parseFloat(style.outlineWidth),
     offset: Number.parseFloat(workedCalc(offset)) || 0,
   };
+}
+
+/** What draws a ring for a control as the stylesheets stand: the control itself and any part of it. */
+export function ringsDrawnFor(control: Element): Element[] {
+  return [control, ...control.querySelectorAll("*")].filter((each) => ringOf(each) !== undefined);
 }
 
 /** How far past an element its scroll stops short, `scroll-margin`, in pixels: the room the keyboard scrolls it in with. */
@@ -278,4 +296,11 @@ export function focusByKeyboard(element: HTMLElement): void {
   // is no change to it.
   delete document.documentElement.dataset.keyboard;
   document.documentElement.dataset.keyboard = "true";
+}
+
+/** Moves focus as a press does: no keyboard modality. */
+export function focusByPress(element: HTMLElement): void {
+  element.focus();
+  document.documentElement.dataset.keyboard = "true";
+  delete document.documentElement.dataset.keyboard;
 }
