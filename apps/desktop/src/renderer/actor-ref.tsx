@@ -498,7 +498,7 @@ export function AutomationCard({
 }
 
 /** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
-function actorCard(actor: Actor): ReactNode {
+export function actorCard(actor: Actor): ReactNode {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return <PersonCard actor={actor} />;
