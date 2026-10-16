@@ -75,8 +75,10 @@ export interface GitHubPullRequest {
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
-  /** The login of who opened it, where GitHub named one. */
+  /** The login of who opened it, where GitHub named one, their avatar where GitHub's avatar host serves it, and whether they are an App's bot. */
   readonly author?: string;
+  readonly authorAvatarUrl?: string;
+  readonly authorBot?: boolean;
   /** When it was opened, and when it was merged or closed where it was, as epoch milliseconds, where GitHub named them. */
   readonly openedAt?: number;
   readonly mergedAt?: number;
@@ -129,6 +131,33 @@ const FAILING_STATUS_STATES: ReadonlySet<string> = new Set(["failure", "error"])
 const COMPLETED = "completed";
 const PENDING_STATUS_STATE = "pending";
 
+/** Who opened a pull request or an issue, as GitHub names them on it: their login, and, where it sends them, their kind and their avatar. */
+export const GitHubOpenerSchema = Schema.Struct({
+  login: Schema.String,
+  type: Schema.optional(Schema.String),
+  avatar_url: Schema.optional(Schema.String),
+});
+
+/** Who opened a pull request or an issue, as its read names them: their login, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; none of them where GitHub named no one. */
+interface OpenerFields {
+  readonly author?: string;
+  readonly authorAvatarUrl?: string;
+  readonly authorBot?: boolean;
+}
+
+/** Who opened a pull request or an issue, as its link's card names them; nothing where GitHub named no one. */
+export function openerFieldsOf(
+  user: typeof GitHubOpenerSchema.Type | null | undefined,
+): OpenerFields {
+  if (user == null) return {};
+  const avatarUrl = githubAvatarUrl(user.avatar_url);
+  return {
+    author: user.login,
+    authorBot: user.type === GITHUB_BOT_TYPE || user.login.endsWith(BOT_LOGIN_SUFFIX),
+    ...(avatarUrl === undefined ? undefined : { authorAvatarUrl: avatarUrl }),
+  };
+}
+
 const PullRequestSchema = Schema.Struct({
   number: Schema.Number,
   title: Schema.String,
@@ -141,7 +170,7 @@ const PullRequestSchema = Schema.Struct({
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
   /** Who opened it; null where their account is gone. */
-  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
+  user: Schema.optional(Schema.NullOr(GitHubOpenerSchema)),
   // Note that what follows is read where GitHub sends it, which its one pull request's read always does, and left out where it does not.
   created_at: Schema.optional(Schema.String),
   merged_at: Schema.optional(Schema.NullOr(Schema.String)),
@@ -326,7 +355,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     additions: record.additions,
     deletions: record.deletions,
     changedFiles: record.changed_files,
-    ...(record.user == null ? undefined : { author: record.user.login }),
+    ...openerFieldsOf(record.user),
     ...(openedAt === undefined ? undefined : { openedAt }),
     ...(mergedAt === undefined ? undefined : { mergedAt }),
     ...(closedAt === undefined ? undefined : { closedAt }),

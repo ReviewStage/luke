@@ -86,6 +86,11 @@ const WHOLE_PULL = {
   comments: 3,
   review_comments: 2,
   commits: 4,
+  user: {
+    login: "octo-dev",
+    type: "User",
+    avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+  },
 };
 
 /** The pull requests `acme/relay` holds: one open, read whole, and one merged, read as a listing names it. */
@@ -486,7 +491,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, who opened it, its size, when it was opened, its branches, labels, and comment and commit counts and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, who opened it with their avatar, its size, when it was opened, its branches, labels, and comment and commit counts and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -524,6 +529,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
               url: "https://github.com/acme/relay/pull/42",
               state: PULL_REQUEST_STATE.OPEN,
               author: "octo-dev",
+              authorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+              authorBot: false,
               additions: 12,
               deletions: 3,
               changedFiles: 2,
@@ -685,6 +692,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               url: page(7),
               state: ISSUE_STATE.OPEN,
               author: "octo-dev",
+              authorBot: false,
             },
           },
         });

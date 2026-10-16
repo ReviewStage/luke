@@ -38,16 +38,8 @@ export const sqlClientOverPglite = (
     PgliteClient.layerFrom(PgliteClient.fromClient({ liveClient: client })),
   );
 
-/**
- * The data directory of the first PGlite this process migrated, dumped once
- * and loaded by every later opening. A fresh PGlite spends seconds in initdb
- * and the migrations, a load from the dump a fraction of one, and a file
- * that opens a database per test opens dozens (workspaces-app's 45 spent
- * most of its run here).
- */
-let migratedDataDirectory: Promise<Blob> | undefined;
-
-async function migrateFreshPglite(): Promise<PGlite> {
+/** A PGlite carrying the same generated migrations the store's tests run against. */
+export async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
   const migrationRuntime = ManagedRuntime.make(sqlClientOverPglite(client));
   try {
@@ -56,22 +48,6 @@ async function migrateFreshPglite(): Promise<PGlite> {
     await migrationRuntime.dispose();
   }
   return client;
-}
-
-/**
- * A PGlite of the caller's own carrying the same generated migrations the
- * store's tests run against. Note that the first opening migrates and hands
- * over that very database, dumped before anyone writes to it, so a file that
- * opens one database pays for no dump load on top of its migrations.
- */
-export async function openMigratedPglite(): Promise<PGlite> {
-  if (migratedDataDirectory !== undefined) {
-    return new PGlite({ loadDataDir: await migratedDataDirectory });
-  }
-  const first = migrateFreshPglite();
-  migratedDataDirectory = first.then((client) => client.dumpDataDir("none"));
-  await migratedDataDirectory;
-  return first;
 }
 
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
