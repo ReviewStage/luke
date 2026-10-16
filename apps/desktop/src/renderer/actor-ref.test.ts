@@ -290,3 +290,25 @@ test("a member who left keeps their own face, grayed, their picture or else thei
   assert.equal(unnamed?.dataset.left, undefined);
   assert.equal(view.querySelector(".actor-ref")?.textContent, "LLee Park (former member)");
 });
+
+test("a facepile of faces with cards names a member who left as one to a screen reader, as their grayed face cannot", () => {
+  const lee: Actor = {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Park",
+    userId: "user-lee",
+  };
+  const view = draw(
+    createElement(ActorStack, {
+      actors: [lee, SAM],
+      drawn: 2,
+      faces: [{}, {}],
+      label: "Reviewers",
+    }),
+  );
+
+  assert.deepEqual(
+    [...view.querySelectorAll(".actor-stack-face")].map((face) => face.getAttribute("aria-label")),
+    ["Lee Park (former member)", "Sam Okafor"],
+  );
+});

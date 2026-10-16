@@ -523,9 +523,10 @@ export interface StackFace {
   readonly card?: ReactNode;
 }
 
-/** What the face says of an actor to a screen reader and in its pill: their name, and what the face says beside it. */
+/** What the face says of an actor to a screen reader and in its pill: their name, that they left where they did, and what the face says beside it. */
 function faceName(actor: Actor, face: StackFace): string {
-  return face.says === undefined ? actorName(actor) : `${actorName(actor)} · ${face.says}`;
+  const name = leftWithFace(actor) ? `${actorName(actor)}${LEFT_WORDS}` : actorName(actor);
+  return face.says === undefined ? name : `${name} · ${face.says}`;
 }
 
 /** One face of a facepile that hangs its card: the actor's mark, its badge, named to a screen reader by its name and what it says. */
