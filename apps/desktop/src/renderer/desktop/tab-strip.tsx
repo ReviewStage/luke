@@ -55,9 +55,11 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * glyph and its × always show. Past holding them all at that floor, the
  * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
  * sideways, and the tab chosen, or the one the keyboard reaches, is brought
- * into the room it shows, and kept there as the strip is narrowed. A tab the
+ * into the room it shows, and kept there as the strip is narrowed; a scroll
+ * of the strip's own comes to rest on whole tabs (`settle`). A tab the
  * strip cuts short wears `data-hidden`, which desktop.css draws not at all
- * rather than as a sliver, and a chevron after the strip counts those tabs
+ * rather than as a sliver, the chosen one alone always drawn, and a chevron
+ * after the strip counts those tabs
  * and lists them, as VS Code's and Chrome's tab lists do, choosing one
  * bringing it into view (`TabOverflow`), so no tab is out of reach however
  * narrow its column.
@@ -183,21 +185,57 @@ function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   else if (after > 0) scrollStrip(strip, after + startGap(strip, shown.left + after), glide);
 }
 
+/** Whether `box`, the strip scrolled `by` further along, stands whole within the strip's `shown` room. */
+function wholeIn(shown: DOMRect, box: DOMRect, by = 0): boolean {
+  const left = box.left - by;
+  const right = box.right - by;
+  return left >= shown.left - OVERFLOW_SLACK && right <= shown.right + OVERFLOW_SLACK;
+}
+
 /**
- * The tabs the strip does not show whole, but the chosen one, which it
- * always brings into view, and one being dragged, which is under the
- * pointer wherever it is carried. Note that it is measured rather than left
- * to a scroll timeline, because a timeline is active over any overflow at
- * all, the sub-pixel one included, and only a tab cut short is hidden.
+ * Settles a scroll of the strip's own, a wheel's step or a swipe, on whole
+ * tabs in the way it went: a tab it left cut at the strip's start is passed
+ * going forward, or brought in whole going back, as it is where the strip
+ * has no room left to go forward. A chosen tab shown whole stays whole, so
+ * where neither way keeps it so, the cut tab is left as it is. Note that a
+ * cut tab is not drawn, so a scroll left between tabs would show an empty
+ * room where a tab nearly stood.
+ */
+function settle(strip: HTMLElement, forward: boolean): void {
+  const shown = strip.getBoundingClientRect();
+  const room = strip.scrollWidth - strip.clientWidth - strip.scrollLeft;
+  const own = strip.querySelector(`${TAB}[aria-selected="true"]`)?.closest(".tab");
+  const chosen = own?.getBoundingClientRect();
+  const keeps = (by: number) =>
+    chosen === undefined || !wholeIn(shown, chosen) || wholeIn(shown, chosen, by);
+  for (const pill of strip.querySelectorAll(".tab")) {
+    const box = pill.getBoundingClientRect();
+    if (box.left >= shown.left - OVERFLOW_SLACK || box.right <= shown.left + OVERFLOW_SLACK)
+      continue;
+    const past = box.right - shown.left + startGap(strip, box.right);
+    const back = box.left - shown.left;
+    const by = (forward ? [past, back] : [back, past]).find(
+      (way) => way <= room + OVERFLOW_SLACK && keeps(way),
+    );
+    if (by !== undefined) scrollStrip(strip, by, false);
+    return;
+  }
+}
+
+/**
+ * The tabs the strip does not show whole, the chosen one among them where a
+ * scroll of the strip's own took it out of view, but one being dragged,
+ * which is under the pointer wherever it is carried. Note that it is
+ * measured rather than left to a scroll timeline, because a timeline is
+ * active over any overflow at all, the sub-pixel one included, and only a
+ * tab cut short is listed.
  */
 function hiddenTabs(strip: HTMLElement): HTMLElement[] {
   const shown = strip.getBoundingClientRect();
-  const candidates = strip.querySelectorAll<HTMLElement>(`${TAB}:not([aria-selected="true"])`);
-  return [...candidates].filter((tab) => {
+  return [...strip.querySelectorAll<HTMLElement>(TAB)].filter((tab) => {
     const pill = tab.closest(".tab") ?? tab;
     if (pill.getAttribute("data-dragging") === "true") return false;
-    const box = pill.getBoundingClientRect();
-    return box.left < shown.left - OVERFLOW_SLACK || box.right > shown.right + OVERFLOW_SLACK;
+    return !wholeIn(shown, pill.getBoundingClientRect());
   });
 }
 
@@ -235,13 +273,16 @@ function underTab(tab: HTMLElement): MenuPlacement {
 
 /**
  * Marks each tab the strip does not show whole, which desktop.css draws not
- * at all rather than as a sliver at the strip's edge, and counts them.
+ * at all rather than as a sliver at the strip's edge, and counts them. Note
+ * that the chosen tab is counted but always drawn, so a scroll that cuts it
+ * leaves what is seen of it in place.
  */
 function measureStrip(strip: HTMLElement): number {
   const hidden = hiddenTabs(strip);
   for (const tab of strip.querySelectorAll<HTMLElement>(TAB)) {
     const pill = tab.closest(".tab") ?? tab;
-    pill.setAttribute("data-hidden", String(hidden.includes(tab)));
+    const chosen = tab.getAttribute("aria-selected") === "true";
+    pill.setAttribute("data-hidden", String(!chosen && hidden.includes(tab)));
   }
   return hidden.length;
 }
@@ -337,6 +378,8 @@ export function TabStrip({
   // How many tabs the strip does not show whole, which its overflow counts.
   const [hidden, setHidden] = useState(0);
   const [listed] = useState(() => new Map<Element, ListedTab>());
+  // Where the strip's last scroll came to rest, which says the way the next one went.
+  const settled = useRef(0);
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
   // The chosen tab last brought into view, so a tab newly chosen, opened
@@ -461,6 +504,11 @@ export function TabStrip({
         onPointerDown={onPointerDown}
         onWheel={wheel}
         onScroll={(event) => setHidden(measureStrip(event.currentTarget))}
+        onScrollEnd={(event) => {
+          const node = event.currentTarget;
+          settle(node, node.scrollLeft >= settled.current);
+          settled.current = node.scrollLeft;
+        }}
         onFocus={(event) => {
           if (within(event.currentTarget, event.target)) setFocused(true);
         }}
