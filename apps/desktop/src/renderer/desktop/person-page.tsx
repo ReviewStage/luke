@@ -20,14 +20,7 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
-import {
-  EllipsisIcon,
-  LinkIcon,
-  ListFilterIcon,
-  MailIcon,
-  SettingsIcon,
-  UsersIcon,
-} from "lucide-react";
+import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
@@ -150,8 +143,7 @@ const MORE = "More";
 
 /**
  * The toolbar's end: their tasks in the sidebar, where the workspace is
- * shared and so filters by who created a task; Edit profile on the reader's
- * own page, which Settings › Profile is; and ⋯, holding Copy email for a
+ * shared and so filters by who created a task; and ⋯, holding Copy email for a
  * member and the workspace's members in Settings for its owners and admins.
  */
 function PersonActions({
@@ -220,16 +212,6 @@ function PersonActions({
         <button type="button" className="toolbar-button bordered-button" onClick={onShowTasks}>
           <ListFilterIcon />
           {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
-        </button>
-      ) : null}
-      {you ? (
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          onClick={() => openSettings({ page: SETTINGS_VIEW.ACCOUNT })}
-        >
-          <SettingsIcon />
-          Edit profile
         </button>
       ) : null}
       {actions.length === 0 ? null : (
