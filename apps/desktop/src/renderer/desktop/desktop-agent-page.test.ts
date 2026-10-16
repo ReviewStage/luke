@@ -850,9 +850,9 @@ test("a GitHub event's run names its pull request beside the automation, which o
   assert.deepEqual(openedOnGitHub, [url]);
 });
 
-test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it", async () => {
+test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
   const url = "https://github.com/acme/relay/pull/2905";
-  const acme = { ...ACME, slug: "acme", github: { login: "acme", active: true } };
+  const acme = { ...ACME, github: { login: "acme", active: true } };
   gitHub = new Map([[2905, { title: "View commands", url, state: PULL_REQUEST_STATE.OPEN }]]);
   const state = stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } });
   Object.defineProperty(window, "luke", {
