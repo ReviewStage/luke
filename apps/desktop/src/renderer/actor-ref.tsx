@@ -549,7 +549,9 @@ export function actorCard(actor: Actor): ReactNode {
  * `card`, or the card its kind hangs where the place adds nothing. With
  * `onOpen` it is a button that opens the actor's page, an agent's tab or an
  * automation's page; a person, someone who left, and a GitHub account open
- * their own (`useActorDoor`); otherwise its press is the line's own.
+ * their own (`useActorDoor`); otherwise its press is the line's own. With
+ * `faceOnly` the mark stands alone, its name said to a screen reader and in
+ * its card, for a line too short to hold the name.
  */
 export function ActorRef({
   actor,
@@ -557,6 +559,7 @@ export function ActorRef({
   onOpen,
   sentence = false,
   possessive = false,
+  faceOnly = false,
 }: {
   actor: Actor;
   card?: ReactNode;
@@ -565,6 +568,8 @@ export function ActorRef({
   sentence?: boolean;
   /** Whether the name says whose: "your Mac", "Charles Pan’s call". */
   possessive?: boolean;
+  /** Whether the mark stands without its name, which only a screen reader hears. */
+  faceOnly?: boolean;
 }): React.JSX.Element {
   const name = actorName(actor, { sentence, possessive });
   // A person's own door, their page or GitHub's, where the place hands none.
@@ -573,8 +578,8 @@ export function ActorRef({
   const inner = (
     <>
       <ActorMark actor={actor} />
-      <span className="actor-ref-name">{name}</span>
-      <BotBadge actor={actor} />
+      <span className={faceOnly ? "visually-hidden" : "actor-ref-name"}>{name}</span>
+      {faceOnly ? null : <BotBadge actor={actor} />}
       <LeftWords actor={actor} />
     </>
   );
