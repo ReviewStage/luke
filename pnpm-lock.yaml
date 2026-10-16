@@ -674,6 +674,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      fractional-indexing:
+        specifier: 3.2.0
+        version: 3.2.0
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'

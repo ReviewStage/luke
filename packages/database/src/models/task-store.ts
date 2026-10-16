@@ -141,6 +141,8 @@ export interface TaskChanges {
   readonly organizationId?: string;
   readonly repository?: string | null;
   readonly pinned?: boolean;
+  /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
+  readonly pinPosition?: string;
   readonly archived?: boolean;
 }
 
@@ -184,10 +186,19 @@ const TaskSummaryRowSchema = Schema.Struct({
 
 type TaskSummaryRow = typeof TaskSummaryRowSchema.Type;
 
+/** The reader's own pin of a plan: when they pinned it, and where it stands once they dragged it; null where it stands by that instant. */
+const ReaderPinSchema = Schema.Struct({
+  pinnedAt: InstantColumnSchema,
+  pinPosition: Schema.NullOr(Schema.String),
+});
+
+type ReaderPin = typeof ReaderPinSchema.Type;
+
 /** A line of the list with the reader's own pin beside it; null where they hold none. */
 const TaskListRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
+  pinPosition: Schema.NullOr(Schema.String),
 });
 
 const TaskRowSchema = Schema.Struct({
@@ -213,11 +224,11 @@ function readersPin(userId: string): SQL | undefined {
 /** The reader's own pin of the plan; none where they hold none. */
 const findPin = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ pinnedAt: InstantColumnSchema }),
+  Result: ReaderPinSchema,
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ pinnedAt: taskPin.pinnedAt })
+        .select({ pinnedAt: taskPin.pinnedAt, pinPosition: taskPin.position })
         .from(taskPin)
         .where(and(eq(taskPin.userId, userId), eq(taskPin.taskId, taskId)))
         .limit(1),
@@ -230,6 +241,23 @@ const insertPin = SqlSchema.void({
   execute: ({ userId, taskId, now }) =>
     Database.use((db) =>
       db.insert(taskPin).values({ userId, taskId, pinnedAt: now }).onConflictDoNothing(),
+    ),
+});
+
+/** The reader's pin of the plan at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
+const placePin = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    taskId: Schema.String,
+    position: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: ({ userId, taskId, position, now }) =>
+    Database.use((db) =>
+      db
+        .insert(taskPin)
+        .values({ userId, taskId, position, pinnedAt: now })
+        .onConflictDoUpdate({ target: [taskPin.userId, taskPin.taskId], set: { position } }),
     ),
 });
 
@@ -335,9 +363,8 @@ function startedText(row: TaskRow): TaskStoreEffect<string> {
  */
 function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
-    const pin = yield* findPin({ userId, taskId: row.id });
-    const pinnedAt = Option.match(pin, { onNone: () => null, onSome: (held) => held.pinnedAt });
-    const summary = summaryOf(row, pinnedAt, yield* readAccountNames([row.userId]));
+    const pin = Option.getOrNull(yield* findPin({ userId, taskId: row.id }));
+    const summary = summaryOf(row, pin, yield* readAccountNames([row.userId]));
     const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
@@ -376,13 +403,14 @@ function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
  * `openedAt` is still answered, as the start, because a desktop through
  * v0.7.1 refuses a summary without it. It goes once a release whose decoder
  * treats it as optional has shipped and v0.7.1 is no longer supported. A pin,
- * the reader's own `pinnedAt`, and an archive are answered only where they
- * stand, so a plan that is neither reads as every plan did before them; an
- * owner whose account is gone is named by nothing.
+ * the reader's own `pinnedAt` and the `pinPosition` they dragged it to,
+ * and an archive are answered only where they stand, so a plan that is
+ * neither reads as every plan did before them; an owner whose account is
+ * gone is named by nothing.
  */
 function summaryOf(
   row: TaskSummaryRow,
-  pinnedAt: Date | null,
+  pin: ReaderPin | null,
   names: ReadonlyMap<string, string>,
 ): TaskSummary {
   const createdAt = row.createdAt.getTime();
@@ -397,7 +425,8 @@ function summaryOf(
     openedAt: createdAt,
     ownerId: row.userId,
     ...(owner === undefined ? undefined : { createdBy: { userId: row.userId, name: owner } }),
-    ...(pinnedAt === null ? undefined : { pinnedAt: pinnedAt.getTime() }),
+    ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
+    ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };
 }
@@ -437,7 +466,11 @@ const findTasks = SqlSchema.findAll({
   execute: ({ userId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select({ ...TASK_SUMMARY_COLUMNS, pinnedAt: taskPin.pinnedAt })
+        .select({
+          ...TASK_SUMMARY_COLUMNS,
+          pinnedAt: taskPin.pinnedAt,
+          pinPosition: taskPin.position,
+        })
         .from(task)
         .leftJoin(taskPin, readersPin(userId))
         .where(and(taskReachableBy(userId), includeArchived ? undefined : isNull(task.archivedAt)))
@@ -712,7 +745,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
  * and without the archived ones unless `includeArchived` asks for them.
  * Nothing but starting a plan moves the order: opening, reading, saving,
  * pinning, and archiving one leave every row where it stood, and the order a
- * pin draws is the window's to draw from `pinnedAt`.
+ * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
  */
 export function listTasks(
   userId: string,
@@ -721,7 +754,13 @@ export function listTasks(
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId, includeArchived: options.includeArchived === true });
     const names = yield* readAccountNames(rows.map((row) => row.userId));
-    return rows.map((row) => summaryOf(row, row.pinnedAt, names));
+    return rows.map((row) =>
+      summaryOf(
+        row,
+        row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
+        names,
+      ),
+    );
   });
 }
 
@@ -806,16 +845,20 @@ function columnChangesOf(changes: TaskChanges, standing: TaskRow, now: Date): Ta
 
 /**
  * The reader's own pin of the plan set as asked: from now, or from the
- * instant already standing, as an archive's stamp is; or taken away. Every
- * other member's pin stands as it was.
+ * instant already standing, as an archive's stamp is, at the position given
+ * where one is; or taken away. Every other member's pin stands as it was.
  */
 function pinAsAsked(
   userId: string,
   taskId: string,
   pinned: boolean,
+  position: string | undefined,
   now: Date,
 ): TaskStoreEffect<void> {
-  return pinned ? insertPin({ userId, taskId, now }) : removePin({ userId, taskId });
+  if (!pinned) return removePin({ userId, taskId });
+  return position === undefined
+    ? insertPin({ userId, taskId, now })
+    : placePin({ userId, taskId, position, now });
 }
 
 /**
@@ -901,7 +944,9 @@ export function updateTask<E = never, R = never>(
           );
         }
         const now = yield* DateTime.nowAsDate;
-        if (changes.pinned !== undefined) yield* pinAsAsked(userId, taskId, changes.pinned, now);
+        if (changes.pinned !== undefined) {
+          yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
+        }
         const columns = columnChangesOf(changes, locked.value, now);
         // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
         const row =

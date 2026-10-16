@@ -185,6 +185,18 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
 
+test("a tab pinned to the sidebar keeps the place a drag gave it across a launch, on this Mac", () => {
+  const first = launch({ task: TASK, taskAgents: [AGENT] });
+  act(() => first.control().onChoose({ changes: AGENT }));
+  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
+  const at = first.control().pins[0]?.at ?? assert.fail("the tab is pinned");
+  act(() => first.control().onPlacePins(new Map([[at, "a3"]])));
+  first.quit();
+
+  const second = launch({ task: TASK, taskAgents: [AGENT] });
+  assert.equal(second.control().pins[0]?.position, "a3");
+});
+
 test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, and one Luke never showed opens in a tab the plan draws", () => {
   const shown = "src/invites/accept.ts";
   const found = "src/invites/expire.ts";

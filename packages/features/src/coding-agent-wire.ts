@@ -2,6 +2,7 @@ import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -412,12 +413,19 @@ export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.T
 /**
  * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
  * asking member's own and no one else's, as a plan's is; pinning one
- * already pinned keeps the instant it was first pinned. The answer is the
- * agent as it then stands.
+ * already pinned keeps the instant it was first pinned. A position, where
+ * the pin stands in the sidebar's Pinned section (`pin-order.ts`), comes
+ * only with a pin. The answer is the agent as it then stands.
  */
 export const codingAgentPinRequestSchema = EffectSchema.Struct({
   pinned: EffectSchema.Boolean,
-});
+  position: EffectSchema.optionalKey(pinPositionSchema),
+}).check(
+  EffectSchema.makeFilter(
+    (request: { pinned: boolean; position?: string }) =>
+      request.position === undefined || request.pinned,
+  ),
+);
 
 export type CodingAgentPinRequest = typeof codingAgentPinRequestSchema.Type;
 
@@ -619,6 +627,8 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type TasklessAgent = typeof tasklessAgentSchema.Type;

@@ -294,14 +294,17 @@ const pinnableTabSchema = Schema.Union([
 
 /**
  * A tab pinned to the sidebar: its plan, the tab, the name the sidebar draws
- * for it, when it was pinned, and, an agent's, the model it ran on then,
- * whose harness's mark its row wears while its plan is not the open one.
+ * for it, when it was pinned, where it stands among the pins once it was
+ * dragged (`@luke/features/pin-order`), kept on this Mac alone, and, an
+ * agent's, the model it ran on then, whose harness's mark its row wears
+ * while its plan is not the open one.
  */
 const pinnedTabSchema = Schema.Struct({
   task: Schema.String,
   tab: pinnableTabSchema,
   label: Schema.String,
   at: Schema.Number,
+  position: Schema.optionalKey(Schema.String),
   model: Schema.optionalKey(Schema.String),
 });
 
@@ -511,6 +514,8 @@ export interface SidePanelControl {
   onUnpin: (taskId: string, tab: PinnableTab) => void;
   /** Names each agent pinned on the plan as its tab is named now, by agent id; an agent named nowhere keeps the name it has. */
   onRenamePins: (taskId: string, labels: ReadonlyMap<string, string>) => void;
+  /** Stands each pin dragged in the sidebar's Pinned section at its new place, named by the instant it was pinned, kept on this Mac; none stands it by that instant again. */
+  onPlacePins: (places: ReadonlyMap<number, string | undefined>) => void;
   /**
    * Shows the panel on the file's tab, opening one at the strip's end where
    * none stands: the window's one door for a file named in place
@@ -682,6 +687,21 @@ function withPin(held: HeldState, pin: Omit<PinnedTab, "at">, at: number): HeldS
 function withoutPin(held: HeldState, taskId: string, tab: PinnableTab): HeldState {
   if (!held.pins.some((each) => pinOf(each, taskId, tab))) return held;
   return { ...held, pins: held.pins.filter((each) => !pinOf(each, taskId, tab)) };
+}
+
+/** The state with each pin `places` names, by the instant it was pinned, standing at the place given there, or by its instant again where none is. */
+function withPinsPlaced(
+  held: HeldState,
+  places: ReadonlyMap<number, string | undefined>,
+): HeldState {
+  const pins = held.pins.map((pin) => {
+    if (!places.has(pin.at)) return pin;
+    const position = places.get(pin.at);
+    if (position === pin.position) return pin;
+    const { position: _placed, ...unplaced } = pin;
+    return position === undefined ? unplaced : { ...pin, position };
+  });
+  return pins.every((pin, at) => pin === held.pins[at]) ? held : { ...held, pins };
 }
 
 /** The name a pin of an agent's tab or its Changes tab wears for the agent `labels` names, by agent id; none for any other pin, or an agent named nowhere. */
@@ -1598,6 +1618,11 @@ export function useSidePanel(
       update((held) => withPinsRenamed(held, on, labels)),
     [update],
   );
+  const onPlacePins = useCallback(
+    (places: ReadonlyMap<number, string | undefined>) =>
+      update((held) => withPinsPlaced(held, places)),
+    [update],
+  );
   const onResize = useCallback(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
@@ -1633,6 +1658,7 @@ export function useSidePanel(
     onPin,
     onUnpin,
     onRenamePins,
+    onPlacePins,
     onOpenFile,
     onBrowseFile,
     onFileHistory,

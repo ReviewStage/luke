@@ -1558,6 +1558,37 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member's PATCH drags their pin of an agent with no plan to a position the list then carries, and one given with an unpin is refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task: plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ taskId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const patch = (body: { pinned: boolean; position: string }) =>
+          ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
+        const listed = Effect.map(ask(request(TASKS, owner)), (answered) =>
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).planlessAgents?.find(
+            (each) => each.id === agent.id,
+          ),
+        );
+
+        const placed = yield* patch({ pinned: true, position: "a1" });
+        const refused = yield* patch({ pinned: false, position: "a2" });
+        const held = yield* listed;
+
+        assert.equal(placed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.equal(held?.pinPosition, "a1");
+        assert.notEqual(held?.pinnedAt, undefined);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {

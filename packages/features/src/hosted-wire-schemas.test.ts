@@ -21,6 +21,7 @@ import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
+import * as pinOrder from "./pin-order.js";
 import * as planAttachmentWire from "./plan-attachment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
@@ -252,6 +253,9 @@ const EFFECT_MODULE_SCHEMAS = {
     pictureTypeSchema: pictureWire.pictureTypeSchema,
     pictureDataUrlSchema: pictureWire.pictureDataUrlSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pictureWire>,
+  "pin-order": {
+    pinPositionSchema: pinOrder.pinPositionSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pinOrder>,
   "plan-attachment-wire": {
     planAttachmentRequestSchema: planAttachmentWire.planAttachmentRequestSchema,
     planAttachmentAnswerSchema: planAttachmentWire.planAttachmentAnswerSchema,

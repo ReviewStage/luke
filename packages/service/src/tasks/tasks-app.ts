@@ -534,6 +534,7 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       ...(organizationId === undefined ? undefined : { organizationId }),
       ...(repository === undefined ? undefined : { repository }),
       ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
+      ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
       ...("archived" in changes ? { archived: changes.archived } : undefined),
     },
     organizationId === undefined ? undefined : movedRepositoryReached(organizationId),

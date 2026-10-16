@@ -192,9 +192,17 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-task page shows.
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
-  while any task is pinned, newest pinned first, which no view filters. A
+  while any task is pinned, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
-  same way, and leaves its place among the tasks. ⌘K offers Pin task or
+  same way, and leaves its place among the tasks. Its rows, tabs pinned to
+  the sidebar among them, are dragged up and down it to the order the
+  developer wants, each drop drawn at once and put back with a toast when
+  the service refuses it; a pin not yet dragged stands on top, newest pinned
+  first. The order is fractional indexing (`@luke/features/pin-order`): a
+  dropped pin takes a key between its new neighbours', so one drop writes one
+  pin. A task's or an agent's place is the account's own, beside its pin, and
+  follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
+  A folded Pinned is not dragged. ⌘K offers Pin task or
   Unpin task for the task on screen, through its row menu's own Pin, and
   none for an archived task.
 - An archived task leaves the list. View options' **Archived tasks** turns

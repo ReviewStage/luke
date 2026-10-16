@@ -207,6 +207,7 @@ export function listTasklessAgents(
         ...page,
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
+        ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
       };
     });
   });

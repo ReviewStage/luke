@@ -23,7 +23,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   messageText,
@@ -2019,4 +2019,49 @@ test("an agent's pin still waiting its turn when the account changes is never as
   await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
 
   assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
+});
+
+test("a pin dragged to a new place stands there at once, and goes back with what the drop placed on this Mac and a toast when the service refuses it", async () => {
+  const answers: ((changed: boolean) => void)[] = [];
+  const pinned = { ...listed(), pinnedAt: 5 };
+  const tab = mount(
+    { shown: true, tasks: listRead([pinned]) },
+    {
+      [ACT_KIND.TASKS_PIN]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  const position = () =>
+    tab.control().listed.tasks.find((task) => task.id === TASK.id)?.pinPosition;
+
+  let putBack = 0;
+  await act(async () =>
+    tab.control().onMovePins([{ agent: false, id: TASK.id, position: "a1" }], () => {
+      putBack += 1;
+    }),
+  );
+  const drawn = position();
+  await act(async () => answers[0]?.(false));
+
+  assert.equal(drawn, "a1");
+  assert.equal(position(), undefined);
+  assert.equal(putBack, 1);
+  assert.equal(newestToastSays(), PIN_MOVE_FAILED_NOTE);
+});
+
+test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {
+  const pinned = { ...listed(), pinnedAt: 5, pinPosition: "a0" };
+  const tab = mount(
+    { shown: true, tasks: listRead([pinned]) },
+    { [ACT_KIND.TASKS_PIN]: () => Promise.resolve(true) },
+  );
+  const position = () =>
+    tab.control().listed.tasks.find((task) => task.id === TASK.id)?.pinPosition;
+
+  await act(async () => tab.control().onMovePins([{ agent: false, id: TASK.id, position: "a1" }]));
+  tab.stand({ tasks: listRead([{ ...pinned, pinPosition: "a2" }]) });
+
+  assert.equal(position(), "a2");
 });
