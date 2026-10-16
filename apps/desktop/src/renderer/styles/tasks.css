@@ -1463,39 +1463,12 @@ button.file-ref:hover .file-ref-path {
   color: var(--state-working);
 }
 
-/* A diff drawn in a File tab's lines (agent-changes-tab.tsx), which keep
-   their gutter, selection, settings, and type; what is a diff's alone is
-   the tint of a line added or removed, its hunk's header on the lit
-   lines' ground, and git's note on a line. */
-.code-line[data-diff="added"] {
-  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
-}
-
-.code-line[data-diff="removed"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.code-line[data-diff="hunk"] {
-  background: var(--code-pointed);
-  color: var(--code-line-number);
-}
-
-.code-line[data-diff="hunk"]:not(:first-child) {
-  margin-top: var(--space-6);
-}
-
-.code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* A narrow panel numbers a diff's lines on the new side alone, so the
-   code keeps the room a second gutter would take; a removed line, which
-   has no new number, still reads by its tint. */
-@container side-panel (max-width: 359px) {
-  .code-line[data-diff] > .code-line-number:first-child {
-    display: none;
-  }
+/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
+   of its own, in the panel's look (diff-view/index.ts); its box fills the
+   File tab's place and scrolls as a File tab's lines do. */
+.diff-view {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the

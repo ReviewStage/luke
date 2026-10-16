@@ -4,7 +4,6 @@ import {
   type CodingAgentChangedFile,
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
-import { parsePatch } from "diff";
 import {
   FILE_MARK,
   type FileMark,
@@ -14,56 +13,20 @@ import {
 } from "../file-tree/contract";
 
 /**
- * changes-model.ts -- an agent's changes as its Changes tab draws them: each file's patch as a unified diff's rows, numbered on both sides, or why it has none.
+ * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none.
  *
  * A file's patch is the hunks of a unified diff from the first `@@` header
- * on, as GitHub sends it. The hunks are jsdiff's (`parsePatch`, the library
- * the plan's own merges already use), which counts each hunk's lines by its
- * header, so a removed line whose own text starts with dashes is still one
- * removed line. Each line of a hunk is a row numbered on the side it stands
- * on: a removed line on the old side alone, an added line on the new side
- * alone, and a line of context on both. A file with no patch is never drawn
- * as unchanged: it says it is binary, too large to show, or, with an empty
- * patch, that its contents did not change.
+ * on, as GitHub sends it. It is drawn whole (`filePatch`), headed as git
+ * writes one, by the diff bundle (`../diff-view/`), and copied or saved the
+ * same way, so `git apply` takes it as it is. A file with no patch is never
+ * drawn as unchanged: it says it is binary, too large to show, or, with an
+ * empty patch, that its contents did not change.
  *
- * The tab draws its files in a File tab's tree and breadcrumbs, which list
+ * The view draws its files in a File tab's tree and breadcrumbs, which list
  * a folder at a time: the folders here are listed from the changed paths
  * alone (`changedFolders`), so either shows only what changed, each file
- * marked as an editor's source control marks it (`changeMarks`). A file's
- * patch is copied or saved as a whole unified diff (`filePatch`), headed
- * as git writes one, so `git apply` takes it as it is.
+ * marked as an editor's source control marks it (`changeMarks`).
  */
-
-/** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
-export const DIFF_ROW = {
-  CONTEXT: "context",
-  ADDED: "added",
-  REMOVED: "removed",
-  NOTE: "note",
-} as const;
-
-type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
-
-/** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-interface DiffRow {
-  readonly kind: DiffRowKind;
-  readonly oldLine: number | undefined;
-  readonly newLine: number | undefined;
-  readonly text: string;
-}
-
-/** One hunk: its `@@` header as written, and its rows. */
-export interface DiffHunk {
-  readonly header: string;
-  readonly rows: readonly DiffRow[];
-}
-
-/** The kind of row each mark starts in a patch; a line of context starts with a space. */
-const ROW_MARK = new Map<string, DiffRowKind>([
-  ["+", DIFF_ROW.ADDED],
-  ["-", DIFF_ROW.REMOVED],
-  ["\\", DIFF_ROW.NOTE],
-]);
 
 /** What the tab says where the changes cannot be drawn. */
 export const CHANGES_WORDS = {
@@ -79,6 +42,7 @@ export const CHANGES_WORDS = {
   UNCHANGED_CONTENTS: "File renamed without changes to its contents.",
   NO_HUNKS: "No changes to show in this file.",
   UNREADABLE: "This file's diff could not be read.",
+  TOO_NARROW_TO_SPLIT: "Needs a wider panel",
 } as const;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -107,41 +71,6 @@ export const STATUS_WORDS = {
 
 /** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
 const NO_SIDE = "/dev/null";
-
-/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
-function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
-  let oldLine = oldStart;
-  let newLine = newStart;
-  return lines.map((line) => {
-    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
-    const text = line.slice(1);
-    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
-    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
-    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
-    return { kind, oldLine: oldLine++, newLine: newLine++, text };
-  });
-}
-
-/**
- * A patch's hunks, or none where it does not read as a unified diff. Note
- * that each hunk's header is taken from the patch as written, because
- * jsdiff keeps only its numbers and git writes the enclosing scope after
- * them; a hunk's own lines start with a mark or a space, so the lines that
- * start with `@@` are its headers, in order.
- */
-export function patchHunks(patch: string): readonly DiffHunk[] | undefined {
-  let parsed: ReturnType<typeof parsePatch>;
-  try {
-    parsed = parsePatch(patch);
-  } catch {
-    return undefined;
-  }
-  const headers = patch.split("\n").filter((line) => line.startsWith("@@"));
-  return (parsed[0]?.hunks ?? []).map((hunk, index) => ({
-    header: headers[index] ?? "",
-    rows: rowsOf(hunk.lines, hunk.oldStart, hunk.newStart),
-  }));
-}
 
 /**
  * What a file's pane says in its patch's place, or nothing where it draws
