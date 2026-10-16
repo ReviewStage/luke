@@ -12,6 +12,9 @@
    root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
    points). */
 @import "@luke/ui/tokens.css";
+/* The shared components' own rules, in Tailwind's `components` layer, over
+   the preflight and under the utilities. */
+@import "@luke/ui/styles.css";
 
 /* The admin dashboard's chart is `@luke/ui`'s, written in the same utilities
    and read in this theme's tokens; the import is what scans it. */

@@ -13,6 +13,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { PROFILE, type SurfaceAttributes, surfaceAttributes, THEME } from "../tokens/surface.js";
 import "../tokens/tokens.css";
+import "../styles.css";
 
 /** A component mounted for a test: the element it was drawn into. */
 export interface Mounted {

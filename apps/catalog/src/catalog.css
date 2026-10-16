@@ -2,6 +2,7 @@
    so the index and the toolbar change density and palette with the example. */
 
 @import "@luke/ui/tokens.css";
+@import "@luke/ui/styles.css";
 
 *,
 *::before,
@@ -132,7 +133,7 @@ body {
   margin-top: var(--luke-space-32);
 }
 
-.catalog-section h2 {
+.catalog-section-title {
   margin: 0 0 var(--luke-space-12);
   font-size: var(--luke-type-section-size);
   line-height: var(--luke-type-section-leading);
@@ -185,4 +186,24 @@ body {
   line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* An example's column of samples, each a row of its own. */
+.catalog-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+}
+
+/* A column narrower than a phone, where long words have to wrap. */
+.catalog-narrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  width: 100%;
+  max-width: 240px;
+  padding: var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
 }
