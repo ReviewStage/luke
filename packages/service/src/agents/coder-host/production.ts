@@ -13,6 +13,7 @@ import type { WebStoreRun } from "../../run.js";
 import { accountMeter } from "../agent-runtime/meter.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
+import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../public-research.js";
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
@@ -40,6 +41,8 @@ export interface CoderHostSeams {
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
+  /** The origin eve answers on for a message one agent sends another, which no request carries; nothing on a machine neither configured nor deployed. */
+  readonly eveOrigin: () => string | undefined;
   /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
   readonly keys: (userId: string) => PlanStoreEffect<ProviderKeys>;
   /** Marks the account's turn as one a step of ran at standard speed because Anthropic refused it Fast; a mark that cannot be written is logged, never thrown. */
@@ -80,6 +83,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           run(conversationReachableBy(userId, conversationId)),
       },
       deploymentSecret: () => environment.cronSecret,
+      eveOrigin: deploymentEveOrigin,
       userInfo: (input) =>
         Effect.tryPromise(async () => {
           // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.

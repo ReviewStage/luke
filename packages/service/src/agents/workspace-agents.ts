@@ -13,8 +13,8 @@ import type { StoreFailure } from "../http/store-failure.js";
 /**
  * workspace-agents.ts -- the coding agents of one workspace as an agent's tools read them: on any task or none, by any member, one task's alone where asked, each with its task's name.
  *
- * Luke's agent tools on a call (`coding-agent-tools.ts`) list and find the
- * agents here. A list names the archived
+ * The agent tools Luke on a call and every coding agent are offered
+ * (`coding-agent-tools.ts`) list and find the agents here. A list names the archived
  * agents too, each marked, since an agent may need to know one stands, and
  * names each agent's task by its name and whether it is archived, read once
  * for the lot; it is narrowed to one task by the id a listed agent's task
@@ -85,18 +85,21 @@ export function listedTask(
     : Result.succeed(ownTask);
 }
 
-/** The workspace's agents, archived ones among them, on the task named alone where one is, newest first and at most the list's bound. */
+/** The workspace's agents, archived ones among them, on the task named alone where one is, newest first and at most the list's bound, the one left out where `except` names one. */
 export const workspaceAgentsOf = (
   userId: string,
   workspaceId: string,
-  options: { readonly taskId?: string | undefined },
+  options: { readonly taskId?: string | undefined; readonly except?: string | undefined },
 ): Effect.Effect<WorkspaceAgents, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
-    const agents = yield* listWorkspaceCodingAgents(userId, workspaceId, {
+    const listed = yield* listWorkspaceCodingAgents(userId, workspaceId, {
       ...(options.taskId === undefined ? undefined : { planId: options.taskId }),
       includeArchived: true,
-      limit: WORKSPACE_AGENTS_LIST_LIMIT,
+      limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
     });
+    const agents = listed
+      .filter((agent) => agent.id !== options.except)
+      .slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
     const names = yield* planNamesOf(
       userId,
       agents.flatMap((agent) => agent.planId ?? []),

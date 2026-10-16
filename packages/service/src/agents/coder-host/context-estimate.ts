@@ -5,6 +5,7 @@ import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
 import { SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../plans/picture-look.js";
+import { LIST_AGENTS_TOOL, MESSAGE_AGENT_TOOL } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
@@ -99,6 +100,14 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,
     inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_AGENTS]: {
+    description: LIST_AGENTS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_AGENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.MESSAGE_AGENT]: {
+    description: MESSAGE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

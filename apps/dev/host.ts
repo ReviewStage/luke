@@ -4,7 +4,12 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
-import { type CoderHost, coderHost, type InboxCall } from "@luke/service/agents/coder-host/host";
+import {
+  type AgentToolCall,
+  type CoderHost,
+  coderHost,
+  type InboxCall,
+} from "@luke/service/agents/coder-host/host";
 import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
@@ -23,6 +28,7 @@ import {
   type PlanTool,
   planToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -231,6 +237,21 @@ export function lookAtPlanPicture(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
       return yield* host.lookAtPicture(admitted.success, input);
+    }),
+  );
+}
+
+/** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */
+export function runAgentTool(
+  auth: SessionAuth,
+  sessionId: string,
+  call: AgentToolCall,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return agentToolRejected(admitted.failure);
+      return yield* host.agentTools(admitted.success, call);
     }),
   );
 }

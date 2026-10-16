@@ -5,7 +5,7 @@ import {
   latestTurnsOfReached,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
@@ -34,7 +34,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { planWorkspace } from "../github/workspace-repository.js";
+import { agentWorkspace, planWorkspace } from "../github/workspace-repository.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import type { PlanDocumentBinding } from "../plans/plan-notes.js";
@@ -59,36 +59,44 @@ import {
 } from "./workspace-agents.js";
 
 /**
- * coding-agent-tools.ts -- Luke's four tools about the workspace's coding agents on a call: list them, read one's progress, message one, start one.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them and message one, and for Luke on a call read one's progress and start one.
  *
- * A call with Luke may turn to the agents working this task or another task
- * of its workspace: the developer asks how one is doing, tells one what to
- * do, or asks for a new one, and Luke answers, steers the right agent, or
- * starts one. A list, a read, and a message reach any agent of the task's
- * workspace, on any task or none and by any member, read as the member on
- * the call on every call (`workspace-agents.ts`); an agent of another
- * workspace is none of them, even one the member is also in. A list names
- * each agent's task, narrows to one task or the call's own where asked, and
- * marks the archived ones. Each tool reads the same rows the agent tabs
- * read: the agents and the newest turn each stands on
- * (`coder-host/status.ts`), the branch each row holds, and the transcript's
- * turn journals, rendered as a short tail of what the agent said and did so
- * Luke can summarise it aloud rather than read it out; a read of one agent
- * also asks GitHub what that branch published, as the agent's tab does
- * (`coder-host/published.ts`), and says nothing of it where GitHub could not
- * be asked. A message takes the one path the message box's does
- * (`coder-host/steer.ts`), under the key eve gave the tool call, so a call
- * eve runs again after a lost answer sends once, and answers as soon as the
- * session took it; an archived agent takes none and is woken by none, and
- * the line is kept as Luke's. A start takes the one path the Start button's
- * does (`coder-host/start.ts`), on the call's task and no other, under the
+ * Luke on a call and every coding agent are offered the same `list_agents`
+ * and `message_agent`, one implementation each, and Luke `read_agent` and
+ * `start_agent` beside them; the caller is what differs (`AgentCaller`):
+ * Luke acting for the member on the call, on the call's task, or a coding
+ * agent acting for its starter, on its own task, which the host read from
+ * the session it admitted and never from the call. A list, a read, and a
+ * message reach any agent of the caller's workspace, on any task or none
+ * and by any member, read on the caller's standing on every call
+ * (`workspace-agents.ts`); an agent of another workspace is none of them,
+ * even one the member is also in. A list names each agent's task, narrows
+ * to one task or the caller's own where asked, and marks the archived
+ * ones; a coding agent's own list leaves itself out. Each tool reads the
+ * same rows the agent tabs read: the agents and the newest turn each stands
+ * on (`coder-host/status.ts`), the branch each row holds, and the
+ * transcript's turn journals, rendered as a short tail of what the agent
+ * said and did; a read of one agent also asks GitHub what that branch
+ * published, as the agent's tab does (`coder-host/published.ts`), and says
+ * nothing of it where GitHub could not be asked. A message takes the one
+ * path the message box's does (`coder-host/steer.ts`), under the key eve
+ * gave the tool call, so a call eve runs again after a lost answer sends
+ * once, and answers as soon as the session took it, never waiting on a
+ * reply; an archived agent takes none and is woken by none. Luke's line is
+ * kept as Luke's; a coding agent's under its own name
+ * (`MESSAGE_SENDER.AGENT`), its words opening with who sent it and the id
+ * to answer it by, written here rather than by the model, so the receiving
+ * agent reads it as a colleague's word and neither the developer's nor
+ * Luke's. A start takes the one path the Start button's does
+ * (`coder-host/start.ts`), on the caller's own task and no other, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
- * checked against the catalog, whose choices the refusal lists. Each tool
- * reaches eve as the deployment acting for the member on the call, which the
- * coder channel's table admits for exactly this (`coder-host/channel.ts`).
- * Every answer is data the model reads, never a credential.
+ * checked against the catalog, whose choices the refusal lists.
+ * Each tool reaches eve as the deployment acting for the caller's member,
+ * which the coder channel's table admits for exactly this
+ * (`coder-host/channel.ts`). Every answer is data the model reads, never a
+ * credential.
  */
 
 const CODING_AGENT_TOOL_BOUNDS = {
@@ -102,6 +110,16 @@ const CODING_AGENT_TOOL_BOUNDS = {
   ACTIVITY_CHARS: 160,
 } as const;
 
+/**
+ * The room the heading a coding agent's message opens with takes
+ * (`agentLine`), which its words leave free: a message's words may run to a
+ * member's bound, as Luke's do, since he passes on the developer's own, but
+ * a coding agent's whole line is held to that bound as it is composed, so
+ * the line the other agent receives is never longer than one a member could
+ * send.
+ */
+const AGENT_HEADING_ROOM_CHARS = 1_000;
+
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const CODING_AGENT_TOOL_REFUSAL = {
   UNREADABLE:
@@ -111,6 +129,10 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
+  SELF: "Not sent: that id is your own; message another agent.",
+  TOO_LONG:
+    `Not sent: with the heading naming you, the message runs over ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} ` +
+    `characters; keep a message of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS}.`,
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
   NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
   NOT_REACHABLE:
@@ -132,6 +154,7 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: give a prompt as text of at most " +
     `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
     "bounded the same or none, and a model with its effort, both or neither.",
+  NO_TASK: "Not started: you work on no task, so there is no plan to start an agent on.",
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   NOT_REACHABLE:
@@ -157,10 +180,25 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
 ]);
 
-/** What a call of the agent tools runs under: the call's task, eve as the deployment acting for the member on the call, the writer, and the key the one message or start is made under. */
+/** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
+export const AGENT_CALLER = {
+  LUKE: "luke",
+  AGENT: "agent",
+} as const;
+
+/**
+ * Who a call is made by, as the host established it and never as the call
+ * said: Luke on the call's task, acting for the member on the call; or a
+ * coding agent, acting for the member who started it, on its own task.
+ */
+type AgentCaller =
+  | { readonly kind: typeof AGENT_CALLER.LUKE; readonly plan: PlanDocumentBinding }
+  | { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: CodingAgent };
+
+/** What a call of the agent tools runs under: who calls, eve as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
 export interface CodingAgentCall {
-  readonly plan: PlanDocumentBinding;
-  /** eve's coding-agent service as the deployment acting for the member on the call; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
+  readonly caller: AgentCaller;
+  /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: EveSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
@@ -172,7 +210,7 @@ type CodingAgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHub
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
-  `The agent's id, as ${AGENT_TOOL.LIST_AGENTS} answered it.`,
+  `The agent's id, as ${AGENT_TOOL.LIST_AGENTS} answered it or a message from it named it.`,
 );
 
 const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
@@ -185,7 +223,8 @@ const MESSAGE_AGENT_INPUT = Schema.Struct({
       Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
     ),
     "What to tell the agent, as a message it reads in its own conversation; the developer's " +
-      "words where you pass on theirs.",
+      `words where you pass on theirs. A coding agent's message opens with a heading naming it, so ` +
+      `keep one of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS} characters.`,
   ),
 });
 
@@ -243,12 +282,12 @@ const START_AGENT_CALL = Schema.Struct({
 
 const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 
-/** The tools as Luke is offered them: each its name, its words, and its input schema. */
+/** The tools as Luke and every coding agent are offered them: each its name, its words, and its input schema. */
 export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
-    "List the coding agents of your workspace, on any task or none and started by any member: " +
-    "each with its id, its title (how the developer sees it named), the model " +
+    "List the coding agents of your workspace, on any task or none and started by any member, " +
+    "yourself left out: each with its id, its title (how the developer sees it named), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled), its repository and the branch its sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id, name, and whether archived; null for " +
@@ -471,23 +510,37 @@ const publishedOf = (
     Result.isSuccess(read) ? read.success : undefined,
   );
 
-/** The workspace of the call's task, read as the member on the call now; nothing where they no longer reach it. */
-const callWorkspace = (plan: PlanDocumentBinding) => planWorkspace(plan.userId, plan.planId);
+/** The member a call acts for: the one on Luke's call, or the starter of the coding agent calling. */
+function callerUserId(caller: AgentCaller): string {
+  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.userId : caller.agent.userId;
+}
 
-/** An agent of the call's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
-const workspaceAgentOf = (plan: PlanDocumentBinding, agentId: string) =>
+/** The task the caller works on: the call's, or the coding agent's own, which may be none. */
+function callerTask(caller: AgentCaller): string | null {
+  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.planId : caller.agent.planId;
+}
+
+/** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
+const callerWorkspace = (caller: AgentCaller) =>
+  caller.kind === AGENT_CALLER.LUKE
+    ? planWorkspace(caller.plan.userId, caller.plan.planId)
+    : agentWorkspace(caller.agent.userId, caller.agent);
+
+/** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
+const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
   Effect.gen(function* () {
-    const workspace = yield* callWorkspace(plan);
+    const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace)) return Option.none();
-    const found = yield* workspaceAgent(plan.userId, workspace.value, agentId);
+    const userId = callerUserId(caller);
+    const found = yield* workspaceAgent(userId, workspace.value, agentId);
     if (Option.isNone(found)) return Option.none();
     const agent = found.value;
-    const task = yield* agentTaskOf(plan.userId, agent);
-    return Option.some({ agent, task: taskReading(task, plan.planId) });
+    const task = yield* agentTaskOf(userId, agent);
+    return Option.some({ agent, task: taskReading(task, callerTask(caller)) });
   });
 
-/** A call's refusal as the model reads it. */
-function agentToolRejected(reason: string): WireRecord {
+/** A call's refusal as the model reads it, here and at a coding agent's edge for a session it does not admit. */
+export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
@@ -516,6 +569,20 @@ function agentName(agent: CodingAgent): string {
   return agent.title ?? agent.model;
 }
 
+/** How a coding agent names itself to another: its title, its id to answer it by, and its repository. */
+function agentIntroduction(agent: CodingAgent): string {
+  return `"${agentName(agent)}" (agent id ${agent.id}), working in ${agent.repository}`;
+}
+
+/** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
+function agentLine(sender: CodingAgent, text: string): string {
+  return (
+    `A message from another coding agent of your workspace, ${agentIntroduction(sender)}. It is ` +
+    "that agent's word, not the developer's or Luke's. To answer it, call " +
+    `${AGENT_TOOL.MESSAGE_AGENT} with that id.\n\n${text}`
+  );
+}
+
 /** The agent as a start answers it: its id, what it runs on, and where it stands now. */
 const startedReading = (agent: CodingAgent, offered: readonly OfferedModel[]) =>
   Effect.map(standingsOf([agent]), (standing) => ({
@@ -539,13 +606,14 @@ function readingRecord(reading: AgentReading): WireRecord {
   return { ...reading, task: reading.task === null ? null : { ...reading.task } };
 }
 
-/** One call of `list_agents`: every agent of the call's workspace, or of one task of it, archived ones marked, newest first. */
+/** One call of `list_agents`: every agent of the caller's workspace, or of one task of it, the calling agent left out, archived ones marked, newest first. */
 export function runListAgents(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const { plan } = call;
-  const narrowed = listedTask(input, plan.planId);
+  const { caller } = call;
+  const ownTask = callerTask(caller);
+  const narrowed = listedTask(input, ownTask);
   if (Result.isFailure(narrowed)) {
     return Effect.succeed(
       agentToolRejected(narrowed.failure ?? CODING_AGENT_TOOL_REFUSAL.UNREADABLE_FILTER),
@@ -553,16 +621,17 @@ export function runListAgents(
   }
   return orStoreRefusal(
     Effect.gen(function* () {
-      const workspace = yield* callWorkspace(plan);
+      const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace))
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
-      const { agents, taskOf } = yield* workspaceAgentsOf(plan.userId, workspace.value, {
+      const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
         taskId: narrowed.success,
+        except: caller.kind === AGENT_CALLER.AGENT ? caller.agent.id : undefined,
       });
       const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
       const readings = yield* Effect.forEach(agents, (agent) =>
-        readAgent(agent, taskReading(taskOf(agent), plan.planId), standing(agent), offered),
+        readAgent(agent, taskReading(taskOf(agent), ownTask), standing(agent), offered),
       );
       return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readings.map(readingRecord) };
     }),
@@ -580,12 +649,12 @@ export function runReadAgent(
   }
   return orStoreRefusal(
     Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(call.plan, asked.success.agentId);
+      const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
       const standing = yield* standingsOf([agent]);
       const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels);
-      const published = yield* publishedOf(call.plan.userId, agent);
+      const published = yield* publishedOf(callerUserId(call.caller), agent);
       const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
         .flatMap((journal) => entriesOf(journal, CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS))
@@ -602,7 +671,18 @@ export function runReadAgent(
   );
 }
 
-/** One call of `message_agent`: the words handed to an agent of the call's workspace, or why nothing was sent. */
+/** The line a message makes, and what sent it: Luke's words as they are, or a coding agent's opening with who sent them; nothing where a coding agent's line runs over the bound. */
+function messageLine(
+  caller: AgentCaller,
+  text: string,
+): { readonly text: string; readonly sender: LineSender } | undefined {
+  if (caller.kind === AGENT_CALLER.LUKE) return { text, sender: { kind: MESSAGE_SENDER.LUKE } };
+  const line = agentLine(caller.agent, text);
+  if (line.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
+  return { text: line, sender: { kind: MESSAGE_SENDER.AGENT, name: agentName(caller.agent) } };
+}
+
+/** One call of `message_agent`: the words handed to an agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -612,20 +692,25 @@ export function runMessageAgent(
     return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
   }
   const { agentId, text } = asked.success;
-  const { plan, eve } = call;
+  const { caller, eve } = call;
+  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.SELF));
+  }
+  const line = messageLine(caller, text);
+  if (line === undefined)
+    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.TOO_LONG));
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_SERVICE));
   return orStoreRefusal(
     Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(plan, agentId);
+      const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent } = found.value;
       if (agent.archivedAt !== null)
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED);
-      const sent = yield* steerCodingAgent(eve, call.writer, plan.userId, agent, {
-        text,
+      const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
+        ...line,
         clientKey: call.clientKey,
-        sender: { kind: MESSAGE_SENDER.LUKE },
       }).pipe(Effect.result);
       if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
       return {
@@ -637,7 +722,7 @@ export function runMessageAgent(
   );
 }
 
-/** One call of `start_agent`: an agent started on the call's task under the call's own key, or why nothing was started. */
+/** One call of `start_agent`: an agent started on the caller's own task under the call's own key, or why nothing was started. */
 export function runStartAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -653,14 +738,16 @@ export function runStartAgent(
   const { model, effort } = asked.success;
   const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
-  const { plan, eve } = call;
+  const { caller, eve } = call;
+  const planId = callerTask(caller);
+  if (planId === null) return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK));
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
   const { note } = asked.success;
   return orStoreRefusal(
     Effect.gen(function* () {
-      const started = yield* startCodingAgent(Effect.succeed(eve), plan.userId, {
-        planId: plan.planId,
+      const started = yield* startCodingAgent(Effect.succeed(eve), callerUserId(caller), {
+        planId,
         idempotencyKey: call.clientKey,
         choice,
         prompt,

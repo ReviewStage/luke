@@ -1592,7 +1592,8 @@ export function delegationStartsOf(
  * What sent one of the developer's lines to an agent, as a reader names it:
  * a member by their account's id and the name it holds now, or nobody where
  * their account is gone; Luke; an automation by the name its run kept; or
- * GitHub by the login the line kept.
+ * GitHub by the login the line kept; or another coding agent by the name
+ * its send kept.
  */
 export type LineSent =
   | {
@@ -1601,7 +1602,8 @@ export type LineSent =
     }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
-  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string };
+  | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
+  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1642,7 +1644,7 @@ const findLineSenders = SqlSchema.findAll({
     ),
 });
 
-/** A sender's row as a reader names it; an automation's or GitHub's that kept no name names nothing. */
+/** A sender's row as a reader names it; an automation's, GitHub's, or an agent's that kept no name names nothing. */
 function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined {
   switch (row.sender) {
     case MESSAGE_SENDER.MEMBER:
@@ -1663,6 +1665,10 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
       return row.senderName === null
         ? undefined
         : { kind: MESSAGE_SENDER.GITHUB, login: row.senderName };
+    case MESSAGE_SENDER.AGENT:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.AGENT, name: row.senderName };
   }
 }
 

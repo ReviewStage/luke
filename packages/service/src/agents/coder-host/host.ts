@@ -18,6 +18,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../plans/page-tool.js";
 import {
@@ -42,8 +43,16 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import {
+  AGENT_CALLER,
+  agentToolRejected,
+  CODING_AGENT_TOOL_REFUSAL,
+  runListAgents,
+  runMessageAgent,
+} from "../coding-agent-tools.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -306,6 +315,22 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Runs one of the agent's tools about the workspace's coding agents
+   * (`../coding-agent-tools.ts`), the agent its session was admitted to as
+   * the caller: a list, or a message sent under the call's own key, which
+   * reaches eve as the deployment acting for this agent's starter, and
+   * reaches nothing where the deployment names no secret or no origin for
+   * eve.
+   */
+  agentTools(
+    admitted: AdmittedConversation,
+    call: AgentToolCall,
+  ): Effect.Effect<
+    WireRecord,
+    never,
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
+  >;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed, then, as the developer's words are received or a turn completes, asks for the agent's title where none stands and waits for it (`title.ts`); a title that fails is logged and the relay still answers. */
   relay(
     event: MessageStreamEvent,
@@ -327,6 +352,19 @@ export type InboxCall =
       readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
       readonly input: UnparsedWireValue;
     };
+
+/** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input eve held to its schema, and eve's id for the call. */
+export interface AgentToolCall {
+  readonly tool: typeof CODER_TOOL.LIST_AGENTS | typeof CODER_TOOL.MESSAGE_AGENT;
+  readonly input: UnparsedWireValue;
+  readonly callId: string;
+}
+
+/** Each of the agent tools a coding agent is offered, run under the call it makes. */
+const AGENT_TOOL_RUN = {
+  [CODER_TOOL.LIST_AGENTS]: runListAgents,
+  [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
+} as const;
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -677,6 +715,31 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    agentTools: (admitted, call) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return agentToolRejected(found.failure);
+        // The agent asking is the one the session was admitted to, and eve is reached as its starter.
+        const sender = found.success;
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        const compose = yield* eveSessionsComposer;
+        const eve =
+          secret === undefined || origin === undefined
+            ? undefined
+            : compose({
+                origin,
+                caller: { secret, account: sender.userId },
+                mount: EVE_MOUNT.CODER,
+              });
+        const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
+        const toolCall = { caller, eve, writer: seams.writer(), clientKey: call.callId };
+        return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
       ),
 
     delegationTitle: (admitted, callId, task) =>
