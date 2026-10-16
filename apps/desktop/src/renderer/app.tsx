@@ -356,9 +356,9 @@ export function App(): React.JSX.Element {
   const workspacesUnread = plans.workspaces.length === 0 && !plans.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => window.luke.onShowLink(openLink), [openLink]);
-  // A failed run's notification clicked, or its toast's View: the run's own link, so it opens in its automation's workspace as any link does.
-  const openRunLink = useRef(openLukeLink);
-  openRunLink.current = openLukeLink;
+  // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
+  const openRunLink = useRef(openLink);
+  openRunLink.current = openLink;
   const openFailedRun = useCallback(
     ({ automationId, runId, workspaceId }: FailedRunPlace) =>
       openRunLink.current({

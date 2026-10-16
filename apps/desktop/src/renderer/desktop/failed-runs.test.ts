@@ -158,3 +158,23 @@ test("a failure seen in one workspace stays seen while another workspace's is op
   draw([again, theirs], undefined);
   assert.equal(marked.at(-1), true, "another run failing in the same instant is news");
 });
+
+test("an automation of another workspace left open does not see its own failure there, which marks that workspace once it is listed", () => {
+  const theirs = failedRun(DIGEST, 2_000, { workspaceId: "workspace-other" });
+  const draw = mount([theirs], DIGEST);
+  draw([theirs], undefined);
+  assert.equal(marked.at(-1), false, "the listed workspace holds no failure");
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  function Other(): React.JSX.Element {
+    marked.push(useFailedRunsMark([theirs], "workspace-other", undefined, false));
+    return createElement(Fragment);
+  }
+  act(() => root.render(onRegistry(registry, createElement(Other))));
+  assert.equal(marked.at(-1), true, "its own workspace still marks it");
+});
