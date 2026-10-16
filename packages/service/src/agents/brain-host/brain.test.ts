@@ -502,12 +502,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
         const session = yield* startSession(host, userId, conversationId);
 
-        const reply = yield* brainTurn(
-          host,
-          session,
-          "turn_0",
-          `${SCRIPTED_POST}${CHAT.POSTED}`,
-        );
+        const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);
 
         const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
         const { organizationId } = channel;

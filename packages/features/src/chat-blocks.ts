@@ -240,9 +240,6 @@ export function codeLinesReadable(block: Pick<ChatCodeBlock, "startLine" | "endL
   );
 }
 
-/** An image block as a message carries one, naming the attachment the desktop fetches. */
-export type ChatImageBlock = Extract<ChatBlock, { type: typeof CHAT_BLOCK.IMAGE }>;
-
 /** A message's body: its blocks in order, few. */
 export const chatBlocksSchema = EffectSchema.Array(chatBlockSchema).check(
   EffectSchema.isMaxLength(ASK_BOUNDS.MAX_BLOCKS),
@@ -284,7 +281,7 @@ export const chatFieldSchema = EffectSchema.Struct({
   ),
 });
 
-export type ChatField = typeof chatFieldSchema.Type;
+type ChatField = typeof chatFieldSchema.Type;
 
 /**
  * What an ask asks, one of six: a choice among options, several where
@@ -340,8 +337,6 @@ export const chatFormValueSchema = EffectSchema.Struct({
   label: filledText(ASK_BOUNDS.MAX_LABEL_CHARS),
   value: chatFieldValueSchema,
 });
-
-export type ChatFormValue = typeof chatFormValueSchema.Type;
 
 /** A form's values, one per field filled, each named by its field's label. */
 export const chatFormValuesSchema = EffectSchema.Array(chatFormValueSchema).check(

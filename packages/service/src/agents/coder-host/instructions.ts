@@ -9,10 +9,10 @@ import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
+import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
-import { INBOX_TOOLS } from "./inbox.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 

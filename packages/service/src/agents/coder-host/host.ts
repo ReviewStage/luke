@@ -458,7 +458,8 @@ const EVE_UNREACHED: EveSessions = {
     Effect.succeed({
       outcome: EVE_RESET_OUTCOME.FAILED,
       status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    }),  stream: () => Stream.empty,
+    }),
+  stream: () => Stream.empty,
 };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
