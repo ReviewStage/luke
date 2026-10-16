@@ -2,6 +2,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -17,6 +18,7 @@ import {
 } from "../renderer/tasks/use-side-panel";
 import {
   AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../renderer/tasks/use-tasks-tab";
@@ -75,6 +77,7 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     me: undefined,
+    chatOn: true,
     agents: [],
     archived: [],
     agentIds: [],
@@ -118,6 +121,7 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverview: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -198,6 +202,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       terminals: [],
       lastTerminal: undefined,
       browsers: [],
+      pullRequestViews: {},
+      onPullRequestView: () => undefined,
       strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
@@ -288,7 +294,24 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
     },
+    issuesView: {
+      open: false,
+      place: { kind: ISSUES_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
     callTaskId: undefined,
+    chatView: {
+      open: false,
+      chat: undefined,
+      place: FOR_YOU,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+      onShow: ignore,
+      onPost: () => Promise.resolve(undefined),
+      onAnswer: () => Promise.resolve(undefined),
+    },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

@@ -76,6 +76,12 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
+  /**
+   * A workspace's issues: list them, the most recently changed first, where
+   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
+   * declares the bodies.
+   */
+  ISSUES: "/api/issues",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -278,6 +284,11 @@ export function automationWebhookPath(automationId: string): string {
 /** An automation's runs, newest first (GET). */
 export function automationRunsPath(automationId: string): string {
   return `${automationPath(automationId)}/runs`;
+}
+
+/** One issue of a workspace the account is a member of: read it (GET) or change it (PATCH). */
+export function issuePath(issueId: string): string {
+  return `${HOSTED_SERVICE_PATH.ISSUES}/${encodeURIComponent(issueId)}`;
 }
 
 /** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
@@ -552,6 +563,16 @@ export function agentPullRequestPath(agentId: string): string {
 /** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
 export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
+}
+
+/** One agent's pull request as its Pull request tab draws it (GET): its description, checks, reviewers, and conversation as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview`;
+}
+
+/** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
+export function agentGitHubImagePath(agentId: string, src: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
 }
 
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */

@@ -28,12 +28,14 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
@@ -43,6 +45,8 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentGitHubImageParamsSchema,
+  codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAnswerViewSchema,
@@ -55,6 +59,7 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOverviewAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
@@ -102,7 +107,24 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import {
+  type IssueListView,
+  type IssueView,
+  issueChangeParamsSchema,
+  issueCreateParamsSchema,
+  issueIdParamsSchema,
+  issueListParamsSchema,
+  issueListViewSchema,
+  issueViewSchema,
+} from "@luke/features/issue-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
+import {
+  type MacRepositoriesAnswer,
+  macRepositoriesAnswerSchema,
+  macRepositorySchema,
+  macTerminalKeySchema,
+  macTerminalOpenParamsSchema,
+} from "@luke/features/mac-terminal-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -423,6 +445,10 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request's description, checks, reviewers, and conversation, which its Pull request tab draws. */
+  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
+  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -432,6 +458,11 @@ export const ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** The listed workspace's issues: listed, one read, one filed, and one changed. */
+  ISSUES_LIST: "issues.list",
+  ISSUES_READ: "issues.read",
+  ISSUES_CREATE: "issues.create",
+  ISSUES_CHANGE: "issues.change",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -500,6 +531,17 @@ export const ACT_KIND = {
   BROWSER_PLACE: "browser.place",
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
+  /**
+   * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
+   * each repository's run command read and set; and a terminal of this Mac
+   * opened on the agent's branch for the asking panel, and closed with its
+   * tab. What the terminal prints and what is typed travel on the port an
+   * open posts to that panel, never on an act.
+   */
+  MAC_REPOSITORIES: "macRepositories.read",
+  MAC_REPOSITORY_SET: "macRepositories.set",
+  MAC_TERMINAL_OPEN: "macTerminal.open",
+  MAC_TERMINAL_CLOSE: "macTerminal.close",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_TASK: "call.showPlan",
@@ -1217,6 +1259,18 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's changes on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewAnswerView>(
+      isReadable(codingAgentOverviewAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: {
+    payload: actSchema(codingAgentGitHubImageParamsSchema),
+    result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
+    refusal: "Could not read the pull request's image on this system.",
+  },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),
     result: wireResult<AutomationListView>(isReadable(automationListViewSchema)),
@@ -1251,6 +1305,26 @@ export const ACT = {
     payload: actSchema(automationIdParamsSchema),
     result: wireResult<AutomationView>(isReadable(automationViewSchema)),
     refusal: "Could not make a new webhook secret on this system.",
+  },
+  [ACT_KIND.ISSUES_LIST]: {
+    payload: actSchema(issueListParamsSchema),
+    result: wireResult<IssueListView>(isReadable(issueListViewSchema)),
+    refusal: "Could not read the issues on this system.",
+  },
+  [ACT_KIND.ISSUES_READ]: {
+    payload: actSchema(issueIdParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not read the issue on this system.",
+  },
+  [ACT_KIND.ISSUES_CREATE]: {
+    payload: actSchema(issueCreateParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not create the issue on this system.",
+  },
+  [ACT_KIND.ISSUES_CHANGE]: {
+    payload: actSchema(issueChangeParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not change the issue on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,
@@ -1363,6 +1437,26 @@ export const ACT = {
     payload: actSchema(terminalAttachParamsSchema),
     result: answersNothing,
     refusal: "Could not open that shell.",
+  },
+  [ACT_KIND.MAC_REPOSITORIES]: {
+    payload: noPayload,
+    result: wireResult<MacRepositoriesAnswer>(isReadable(macRepositoriesAnswerSchema)),
+    refusal: "Could not read the run commands set on this Mac.",
+  },
+  [ACT_KIND.MAC_REPOSITORY_SET]: {
+    payload: actSchema(macRepositorySchema),
+    result: answersNothing,
+    refusal: "Could not save the repository's run command on this Mac.",
+  },
+  [ACT_KIND.MAC_TERMINAL_OPEN]: {
+    payload: actSchema(macTerminalOpenParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open a terminal on this Mac.",
+  },
+  [ACT_KIND.MAC_TERMINAL_CLOSE]: {
+    payload: actSchema(macTerminalKeySchema),
+    result: answersNothing,
+    refusal: "Could not close the terminal.",
   },
   [ACT_KIND.TERMINAL_DETACH]: {
     payload: actSchema(terminalShellParamsSchema),

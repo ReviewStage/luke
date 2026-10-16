@@ -51,6 +51,8 @@ import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-task";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
+import { useChatOn } from "./chat-gate";
+import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
   type AgentPart,
@@ -61,6 +63,7 @@ import {
   agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
+  chatNoticeOf,
   delegates,
   dockedTodos,
   endLine,
@@ -80,12 +83,15 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { linkChip } from "./mention-chip";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
+import { useMentionDoors } from "./plan-mentions";
+import { PlanPictures } from "./plan-pictures";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
@@ -296,6 +302,32 @@ export interface DelegationDoors {
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
   jobs?: WorkerJobs | undefined;
+  /** The chat a chat notice's card reads its message from and opens in; none where the window holds no chat. */
+  chat?: ChatNoticeDoors | undefined;
+  /** Whether the window offers Chat (`chat-gate.ts`), without which a chat notice is drawn as the plain line it is. */
+  chatOn?: boolean;
+}
+
+/** A chat notice's card, at the moment the window's clock says. */
+function NoticeRow({
+  message,
+  doors,
+}: {
+  message: CodingAgentMessage;
+  doors: ChatNoticeDoors | undefined;
+}): ReactNode {
+  const now = useMinute();
+  const notice = chatNoticeOf(message);
+  if (notice === undefined) return null;
+  return (
+    <ChatNoticeCard
+      messageId={message.id}
+      notice={notice}
+      words={messageWords(message)}
+      doors={doors}
+      now={now}
+    />
+  );
 }
 
 /**
@@ -606,7 +638,9 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
  * automation's prompt, or the task a worker was, as a message sent to the
  * agent, at a sent message's measure over the line naming who sent it and
  * when, as a sent message's bubble stands over its own: a card folded under
- * its title, and a webhook's body folded again inside it.
+ * its title, and a webhook's body folded again inside it. Where the agent
+ * works on a task, the plan's own pictures are drawn in the card as its
+ * page draws them (`plan-pictures.tsx`), read only once the card is opened.
  */
 function PlanCard({
   text,
@@ -616,6 +650,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
+  planId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -629,8 +664,11 @@ function PlanCard({
   sentAt?: number | undefined;
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
+  /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
+  planId?: string | undefined;
 }): ReactNode {
   const named = sender != null;
+  const words = <TranscriptWords text={text} />;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-task-card="" aria-label={lead.label} className="agent-origin-card">
@@ -639,7 +677,13 @@ function PlanCard({
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
-          <TranscriptWords text={text} />
+          {planId === undefined ? (
+            words
+          ) : (
+            <PlanPictures planId={planId} text={text}>
+              {words}
+            </PlanPictures>
+          )}
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
@@ -699,7 +743,13 @@ function TaskSender({
   );
 }
 
-/** The issue or pull request an automation's GitHub event named, by number and title, opening on GitHub where the event gave its address. */
+/**
+ * The issue or pull request an automation's GitHub event named, by number
+ * and title: where the event gave its address, its chip, as the transcript
+ * draws a link to it, wearing GitHub's mark for where it stands and opening
+ * it on GitHub (`mention-chip.tsx`); a link opening on GitHub where the
+ * address names no chip; and its words alone where the event gave none.
+ */
 function OriginSubject({
   subject,
   openGitHub,
@@ -707,10 +757,13 @@ function OriginSubject({
   subject: NonNullable<CodingAgentOrigin["subject"]>;
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
+  const doors = useMentionDoors();
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
   if (url === undefined) return <span className="agent-origin-subject">{words}</span>;
+  const chip = linkChip(url, words, doors);
+  if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
     <a
       className="text-link agent-origin-subject"
@@ -860,14 +913,30 @@ const NO_ARRIVED: readonly ArrivedLine[] = [];
 const SENT_ACTIONS_CLASS = "static border-0 bg-transparent p-0 shadow-none";
 
 /**
+ * The line a finished turn ends on: how long it worked and when it ended,
+ * then its Copy and Copy link beside it, set as a sent message's are under
+ * its bubble rather than floated over the turn's corner. A turn still
+ * running offers no Copy, because its words are not yet whole.
+ */
+function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
+  if (workedFor === null && copy === null) return null;
+  return (
+    <div className="agent-turn-foot" data-turn-foot="">
+      {workedFor}
+      {copy}
+    </div>
+  );
+}
+
+/**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble, with a quiet line
  * under it holding its Copy and Copy link and, at the bubble's edge, who
- * sent it and when; or one of the agent's own turns, with a copy of its
- * words under it where it has any, ending once it has finished on how long
- * it worked and when it ended. A line that reached a turn while it ran is
- * drawn inside it, as its own bubble between the work before it and the
- * work after it.
+ * sent it and when; or one of the agent's own turns, ending once it has
+ * finished on a line saying how long it worked and when it ended, with the
+ * Copy and Copy link of its words beside it where it has any. A line that
+ * reached a turn while it ran is drawn inside it, as its own bubble between
+ * the work before it and the work after it.
  */
 export function AgentMessage({
   message,
@@ -881,10 +950,13 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
+  planId,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
+  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  planId?: string | undefined;
   /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
   origin?: TranscriptOrigin | undefined;
   /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
@@ -912,8 +984,13 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
+        planId={planId}
       />
     );
+  }
+  // A line a chat notice wrote is the sender's message, never the developer's bubble, while the window offers Chat.
+  if (delegation?.chatOn === true && chatNoticeOf(message) !== undefined) {
+    return <NoticeRow message={message} doors={delegation.chat} />;
   }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -998,9 +1075,19 @@ export function AgentMessage({
             {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
           </TranscriptRows>
         </MessageContent>
-        {said || !ends ? null : workedFor}
-        {words === "" || said || !ends ? null : (
-          <CopyMessageAction words={words} messageId={message.id} />
+        {said || !ends ? null : (
+          <TurnFoot
+            workedFor={workedFor}
+            copy={
+              words === "" || moving ? null : (
+                <CopyMessageAction
+                  words={words}
+                  messageId={message.id}
+                  className={SENT_ACTIONS_CLASS}
+                />
+              )
+            }
+          />
         )}
       </Message>
     );
@@ -1029,6 +1116,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
+  planId,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1066,6 +1154,8 @@ function AgentTranscriptView({
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
+  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  planId?: string | undefined;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1074,7 +1164,9 @@ function AgentTranscriptView({
     // was handed a prompt in its place, which is the developer's message as
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since.
-    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const first = messages.find(
+      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+    );
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
@@ -1095,6 +1187,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message}
                 plan={message === plan}
+                planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 delegation={delegation}
@@ -1182,6 +1275,7 @@ function AgentTabView({
   onOpenSubagent,
   onOpenTarget,
   cards,
+  chat,
   openGitHub,
   onOpenApiKeys,
   keywords,
@@ -1215,6 +1309,8 @@ function AgentTabView({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang; none where they hang their hints. */
   cards?: TranscriptCards | undefined;
+  /** The chat a chat notice's card reads and opens; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
   openGitHub: (url: string) => void;
   /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
   onOpenApiKeys?: (() => void) | undefined;
@@ -1228,6 +1324,7 @@ function AgentTabView({
   readerId?: string | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
+  const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
   const steering = new Set(composer.sent.filter((line) => line.steers).map((line) => line.id));
   const starterActor = usePerson(agent.startedBy);
@@ -1259,6 +1356,7 @@ function AgentTabView({
               briefSender={starter === undefined ? undefined : starterActor}
               origin={origin}
               readerId={readerId}
+              planId={agent.planId ?? undefined}
               delegation={{
                 models,
                 own: { model: agent.model, effort: agent.effort },
@@ -1267,6 +1365,8 @@ function AgentTabView({
                 onOpenTarget,
                 cards,
                 standings: transcript.subagents,
+                chat,
+                chatOn,
               }}
               reading={transcript.reading}
               failed={transcript.failed}
@@ -1337,8 +1437,10 @@ export function AgentTab({
   shown,
   onOpenSubagent,
   onOpenChanges,
+  onOpenPullRequest,
   onOpenTarget,
   cards,
+  chat,
   onHeld,
   run,
 }: {
@@ -1356,6 +1458,10 @@ export function AgentTab({
   cards?: TranscriptCards | undefined;
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;
+  /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
+  onOpenPullRequest?: (() => void) | undefined;
+  /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
+  chat?: ChatNoticeDoors | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -1446,6 +1552,7 @@ export function AgentTab({
           openGitHub,
           copy: copyWithToast,
           openChanges: onOpenChanges,
+          openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}
         delegationStarts={shown ? transcript.delegations : undefined}
@@ -1454,6 +1561,7 @@ export function AgentTab({
         onOpenSubagent={onOpenSubagent}
         onOpenTarget={onOpenTarget}
         cards={cards}
+        chat={chat}
         openGitHub={openGitHub}
         onOpenApiKeys={control.onOpenApiKeys}
         keywords={control.keywords}

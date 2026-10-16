@@ -131,6 +131,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
   });
   assert.deepEqual(feedbackAbout, [
     EXPERIMENT.BROWSER,
+    EXPERIMENT.ISSUES,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
     EXPERIMENT.AUTOMATIONS,
@@ -168,6 +169,7 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
   );
   assert.deepEqual(cards, [
     ["Browser tab"],
+    ["Issues"],
     ["Chat"],
     ["Video calls", "Avatar"],
     ["Automations"],

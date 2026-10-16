@@ -353,24 +353,46 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
   color: var(--text-secondary);
 }
 
-/* Who last changed a section, and when: a quiet line at the end of its
-   heading's row, shown while the pointer or the keyboard is on the section.
-   It fades on opacity alone, so nothing moves. */
+/* Who last changed a section, and when: the writer's face and a few
+   letters at the end of its heading's row, shown while the pointer or the
+   keyboard is on the section. It fades on opacity alone, so nothing moves.
+   `--plan-byline-room` holds a face and the widest of those letters, a date
+   such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
+   column with its ⋯, which hangs `--space-6` past the column's edge. */
+.plan-body {
+  --plan-byline-room: 64px;
+  --plan-unit-row-room: calc(
+    var(--plan-byline-room) +
+    var(--space-4) +
+    var(--control-height) -
+    var(--space-6)
+  );
+}
+
 .plan-unit-attributed {
   position: relative;
+}
+
+/* A section's heading wraps short of the row at its end, so the byline and
+   the ⋯ never stand over its words, however long it runs. The room is kept
+   whether or not they are shown, and in the editor too, so no heading
+   rewraps as the pointer comes and goes or as the text opens to be edited. */
+.plan-unit-attributed > .plan-unit > .markdown-heading:first-child,
+.plan-document-editor .plan-unit > .markdown-heading:is([data-level="1"], [data-level="2"]) {
+  padding-right: var(--plan-unit-row-room);
 }
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a
    control tall, each centred on it, so the line reads level with the button.
    The row hangs past the column's edge by `--space-6`, as the ⋯ always has,
-   and starts short of the heading's middle so a long byline is cut there;
-   where a section has no ⋯, the row keeps its room, so every byline ends at
-   one edge. It takes no pointer itself, only its byline and its ⋯ do. */
+   and holds the room its heading keeps; where a section has no ⋯, the row
+   keeps its room, so every byline ends at one edge. It takes no pointer
+   itself, only its byline and its ⋯ do. */
 .plan-unit-row {
   position: absolute;
   top: 0;
   right: calc(var(--space-6) * -1);
-  left: 45%;
+  width: calc(var(--plan-unit-row-room) + var(--space-6));
   display: flex;
   height: var(--control-height);
   align-items: center;
@@ -385,6 +407,7 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
 
 .plan-unit-byline {
   min-width: 0;
+  max-width: var(--plan-byline-room);
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
@@ -1516,39 +1539,12 @@ button.file-ref:hover .file-ref-path {
   color: var(--state-working);
 }
 
-/* A diff drawn in a File tab's lines (agent-changes-tab.tsx), which keep
-   their gutter, selection, settings, and type; what is a diff's alone is
-   the tint of a line added or removed, its hunk's header on the lit
-   lines' ground, and git's note on a line. */
-.code-line[data-diff="added"] {
-  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
-}
-
-.code-line[data-diff="removed"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.code-line[data-diff="hunk"] {
-  background: var(--code-pointed);
-  color: var(--code-line-number);
-}
-
-.code-line[data-diff="hunk"]:not(:first-child) {
-  margin-top: var(--space-6);
-}
-
-.code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* A narrow panel numbers a diff's lines on the new side alone, so the
-   code keeps the room a second gutter would take; a removed line, which
-   has no new number, still reads by its tint. */
-@container side-panel (max-width: 359px) {
-  .code-line[data-diff] > .code-line-number:first-child {
-    display: none;
-  }
+/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
+   of its own, in the panel's look (diff-view/index.ts); its box fills the
+   File tab's place and scrolls as a File tab's lines do. */
+.diff-view {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the
@@ -1722,34 +1718,6 @@ button.file-ref:hover .file-ref-path {
   color: var(--review-tone);
 }
 
-/* The reviews that said something, folded under their count until opened. */
-.changes-comments {
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.changes-comments > summary {
-  padding: var(--space-6) var(--space-12);
-  cursor: default;
-}
-
-.changes-comments-count {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.changes-comments > ul {
-  display: flex;
-  max-height: 40vh;
-  flex-direction: column;
-  gap: var(--space-8);
-  margin: 0;
-  padding: 0 var(--space-12) var(--space-8);
-  overflow-y: auto;
-  list-style: none;
-}
-
 .changes-comment-head {
   display: flex;
   min-width: 0;
@@ -1774,15 +1742,458 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
-/* A review's words, cut at two lines and faded where they run on. */
-.changes-comment-words {
-  display: -webkit-box;
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
+   bar, wearing the pull request's standing as a pill in its own colour and
+   its branches quiet beside it, over the page read top to bottom in one
+   scroller, its sections each under a quiet heading.
+
+   It keeps to the panel's top row's two edges, so the tab reads down from
+   the strip above it: whatever is boxed or edged (the pill, the merge box,
+   the checks, a comment) stands at the row's inset, where a tab's chip
+   does, and every word and glyph at the content inset, where a tab's glyph
+   does, a box holding its own at a row's inset within; the bar's last
+   control ends where the row's last control ends. A boxed thing's hairline
+   counts toward its inset (`--boxed-inset`), so what it holds lands on the
+   content inset to the pixel. */
+.pull-request-tab {
+  --boxed-inset: calc(var(--row-inset) - 1px);
+}
+
+.pull-request-bar,
+.pull-request-tab .file-view-bar {
+  gap: var(--control-gap);
+  padding-inline: var(--column-inset);
+}
+
+/* The files' strip of who the pull request names stands on no box, so its
+   words start at the content inset. */
+.pull-request-tab .changes-people {
+  padding-inline: var(--content-inset) var(--column-inset);
+}
+
+/* The view the switch shows fills the room under the bar, the other kept
+   drawn but hidden, so switching back draws what it last read. */
+.pull-request-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pull-request-view[hidden] {
+  display: none;
+}
+
+.pull-request-bar .segmented {
+  flex: 0 0 auto;
+}
+
+.pull-request-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--boxed-inset);
+  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
+  color: var(--pull-request-tone);
+  font-weight: 600;
+}
+
+/* The branches it merges, quiet in the code face under the title. */
+.pull-request-branches {
   margin: var(--space-2) 0 0;
-  padding-left: 21px; /* off-scale: past an inline actor's 16px mark and its 5px gap */
+  min-width: 0;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-page {
+  min-height: 0;
+  flex: 1;
+  padding: var(--space-12) var(--column-inset) var(--space-24);
+  overflow-y: auto;
+}
+
+/* In the side panel, the page keeps to the reading measure a transcript
+   keeps to, so a panel filling the window reads in one column. */
+.side-panel-content .pull-request-page {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The words that stand on the page rather than in a box, at the content
+   inset. */
+.pull-request-title,
+.pull-request-page .pull-request-branches,
+.changes-people.pull-request-people,
+.pull-request-heading,
+.pull-request-none,
+.pull-request-section > .pull-request-words {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
   user-select: text;
+}
+
+.pull-request-number {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* Who opened it and its reviewers, in the Changes tab's voice, standing on
+   the page rather than across it. */
+.changes-people.pull-request-people {
+  padding-block: var(--space-6) 0;
+  border-bottom: 0;
+}
+
+.pull-request-quiet {
+  color: var(--text-tertiary);
+}
+
+/* Whether it would merge as it stands, boxed as GitHub's own box is, its
+   glyph in the colour of what it means: ready green, a wait amber, and
+   something to fix red. */
+.pull-request-merge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 0;
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.pull-request-merge > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--merge-tone);
+}
+
+[data-merge-tone="ready"] {
+  --merge-tone: var(--state-complete);
+}
+
+[data-merge-tone="waiting"] {
+  --merge-tone: var(--state-attention);
+}
+
+[data-merge-tone="blocked"] {
+  --merge-tone: var(--danger);
+}
+
+.pull-request-section {
+  margin-top: var(--space-20);
+}
+
+.pull-request-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pull-request-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.pull-request-none {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+/* The checks, one boxed list, each row opening the check's page. */
+.pull-request-checks {
+  margin: 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  list-style: none;
+}
+
+.pull-request-checks > li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-check {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--boxed-inset);
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+button.pull-request-check {
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-check:hover {
+  background: var(--raised);
+}
+
+.pull-request-check-glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--check-tone);
+}
+
+.pull-request-check-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+[data-check-state="passed"] {
+  --check-tone: var(--state-complete);
+}
+
+[data-check-state="failed"] {
+  --check-tone: var(--danger);
+}
+
+[data-check-state="pending"] {
+  --check-tone: var(--state-attention);
+}
+
+[data-check-state="skipped"] {
+  --check-tone: var(--text-tertiary);
+}
+
+.pull-request-check-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-check-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Words written on GitHub, drawn at the transcript's own size, a step over
+   the page's quiet lines, its headings no more than a step above that
+   (`PANEL_MARKDOWN_COMPONENTS`). */
+.pull-request-words {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+/* The comments and reviews, oldest first, each boxed under its head. */
+.pull-request-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-entry {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  font-size: 12.5px;
+}
+
+/* A task list stands as GitHub draws one: its boxes in the bullets' place. */
+.pull-request-words ul:has(> li > input[type="checkbox"]) {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pull-request-words li > input[type="checkbox"] {
+  margin: 0 var(--space-6) 0 0;
+  vertical-align: middle;
+}
+
+/* A picture GitHub's rendering names, read through the service: as wide as
+   the words around it at most, at its own shape, and a quiet box of a
+   screenshot's shape while it is read. */
+.pull-request-picture {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--space-4);
+  vertical-align: middle;
+}
+
+.pull-request-picture-waiting {
+  display: inline-block;
+  width: min(100%, 240px);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--space-4);
+  background: var(--raised);
+  vertical-align: middle;
+}
+
+.pull-request-entry .changes-comment-state {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* A review's threads on lines, under its words: each boxed as the checks
+   are, its head a row like a check's that opens and closes it, its chevron
+   at the end as a docked card's is; then the lines it is on, drawn as Files
+   changed draws a diff's rows, and its comments, each under its head. The
+   box clips at its own edge, so its head's ring is drawn inside. */
+.pull-request-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread {
+  --focus-ring-offset: var(--focus-ring-inset);
+  min-width: 0;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
+.pull-request-thread-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--boxed-inset);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.pull-request-thread-head:hover {
+  background: var(--raised);
+}
+
+.pull-request-thread-head > svg {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+}
+
+/* A long path is cut at its start rather than its end, so its file's name
+   stands; the path itself is isolated, so it still reads left to right. */
+.pull-request-thread-path {
+  min-width: 0;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-thread-head > .pull-request-quiet {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Whether a thread was resolved or outdated, in the quiet badge a bot's
+   name wears (desktop.css's `.actor-bot`). */
+.pull-request-thread-label {
+  flex: 0 0 auto;
+  padding: 0 5px; /* off-scale */
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+/* A preview's rows (diff-rows.tsx) on the diff colours Files changed draws
+   in: the tint of a line added or removed, and git's note on a line. */
+.pull-request-thread-lines > .code-line[data-diff="added"] {
+  background: var(--diff-added-ground);
+}
+
+.pull-request-thread-lines > .code-line[data-diff="removed"] {
+  background: var(--diff-removed-ground);
+}
+
+.pull-request-thread-lines > .code-line[data-diff="note"] .code-line-text {
+  color: var(--code-line-number);
+  font-style: italic;
+}
+
+/* The preview stands in the box rather than filling a tab, on a File tab's ground. */
+.pull-request-thread-lines {
+  flex: none;
+  overflow-y: visible;
+  border-top: 1px solid var(--hairline);
+  background: var(--code-ground);
+}
+
+.pull-request-thread-comments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread-comment {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--boxed-inset);
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-thread-more {
+  margin: 0 var(--boxed-inset) var(--space-8);
+}
+
+/* The earlier entries a read left on GitHub, counted where they would stand. */
+.pull-request-earlier {
+  margin: 0 0 var(--space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: underline;
 }
 
 .file-tab-snippet-label {
@@ -2194,6 +2605,24 @@ button.file-ref:hover .file-ref-path {
   white-space: nowrap;
 }
 
+/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot): how long
+   it worked, then its Copy and Copy link to the right of it, as a sent
+   message's line holds them under its bubble. Note that the room above is
+   the row's rather than the worked line's, because the buttons are taller
+   than the words and centring them would push the words down. */
+.agent-turn-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin-top: var(--space-4);
+}
+
+.agent-turn-foot > [data-worked] {
+  min-width: 0;
+  margin-top: 0;
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */
@@ -2480,7 +2909,7 @@ button.skill-chip:hover,
 /* Too narrow for the model's words: the chip draws its harness's mark
    alone, where it has one, its label and hint still naming the choice. */
 @container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) {
+  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
     padding: 0 var(--space-8);
   }
 
@@ -2488,7 +2917,10 @@ button.skill-chip:hover,
     display: block;
   }
 
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) :is(.model-label, .settings-chevron) {
+  .agent-composer
+    .agent-model-chip
+    .luke-chip:has(.harness-mark)
+    :is(.model-label, .settings-chevron) {
     display: none;
   }
 }

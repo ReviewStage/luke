@@ -1,0 +1,10 @@
+{
+  "type": "string",
+  "enum": [
+    "backlog",
+    "todo",
+    "in-progress",
+    "done",
+    "canceled"
+  ]
+}

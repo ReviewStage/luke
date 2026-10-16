@@ -6,7 +6,8 @@
  * TypeScript diagnostics), the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
- * with. Node is the
+ * with, and GTK 3, the one library an Electron app needs beyond Chromium's,
+ * so an agent runs a desktop app under Xvfb the same way. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the
@@ -40,11 +41,30 @@ import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from
 /** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
 const PLAYWRIGHT_VERSION = "1.64.1";
 
+/**
+ * Installs GTK 3 with the system's own package manager, `$SUDO` as
+ * `PREPARE_TMUX` set it. Electron's binary links it where Playwright's
+ * Chromium does not, and it is the one library `--with-deps` leaves an
+ * Electron app missing; Ubuntu since 24.04 names it with the `t64` suffix.
+ */
+const INSTALL_GTK =
+  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y gtk3; else $SUDO apt-get install -y --no-install-recommends libgtk-3-0t64 || $SUDO apt-get install -y --no-install-recommends libgtk-3-0; fi";
+
+/**
+ * Makes every `apt-get` after it wait up to ten minutes for dpkg's lock
+ * rather than fail at once. A freshly booted image can have another
+ * `apt-get` holding it as `prepare` starts, and Playwright's own
+ * `--with-deps` install takes no option to wait, so the wait is set in apt's
+ * configuration, where it and every install here read it.
+ */
+const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
+
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
 const PREPARE_SCRIPT = [
   "set -e",
   "git --version",
   "node --version",
+  WAIT_FOR_DPKG_LOCK,
   "command -v pnpm >/dev/null 2>&1 || npm install -g pnpm",
   "if ! command -v python3 >/dev/null 2>&1; then",
   '  if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y python3; else sudo -n apt-get update && sudo -n apt-get install -y python3; fi',
@@ -56,6 +76,8 @@ const PREPARE_SCRIPT = [
   // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
   `npm install -g playwright@${PLAYWRIGHT_VERSION}`,
   "playwright install --with-deps chromium",
+  // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
+  INSTALL_GTK,
 ].join("\n");
 
 /**

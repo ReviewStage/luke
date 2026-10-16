@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { startMacTerminal } from "@luke/host/mac-terminal";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
@@ -20,6 +22,8 @@ import { avatarActRows, avatarReports } from "./avatar-acts";
 import { browserActRows } from "./browser-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
+import { issueActRows } from "./issue-acts";
+import { macTerminalActRows } from "./mac-terminal-acts";
 import { settingsActRows } from "./settings-rows";
 import { tasksActRows } from "./tasks-acts";
 import { terminalActRows, whenPageGone } from "./terminal-acts";
@@ -134,6 +138,24 @@ export function registerDesktopIpc(services: DesktopServices): void {
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
+    ...macTerminalActRows({
+      host: operator.host,
+      stateRoot: config.stateRoot,
+      ports: {
+        open: (sender, ticket) => {
+          const { port1, port2 } = new MessageChannelMain();
+          sender.postMessage(MAC_TERMINAL_PORT_CHANNEL, ticket, [port2]);
+          port1.start();
+          return {
+            post: (message) => port1.postMessage(message),
+            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
+            close: () => port1.close(),
+          };
+        },
+        whenGone: whenPageGone,
+      },
+      start: startMacTerminal,
+    }),
     ...terminalActRows({
       host: operator.host,
       ports: {
@@ -159,6 +181,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...integrationActRows({ host: operator.host }),
     ...automationActRows({ host: operator.host }),
+    ...issueActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

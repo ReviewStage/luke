@@ -23,6 +23,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
@@ -683,6 +684,64 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
+test("the plan's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+  const listed = {
+    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+  };
+  const tab = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const column = () => tab.control().mainTabs;
+  const agent = { agent: AGENT_ID };
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent]);
+
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [agent]);
+  assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
+  act(() => tab.control().onReopenClosedTab?.());
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent], "⇧⌘T opens it first again");
+  assert.equal(column().tab, MAIN_TAB.PLAN);
+  act(() => column().onClose(MAIN_TAB.PLAN));
+
+  const launched = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const again = () => launched.control().mainTabs;
+  assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
+
+  act(() => again().onClose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN]);
+  assert.equal(again().tab, MAIN_TAB.PLAN, "a column with no other tab is back on the plan");
+  act(() => again().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN], "alone, it does not close");
+  act(() => again().onChoose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN, agent], "it stays open beside a tab opened since");
+});
+
+test("a closed plan's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  const archived = { ...RUNNING_AGENT, archivedAt: 5 };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        listed = [archived];
+        return Promise.resolve({ agent: archived });
+      },
+    },
+  );
+  await settle();
+  const column = () => tab.control().mainTabs;
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+
+  await act(() => tab.control().agents.onArchive(AGENT_ID, true));
+  await settle();
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
+  act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
+  assert.equal(column().tabs[0], MAIN_TAB.PLAN, "the plan's tab stands beside the draft's");
+  assert.equal(column().tabs.length, 2);
+});
+
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -699,6 +758,35 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   tab.stand({ tasks: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else Call", () => {
+  const tab = mount({ shown: true, tasks: OPEN });
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+
+  act(() => panel().onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE }, "as ⇧⌘T opens it");
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.CODE]);
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+
+  // A launch keeps no tab closed to open again, but keeps the kinds closed on the plan.
+  const launched = mount({ shown: true, tasks: OPEN });
+  assert.equal(launched.control().onReopenClosedTab, undefined);
+  assert.equal(launched.control().sidePanel.open, false);
+  act(() => launched.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.CODE });
+
+  window.localStorage.clear();
+  const fresh = mount({ shown: true, tasks: OPEN });
+  assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan holds nothing yet");
+  assert.equal(fresh.control().sidePanel.open, false);
+  act(() => fresh.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -1155,6 +1243,59 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
   assert.equal(tab.control().inboxView.chosen, undefined);
   assert.equal(tab.shownInboxes.at(-1), null);
+});
+
+test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().inboxView.onOpen());
+  const chosen = tab.control().inboxView.chosen;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
+    }),
+  );
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().inboxView.onOpen());
+  const linked = tab.control().inboxView.chosen;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().inboxView.onClose());
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
+  assert.deepEqual(linked, { taskId: "notes", itemId });
+  assert.equal(tab.control().inboxView.chosen, undefined);
+});
+
+test("a link to the Inbox stands on the item last chosen in the workspace it lists, as the sidebar's row does", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.INBOX } }));
+
+  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+});
+
+test("the Inbox chosen by one account is not stood on by the next to sign in on this Mac", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().inboxView.onClose());
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true, account: "teammate@example.com" });
+  act(() => tab.control().inboxView.onOpen());
+
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(tab.control().inboxView.chosen, undefined);
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
@@ -1629,7 +1770,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
@@ -2108,4 +2249,31 @@ test("a pin's place the service took follows the next list, even one a drag on a
   tab.stand({ tasks: listRead([{ ...pinned, pinPosition: "a2" }]) });
 
   assert.equal(position(), "a2");
+});
+
+test("a fixture run on the chat profile opens Chat at once and its staged chat lands there; a live run stages none", async () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.CHAT });
+  assert.equal(fixture.control().chatView.open, true);
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(fixture.control().chatView.chat, "the staged chat landed");
+  });
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  const live = mount({ shown: true });
+  await settle();
+  assert.equal(live.control().chatView.open, false);
+  assert.equal(live.control().chatView.chat, undefined);
+});
+
+test("opening Chat on a place, as a chat notice's Open in Chat does, asks first while a page stands its ask, as every other way out does", () => {
+  const tab = mount({ shown: true, tasks: listRead([listed()]) });
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+  act(() => tab.control().chatView.onShow(FOR_YOU));
+  assert.equal(tab.control().chatView.open, false, "nothing is left before Leave");
+  assert.equal(asked.length, 1);
+  act(() => asked[0]?.());
+  assert.equal(tab.control().chatView.open, true);
 });

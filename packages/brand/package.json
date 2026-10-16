@@ -1,6 +1,5 @@
 {
   "name": "@luke/brand",
-  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "Luke's brand: the design sources, the generators, and the generated art, motion tokens, and geometry",

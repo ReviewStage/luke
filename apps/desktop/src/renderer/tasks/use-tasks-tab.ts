@@ -19,15 +19,22 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import {
+  type AppInboxTask,
+  type AppInboxTaskHolding,
+  type AppInboxTasklessItem,
+  RUN_PROFILE,
+} from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
+import { type ChatAskAnswer, type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import {
   isAgentTab,
   isBrowserTab,
   isChangesTab,
   isDraftTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -102,6 +109,7 @@ import {
   useConfirmDialog,
 } from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
+import type { FixtureChat, Staged } from "./chat-fixture";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -133,6 +141,7 @@ import {
 } from "./use-plan-history";
 import {
   drawsChanges,
+  drawsMacTerminal,
   drawsSubagent,
   drawsTerminal,
   inColumn,
@@ -197,7 +206,8 @@ export type InboxChoice = (
  * item beside them. It is the window's alone, as a version history is, so
  * it leaves the plan the host has open, and the call bound to it, as they
  * stand; opening any plan, or a new one, leaves it. The item chosen is kept
- * while it stands, so the item answered stays in sight.
+ * while it stands, so the item answered stays in sight, and after it is
+ * left, so opening it again in the same workspace stands on the item last read.
  */
 interface InboxViewControl {
   readonly open: boolean;
@@ -246,9 +256,11 @@ const STAND_IN = {
   PERSON: "person",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  CHAT: "chat",
+  ISSUES: "issues",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, or the Automations page. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
@@ -260,7 +272,9 @@ type StandIn =
       readonly workspaceId: string | undefined;
     }
   | { readonly kind: typeof STAND_IN.FACTORY }
-  | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace };
+  | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace }
+  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace }
+  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
 
 /** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
 interface FactoryViewControl {
@@ -277,7 +291,11 @@ export const AUTOMATIONS_PAGE = {
 } as const;
 
 export type AutomationsPlace =
-  | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.LIST;
+      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
+      readonly deleted?: string;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.NEW;
       /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
@@ -288,6 +306,8 @@ export type AutomationsPlace =
       readonly automationId: string;
       /** The run a link named, which its runs mark and bring into view. */
       readonly runId?: string;
+      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history. */
+      readonly created?: true;
     };
 
 /** The list, where the Automations pages open with none asked for. */
@@ -300,6 +320,60 @@ interface AutomationsViewControl {
   readonly place: AutomationsPlace;
   /** Opens the page asked for, the list where none is. */
   readonly onOpen: (place?: AutomationsPlace) => void;
+  readonly onClose: () => void;
+}
+
+/**
+ * The window's Chat, standing in the plan's place beside the sidebar as the
+ * Inbox does and on the same terms: the workspace's channels in a rail of
+ * their own, and For you or the channel chosen beside it. It gives way to
+ * the Inbox, an agent's page, Factory, and the Automations page, and they to it. The chat is the
+ * one read, which a fixture run stages and nothing else reads yet, so its
+ * sidebar row is drawn only where there is one.
+ */
+interface ChatViewControl {
+  readonly open: boolean;
+  /** The chat as last read, with the agent lines that name its agents; none where nothing reads one. */
+  readonly chat: FixtureChat | undefined;
+  /** For you or the channel shown, For you until another is chosen. */
+  readonly place: ChatPlace;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+  readonly onChoose: (place: ChatPlace) => void;
+  /** Opens it on a place, from wherever the window stands: what a chat notice's Open in Chat asks. */
+  readonly onShow: (place: ChatPlace) => void;
+  /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+}
+
+/** The fixture's staging, as a fixture run imports it. */
+type ChatStager = typeof import("./chat-fixture");
+
+/** What a post or an answer says where no chat is read to send it to. */
+const NO_CHAT_SERVICE = "Chat is not available yet.";
+
+/** Which Issues page stands: the list, or one issue's. */
+export const ISSUES_PAGE = {
+  LIST: "list",
+  ISSUE: "issue",
+} as const;
+
+export type IssuesPlace =
+  | { readonly kind: typeof ISSUES_PAGE.LIST }
+  | { readonly kind: typeof ISSUES_PAGE.ISSUE; readonly issueId: string };
+
+/** The list, where the Issues pages open with none asked for. */
+const ISSUES_LIST: IssuesPlace = { kind: ISSUES_PAGE.LIST };
+
+/** The window's Issues pages: whether one stands in the plan's place, which, and the presses that open, move between, and leave them. */
+interface IssuesViewControl {
+  readonly open: boolean;
+  /** The page standing, the list while none does. */
+  readonly place: IssuesPlace;
+  /** Opens the page asked for, the list where none is. */
+  readonly onOpen: (place?: IssuesPlace) => void;
   readonly onClose: () => void;
 }
 
@@ -464,8 +538,12 @@ export interface TasksControl {
   factoryView: FactoryViewControl;
   /** The window's Automations page: whether it stands in the plan's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
+  /** The window's Issues page: whether it stands in the plan's place, which, and its presses (`issues-page.tsx`). */
+  issuesView: IssuesViewControl;
   /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callTaskId: string | undefined;
+  /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
+  chatView: ChatViewControl;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (taskId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -758,6 +836,38 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
   return entries.filter((entry) => listed.has(entry.taskId));
 }
 
+/**
+ * The Inbox's last choice, by the account signed in and the workspace listed
+ * as it was made, so another account on this Mac, or another workspace,
+ * never opens on it.
+ */
+interface RememberedInboxChoice {
+  readonly account: string | undefined;
+  readonly workspaceId: string | undefined;
+  readonly chosen: InboxChoice;
+}
+
+/**
+ * The Inbox's choice to stand on as it opens again: the one last made, where
+ * it was made by the account signed in now in the workspace listed, else none,
+ * where the list's first stands in. Note that it comes back as a row's choice
+ * rather than an ask, so an item gone since gives way to the first rather than
+ * saying it is missing.
+ */
+function rememberedChoice(
+  remembered: RememberedInboxChoice | undefined,
+  now: { readonly account: string | undefined; readonly workspaceId: string | undefined },
+): InboxChoice | undefined {
+  if (remembered === undefined) return undefined;
+  if (remembered.account !== now.account || remembered.workspaceId !== now.workspaceId) {
+    return undefined;
+  }
+  const { chosen } = remembered;
+  return "taskId" in chosen
+    ? { taskId: chosen.taskId, itemId: chosen.itemId }
+    : { agentId: chosen.agentId, itemId: chosen.itemId };
+}
+
 /** What the second call's question says: the call it ends, and what the act does. */
 function secondCallQuestion(taskName: string): DialogQuestion {
   return {
@@ -849,9 +959,46 @@ export function useTasksTab(input: {
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the plan's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
+  // The chat profile opens Chat at launch over its fixture.
+  const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
+    input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
+      ? { kind: STAND_IN.CHAT, place: FOR_YOU }
+      : undefined,
+  );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
+  /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
+  const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
+  /**
+   * The chat a fixture run stages, stamped once at the moment it lands,
+   * which its own posts and answers land in, and the module that stages it.
+   * Note that the module is imported only by a fixture run, because its
+   * synthetic chat must never ship in the bundle every launch parses.
+   */
+  const [chat, setChat] = useState<FixtureChat | undefined>(undefined);
+  const [stager, setStager] = useState<ChatStager | undefined>(undefined);
+  const { fixtureMode } = input.run;
+  useEffect(() => {
+    if (!fixtureMode) return;
+    let live = true;
+    import("./chat-fixture").then((loaded) => {
+      if (!live) return;
+      setStager(loaded);
+      setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));
+    });
+    return () => {
+      live = false;
+    };
+  }, [fixtureMode]);
+  const stage = (
+    staged: (held: FixtureChat, staging: ChatStager) => Staged,
+  ): Promise<string | undefined> => {
+    if (chat === undefined || stager === undefined) return Promise.resolve(NO_CHAT_SERVICE);
+    const landed = staged(chat, stager);
+    if ("refused" in landed) return Promise.resolve(landed.refused);
+    setChat(landed.chat);
+    return Promise.resolve(undefined);
+  };
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly taskId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -1153,6 +1300,16 @@ export function useTasksTab(input: {
     reportedTab.current = { agentId: shownAgent, inboxTaskId: shownInbox };
     tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent, inboxTaskId: shownInbox });
   }, [shownAgent, shownInbox, tell]);
+  // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
+  useEffect(() => {
+    if (inboxChosen !== undefined) {
+      lastInboxChoice.current = {
+        account: input.account,
+        workspaceId: listedWorkspaceId,
+        chosen: inboxChosen,
+      };
+    }
+  }, [inboxChosen, input.account, listedWorkspaceId]);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -1940,10 +2097,11 @@ export function useTasksTab(input: {
     sidePanel.onShow(planId, tab);
   };
 
-  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed.
-  const listLinked = (workspace: string) => {
+  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
+  const listLinked = (workspace: string): string | undefined => {
     const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
     if (home !== undefined && home.id !== listedWorkspace?.id) chooseListed(home.id);
+    return home?.id ?? listedWorkspace?.id;
   };
 
   // A version's Open lands where its writer wrote it: an agent's tab as a
@@ -2052,10 +2210,18 @@ export function useTasksTab(input: {
         });
         return;
       }
-      case LINK_PLACE.INBOX:
-        listLinked(workspace);
-        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
+      case LINK_PLACE.INBOX: {
+        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists.
+        const workspaceId = listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.INBOX,
+          chosen: rememberedChoice(lastInboxChoice.current, {
+            account: input.account,
+            workspaceId,
+          }),
+        });
         return;
+      }
       case LINK_PLACE.INBOX_ITEM:
         // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
         listLinked(
@@ -2124,8 +2290,10 @@ export function useTasksTab(input: {
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, tasks.activeTaskId, onOpenFile]);
 
-  // Every tab closed is kept as it stood for ⇧⌘T to open again: the plan's
-  // tab never closes, and a draft's lets its draft go, so neither is kept.
+  // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
+  // which lets its draft go, and the plan's while it stands alone, which
+  // does not close. Note that a tab's place is counted among those after the
+  // plan's, which stand there whether or not the plan's tab is open.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
   // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
@@ -2140,10 +2308,12 @@ export function useTasksTab(input: {
   );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
-      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      const after = openTabs.filter((each) => each !== MAIN_TAB.PLAN);
+      const at = after.findIndex((each) => sameTab(each, tab));
+      const closes = tab === MAIN_TAB.PLAN ? openTabs.includes(tab) && after.length > 0 : at >= 0;
       const task = viewed.activeTaskId;
-      if (task !== undefined && at > 0 && !isDraftTab(tab)) {
-        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: at - 1 };
+      if (task !== undefined && closes && !isDraftTab(tab)) {
+        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: Math.max(0, at) };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closeMainTab(tab);
@@ -2184,6 +2354,7 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
+    if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });
     // A Browser tab's page went with it, so there is nothing to open again.
     if (isBrowserTab(tab)) return false;
     return true;
@@ -2238,6 +2409,37 @@ export function useTasksTab(input: {
     setReopenFor(NO_CLOSED_TABS);
     for (const closed of reopenFor) reopenNow.current(closed);
   }, [reopenFor, tasks.activeTaskId, setReopenFor]);
+
+  // Showing the panel on a plan whose strip holds no tab opens one first, so
+  // the panel is never shown empty beside the summary that lists the same:
+  // the tab last closed on the plan this launch, where ⇧⌘T would open it,
+  // else the kind last closed on it, kept across launches, else Call. An
+  // agent's page has no kind to fall back on, so its panel shows empty,
+  // offering what its "+" does.
+  const toggleSidePanel = () => {
+    const task = tasks.activeTaskId;
+    if (
+      sidePanel.open ||
+      sidePanel.strip.length > 0 ||
+      pageAgents !== undefined ||
+      task === undefined
+    ) {
+      sidePanel.onToggle();
+      return;
+    }
+    const stack = latestClosedTabs();
+    const at = stack.findLastIndex(
+      (closed) =>
+        closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL && closed.task === task && drawsAgain(closed),
+    );
+    const closed = stack[at];
+    if (closed !== undefined) {
+      setClosedTabs(stack.toSpliced(at, 1));
+      reopenHere(closed);
+      return;
+    }
+    sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.CALL);
+  };
 
   // The home page is where the tab rests, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
@@ -2322,7 +2524,7 @@ export function useTasksTab(input: {
     status: callStatus(reported, tasks),
     live,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
-    sidePanel: { ...sidePanel, onClose: closeSidePanelTab },
+    sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
@@ -2375,8 +2577,17 @@ export function useTasksTab(input: {
       chosen: inboxChosen,
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        const remembered = lastInboxChoice.current;
         setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? held : { kind: STAND_IN.INBOX, chosen: undefined },
+          held?.kind === STAND_IN.INBOX
+            ? held
+            : {
+                kind: STAND_IN.INBOX,
+                chosen: rememberedChoice(remembered, {
+                  account: input.account,
+                  workspaceId: listedWorkspaceId,
+                }),
+              },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
@@ -2384,6 +2595,30 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
         ),
+    },
+    // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
+    chatView: {
+      open: standIn?.kind === STAND_IN.CHAT,
+      chat,
+      place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
+      onOpen: guard(() => {
+        setHistoryFor(undefined);
+        setStandIn((held) =>
+          held?.kind === STAND_IN.CHAT ? held : { kind: STAND_IN.CHAT, place: FOR_YOU },
+        );
+      }),
+      onClose: guard(() => setStandIn(undefined)),
+      onChoose: (place) =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
+        ),
+      onShow: guard((place: ChatPlace) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.CHAT, place });
+      }),
+      onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
+      onAnswer: (answer) =>
+        stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
     },
     // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
     agentView: {
@@ -2435,6 +2670,16 @@ export function useTasksTab(input: {
       onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AUTOMATIONS, place });
+      }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
+    // The Issues page stands over the plan's place as the Automations page does, each giving way to the others.
+    issuesView: {
+      open: standIn?.kind === STAND_IN.ISSUES,
+      place: standIn?.kind === STAND_IN.ISSUES ? standIn.place : ISSUES_LIST,
+      onOpen: guard((place: IssuesPlace = ISSUES_LIST) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.ISSUES, place });
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
@@ -2517,7 +2762,7 @@ export function useTasksTab(input: {
     },
     onLeaveTask: guard(() => leaveTask()),
     // Home is the page with no plan open, so where none is, only the Inbox, an
-    // agent's page, or Factory standing over it is put away, and the host is asked nothing.
+    // agent's page, Factory, the Automations page, or Chat standing over it is put away, and the host is asked nothing.
     onGoHome: guard(() => (boundFor === undefined ? setStandIn(undefined) : leaveTask())),
     onRenameTask: renameTask,
     onDraftName: draftName,

@@ -1,4 +1,8 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CHIPS_EXAMPLE } from "./examples/chips";
+import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
 /**
  * examples.ts -- every example the catalog draws, in the order its index lists them.
@@ -15,4 +19,10 @@ export interface Example {
   readonly Render: () => React.JSX.Element;
 }
 
-export const EXAMPLES: readonly Example[] = [ARTWORK_EXAMPLE];
+export const EXAMPLES: readonly Example[] = [
+  ARTWORK_EXAMPLE,
+  TYPOGRAPHY_EXAMPLE,
+  LAYOUT_EXAMPLE,
+  BUTTONS_EXAMPLE,
+  CHIPS_EXAMPLE,
+];

@@ -22,6 +22,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -731,12 +732,22 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
   const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
   const shown = Option.getOrThrow(
     await database.run(
-      writePage(opener, plan.taskId, { title: "Funnel", html: "<h1>Funnel</h1>" }),
+      writePage(
+        opener,
+        plan.taskId,
+        { title: "Funnel", html: "<h1>Funnel</h1>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
     ),
   );
   const theirs = Option.getOrThrow(
     await database.run(
-      writePage(stranger.userId, stranger.taskId, { title: "Theirs", html: "<p/>" }),
+      writePage(
+        stranger.userId,
+        stranger.taskId,
+        { title: "Theirs", html: "<p/>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
     ),
   );
   const eve = await fakeCoderEve(plan.workspaceId);

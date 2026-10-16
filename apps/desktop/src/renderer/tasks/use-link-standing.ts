@@ -1,5 +1,6 @@
-import type { PullRequestState } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/coding-agent-wire";
 import {
+  type GitHubPullRequestSummary,
   type IssueState,
   issueAddressOf,
   pullRequestAddressOf,
@@ -15,7 +16,7 @@ import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /**
- * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, and where it stands, and who it is with, read through the workspace's own connection.
+ * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one the place drawing them names, as the window's Inbox
@@ -57,7 +58,7 @@ export interface LinkStanding {
   readonly key: string;
   readonly title: string;
   readonly state: string | undefined;
-  readonly pullRequest: { readonly number: number; readonly state: PullRequestState } | undefined;
+  readonly pullRequest: StandingPullRequest | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
   /** Who it is with, as its card says it: who opened a pull request or a GitHub issue, or who a Linear issue is assigned to; none where its provider named no one. */
   readonly byline: string | undefined;
@@ -71,6 +72,67 @@ function openedBy(login: string | undefined): string | undefined {
 /** What a card says of who a Linear issue is assigned to. */
 function assignedTo(name: string | undefined): string | undefined {
   return name === undefined ? undefined : `Assigned to ${name}`;
+}
+
+/** A pull request as its chip draws it: its number and state for its mark, and for its card what the service answered of it, each none, or no labels, where an older service answered none. */
+export interface StandingPullRequest {
+  readonly number: number;
+  readonly state: PullRequestState;
+  readonly lines: { readonly additions: number; readonly deletions: number } | undefined;
+  readonly files: number | undefined;
+  /** The GitHub login of who opened it. */
+  readonly author: string | undefined;
+  /** When it was last opened, merged, or closed, as its state says: merged when merged, closed when closed, and opened otherwise. */
+  readonly when: { readonly moment: PullRequestMoment; readonly at: number } | undefined;
+  readonly branches: { readonly base: string; readonly head: string } | undefined;
+  readonly labels: readonly { readonly name: string; readonly color: string }[];
+  readonly comments: number | undefined;
+  readonly commits: number | undefined;
+}
+
+/** The moment a pull request's card names when it says how long ago: when it was opened, merged, or closed. */
+export const PULL_REQUEST_MOMENT = {
+  OPENED: "opened",
+  MERGED: "merged",
+  CLOSED: "closed",
+} as const;
+
+export type PullRequestMoment = (typeof PULL_REQUEST_MOMENT)[keyof typeof PULL_REQUEST_MOMENT];
+
+/** When the card says a pull request last moved, as its state names it: merged or closed when it was, and opened otherwise; none where the service answered no time for it. */
+function whenOf(pullRequest: GitHubPullRequestSummary): StandingPullRequest["when"] {
+  if (pullRequest.state === PULL_REQUEST_STATE.MERGED && pullRequest.mergedAt !== undefined) {
+    return { moment: PULL_REQUEST_MOMENT.MERGED, at: pullRequest.mergedAt };
+  }
+  if (pullRequest.state === PULL_REQUEST_STATE.CLOSED && pullRequest.closedAt !== undefined) {
+    return { moment: PULL_REQUEST_MOMENT.CLOSED, at: pullRequest.closedAt };
+  }
+  return pullRequest.openedAt === undefined
+    ? undefined
+    : { moment: PULL_REQUEST_MOMENT.OPENED, at: pullRequest.openedAt };
+}
+
+/** A pull request as the service answered it for a chip, as its card draws it. */
+function standingPullRequestOf(pullRequest: GitHubPullRequestSummary): StandingPullRequest {
+  return {
+    number: pullRequest.number,
+    state: pullRequest.state,
+    // Note that an older service answers none of what follows, so its card draws none of it.
+    lines:
+      pullRequest.additions === undefined || pullRequest.deletions === undefined
+        ? undefined
+        : { additions: pullRequest.additions, deletions: pullRequest.deletions },
+    files: pullRequest.changedFiles,
+    author: pullRequest.author,
+    when: whenOf(pullRequest),
+    branches:
+      pullRequest.baseRef === undefined || pullRequest.headRef === undefined
+        ? undefined
+        : { base: pullRequest.baseRef, head: pullRequest.headRef },
+    labels: pullRequest.labels ?? [],
+    comments: pullRequest.comments,
+    commits: pullRequest.commits,
+  };
 }
 
 /** A pull request's state in words, as its chip says it. */
@@ -202,7 +264,7 @@ function readStanding(
           key,
           title: pullRequest.title,
           state: PULL_REQUEST_WORDS[pullRequest.state],
-          pullRequest: { number: pullRequest.number, state: pullRequest.state },
+          pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
           byline: openedBy(pullRequest.author),
         },

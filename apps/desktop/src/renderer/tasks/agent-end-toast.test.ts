@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { ToastHost } from "../toast";
+import { TOAST_HOLD, ToastHost } from "../toast";
 import { type AgentPlace, useAgentEndToasts } from "./agent-end-toast";
 
 /** An agent's end as main hands it to the window. */
@@ -39,6 +40,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   registry?.dispose();
   document.body.innerHTML = "";
@@ -86,4 +88,43 @@ test("an automation's agent with no plan is toasted under the automation's name,
   act(() => view?.click());
 
   assert.deepEqual(viewed, [{ taskId: null, agentId: AGENT_ID }]);
+});
+
+/** What each toast standing says, leaving out those on their way out. */
+function standing(): string[] {
+  return [...document.querySelectorAll(".toast:not([data-leaving]) .toast-words")].map(
+    (words) => words.textContent ?? "",
+  );
+}
+
+/** Lets `ms` pass on the faked clock the toasts' holds run down on. */
+function pass(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+test("an agent's end leaves by itself once the news's hold runs out, but not while the pointer is over it", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  mount();
+  const hold = Duration.toMillis(TOAST_HOLD.NEWS);
+
+  act(() =>
+    ended?.({
+      taskId: null,
+      agentId: AGENT_ID,
+      words: "Triage overnight issues finished",
+      detail: "Morning Sentry triage",
+      failed: false,
+    }),
+  );
+  const toast = document.querySelector<HTMLElement>(".toast") ?? assert.fail("the toast");
+  act(() => toast.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  pass(hold * 2);
+  const pointedAt = standing();
+  act(() => toast.dispatchEvent(new PointerEvent("pointerout", { bubbles: true })));
+  pass(hold);
+
+  assert.deepEqual(pointedAt, ["Triage overnight issues finished"]);
+  assert.deepEqual(standing(), []);
 });

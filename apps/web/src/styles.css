@@ -7,6 +7,15 @@
 
 @import "tailwindcss";
 
+/* The shared tokens: `@luke/ui`'s scale, the web profile's roles, its light
+   and dark palettes, and this site's old names for them, keyed on each page
+   root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
+   points). */
+@import "@luke/ui/tokens.css";
+/* The shared components' own rules, in Tailwind's `components` layer, over
+   the preflight and under the utilities. */
+@import "@luke/ui/styles.css";
+
 /* The admin dashboard's chart is `@luke/ui`'s, written in the same utilities
    and read in this theme's tokens; the import is what scans it. */
 @import "@luke/ui/theme.css";
@@ -19,9 +28,9 @@
 
 /* Only the tokens the page actually draws with. shadcn/ui's contract is a
    superset — popover, secondary, destructive, sidebar — and a token nothing
-   reads is drift waiting to happen. Every value is declared in `:root` below
-   and merely aliased here, so the plain-CSS blocks further down read the same
-   vocabulary the utilities do. The chart slots stay out of this block for the
+   reads is drift waiting to happen. Every value is a shared token's, under the
+   name the plain-CSS blocks further down read too, and merely aliased here, so
+   they read the same vocabulary the utilities do. The chart slots stay out of this block for the
    same reason: the admin dashboard's chart configs read `--chart-*` directly,
    and no utility class does. */
 @theme inline {
@@ -70,94 +79,22 @@
 }
 
 :root {
-  color-scheme: light;
-
-  /* shadcn/ui's stock light theme, with one deliberate change: the ground is
-     warmed off pure white. It cannot be warmed further without darkening
-     `--muted-foreground` with it — shadcn's stock `oklch(0.556 0 0)` is
-     4.58:1 here and 4.43:1 on #f7f7f7, which is under AA for body text. */
-  --background: #fbfbfa;
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-
-  /* Luke's accent carries the one filled control on the page. #04121a on
-     #5cd5ff is 11.2:1, so the pairing the dark page used survives the
-     inversion untouched: a filled button owns its own ground. */
-  --primary: #5cd5ff;
-  --primary-foreground: #04121a;
-
-  /* The same accent at text weight. #5cd5ff is 1.4:1 on this ground — fine
-     behind near-black, unreadable as ink — so links and inline accents get a
-     darkened member of the same hue family at 5.7:1. */
-  --accent-ink: #0d6e80;
-
-  /* The focus ring is a non-text indicator and owes 3:1 against the ground
-     (WCAG 2.2, 1.4.11), which the accent cannot pay on a light page. */
-  --ring: var(--foreground);
-
-  /* The product's state palette, restated for a light ground: the dark-page
-     values are pastels here. Ink passes AA against the page, tint carries it
-     as a pill. */
-  --attention: #9a5300;
-  --attention-tint: #fdf0e2;
-  --complete: #0f7a4e;
-  --complete-tint: #e6f5ed;
-
-  --radius: 0.5rem;
-
-  /* Prose and headings are the sans; mono is reserved for code, commands, and
-     the small technical labels that read as tokens rather than as sentences.
-     The wordmark keeps its own face. */
-  --font-page: "Geist Variable", -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
-  --font-code: "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-  --font-wordmark: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
-
-  /* Space scale, 4px grid. Read by the document pages, which stay plain CSS,
-     and mirrored by Tailwind's own scale for everything written at a call
-     site. */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
-  --space-9: 96px;
-
+  /* The page's palette, its fonts, its 4px space scale, and its corner are
+     the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
+     read here by the names this sheet always used (`--background`,
+     `--muted-foreground`, `--space-5`, `--radius`, …) through its aliases
+     (`tokens/legacy.css`). A page is light unless its root asks for the dark
+     theme the admin dashboard and the OAuth cards are drawn in. */
   font-optical-sizing: auto;
   font-synthesis: none;
 }
 
-/* The admin dashboard and OAuth cards opt into this dark vocabulary. Ordinary
-   site pages use the light root tokens above. */
-.dark {
-  color-scheme: dark;
-
-  --background: #08090b;
-  --foreground: rgba(255, 255, 255, 0.92);
-
-  /* A step above the page (1.06:1) lets card surfaces read before borders do. */
-  --card: #101114;
-  --muted: rgba(255, 255, 255, 0.05);
-  --muted-foreground: rgba(255, 255, 255, 0.56);
-  --border: rgba(255, 255, 255, 0.08);
-
-  /* The product's state palette needs no pastel restatement on its own dark
-     ground: ink and tint are the loopback pill's values verbatim. */
-  --attention: #ffa049;
-  --attention-tint: rgba(255, 160, 73, 0.14);
-  --complete: #6fdca4;
-  --complete-tint: rgba(111, 220, 164, 0.14);
-
-  /* The admin dashboard's chart series, declared here because that page is
-     the one chart surface and it opts into this theme. The accent cyan itself
-     sits too light for a mark on the dark card, so the slot is a darker step
-     of the same hue family, validated against the card at #101114 (6.1:1,
-     ≥ 3:1). */
+/* The admin dashboard's chart series, declared here because that page is
+   the one chart surface and it is drawn in the dark theme. The accent cyan
+   itself sits too light for a mark on the dark card, so the slot is a darker
+   step of the same hue family, validated against the card at #101114 (6.1:1,
+   ≥ 3:1). */
+[data-luke-theme="dark"] {
   --chart-1: #2f9bd8;
 }
 
@@ -166,15 +103,16 @@
    page that draws an integration's mark, its landing, is on the dark ground,
    so these are the dark inks: Executor's, Notion's, and Sentry's white,
    Mercury's near-white, and Neon's green for a dark ground. */
-.dark :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+[data-luke-theme="dark"]
+:is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
   color: #fff;
 }
 
-.dark .integration-mark-mercury {
+[data-luke-theme="dark"] .integration-mark-mercury {
   color: #f4f5f9;
 }
 
-.dark .integration-mark-neon {
+[data-luke-theme="dark"] .integration-mark-neon {
   color: #34d59a;
 }
 

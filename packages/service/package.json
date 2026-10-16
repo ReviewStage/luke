@@ -1,6 +1,5 @@
 {
   "name": "@luke/service",
-  "version": "0.16.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -111,6 +110,7 @@
     "./auth/bearer": "./src/auth/bearer.js",
     "./auth/browser-session": "./src/auth/browser-session.js",
     "./auth/oauth-clients": "./src/auth/oauth-clients.js",
+    "./issues/issues-app": "./src/issues/issues-app.js",
     "./automations/automation-github": "./src/automations/automation-github.js",
     "./automations/automation-runs": "./src/automations/automation-runs.js",
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",
@@ -223,9 +223,8 @@
     "./voice/socket": "./src/voice/socket.js"
   },
   "scripts": {
-    "test:vitest:1": "vitest run --shard=1/3",
-    "test:vitest:2": "vitest run --shard=2/3",
-    "test:vitest:3": "vitest run --shard=3/3",
+    "test:vitest:1": "vitest run --shard=1/2",
+    "test:vitest:2": "vitest run --shard=2/2",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "src": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    }
+  },
+  "required": [
+    "agentId",
+    "src"
+  ],
+  "additionalProperties": false
+}

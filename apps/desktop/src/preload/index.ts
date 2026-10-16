@@ -1,3 +1,4 @@
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
@@ -48,4 +49,9 @@ contextBridge.exposeInMainWorld("luke", exposedBridge());
 // it back by the channel and checks the ticket (`renderer/terminal/terminal-port.ts`).
 ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
+});
+
+// A terminal of this Mac's port is handed in the same way (`renderer/planning/mac-terminal-tab.tsx`).
+ipcRenderer.on(MAC_TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
+  window.postMessage({ channel: MAC_TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });

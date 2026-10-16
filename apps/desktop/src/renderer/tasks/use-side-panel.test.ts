@@ -35,6 +35,8 @@ function usedTask(id: string): OpenTask {
 interface Stood {
   task: string;
   taskAgents: readonly string[] | undefined;
+  /** Whether the plan holds nothing yet, so its strip draws no tab. */
+  bare?: boolean;
 }
 
 /** Mounts the panel alone, as a launch does, over the plan and agents given, answering the control as it stands. */
@@ -43,7 +45,7 @@ function launch(stood: Stood) {
   function Probe({ held }: { held: Stood }) {
     control = useSidePanel(
       undefined,
-      usedTask(held.task),
+      held.bare === true ? { id: held.task, holds: {} } : usedTask(held.task),
       held.taskAgents,
       [],
       [],
@@ -164,19 +166,19 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
+  act(() => first.control().onPin({ changes: AGENT }, "Pull request: Invite flow"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(
     second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Changes: Invite flow" }],
+    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request: Invite flow" }],
   );
   // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
   act(() => second.control().onRenamePins(TASK, new Map([[AGENT, "Expiring invites"]])));
-  assert.equal(second.control().pins[0]?.label, "Changes: Expiring invites");
+  assert.equal(second.control().pins[0]?.label, "Pull request: Expiring invites");
 
   // Shown from its pin on another plan, it opens there, at the end of that plan's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });
@@ -331,4 +333,31 @@ test("the Browser tab experiment going off closes every Browser tab on every pla
     [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
   );
   Reflect.deleteProperty(window, "luke");
+});
+
+test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {
+  const panel = launch({ task: TASK, taskAgents: [] });
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  assert.equal(panel.control().open, true);
+
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  assert.deepEqual(panel.control().strip, []);
+  assert.equal(panel.control().open, false);
+
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.equal(panel.control().open, true);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
+
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, true, "shown on purpose, it stands empty");
+  assert.deepEqual(panel.control().strip, []);
+  panel.render({ task: TASK, taskAgents: [] });
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  assert.equal(panel.control().open, false, "left and come back to, it is asked for again");
+  act(() => panel.control().onToggle());
+  act(() => panel.control().onToggle());
+  assert.equal(panel.control().open, false);
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.equal(panel.control().open, false, "hidden by the toggle, not by the empty strip");
 });

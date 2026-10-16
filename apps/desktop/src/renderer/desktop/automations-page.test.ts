@@ -919,7 +919,7 @@ test("a deletion asks first, then goes back to the list without the automation",
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST, deleted: SWEEP.id });
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 
@@ -1519,7 +1519,7 @@ test("the repository chosen first is not said again among the others its runs wo
   await settle();
   assert.match(page.textContent ?? "", /also work in acme\/web\./u);
 
-  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
   act(() => button("webacme").click());
@@ -1569,7 +1569,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
   act(() => button("webacme").click());

@@ -29,6 +29,7 @@ import {
 } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -48,6 +49,7 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { MemberDirectory } from "../member-directory";
 import { AgentComposer } from "./agent-composer";
 import {
   mentionablePullRequests,
@@ -172,6 +174,19 @@ function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly Co
   );
 }
 
+/** The workspace's members, as its Members list reads them: the reader, and a teammate. */
+const READER_ID = "u_reader";
+const DANA_ID = "u_dana";
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: READER_ID,
+    name: "Charles Pan",
+    email: "charles@example.com",
+    role: WORKSPACE_ROLE.OWNER,
+  },
+  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
+];
+
 /** Every act the panel told the main process, in order. */
 const told: Act[] = [];
 
@@ -224,27 +239,29 @@ beforeEach(() => {
                     ],
                   },
                 }
-              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-                ? {
-                    status: ACT_OUTCOME_STATUS.DONE,
-                    value: {
-                      agents: workspaceAnswer(request.payload),
-                    },
-                  }
-                : request.kind === ACT_KIND.TASKS_TREE
+              : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+                ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+                : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
                   ? {
                       status: ACT_OUTCOME_STATUS.DONE,
                       value: {
-                        folder: {
-                          path: "",
-                          repository: standing,
-                          branch: "main",
-                          entries: TREES.get(standing) ?? [],
-                          truncated: false,
-                        },
+                        agents: workspaceAnswer(request.payload),
                       },
                     }
-                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+                  : request.kind === ACT_KIND.TASKS_TREE
+                    ? {
+                        status: ACT_OUTCOME_STATUS.DONE,
+                        value: {
+                          folder: {
+                            path: "",
+                            repository: standing,
+                            branch: "main",
+                            entries: TREES.get(standing) ?? [],
+                            truncated: false,
+                          },
+                        },
+                      }
+                    : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
         );
       },
       recordSurfaceEvent: ignore,
@@ -1250,4 +1267,133 @@ test("the task's pull requests are a kind of their own, narrowed to by their row
     [crumb(container), listed(container)],
     ["Pull requests", ["#3061 test: sweep flaky tests"]],
   );
+});
+
+/** The node drawn on a plan's page in a workspace whose members the window reads. */
+function amongMembers(node: ReactNode): ReactNode {
+  return createElement(MemberDirectory, {
+    workspace: { id: "workspace-1", memberCount: MEMBERS.length },
+    readerId: READER_ID,
+    children: node,
+  });
+}
+
+/** The box drawn on a plan's page among the workspace's members, every message it sends written down. */
+async function memberBox() {
+  const sent: string[] = [];
+  const sender: MessageSender = (_agentId, text) => {
+    sent.push(text);
+    return new Promise<CodingAgentAgentAnswer>(ignore);
+  };
+  const { container } = drawing(
+    amongMembers(createElement(Box, { sender, skills: noSkills })),
+    taskPage(),
+  );
+  await settle();
+  return { container, sent };
+}
+
+/** The People group's rows, each by its name, its detail, and its mark's kind. */
+function peopleListed(container: HTMLElement): [string, string, string | null][] {
+  return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
+    (row) => [
+      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
+      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
+    ],
+  );
+}
+
+test("an @ among the workspace's members offers its people, the reader as You, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
+  const { container } = await memberBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  const people = peopleListed(container);
+  const kind = kindsListed(container).find(([name]) => name === "People");
+  typeInComposer(container, " and @people:reyes");
+  await settle();
+
+  assert.deepEqual(people, [
+    ["Charles Pan", "You", ACTOR_KIND.PERSON],
+    ["Dana Reyes", "dana@example.com", ACTOR_KIND.PERSON],
+  ]);
+  assert.deepEqual(kind, ["People", "2 members"]);
+  assert.deepEqual([crumb(container), listed(container)], ["People", ["Dana Reyes"]]);
+});
+
+test("a person picked from the @ list is drawn as their chip and sent as their page's link, which names them by their account's id alone", async () => {
+  const { container, sent } = await memberBox();
+
+  typeInComposer(container, "Ask @dana");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Dana Reyes"],
+  );
+  assert.deepEqual(sent, ["Ask [@Dana Reyes](https://tryluke.dev/acme/person/u_dana)"]);
+});
+
+test("a sent message's mention of a person is drawn as the chip wearing their mark that opens their page, its target on no attribute", async () => {
+  const opened: ReadLink[] = [];
+  const person = mentionMarkdown({ kind: MENTION_KIND.PERSON, userId: DANA_ID }, "Dana", PLACE);
+  const container = drawn(
+    amongMembers(
+      createElement(
+        OpenLinkProvider,
+        { value: (link: ReadLink) => opened.push(link) },
+        createElement(TranscriptWords, { text: `Ask ${person} to review.` }),
+      ),
+    ),
+    taskPage(),
+  );
+  await settle();
+
+  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  assert.ok(chip);
+  act(() => chip.click());
+
+  assert.equal(chip.querySelector(".mention-chip-label")?.textContent, "Dana");
+  assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
+  assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
+  assert.deepEqual(opened, [
+    { workspace: "acme", place: { kind: LINK_PLACE.PERSON, userId: DANA_ID } },
+  ]);
+  assert.equal(carryingTarget(container), undefined);
+});
+
+test("off a members' directory an @ offers no people", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @dana");
+  await settle();
+
+  assert.deepEqual(peopleListed(container), []);
+});
+
+test("a person's page pasted into the box becomes their chip called by their name, and one of another workspace pastes as the words it is", async () => {
+  const { container, sent } = await memberBox();
+  const here = "https://tryluke.dev/acme/person/u_dana";
+  const elsewhere = "https://tryluke.dev/other/person/u_dana";
+
+  typeInComposer(container, "Ask ");
+  pasteInComposer(container, here);
+  typeInComposer(container, "not ");
+  pasteInComposer(container, elsewhere);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Dana Reyes"],
+  );
+  assert.deepEqual(sent, [`Ask [@Dana Reyes](${here}) not ${elsewhere}`]);
 });

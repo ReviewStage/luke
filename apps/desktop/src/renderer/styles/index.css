@@ -1,11 +1,20 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
-/* Motion tokens first, so base.css can spend them without restating the springs
+/* The shared tokens first, `@luke/ui`'s scale, the desktop profile's roles,
+   its palette, and the window's old names for them, keyed on the root's
+   `data-luke-profile` and `data-luke-theme` (index.html, call.html), so every
+   sheet below reads them. */
+@import "@luke/ui/tokens.css";
+/* Motion tokens next, so base.css can spend them without restating the springs
    or the duration set. */
 @import "@luke/brand/motion-tokens.css";
 /* Before base.css: `.settings-input` is equal specificity to the tweaks
    there, and those tweaks have to win. */
 @import "./settings.css";
 @import "./base.css";
+/* The shared components' own rules, in the `components` layer: above
+   base.css's element resets, which sit in `base`, and under the utilities
+   tailwind.css layers last, so a reset never undoes a shared control. */
+@import "@luke/ui/styles.css";
 /* Before the surfaces that draw messages, so each can restate a measure of its
    own without out-specifying the block it is styling. */
 @import "./markdown.css";
@@ -25,5 +34,7 @@
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";
+/* The Issues page, over the window's layout it stands in. */
+@import "./issues.css";
 /* The call card, and its floating window over the desktop's ground, which it must not have. */
 @import "./call.css";

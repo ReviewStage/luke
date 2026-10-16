@@ -22,6 +22,7 @@ import {
   isBrowserTab,
   isChangesTab,
   isFileTab,
+  isMacTerminalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -56,7 +57,8 @@ import { panelTabPlace } from "../links-at-hand";
 import { type MenuRow, MenuRowList } from "../searchable-menu";
 import { SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
-import { AgentChangesTab, ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
+import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
+import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab";
 import {
@@ -78,6 +80,7 @@ import {
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
+import { MacTerminalTab } from "../tasks/mac-terminal-tab";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
@@ -104,6 +107,8 @@ import {
   isPinnable,
   type OpenBrowser,
   type OpenFile,
+  PULL_REQUEST_VIEW,
+  type PullRequestView,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
@@ -222,7 +227,7 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Changes, and its Terminal, and no plan's Board,
+ * agent's workers, its Pull request, and its Terminal, and no plan's Board,
  * Code, Call, files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered.
  */
@@ -287,7 +292,7 @@ export function useColumnFocus(): ColumnFocus {
 export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
-  CHANGES: "Changes",
+  PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
   TERMINAL: "Terminal",
   BROWSER: "Browser",
@@ -380,6 +385,22 @@ export function changesTabOf(
   return { changes: changesAgentOf(agents, agentId, open) };
 }
 
+/**
+ * Opens an agent's Pull request tab, the one that stands for its pull
+ * request (`changesTabOf`), on the view given: the overview its pull
+ * request's chip asks for, or the files its Changes chip does.
+ */
+export function showPullRequest(
+  panel: Pick<SidePanelControl, "changes" | "onChoose" | "onPullRequestView">,
+  agents: CodingAgentsControl,
+  agentId: string,
+  view: PullRequestView,
+): void {
+  const tab = changesTabOf(agents, agentId, panel.changes);
+  panel.onPullRequestView(tab.changes, view);
+  panel.onChoose(tab);
+}
+
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open. */
 function kindRow(tab: FixedSidePanelTab): MenuRow {
   return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
@@ -396,10 +417,11 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
  * that tab rather than opening another, as a browser's tab search does, so
  * no row says it is open; a file not open opens through the panel's one
- * door for a file on the newest snippet of it. Then, under Changes, each
- * agent's pull request (`changesOffers`), named as its Changes tab is, with
- * the pull request's number beside it, found by its title and number too,
- * which opens the agent's Changes tab. The plan's coding agents are opened
+ * door for a file on the newest snippet of it. Then, under Pull requests,
+ * each agent's pull request (`changesOffers`), named as its Pull request tab
+ * is (a kind still spelled `changes`, as the tab of its files alone was),
+ * with the pull request's number beside it, found by its title and number
+ * too, which opens the agent's Pull request tab. The plan's coding agents are opened
  * from the plan's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
@@ -450,7 +472,7 @@ export function panelEntries(input: {
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the plan's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
-    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label });
+    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label, pullRequest });
     const number = pullRequestNumberLabel(pullRequest);
     return {
       row: {
@@ -458,7 +480,7 @@ export function panelEntries(input: {
         ...look,
         detail: number,
         terms: [look.label, pullRequest.title, number],
-        section: ADD_SECTION.CHANGES,
+        section: ADD_SECTION.PULL_REQUESTS,
       },
       onPick: () => panel.onChoose({ changes: agentId }),
     };
@@ -520,11 +542,15 @@ export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Changes tab's look, named for the agent as the plan's agents last read it. */
+/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it, wearing its pull request's mark for where it stands. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agent = agents.agents?.find((each) => each.id === agentId);
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-  return tabLook({ kind: TAB_KIND.CHANGES, agentName });
+  return tabLook({
+    kind: TAB_KIND.CHANGES,
+    agentName,
+    pullRequest: agents.pullRequests.get(agentId),
+  });
 }
 
 /**
@@ -636,7 +662,13 @@ function stripTabs(input: {
       ).then((messages) =>
         messages === undefined
           ? undefined
-          : agentTranscript({ title: label, messages, brief: undefined, task }),
+          : agentTranscript({
+              title: label,
+              messages,
+              brief: undefined,
+              task,
+              chatOn: agents.chatOn,
+            }),
       );
     return {
       tab,
@@ -713,6 +745,12 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
+  // A terminal of this Mac's tab names the repository it runs beside its word.
+  const macTerminalTabs = panel.strip.filter(isMacTerminalTab).map((tab) => ({
+    tab,
+    look: look(tab, { ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }), detail: tab.repository }),
+    close: () => panel.onClose(tab),
+  }));
   // A Browser tab is named by its page's title, its address beside it on hover.
   const browserTabs = browsers.map(({ tab }) => {
     const page = browserPages.get(tab.browser);
@@ -732,6 +770,7 @@ function stripTabs(input: {
     ...changesTabs,
     ...pageTabs,
     ...terminalTabs,
+    ...macTerminalTabs,
     ...browserTabs,
   ];
 }
@@ -907,7 +946,13 @@ function PanelTabs({
   );
 }
 
-/** The panel with every tab closed: every row its "+" menu offers, under the menu's own headings, each opening what it names as its row there does. */
+/**
+ * The panel shown on purpose with every tab closed: every row its "+" menu
+ * offers, under the menu's own headings, each opening what it names as its
+ * row there does. Note that a plan's page reaches it by ⌘T alone, since its
+ * Show panel opens a tab first (`useTasksTab`), while an agent's page, which
+ * has no summary to list its tabs, reaches it by its toggle too.
+ */
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
@@ -1013,6 +1058,8 @@ export function workerCardReading(
         messages,
         brief: undefined,
         task: worker.task,
+        // A worker's own lines carry no chat notice, which reaches the agent's turn alone.
+        chatOn: false,
       }),
   };
 }
@@ -1120,7 +1167,13 @@ function subagentCardReading(
       choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
       transcript:
         messages &&
-        agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+        agentTranscript({
+          title: label,
+          messages,
+          brief: undefined,
+          task: delegation.task,
+          chatOn: agents.chatOn,
+        }),
     };
   };
 }
@@ -1258,6 +1311,8 @@ function TabContent({
   onShowNote,
   onRevealed,
   onCloseTab,
+  pullRequestViews,
+  onPullRequestView,
   shellsList,
   browsers,
   onBrowserOpened,
@@ -1310,6 +1365,10 @@ function TabContent({
   onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
+  /** What each agent's Pull request tab shows, by agent (`SidePanelControl.pullRequestViews`). */
+  pullRequestViews: SidePanelControl["pullRequestViews"];
+  /** Chooses what an agent's Pull request tab shows. */
+  onPullRequestView: SidePanelControl["onPullRequestView"];
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
   /** The plan's Browser tabs, which a Browser tab reads the address it was opened at from. */
@@ -1318,6 +1377,9 @@ function TabContent({
   onBrowserOpened: (browserId: string, address: string) => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isMacTerminalTab(tab)) {
+    return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
+  }
   if (isBrowserTab(tab)) {
     const open = browsers.find((each) => sameTab(each.tab, tab));
     // The tab stands for one no longer open only until the panel moves on, a render away.
@@ -1364,13 +1426,15 @@ function TabContent({
   }
   if (isChangesTab(tab)) {
     return (
-      <AgentChangesTab
+      <AgentPullRequestTab
         key={tab.changes}
         agentId={tab.changes}
         control={agents}
         shown={shown}
         repository={repository}
         tree={fileTree}
+        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.OVERVIEW}
+        onView={(view) => onPullRequestView(tab.changes, view)}
       />
     );
   }
@@ -1818,9 +1882,11 @@ export function SidePanel({
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
-                : isBrowserTab(tab)
-                  ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
-                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isMacTerminalTab(tab)
+                  ? TAB_WORDS.MAC_TERMINAL
+                  : isBrowserTab(tab)
+                    ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
+                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1964,6 +2030,8 @@ export function SidePanel({
               onShowNote={showNote}
               onRevealed={revealed}
               onCloseTab={panel.onClose}
+              pullRequestViews={panel.pullRequestViews}
+              onPullRequestView={panel.onPullRequestView}
               shellsList={shellsList}
               browsers={browsers}
               onBrowserOpened={panel.onBrowserOpened}

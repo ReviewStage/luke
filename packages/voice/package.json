@@ -1,6 +1,5 @@
 {
   "name": "@luke/voice",
-  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The live voice orchestrator: the call, its socket, and the live session source it opens",

@@ -9,9 +9,7 @@ import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
-import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
@@ -69,11 +67,11 @@ import { taskCardOf } from "./task-card";
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
  * glyph (`empty-state.tsx`); with Needs you leaving out every item, the list
  * says so and offers Show all, while the pane goes on showing the item
- * chosen, answered, though the list draws it no row. Escape leaves it for the plan it stood over,
- * and so does any row of the sidebar. Too narrow for the list and the item
+ * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
+ * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
  * item, whose way back, Back's chord, or Escape gives the list, and a press
- * on a row there the item again, before Escape leaves the Inbox. K and J, and the pager where the
+ * on a row there the item again. K and J, and the pager where the
  * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`).
@@ -136,7 +134,6 @@ const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
 /** The window's Inbox, in the plan's place: every plan's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.inboxView;
-  useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
   const { act } = useAct();
   const openLink = useOpenLink();
   const now = useMinute();
@@ -237,7 +234,11 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     ...taskEntries,
     ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
-  const filter = { grouping: choices.grouping, waitingOnly: choices.waitingOnly };
+  const filter = {
+    grouping: choices.grouping,
+    waitingOnly: choices.waitingOnly,
+    readerId: tasks.me,
+  };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(entries, { ...filter, chosen: undefined });
   const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
@@ -348,7 +349,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 shown: tasks.shown,
                 needsYou: choices,
                 view: { choices, folds },
-                waiting: anyNeedsYou(entries),
+                waiting: anyNeedsYou(entries, tasks.me),
               }}
               models={named.models}
               readerId={tasks.me}

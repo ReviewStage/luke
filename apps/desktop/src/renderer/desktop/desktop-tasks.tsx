@@ -4,6 +4,7 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -28,6 +29,7 @@ import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
+  anyNeedsYou,
   firstChoice,
   INBOX_GROUPING,
   type InboxListed,
@@ -55,7 +57,7 @@ import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { useOpenLink } from "../tasks/use-open-link";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
@@ -66,9 +68,9 @@ import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import {
   COLUMN,
-  changesTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  showPullRequest,
   taskCards,
   useColumnFocus,
   useSidePanelDrawing,
@@ -210,7 +212,11 @@ function TaskInboxTab({
   const needsYou = useTaskInboxWaitingOnly();
   const items = [...inbox.board.open, ...inbox.board.settled];
   const groups = [{ holder: taskHolder(task), items }];
-  const filter = { grouping: INBOX_GROUPING.NEWEST, waitingOnly: needsYou.waitingOnly };
+  const filter = {
+    grouping: INBOX_GROUPING.NEWEST,
+    waitingOnly: needsYou.waitingOnly,
+    readerId: tasks.me,
+  };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(groups, { ...filter, chosen: undefined });
   const steps = inboxList(groups, { ...filter, chosen: asked });
@@ -263,7 +269,7 @@ function TaskInboxTab({
           shown,
           needsYou,
           view: undefined,
-          waiting: inbox.board.open.length > 0,
+          waiting: anyNeedsYou(groups, tasks.me),
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -522,9 +528,22 @@ function PlanDocument({
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
   // An agent's Changes chip opens its pull request's changes in the side panel, beside its
-  // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
+  // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
   const openChanges = (agentId: string) =>
-    sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
+  // Its pull request's chip opens the same tab on the pull request's overview.
+  const openPullRequest = (agentId: string) =>
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.OVERVIEW);
+  // Run opens the agent's terminal of this Mac in the side panel at once;
+  // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
+  const { repository } = task;
+  const openOnMac =
+    repository === null
+      ? undefined
+      : (agentId: string) => {
+          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
+          showSide();
+        };
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -555,6 +574,17 @@ function PlanDocument({
       }
     }
   };
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = tasks.chatView.chat;
+  const chat =
+    chatRead === undefined
+      ? undefined
+      : {
+          chat: chatRead.answer,
+          names: chatNames(tasks.tasks, chatRead.agents, undefined),
+          onOpen: tasks.chatView.onShow,
+        };
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = taskCards({
@@ -635,6 +665,7 @@ function PlanDocument({
                       inbox={inbox.board.open.length}
                       actionsSlot={actionsSlot}
                       onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                      onOpenOnMac={openOnMac}
                     />
                   }
                 >
@@ -783,8 +814,10 @@ function PlanDocument({
                         views={views}
                         onOpenDelegation={openDelegation}
                         onOpenChanges={openChanges}
+                        onOpenPullRequest={openPullRequest}
                         onOpenTarget={openTarget}
                         cards={cards}
+                        chat={chat}
                       />
                     )}
                   </FindScope>

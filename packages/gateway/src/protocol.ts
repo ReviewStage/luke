@@ -146,9 +146,18 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's issues: listed, one read, one filed, and one changed. */
+  ISSUES_LIST: "issues.list",
+  ISSUES_READ: "issues.read",
+  ISSUES_CREATE: "issues.create",
+  ISSUES_CHANGE: "issues.change",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
+  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
+  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
@@ -215,6 +224,9 @@ export const GATEWAY_METHOD = {
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
+  /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
+  MAC_REPOSITORIES_READ: "macRepositories.read",
+  MAC_REPOSITORY_SET: "macRepositories.set",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",

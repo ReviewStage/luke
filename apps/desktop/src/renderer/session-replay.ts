@@ -22,7 +22,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * pictures of the person's screen, a plan's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, and coding agents' tabs and their Terminal tabs,
+ * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
  * and Browser tabs with the still of a page they draw, among others. The whiteboard and a Terminal tab are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather

@@ -8,6 +8,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -121,6 +122,10 @@ let refuseRename = false;
 let refusePhoto = false;
 /** Whether the service refuses a role change for the account's role. */
 let refuseRole = false;
+/** Each repository's clone and command set on this Mac, as its settings file holds them. */
+let macRepositories: MacRepository[] = [];
+/** The repositories the workspace reaches on GitHub, by full name. */
+let githubRepositories: string[] = [];
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -151,6 +156,12 @@ const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
   value,
 });
+
+/** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
+const MAC_GROUP_READS: ReadonlySet<ActKind> = new Set([
+  ACT_KIND.TASKS_REPOSITORIES,
+  ACT_KIND.MAC_REPOSITORIES,
+]);
 
 /** The bridge, answering the section's acts the way the host would. */
 function answer(request: Act): Promise<ActOutcome> {
@@ -268,6 +279,31 @@ function answer(request: Act): Promise<ActOutcome> {
       if (automations === undefined)
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
       return Promise.resolve(done({ automations: automations.map(automationOf) }));
+    case ACT_KIND.TASKS_REPOSITORIES:
+      return Promise.resolve(
+        done({
+          repositories: {
+            installed: true,
+            installationUrl: "https://github.com/apps/luke/installations/new",
+            repositories: githubRepositories.map((fullName) => {
+              const [owner = "", name = ""] = fullName.split("/");
+              return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1 };
+            }),
+          },
+        }),
+      );
+    case ACT_KIND.MAC_REPOSITORIES:
+      return Promise.resolve(done({ repositories: macRepositories }));
+    case ACT_KIND.MAC_REPOSITORY_SET: {
+      const entry = request.payload;
+      macRepositories = [
+        ...macRepositories.filter(
+          (each) => each.repository.toLowerCase() !== entry.repository.toLowerCase(),
+        ),
+        entry,
+      ];
+      return Promise.resolve(done(undefined));
+    }
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
@@ -297,6 +333,8 @@ beforeEach(() => {
   refusePhoto = false;
   refuseRole = false;
   automations = undefined;
+  macRepositories = [];
+  githubRepositories = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -1450,7 +1488,10 @@ test("the owner invites an address as a role, sees it pending with its link to c
   assert.deepEqual(invitationRows(page), []);
   assert.deepEqual(
     sent
-      .filter((request) => request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ)
+      .filter(
+        (request) =>
+          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ && !MAC_GROUP_READS.has(request.kind),
+      )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
@@ -1746,4 +1787,48 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
   await chooseAction(rowNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {
+  githubRepositories = ["acme/app"];
+  macRepositories = [{ repository: "acme/old", command: "make run" }];
+  const { page } = await mount(ACME);
+  const group = page.querySelector<HTMLElement>(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
+  );
+  assert.ok(group !== null);
+  const field = (name: string) => {
+    const label = [...group.querySelectorAll<HTMLLabelElement>(".mac-repository-name")].find(
+      (each) => each.textContent === name,
+    );
+    const input =
+      label === undefined ? null : group.querySelector<HTMLInputElement>(`#${label.htmlFor}`);
+    assert.ok(input !== null, name);
+    return input;
+  };
+  assert.deepEqual(
+    [...group.querySelectorAll(".mac-repository-name")].map((each) => each.textContent),
+    ["acme/app", "acme/old"],
+  );
+  assert.equal(field("acme/app").value, "");
+  assert.equal(field("acme/old").value, "make run");
+
+  const typed = field("acme/app");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      typed,
+      " pnpm dev ",
+    );
+    typed.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => typed.form?.requestSubmit());
+  await settle();
+
+  assert.deepEqual(
+    sent.flatMap((request) =>
+      request.kind === ACT_KIND.MAC_REPOSITORY_SET ? [request.payload] : [],
+    ),
+    [{ repository: "acme/app", command: "pnpm dev" }],
+  );
+  assert.equal(field("acme/app").value, "pnpm dev");
 });

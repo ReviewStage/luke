@@ -13,9 +13,9 @@ import { TOAST_TONE, ToastHost, type ToastNotice, useToast } from "./toast";
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
  * window too short for three stands two, setting the oldest aside until
- * there is room again, and the stack stands clear of a call bar docked at
- * the window's foot under it. jsdom lays nothing out, so the window's height
- * and the boxes the stack and the bar stand in are given. Synthetic
+ * there is room again, and the stack keeps the window's bottom-right corner
+ * whatever docks at its foot. jsdom lays nothing out, so the window's height
+ * is given and the stack's place is read from the stylesheet. Synthetic
  * throughout.
  */
 
@@ -126,30 +126,19 @@ test("a window made too short for three toasts sets the oldest aside, without di
   assert.ok(standing().includes("Retry the webhook finished"), "the toast set aside comes back");
 });
 
-test("the stack stands on the highest dock at the window's foot by the stylesheet alone, watching nothing of the window, and a column hidden under the side panel docks nothing", () => {
+test("the stack stands the same step in from the window's foot as from its right edge, whatever docks at the window's foot", () => {
   document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  const watched = vi.spyOn(MutationObserver.prototype, "observe");
-  const sized = vi.spyOn(ResizeObserver.prototype, "observe");
   const column = document.body.appendChild(document.createElement("div"));
   column.className = "desktop-task-main";
-  const docks = ["desktop-call-bar", "agent-composer", "agent-todos-dock"].map((name) => {
-    const dock = column.appendChild(document.createElement("div"));
-    dock.className = name;
-    return dock;
-  });
-  mount(WINDOW.SHORT);
+  for (const name of ["desktop-call-bar", "agent-composer", "agent-todos-dock"]) {
+    column.appendChild(document.createElement("div")).className = name;
+  }
+  mount(WINDOW.TALL);
 
   act(() => show?.(persisting("Retry the webhook finished")));
   const stack = document.querySelector<HTMLElement>(".toast-stack") ?? assert.fail("the stack");
-  const foot = getComputedStyle(stack).bottom;
-  const named = docks.map((dock) => getComputedStyle(dock).getPropertyValue("anchor-name"));
-  column.hidden = true;
-  const hidden = docks.map((dock) => getComputedStyle(dock).getPropertyValue("anchor-name"));
+  const { bottom, right } = getComputedStyle(stack);
 
-  for (const anchor of ["--dock-call", "--dock-composer", "--dock-todos"]) {
-    assert.ok(foot.includes(`anchor(${anchor}`), `the stack's foot stands on ${anchor}`);
-  }
-  assert.deepEqual(named, ["--dock-call", "--dock-composer", "--dock-todos"]);
-  assert.deepEqual(hidden, ["none", "none", "none"]);
-  assert.deepEqual([...watched.mock.calls, ...sized.mock.calls], [], "the stack watches nothing");
+  assert.notEqual(bottom, "");
+  assert.equal(bottom, right, "the stack keeps the corner rather than standing on a dock");
 });

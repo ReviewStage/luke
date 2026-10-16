@@ -7,7 +7,7 @@ import {
   HTTP_STATUS,
   jsonResponse,
 } from "@luke/wire/testing";
-import { Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -27,6 +27,12 @@ function manager(options: {
   client?: AccountClient;
   /** Who the service says a token belongs to; the stored account's person unless given. */
   identity?: { id: string; email: string };
+  /** The capability start a sign-in runs; recording "start" unless given. */
+  startCapabilities?: Effect.Effect<void>;
+  /** The capability stop a sign-out runs; recording "stop" unless given. */
+  stopCapabilities?: Effect.Effect<void>;
+  /** The refresh grant's answer; new tokens unless given. */
+  refresh?: AccountClient["refresh"];
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
   /** Whose session the hand-off's exchange answers; the stored account's person unless given. */
@@ -63,7 +69,9 @@ function manager(options: {
           ...(options.identity ?? { id: STORED.id, email: STORED.email }),
           provider: STORED.provider,
         }),
-      refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
+      refresh:
+        options.refresh ??
+        (() => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" })),
       authorizeUrl: (input: { redirectUri: string; state: string }) => {
         authorizations.push(input);
         return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
@@ -106,12 +114,16 @@ function manager(options: {
       openExternal: async (url) => {
         opened.push(url);
       },
-      startCapabilities: Effect.sync(() => {
-        events.push("start");
-      }),
-      stopCapabilities: Effect.sync(() => {
-        events.push("stop");
-      }),
+      startCapabilities:
+        options.startCapabilities ??
+        Effect.sync(() => {
+          events.push("start");
+        }),
+      stopCapabilities:
+        options.stopCapabilities ??
+        Effect.sync(() => {
+          events.push("stop");
+        }),
     });
     // The subscriber every test is: a fiber forked into the test's own scope,
     // pumping every snapshot the instance settles on, exactly as
@@ -203,6 +215,40 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a renewal that signs out answers its caller before the sign-out's capability stop settles",
+  () =>
+    Effect.gen(function* () {
+      // The stop waits on the renewal's caller, as `tasks.reset` waits on the
+      // lock a Plans read holds while it renews.
+      const callerDone = yield* Deferred.make<void>();
+      const subject = yield* manager({
+        stored: STORED,
+        client: refreshingClient(() =>
+          Promise.resolve(
+            jsonResponse(
+              { error: "invalid_grant", error_description: "Refresh token was revoked" },
+              400,
+            ),
+          ),
+        ),
+        stopCapabilities: Deferred.await(callerDone),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const changes = yield* subject.instance.changes;
+
+      yield* subject.instance.renewOnce();
+      yield* Deferred.succeed(callerDone, undefined);
+
+      const settled = yield* Stream.runCollect(Stream.take(changes, 2));
+      assert.deepEqual(
+        settled.map((account) => account.status),
+        [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT],
+      );
+      assert.equal(subject.stored(), undefined);
+    }),
+);
+
 /** Waits for the consent trip to have composed its authorization page. */
 async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
@@ -221,6 +267,123 @@ function grantCode(authorizations: readonly { redirectUri: string; state: string
     return yield* Effect.promise(() => fetch(callback, { redirect: "manual" }));
   });
 }
+
+/** Lets the event loop turn `count` times, long enough for a loopback round trip to land. */
+async function turns(count: number): Promise<void> {
+  for (let turn = 0; turn < count; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+}
+
+it.effect(
+  "a sign-in begun while a refused renewal's sign-out stops capabilities starts only after it",
+  () =>
+    Effect.gen(function* () {
+      const refusing = refreshingClient(() =>
+        Promise.resolve(
+          jsonResponse(
+            { error: "invalid_grant", error_description: "Refresh token was revoked" },
+            400,
+          ),
+        ),
+      );
+      const released = yield* Deferred.make<void>();
+      const order: string[] = [];
+      const subject = yield* manager({
+        stored: STORED,
+        refresh: (token) => refusing.refresh(token),
+        startCapabilities: Effect.sync(() => order.push("start")),
+        stopCapabilities: Deferred.await(released).pipe(
+          Effect.andThen(Effect.sync(() => order.push("stop"))),
+        ),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      yield* subject.instance.renewOnce();
+
+      const signingIn = yield* Effect.forkChild(
+        subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+      );
+      const granting = yield* Effect.forkChild(grantCode(subject.authorizations));
+      // The stop is held until a sign-in that did not wait would have landed.
+      yield* Effect.race(
+        Fiber.join(signingIn),
+        Effect.promise(() => turns(500)),
+      );
+      yield* Deferred.succeed(released, undefined);
+      yield* Fiber.join(granting);
+      yield* Fiber.join(signingIn);
+
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+      assert.equal(subject.stored()?.refreshToken, "issued-refresh");
+      assert.deepEqual(order, ["stop", "start"]);
+    }),
+);
+
+it.effect("a sign-in cancelled while a refused renewal's sign-out settles opens no browser", () =>
+  Effect.gen(function* () {
+    const refusing = refreshingClient(() =>
+      Promise.resolve(
+        jsonResponse(
+          { error: "invalid_grant", error_description: "Refresh token was revoked" },
+          400,
+        ),
+      ),
+    );
+    const released = yield* Deferred.make<void>();
+    const subject = yield* manager({
+      stored: STORED,
+      refresh: (token) => refusing.refresh(token),
+      stopCapabilities: Deferred.await(released),
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    yield* subject.instance.renewOnce();
+
+    const signingIn = yield* Effect.forkChild(
+      subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+    );
+    yield* Effect.yieldNow;
+    subject.instance.cancelSignIn();
+    yield* Deferred.succeed(released, undefined);
+
+    assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_OUT);
+    assert.deepEqual(subject.authorizations, []);
+    assert.deepEqual(subject.opened, []);
+  }),
+);
+
+it.effect(
+  "a cancel pressed while a sign-in waits on the sign-out also ends a sign-in again already open",
+  () =>
+    Effect.gen(function* () {
+      const refusing = refreshingClient(() =>
+        Promise.resolve(
+          jsonResponse(
+            { error: "invalid_grant", error_description: "Refresh token was revoked" },
+            400,
+          ),
+        ),
+      );
+      const released = yield* Deferred.make<void>();
+      const subject = yield* manager({
+        stored: STORED,
+        refresh: (token) => refusing.refresh(token),
+        stopCapabilities: Deferred.await(released),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const again = yield* Effect.forkChild(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB));
+      yield* Effect.promise(() => armed(subject.authorizations));
+      yield* subject.instance.renewOnce();
+
+      const signingIn = yield* Effect.forkChild(
+        subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+      );
+      yield* Effect.yieldNow;
+      subject.instance.cancelSignIn();
+      yield* Deferred.succeed(released, undefined);
+
+      assert.equal(yield* Fiber.join(again), false);
+      assert.equal((yield* Fiber.join(signingIn)).status, ACCOUNT_STATUS.SIGNED_OUT);
+      assert.equal(subject.authorizations.length, 1);
+    }),
+);
 
 /** The hand-off page the sign-in sent the browser on to, read off its redirect. */
 function handOffPage(response: Response): URL {

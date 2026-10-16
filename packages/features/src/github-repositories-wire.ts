@@ -13,8 +13,10 @@ import { countedNumber } from "./service-wire.js";
  * named everywhere by its full name, `owner/name` as GitHub spells it, which
  * is the one form a plan stores and a coding agent checks out. One pull
  * request of such a repository is read the same way, by its number, and
- * travels as no more than a link to it draws: its number, title, page, and
- * where it stands; and so is one issue, by its number, open, closed as
+ * travels as no more than a link to it draws: its number, title, page,
+ * where it stands, its author, its size, its age, its branches, its labels,
+ * and its comment and commit counts; and so is one issue,
+ * by its number, open, closed as
  * done, or closed as not planned.
  */
 
@@ -88,7 +90,10 @@ export const githubPullRequestNumberSchema = EffectSchema.Int.check(
 /**
  * One pull request of a repository as a link to it is drawn: its number,
  * its title, its own page on GitHub, and where it stands, merged before
- * closed and draft before open, as an agent's pill reads it.
+ * closed and draft before open, as an agent's pill reads it; and who
+ * opened it, its size, its age, its branches, its labels, and its comment
+ * and commit counts, as GitHub counts them, none of which an older service
+ * answers, so a link it read draws none of them.
  */
 export const githubPullRequestSummarySchema = EffectSchema.Struct({
   number: githubPullRequestNumberSchema,
@@ -98,6 +103,26 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
   /** The GitHub login of who opened it; absent where GitHub named none, and from a service older than it. */
   author: EffectSchema.optionalKey(EffectSchema.String),
+  additions: EffectSchema.optionalKey(countedNumber),
+  deletions: EffectSchema.optionalKey(countedNumber),
+  /** How many files it changes. */
+  changedFiles: EffectSchema.optionalKey(countedNumber),
+  /** When it was opened, and when it was merged or closed where it was, as epoch milliseconds. */
+  openedAt: EffectSchema.optionalKey(countedNumber),
+  mergedAt: EffectSchema.optionalKey(countedNumber),
+  closedAt: EffectSchema.optionalKey(countedNumber),
+  /** The branch it merges into, and the branch it merges from. */
+  baseRef: EffectSchema.optionalKey(EffectSchema.String),
+  headRef: EffectSchema.optionalKey(EffectSchema.String),
+  /** Its labels, each by its name and its colour as GitHub's six hex digits with no `#`. */
+  labels: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({ name: EffectSchema.String, color: EffectSchema.String }),
+    ),
+  ),
+  /** How many comments it holds, on its conversation and its diff together, and how many commits. */
+  comments: EffectSchema.optionalKey(countedNumber),
+  commits: EffectSchema.optionalKey(countedNumber),
 });
 
 export type GitHubPullRequestSummary = typeof githubPullRequestSummarySchema.Type;

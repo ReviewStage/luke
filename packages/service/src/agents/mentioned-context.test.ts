@@ -14,6 +14,7 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "./attached-files.js";
 import {
@@ -383,6 +384,11 @@ const PAGE_ID = "3b9a0c1d-2e4f-4a6b-8c0d-1e2f3a4b5c6d";
 
 const OTHER_AGENT_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b";
 
+const PERSON_ID = "Hq3vT9xLk2PzR8wN";
+
+const person = (name: string, userId = PERSON_ID) =>
+  mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, name, PLACE);
+
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
@@ -408,6 +414,9 @@ const OTHER_AGENT: MentionedAgent = {
 const READS = {
   pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Invites by week", version: 3, at: 1_000 }]]),
   agents: new Map([[OTHER_AGENT_ID, OTHER_AGENT]]),
+  people: new Map([
+    [PERSON_ID, { userId: PERSON_ID, name: "Dana Reyes", role: WORKSPACE_ROLE.ADMIN }],
+  ]),
 };
 
 test("a page of the plan the words mention is handed by its title, id, and version, with how to read it and how to revise it, and never its HTML", () => {
@@ -440,6 +449,7 @@ test("an agent of the workspace on another task or on none is handed with its ta
   const reads = (standing: MentionedAgent) => ({
     pages: new Map(),
     agents: new Map([[OTHER_AGENT_ID, standing]]),
+    people: new Map(),
   });
 
   const another = mentionedContext(
@@ -474,6 +484,7 @@ test("an agent of the plan that published nothing yet is handed its branch to fe
     mentionedContext(`See ${agent("Store")}.`, TASK, {
       pages: new Map(),
       agents: new Map([[OTHER_AGENT_ID, standing]]),
+      people: new Map(),
     }) ?? "";
 
   assert.match(
@@ -504,7 +515,11 @@ test("a page the send did not find on the plan is named as gone, an agent it did
 
 test("an agent whose task is archived is handed as taking no message, and one mentioned in upper case is found as the store holds it", () => {
   const onArchived = { ...OTHER_AGENT, task: { id: TASK.id, name: "Rollout", archived: true } };
-  const reads = { pages: new Map(), agents: new Map([[OTHER_AGENT_ID, onArchived]]) };
+  const reads = {
+    pages: new Map(),
+    agents: new Map([[OTHER_AGENT_ID, onArchived]]),
+    people: new Map(),
+  };
 
   const part =
     mentionedContext(`See ${agent("Store", OTHER_AGENT_ID.toUpperCase())}.`, TASK, reads) ?? "";
@@ -512,6 +527,39 @@ test("an agent whose task is archived is handed as taking no message, and one me
   assert.match(part, /"Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\)/u);
   assert.match(part, /Its task is archived, so it takes no message\./u);
   assert.doesNotMatch(part, /message_agent/u);
+});
+
+test("a person the words mention is handed by their name and role in the workspace, once however often named, and never their email", () => {
+  const part = mentionedContext(
+    `Ask ${person("Dana")} to look, then tell ${person("Dana")}.`,
+    TASK,
+    READS,
+  );
+
+  assert.equal(
+    part,
+    `${MENTIONED_HEADING}\n\nThe developer pointed you at Dana Reyes, an admin of your workspace. No tool of yours reaches them, so where the work needs them, name them in what you write, as the developer's mention of them is written.`,
+  );
+});
+
+test("a person the send did not find among the workspace's members is named as not a member, to an agent with a plan or with none", () => {
+  const words = `Ask ${person("Sam", "Zz9yX8wV7uT6sR5q")}.`;
+
+  for (const plan of [TASK, undefined]) {
+    assert.equal(
+      mentionedContext(words, plan, READS),
+      `${MENTIONED_HEADING}\n\nThe person "Sam": not a member of your workspace.`,
+    );
+  }
+});
+
+test("the people the words mention are what the send reads, each once, by the id as written", () => {
+  const ids = mentionedIds(
+    `${person("Dana")} and ${person("Dana")}, then ${person("Sam", "Zz9")}.`,
+    TASK,
+  );
+
+  assert.deepEqual(ids.people, [PERSON_ID, "Zz9"]);
 });
 
 /** A section's address as its heading's ⋯ "Copy link" copies it, bare. */
@@ -531,7 +579,7 @@ test("a section's bare address in the words is handed the section as it stands, 
   }
 });
 
-test("a gone section's bare address is named by its anchor, and a page's or an agent's bare address is read as its mention", () => {
+test("a gone section's bare address is named by its anchor, and a page's, an agent's, or a person's bare address is read as its mention", () => {
   const pageAddress = encodeMention(
     { kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId: PAGE_ID },
     PLACE,
@@ -540,13 +588,18 @@ test("a gone section's bare address is named by its anchor, and a page's or an a
     { kind: MENTION_KIND.AGENT, taskId: TASK.id, agentId: OTHER_AGENT_ID },
     PLACE,
   );
-  const words = `See ${bareSection("Old flow")}, ${pageAddress} and ${agentAddress}.`;
+  const personAddress = encodeMention({ kind: MENTION_KIND.PERSON, userId: PERSON_ID }, PLACE);
+  const words = `See ${bareSection("Old flow")}, ${pageAddress}, ${agentAddress} and ${personAddress}.`;
 
   assert.match(
     mentionedContext(words, TASK) ?? "",
     /The section "old-flow": no longer in the plan\./u,
   );
-  assert.deepEqual(mentionedIds(words, TASK), { pages: [PAGE_ID], agents: [OTHER_AGENT_ID] });
+  assert.deepEqual(mentionedIds(words, TASK), {
+    pages: [PAGE_ID],
+    agents: [OTHER_AGENT_ID],
+    people: [PERSON_ID],
+  });
 });
 
 test("a bare GitHub page of the plan's repository, a bare Linear issue, a bare address in code, and one a link or picture holds between angle brackets are handed nothing and bring in no server", () => {

@@ -32,6 +32,20 @@ that wrote it is signed in. The files attached to such a message stay in
 memory only.
 None of it is sent anywhere.
 
+**Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
+Luke, in a tab of its side panel, on this Mac. Its shell clones the repository
+from GitHub into Luke's application data the first time, with your own git
+login, fetches the agent's pushed branch, checks it out in a worktree there,
+runs the run command you set for that repository if you set one, and stays
+open for you to type in. It runs as your macOS user in your login shell, and
+reaches what you can. Each repository's run command is kept in this Mac's
+settings, under Settings › Workspace › Repositories, and never sent anywhere;
+what the terminal prints and what you type pass only between Luke's windows
+on this Mac, are held in memory up to the latest 256 KB of output while the
+tab stays open, and are never written to disk, logged, counted, or recorded.
+Closing the tab, or quitting Luke, hangs up the terminal and everything it
+started on it; the clone and the worktree stay until you delete them.
+
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
 to can each run any shell command on your Mac, at once and without asking you,
@@ -115,8 +129,11 @@ message, rename, and stop the coding agents any member started on it. Each
 message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
 message of a member whose account is deleted keeps no account and reads as a
-former member's. A coding agent can also list the other coding agents of its
-workspace, on any task and whichever member started them, send one a
+former member's. A message that mentions another coding agent of the
+workspace tells the agent it reaches that agent's task, branch, and pull
+request, and how to message it, never its conversation. A coding agent can
+also list the other coding agents of its workspace, on any task and whichever
+member started them, send one a
 message, list the workspace's open tasks, and start a new one on its own
 task or another task of the workspace, without asking you first; a
 message is kept in the receiving agent's transcript under the sending
@@ -238,6 +255,24 @@ agent's title, and whether it finished or failed, or its branch's pull request
 number, unless you turn these off in Settings › Coding agents; macOS shows and
 keeps them as it does any app's. Deleting the task, or your account, deletes
 its items.
+
+**A workspace's chat.** A workspace has one chat on our service where its
+coding agents, each plan's Luke, and the people in it talk: a general
+channel, a channel for each plan, channels a member opens on a topic, and
+direct messages between two members, with replies in threads. Each member
+has a handle our service makes once and keeps: yours is spelled from your
+account's name. A message is stored with its words, any links, references to
+lines of a repository (a path, the lines, and the commit, never the lines
+themselves), the members it mentions, who posted it, where, and when; it may
+also ask for an answer, with the answer and who gave it stored beside it.
+Every message is stored under the workspace and readable by our own
+operators, like an agent's transcript. Every person in the workspace can
+read every channel and every direct message, one between two other people
+included; a coding agent and Luke read the channels and only their own
+direct messages, and only a direct message's two members post in it.
+Deleting a plan deletes its channel with its messages, deleting your account
+deletes your messages (others' replies to them stay), and deleting the
+workspace deletes its chat.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, or to the prompt you start one with, by picking them with +,
@@ -365,16 +400,28 @@ An inbox item's line reference is read the same way, at the
 commit the agent named, for the lines on the item and the File tab it opens;
 nothing of the file is stored.
 
-**A coding agent's changes.** A coding agent's Changes tab shows its pull
-request's changed files. Each time the tab opens, our service reads them from
-GitHub with a token the Luke GitHub App mints for that one repository on the
-workspace's installation: each file's name and patch, for up to 300
-files, leaving out a patch over 100,000 characters. It stores none of it, and
-Luke holds it in memory while the tab is open, never on disk, except that
-downloading the patch writes it where you save it. Wherever Luke names
-someone on GitHub, as the tab does who opened and reviewed the pull request,
-it draws them by their GitHub avatar, which your Mac loads straight from
-GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
+**A coding agent's pull request.** A coding agent's Pull request tab shows its
+pull request as GitHub holds it, in two views. Each time a view first opens, or
+you refresh it, our service reads it from GitHub with a token the Luke GitHub
+App mints for that one repository on the workspace's installation. The overview
+reads its title, branches, and whether it would merge; its description and up
+to its 100 newest comments and reviews, each whole with its author, as GitHub
+renders them; the name, App, state, and times of up to 100 checks on its head;
+its reviewers; and up to its 100 newest review threads on lines, each with the
+file and lines it is on, the part of the diff it was made on, whether it was
+resolved or outdated, and up to its first 50 comments, each whole with its
+author, as GitHub renders them. An image in the description or a comment is read by our
+service too, never by your Mac: an upload with the same one-repository token,
+through a fresh signed address GitHub gives for it, and any other image through
+GitHub's own image proxy, each up to 8 MB; other images are shown as links.
+Files changed reads each changed file's name and patch, for up to 300 files,
+leaving out a patch over 100,000 characters. It stores none of it, and Luke
+holds it in memory while the tab is open, never on disk, except that
+downloading a patch writes it where you save it. Wherever Luke names someone on
+GitHub, as the tab does who opened, reviewed, and commented on the pull
+request, it draws them by their GitHub avatar, which your Mac loads straight
+from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP
+address.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
@@ -396,14 +443,16 @@ page for a task: an interactive HTML document, such as a chart or a mockup,
 that opens in the task's side panel. Our service stores each page with the
 task, as written and readable by our own operators: its title and HTML, at
 most 262,144 characters a version, and every version it has had, each kept as
-written and never changed. Deleting the task deletes its pages. A page made by
-Luke is part of the task conversation, so it is sent back to
-Luke's model as the conversation goes on (see "Who we send it to"). Luke
+written and never changed, with which coding agent, or Luke, showed it.
+Deleting the task deletes its pages. A page made by Luke is part of the task
+conversation, so it is sent back to Luke's model as the conversation goes on
+(see "Who we send it to"). Luke
 and coding agents can also read a page of any task of the workspace by its
 id, as a mention of the page points them to it: its HTML, at most 40,000
 characters of it, is then sent to that agent's model as part of its
 conversation. Luke
-on your Mac reads a page's HTML from our service only to draw it, holds it in
+on your Mac reads a page's HTML from our service only to draw it, in its tab
+or in the card over its tab, its row, or a chip naming it, holds it in
 memory only, and never passes it to the rest of the panel. A page runs sealed
 off from Luke: it cannot read the panel, your account, or another page, and
 cannot store anything, open a window, or send anything anywhere but the
@@ -569,8 +618,15 @@ connected, Luke and the workers he hands work to can read and
 change whatever your Linear account can, through Linear's own MCP server,
 without asking you first, and so can every coding agent and its workers,
 unless you switch Linear off for that agent in its message box's MCP menu,
-which takes effect from its next turn and is stored with the agent. The
-workers are told to change something only when their subagent task asks for
+which takes effect from its next turn and is stored with the agent. A
+message to the agent from a member of the workspace or Luke, or an
+automation's own prompt (never a webhook body or a GitHub event's words),
+that mentions Linear, one of its tools, or one of its pages hands it Linear
+for the turn that message opens, or, sent while a turn is under way, for its
+next one, even while Linear is switched off for that agent, and leaves the
+switch as it is; a message from another coding agent or a reviewer hands it
+none. The workers are told to change
+something only when their subagent task asks for
 it. What Linear answers goes to the model that made the call, and each call,
 with its input and everything Linear answered, is written to the task's conversation
 or the agent's transcript like any other tool call. Disconnecting stops Luke
@@ -598,10 +654,11 @@ person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
 deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
-to a Linear issue, the app asks our service for that issue's key, title, and
-state, which it reads through this connection as you look and keeps
-nowhere; the app shows them on the link, and they go no further. The
-connection read through is that of the workspace the words belong to: a
+to a Linear issue, the app asks our service for that issue's key, title,
+state, and assignee's name, which it reads through this connection as you
+look and keeps nowhere; the app shows them on the link, and they go no
+further. The connection read through is that of the workspace the words belong
+to: a
 plan's, or an Inbox item's own, its plan's or its agent's, never the
 workspace the Inbox happens to list; an item whose workspace is not known
 reads nothing.
@@ -759,14 +816,15 @@ whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; each coding agent's and
+are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
 the still of its page drawn while something covers it; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
-that open over a row on hover. The whiteboard and a Terminal tab's shell draw
-their words as pixels, which the masking cannot reach, so leaving them out is
+that open over a row or a chip on hover, a page's preview among them. The
+whiteboard and a Terminal tab's shell draw their words as pixels, which the
+masking cannot reach, so leaving them out is
 their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
@@ -991,18 +1049,23 @@ only when you press Send.
   agent's pull request, or a check fails on an agent's branch, GitHub tells
   our service the same way; our service reads who did it by their GitHub
   login, the pull request's number and branch, the link to the review,
-  comment, or failed commit, a review's verdict, and when, never what the
-  review or comment says, and sends that to the agents on that pull request
-  as a message, which their transcript keeps under that login until the
-  task is deleted. The agent then reads the review or comment itself with
-  the App's token, and what it reads lands in its transcript like any other
-  command's output. Our service also reads from GitHub, through
+  comment, or failed commit, a review's verdict, when, and what the review
+  or comment says; for a review it also reads that review's inline comments
+  from GitHub, each with its file and line, with a token the App mints for
+  the repository on the workspace's installation. It sends that to the
+  agents on that pull request as a message, which their transcript keeps
+  under that login until the task is deleted, and which reaches the model
+  that runs the agent like any other message. Whatever the message cut
+  short, or a failed check, the agent reads itself with the App's token,
+  and what it reads lands in its transcript like any other command's
+  output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
   open, a pull request's changed files for the Changes tab, a repository's
-  skills, and the number, title, link, and state of a pull request or an
-  issue a plan, a reply, or an Inbox item links to, which the app shows on
-  the link; an issue is read on a token cut to reading issues alone, and an
-  Inbox item's link is read through its own workspace's installation, its
+  skills, and the number, title, link, state, and author's GitHub login of a
+  pull request or an issue a plan, a reply, or an Inbox item links to, which
+  the app shows on the link; an issue is read on a token cut to reading
+  issues alone, and an Inbox item's link is read through its own workspace's
+  installation, its
   plan's or its agent's, and through none where that is not known.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
@@ -1075,7 +1138,8 @@ keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
-switch for commands on your Mac is kept with that Mac's settings. Our service
+switch for commands on your Mac and each repository's run command for Run
+are kept with that Mac's settings. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
@@ -1113,8 +1177,8 @@ reports by Sentry.
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts, preferences, and plan template with its history, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
-  agents, and inbox items and pictures, the conversation with its attached
-  files, every call's record, the commands waiting for your Mac with the
+  agents, inbox items and pictures, and chat messages, the conversation with
+  its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
   versions left there — and asks PostHog to erase your usage data and

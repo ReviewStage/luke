@@ -87,10 +87,6 @@ test("the model chip at an agent box's foot is the plan toolbar's repository chi
 
   assert.equal(model.dataset.look, CHIP_LOOK.TOOLBAR);
   assert.equal(repository.dataset.look, CHIP_LOOK.TOOLBAR);
-  assert.deepEqual([...model.classList], [...repository.classList]);
-  // The toolbar's ⋯ and Summary are toolbar buttons too, so the chip lights and presses as they do.
-  assert.ok(repository.classList.contains("toolbar-button"));
-  assert.ok(!repository.classList.contains("bordered-button"));
 });
 
 test("what an agent published and a new plan's repository are the composer's one pill", () => {
@@ -118,6 +114,5 @@ test("a settings picker is a field inside the hairline its row's buttons draw", 
   );
 
   assert.equal(picker.dataset.look, CHIP_LOOK.FIELD);
-  assert.ok(picker.classList.contains("bordered-button"));
   assert.equal(picker.querySelectorAll(".settings-chevron").length, 1);
 });

@@ -2,6 +2,7 @@
    so the index and the toolbar change density and palette with the example. */
 
 @import "@luke/ui/tokens.css";
+@import "@luke/ui/styles.css";
 
 *,
 *::before,
@@ -132,7 +133,7 @@ body {
   margin-top: var(--luke-space-32);
 }
 
-.catalog-section h2 {
+.catalog-section-title {
   margin: 0 0 var(--luke-space-12);
   font-size: var(--luke-type-section-size);
   line-height: var(--luke-type-section-leading);
@@ -185,4 +186,49 @@ body {
   line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* An example's column of samples, each a row of its own. */
+.catalog-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+}
+
+/* A column narrower than a phone, where long words have to wrap. */
+.catalog-narrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  width: 100%;
+  max-width: 240px;
+  padding: var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+/* A sample block standing for an item an arrangement holds; a long one
+   gives way rather than overflowing, as a real label does. */
+.catalog-swatch {
+  overflow: hidden;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A dashed outline that shows the room an arrangement is given. */
+.catalog-frame {
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-frame-wide {
+  width: 160px;
 }

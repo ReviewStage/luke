@@ -1,6 +1,5 @@
 {
   "name": "@luke/host",
-  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The desktop's Node kernel: everything that executes, persists, schedules, or holds an account, reached only through the Gateway",
@@ -15,6 +14,8 @@
     "./desktop-service": "./src/desktop-service.js",
     "./quit": "./src/quit.js",
     "./host-operator": "./src/host-operator.js",
+    "./mac-terminal": "./src/mac-terminal.js",
+    "./open-on-mac": "./src/open-on-mac.js",
     "./appearance": "./src/appearance.js",
     "./build-commit": "./src/build-commit.js",
     "./service-layer": "./src/service-layer.js",

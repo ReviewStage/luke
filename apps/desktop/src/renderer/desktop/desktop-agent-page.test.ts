@@ -23,8 +23,10 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
+  type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -36,7 +38,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { handState } from "#testing/app-state";
+import { handState, stateWith } from "#testing/app-state";
 import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
@@ -142,6 +144,9 @@ let published: CodingAgentPullRequestAnswer | undefined;
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
 let workspace: readonly CodingAgentSummary[] = [];
+/** The pull requests the workspace's GitHub App answers, by number; one it holds none for reads as none. */
+let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
+  new Map();
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -155,6 +160,7 @@ beforeEach(() => {
   openedOnGitHub = [];
   copied = [];
   workspace = [];
+  gitHub = new Map();
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -211,6 +217,12 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.GITHUB_OPEN) {
           openedOnGitHub.push(request.payload.url);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+          const { number } = request.payload;
+          const held = gitHub.get(number);
+          const value = held === undefined ? null : { number, author: "octo-dev", ...held };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
           copied.push(request.payload.words);
@@ -460,20 +472,20 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
     [...well.querySelectorAll("section")].map((each) => each.getAttribute("aria-label")),
     headings,
   );
-  assert.deepEqual(headings, ["Changes", "Terminal"]);
+  assert.deepEqual(headings, ["Pull requests", "Terminal"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the empty panel offers the agent's pull request");
   act(() => changes.click());
   await settle();
   assert.ok(
     [...shown.querySelectorAll("[role='tab']")].some((tab) =>
-      (tab.textContent ?? "").includes("Changes"),
+      (tab.textContent ?? "").includes("Pull request"),
     ),
-    "the Changes tab stands in the panel",
+    "the Pull request tab stands in the panel",
   );
 });
 
-test("an archived agent's pull request, picked from the panel's +, opens in a Changes tab standing beside its page", async () => {
+test("an archived agent's pull request, picked from the panel's +, opens in a Pull request tab standing beside its page", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   published = {
     repository: "acme/relay",
@@ -506,8 +518,8 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
   );
 
   assert.ok(
-    tabs.some((label) => label.includes("Changes")),
-    `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
 
@@ -834,8 +846,44 @@ test("a GitHub event's run names its pull request beside the automation, which o
 
   const { sender } = origin(page);
   assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
-  act(() => sender?.querySelector<HTMLElement>("a")?.click());
+  act(() => sender?.querySelector<HTMLElement>(".mention-chip")?.click());
   assert.deepEqual(openedOnGitHub, [url]);
+});
+
+test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
+  const url = "https://github.com/acme/relay/pull/2905";
+  const acme = { ...ACME, github: { login: "acme", active: true } };
+  gitHub = new Map([[2905, { title: "View commands", url, state: PULL_REQUEST_STATE.OPEN }]]);
+  const state = stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } });
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(state),
+    },
+  });
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: { prompt: "Review it.", subject: { number: 2905, title: "View commands", url } },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const page = mount(tasksControl({ workspaces: [acme] }));
+  await settle();
+
+  const chip = origin(page).sender?.querySelector<HTMLElement>(".mention-chip");
+  assert.deepEqual(
+    [
+      chip?.querySelector(".mention-chip-label")?.textContent,
+      chip?.querySelector(".mention-chip-state")?.textContent,
+      chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
+    ],
+    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
+  );
 });
 
 test("too narrow for the line naming who sent it, it breaks between the automation, the pull request, and who ran it, never cutting all three to their first letters", async () => {
