@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
+  ensureMember,
+  ensurePlanChannel,
+  openAsksOf,
+  postAsk,
+} from "@luke/database/models/chat-store";
+import {
   archiveCodingAgent,
   createCodingAgent,
   lineSendersOf,
@@ -15,7 +21,14 @@ import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
-import { CHAT_BOUNDS, CHAT_TOOL } from "@luke/features/chat-wire";
+import {
+  ASK_STATUS,
+  CHAT_ASK,
+  CHAT_BLOCK,
+  CHAT_BOUNDS,
+  CHAT_TOOL,
+  MEMBER_KIND,
+} from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -64,6 +77,7 @@ import {
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
+import { ASK_REFUSAL } from "../coder-host/chat-ask.js";
 import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
@@ -822,6 +836,55 @@ test("with Chat off for the plan's owner Luke's chat tools run nothing, and once
   const read = await call(CHAT_TOOL.READ, { channel: "#teammate-invitations" }, "read-on");
   assert.ok(Array.isArray(read.messages));
   assert.equal(read.messages.length, 1);
+});
+
+test("Luke speaks in the chat as the plan's own @luke whatever member a call's input names: a post naming an agent's member lands as Luke's, and an ask of the agent's cannot be resolved through Luke", async () => {
+  const plan = await taskConversation(undefined, RELAY_FULL_NAME);
+  await chatOn(plan.userId);
+  const agent = await agentOn(plan.userId, plan.taskId);
+  const channel = Option.getOrThrow(
+    await database.run(ensurePlanChannel(plan.userId, plan.taskId)),
+  );
+  const { organizationId } = channel;
+  const member = Option.getOrThrow(
+    await database.run(
+      ensureMember(plan.userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: agent.id }),
+    ),
+  );
+  const asked = await database.run(
+    postAsk(plan.userId, organizationId, {
+      authorMemberId: member.id,
+      to: { channelId: channel.id },
+      blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which queue sends the emails?" }],
+      mentions: [],
+      clientKey: randomUUID(),
+      key: "invite-queue",
+      ask: { response: { type: CHAT_ASK.TEXT } },
+    }),
+  );
+  assert.ok(Result.isSuccess(asked));
+  const call = await callerOn(brainHost(seams), plan);
+  const smuggled = { authorMemberId: member.id, as: "@agent-1", author: member.id };
+
+  const posted = await call(CHAT_TOOL.POST, { text: "The outbox does.", ...smuggled }, "call-as");
+  assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+  const read = await call(CHAT_TOOL.READ, { channel: "#teammate-invitations" }, "read-as");
+  assert.ok(Array.isArray(read.messages));
+  const mine = read.messages.find((each) => isRecord(each) && each.seq === posted.seq);
+  assert.ok(isRecord(mine));
+  assert.equal(mine.from, "@luke");
+
+  assert.deepEqual(
+    await call(CHAT_TOOL.RESOLVE, { key: "invite-queue", reason: "Answered.", ...smuggled }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: ASK_REFUSAL.NO_ASK },
+  );
+  const asks = await database.run(
+    openAsksOf(plan.userId, organizationId, { authorMemberId: member.id }, 5),
+  );
+  assert.deepEqual(
+    asks.map((ask) => [ask.askKey, ask.askStatus]),
+    [["invite-queue", ASK_STATUS.OPEN]],
+  );
 });
 
 test("Luke posts at most the chat's bound in one turn, a call eve runs again is its one post however many came after, and a post the bound refused is no post", async () => {
