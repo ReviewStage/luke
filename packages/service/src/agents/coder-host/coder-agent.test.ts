@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { Redacted } from "effect";
+import { Duration, Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
+import { serializeModelInputSchema } from "eve/tools";
 import { test } from "vitest";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
@@ -15,9 +16,11 @@ import {
   BRAIN_HOST_TURN,
 } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
+import { CODER } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
+import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, planToolsOf } from "./tool-set.js";
 
 const SECRET = "cron-secret-1";
@@ -202,4 +205,19 @@ test("an agent whose credential reads its checks waits on them with sleep, which
     ],
     [true, false],
   );
+});
+
+test("one pause is held inside what is left of the GitHub credential its background commands use, and the model is told the bound and to wait again for longer", () => {
+  const shown = serializeModelInputSchema(SLEEP_TOOL.inputSchema);
+  assert.equal(
+    JSON.stringify(shown).includes(`"maximum":${Duration.toSeconds(CODER.SLEEP_MAX)}`),
+    true,
+  );
+  assert.ok(
+    Duration.isLessThan(
+      Duration.sum(CODER.SLEEP_MAX, CODER.GITHUB_TOKEN_REFRESH),
+      Duration.hours(1),
+    ),
+  );
+  assert.ok(SLEEP_TOOL.description?.includes("to wait longer, wait again"));
 });
