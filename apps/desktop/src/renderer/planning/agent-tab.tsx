@@ -637,10 +637,10 @@ function TaskSender({
     <ActorLine>
       {task === undefined ? null : <TaskRef task={task} onOpen={onOpen} />}
       {starter === undefined ? null : (
-        <>
+        <ActorLine>
           {task === undefined ? "Started by " : " · started by "}
           <ActorRef actor={starter} sentence />
-        </>
+        </ActorLine>
       )}
     </ActorLine>
   );
@@ -678,7 +678,8 @@ function OriginSubject({
  * where it cannot, deleted, someone else's personal one, or the Automations
  * experiment off; then the issue or pull request its GitHub event named,
  * and who asked for a run now. A webhook's body is the card's, never this
- * line's.
+ * line's. Each part after the first is a line of its own, separator and
+ * all, so a narrow line breaks between the parts (desktop.css).
  */
 function AutomationSender({
   automationId,
@@ -713,16 +714,16 @@ function AutomationSender({
         />
       )}
       {subject === undefined ? null : (
-        <>
+        <ActorLine>
           {" · "}
           <OriginSubject subject={subject} openGitHub={openGitHub} />
-        </>
+        </ActorLine>
       )}
       {run?.runBy === undefined ? null : (
-        <>
+        <ActorLine>
           {" · Run by "}
           <ActorRef actor={runner} sentence />
-        </>
+        </ActorLine>
       )}
     </ActorLine>
   );

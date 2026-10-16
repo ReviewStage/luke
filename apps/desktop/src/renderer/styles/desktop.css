@@ -3017,6 +3017,14 @@ ul.actor-stack {
   max-width: 100%;
 }
 
+/* Who sent it can name an automation, an issue, and a runner: too narrow
+   for all three on one line, it breaks between them rather than cutting
+   each name to its first letters. */
+.agent-origin > .message-sender > .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
 /* A task named as the sender of its plan: its document glyph standing in a
    16px mark's place, in the line's own quiet ink. */
 .agent-origin-glyph {
@@ -3154,7 +3162,10 @@ ul.actor-stack {
 
 /* The call bar ------------------------------------------------------------- */
 
+/* It answers the column's width, so a narrow column gives the call bar and
+   the captions above it the room the summary's rail reserves. */
 .desktop-call-bar {
+  container: plan-call-bar / inline-size;
   position: relative;
   flex: 0 0 auto;
   padding: var(--space-12) calc(var(--page-inset) + var(--summary-room)) var(--space-12)
@@ -3179,6 +3190,25 @@ ul.actor-stack {
   width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
 }
 
+/* Too narrow a column to keep the rail's room: the bar, which stands under
+   the rail rather than beside it, runs to the page's inset at its right,
+   and the captions span the column to its insets, centred on it, their
+   volume hint wrapping rather than cut. */
+@container plan-call-bar (max-width: 359px) {
+  .desktop-call-bar > .call-bar {
+    margin-right: calc(-1 * var(--summary-room));
+  }
+
+  .desktop-call-bar .voice-caption {
+    left: 50%;
+    width: calc(100% - 2 * var(--column-inset));
+  }
+
+  .desktop-call-bar .volume-hint-text {
+    white-space: normal;
+  }
+}
+
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
@@ -3190,14 +3220,19 @@ ul.actor-stack {
 /* The call bar's own row, laid out as a voice composer's controls are: at
    rest one start pill in its middle; in a call the call's two lines at its
    left and its controls at its right. Its height holds whichever it draws,
-   so the document above never moves when a call begins or ends. */
+   so the document above never moves when a call begins or ends, but where
+   it is too narrow for the call on one row (below). It answers its own
+   width, as the plan's page, the sidebar's card, the floating card, and the
+   floating window draw it, each at a width of its own. */
 .call-bar {
+  container: call-bar / inline-size;
   display: flex;
   max-width: var(--reading-width);
   min-height: var(--call-row-height);
+  flex-wrap: wrap;
   align-items: center;
   margin: 0 auto;
-  gap: var(--space-12);
+  gap: var(--space-8) var(--space-12);
 }
 
 .call-bar[data-call="false"] {
@@ -3250,6 +3285,12 @@ ul.actor-stack {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Luke's part is the one that gives way to a long command; the notetaker's
+   says the same few words whole, or goes (below). */
+.call-backend-part[data-part="notes"] {
+  flex: none;
 }
 
 .call-backend-action {
@@ -3308,6 +3349,42 @@ ul.actor-stack {
 
 .call-end:active {
   opacity: 0.7;
+}
+
+/* Too narrow for both of the backend's parts: the notetaker's goes while
+   Luke's stands, so what Luke is doing keeps the line. */
+@container call-bar (max-width: 479px) {
+  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+    display: none;
+  }
+}
+
+/* Narrower, the controls close up, their discs touching edge to edge, and
+   the working dots go, the line's own words saying Luke works, so Luke's
+   command keeps their room. */
+@container call-bar (max-width: 279px) {
+  .call-backend > .thinking-dots {
+    display: none;
+  }
+
+  .call-controls {
+    gap: 0;
+  }
+
+  .call-end {
+    margin-left: 0;
+  }
+}
+
+/* Too narrow for the status beside the controls (the sidebar's card at its
+   narrowest, the plan's bar in a 280px column): the status takes a row of
+   its own, the voice's word whole, and the controls stand under it at the
+   right. The floating window's bar is wider than this and must stay so,
+   since its window's height is fixed (call.css). */
+@container call-bar (max-width: 209px) {
+  .call-status {
+    flex-basis: 100%;
+  }
 }
 
 /* The repository chip ------------------------------------------------------ */

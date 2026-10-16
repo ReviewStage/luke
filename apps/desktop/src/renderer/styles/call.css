@@ -110,7 +110,10 @@ html.call-window #root {
 
 /* Alone in its window, which shows and hides it whole, so it neither rises
    nor leaves, and its shadow keeps within the room the window leaves it. The
-   whole card is what the window is dragged by, wherever it is held. */
+   whole card is what the window is dragged by, wherever it is held. Note
+   that the bar inside it must stay wider than the bar's stacking query
+   (desktop.css's `@container call-bar`), because the window's height is
+   fixed and a stacked bar would not fit it. */
 .call-card[data-surface="window"] {
   width: 248px;
   box-shadow: 0 2px 6px var(--shadow);

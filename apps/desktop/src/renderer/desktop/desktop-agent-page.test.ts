@@ -34,6 +34,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
@@ -672,6 +673,35 @@ test("a GitHub event's run names its pull request beside the automation, which o
   assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
   act(() => sender?.querySelector<HTMLElement>("a")?.click());
   assert.deepEqual(openedOnGitHub, [url]);
+});
+
+test("too narrow for the line naming who sent it, it breaks between the automation, the pull request, and who ran it, never cutting all three to their first letters", async () => {
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: {
+          prompt: "Review it.",
+          subject: { number: 2905, title: "View commands" },
+          runBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const styles = layContainersAt({});
+  const page = mount(plansControl({ me: "user-dean" }));
+  await settle();
+
+  const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
+  const wraps = getComputedStyle(line).flexWrap;
+  styles.remove();
+
+  assert.equal(wraps, "wrap");
+  assert.deepEqual(
+    [...line.children].map((part) => words(part)),
+    ["Flaky-test sweep", " · #2905 View commands", " · Run by you"],
+  );
 });
 
 test("a webhook's body stands folded inside the card under the prompt, and nowhere in the line naming who sent it", async () => {
