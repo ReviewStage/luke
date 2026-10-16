@@ -534,15 +534,18 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, the Inbox, an agent's or a person's page, Factory, or the Automations page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, or the Automations page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here,
       // bar the caret Settings opens with, whose untouched Escape leaves it.
+      // The Inbox is the one page Escape never leaves: a narrow one's item
+      // steps back to its list, and there the press stops, rather than
+      // reaching the plan the Inbox stands over.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
-      if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
+      if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
@@ -553,7 +556,15 @@ export function App(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [signIn.cancelSignIn, signIn.signInWait, listening, tasks.back, speaking, stopSpeaking]);
+  }, [
+    signIn.cancelSignIn,
+    signIn.signInWait,
+    listening,
+    tasks.back,
+    tasks.inboxView.open,
+    speaking,
+    stopSpeaking,
+  ]);
 
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);
