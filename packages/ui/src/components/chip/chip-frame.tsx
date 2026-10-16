@@ -38,8 +38,10 @@ export function ChipFrame({
       className={className === undefined ? "luke-chip" : `luke-chip ${className}`}
       data-look={look}
     >
-      {children}
-      {chevron ? <ChevronDownIcon /> : null}
+      <span className="luke-chip-face">
+        {children}
+        {chevron ? <ChevronDownIcon /> : null}
+      </span>
     </button>
   );
 }

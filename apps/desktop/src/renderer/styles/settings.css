@@ -580,7 +580,7 @@
   gap: var(--space-8);
 }
 
-.workspace-heir > svg:last-child {
+.workspace-heir .luke-chip-face > svg:last-child {
   margin-left: auto;
 }
 

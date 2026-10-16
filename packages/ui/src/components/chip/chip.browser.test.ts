@@ -49,36 +49,39 @@ test("a chip in a narrow row cuts its words short rather than leaving the row", 
   expect(name && name.scrollWidth > name.clientWidth).toBe(true);
 });
 
-test("a chip that keeps the keyboard while unavailable fades all it holds and does not light", async () => {
+test("a chip that keeps the keyboard while unavailable fades all it holds, its ring untouched, and does not light", async () => {
+  const picture =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'/%3E";
   const { container } = await mount(
     createElement(
       "div",
-      { style: { color: "rgb(255, 0, 0)" } },
+      null,
       Object.values(CHIP_LOOK).map((look) =>
         createElement(Chip, {
           key: look,
           look,
           chevron: true,
           "aria-disabled": true,
-          children: look === CHIP_LOOK.FIELD ? look : createElement(ChipName, { children: look }),
+          children: [
+            createElement("img", { key: "picture", src: picture, alt: "" }),
+            createElement("span", { key: "number", style: { color: "rgb(0, 160, 0)" } }, "#42"),
+            look,
+          ],
         }),
       ),
+      createElement(Chip, { look: CHIP_LOOK.FIELD, children: "available" }),
     ),
   );
-  const { container: available } = await mount(
-    createElement(Chip, { look: CHIP_LOOK.FIELD, chevron: true, children: "field" }),
-  );
-  const availableChip = available.querySelector("button");
-  const availableInk = availableChip === null ? "" : getComputedStyle(availableChip).color;
-  for (const chip of container.querySelectorAll("button")) {
-    expect(getComputedStyle(chip).color).not.toBe("rgb(255, 0, 0)");
-    for (const glyph of chip.querySelectorAll("svg"))
-      expect(getComputedStyle(glyph).opacity).toBe("0.45");
+  const [toolbar, pill, field, available] = [...container.querySelectorAll("button")];
+  for (const chip of [pill, toolbar, field]) {
+    expect(chip && getComputedStyle(chip).opacity).toBe("1");
+    const face = chip?.querySelector(".luke-chip-face");
+    expect(face && getComputedStyle(face).opacity).toBe("0.45");
+    expect(face?.querySelector("img")).not.toBeNull();
   }
-  const bareField = container.querySelector('[data-look="field"]');
-  expect(bareField && getComputedStyle(bareField).color).not.toBe(availableInk);
-  await userEvent.hover(page.getByRole("button", { name: "field" }).nth(0));
-  const field = container.querySelector('[data-look="field"]');
+  const availableFace = available?.querySelector(".luke-chip-face");
+  expect(availableFace && getComputedStyle(availableFace).opacity).toBe("1");
+  await userEvent.hover(page.getByRole("button", { name: "#42 field" }));
   expect(field && getComputedStyle(field).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 

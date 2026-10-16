@@ -44,13 +44,24 @@
     white-space: nowrap;
   }
 
-  .luke-chip > svg {
+  /* All a chip holds stands in one face, so an unavailable chip fades it
+     once, whatever it holds: bare words, a name, a picture, a mark, or the
+     chevron. */
+  .luke-chip-face {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: inherit;
+    min-width: 0;
+  }
+
+  .luke-chip-face > svg {
     flex: none;
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
   }
 
-  .luke-chip > svg.settings-chevron {
+  .luke-chip-face > svg.settings-chevron {
     width: 12px;
     height: 12px;
     color: var(--luke-color-text-subtle);
@@ -106,7 +117,11 @@
     --luke-chip-ink: var(--luke-color-text);
   }
 
-  .luke-chip[data-look="field"] > .luke-chip-name {
+  .luke-chip[data-look="field"] > .luke-chip-face {
+    flex: 1;
+  }
+
+  .luke-chip[data-look="field"] .luke-chip-name {
     flex: 1;
     text-align: left;
   }
@@ -118,13 +133,7 @@
     opacity: 0.45;
   }
 
-  /* Its words fade from the look's own ink, whether they stand bare or in
-     a name, and its marks and chevron fade with them. */
-  .luke-chip[aria-disabled="true"] {
-    color: color-mix(in srgb, var(--luke-chip-ink) 45%, transparent);
-  }
-
-  .luke-chip[aria-disabled="true"] > svg {
+  .luke-chip[aria-disabled="true"] > .luke-chip-face {
     opacity: 0.45;
   }
 
