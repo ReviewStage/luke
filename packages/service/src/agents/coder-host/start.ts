@@ -76,8 +76,13 @@ import { anthropicFastAccess } from "./account-keys.js";
  * (`coder-host/channel.ts`).
  */
 
-/** The heading a start's note stands under, after the plan or the prompt it rides with. */
-const NOTE_HEADING = "## Note from the developer";
+/** The heading a start's note stands under, after the plan or the prompt it rides with: the developer's, or the coding agent's that started the agent (`../coding-agent-tools.ts`). */
+export const START_NOTE_HEADING = {
+  DEVELOPER: "## Note from the developer",
+  AGENT: "## Note from the coding agent that started you",
+} as const;
+
+type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEADING];
 
 /** Where a Start puts the agent: on a plan, handed the plan or a prompt in its place and a note after either, or in a workspace with no plan, on a repository, handed a prompt. */
 export type StartPlace =
@@ -86,6 +91,8 @@ export type StartPlace =
       readonly prompt: string | undefined;
       /** What the developer said for the agent beyond the plan or the prompt; none where they said nothing more. */
       readonly note?: string | undefined;
+      /** Whose note it is; the developer's unless a coding agent started this one. */
+      readonly noteHeading?: StartNoteHeading | undefined;
     }
   | {
       readonly planId: null;
@@ -159,8 +166,12 @@ interface StartLanding {
 }
 
 /** The brief with the note after it under its heading; the brief alone where there is no note. */
-function withNote(brief: string, note: string | undefined): string {
-  return note === undefined ? brief : `${brief}\n\n${NOTE_HEADING}\n\n${note}`;
+function withNote(
+  brief: string,
+  note: string | undefined,
+  heading: StartNoteHeading = START_NOTE_HEADING.DEVELOPER,
+): string {
+  return note === undefined ? brief : `${brief}\n\n${heading}\n\n${note}`;
 }
 
 /** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the prompt; in a workspace, the prompt. */
@@ -197,10 +208,14 @@ const landingOf = Effect.fnUntraced(function* (
       place.prompt === undefined
         ? {
             planId: place.planId,
-            planSnapshot: withNote(planMarkdown(plan), place.note),
+            planSnapshot: withNote(planMarkdown(plan), place.note, place.noteHeading),
             prompt: null,
           }
-        : { planId: place.planId, planSnapshot: null, prompt: withNote(place.prompt, place.note) },
+        : {
+            planId: place.planId,
+            planSnapshot: null,
+            prompt: withNote(place.prompt, place.note, place.noteHeading),
+          },
   };
 });
 

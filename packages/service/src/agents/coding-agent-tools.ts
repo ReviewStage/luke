@@ -42,7 +42,7 @@ import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "../provider
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
-import { startCodingAgent } from "./coder-host/start.js";
+import { START_NOTE_HEADING, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
@@ -59,11 +59,11 @@ import {
 } from "./workspace-agents.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them and message one, and for Luke on a call read one's progress and start one.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
  *
- * Luke on a call and every coding agent are offered the same `list_agents`
- * and `message_agent`, one implementation each, and Luke `read_agent` and
- * `start_agent` beside them; the caller is what differs (`AgentCaller`):
+ * Luke on a call and every coding agent are offered the same `list_agents`,
+ * `message_agent`, and `start_agent`, one implementation each, and Luke
+ * `read_agent` beside them; the caller is what differs (`AgentCaller`):
  * Luke acting for the member on the call, on the call's task, or a coding
  * agent acting for its starter, on its own task, which the host read from
  * the session it admitted and never from the call. A list, a read, and a
@@ -92,7 +92,9 @@ import {
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
- * checked against the catalog, whose choices the refusal lists.
+ * checked against the catalog, whose choices the refusal lists. An agent a
+ * coding agent starts is told in that note which agent started it and how
+ * to report back, and its choice leaves the member's default as it stood.
  * Each tool reaches eve as the deployment acting for the caller's member,
  * which the coder channel's table admits for exactly this
  * (`coder-host/channel.ts`). Every answer is data the model reads, never a
@@ -583,6 +585,14 @@ function agentLine(sender: CodingAgent, text: string): string {
   );
 }
 
+/** The note an agent a coding agent starts is handed: which agent started it and how to report back, then the note it was given. */
+function startedByNote(starter: CodingAgent, note: string | undefined): string {
+  const lead =
+    `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
+    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id.`;
+  return note === undefined ? lead : `${lead}\n\n${note}`;
+}
+
 /** The agent as a start answers it: its id, what it runs on, and where it stands now. */
 const startedReading = (agent: CodingAgent, offered: readonly OfferedModel[]) =>
   Effect.map(standingsOf([agent]), (standing) => ({
@@ -743,7 +753,9 @@ export function runStartAgent(
   if (planId === null) return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK));
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
-  const { note } = asked.success;
+  // An agent a coding agent starts hears who started it, and its choice is no member's new default.
+  const byAgent = caller.kind === AGENT_CALLER.AGENT;
+  const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   return orStoreRefusal(
     Effect.gen(function* () {
       const started = yield* startCodingAgent(Effect.succeed(eve), callerUserId(caller), {
@@ -752,6 +764,7 @@ export function runStartAgent(
         choice,
         prompt,
         note,
+        ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

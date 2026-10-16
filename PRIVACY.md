@@ -116,11 +116,13 @@ message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
 message of a member whose account is deleted keeps no account and reads as a
 former member's. A coding agent can also list the other coding agents of its
-workspace, on any task and whichever member started them, and send one a
-message without asking you first; that message is kept in the receiving
-agent's transcript under the sending agent's title, opening with the sending
-agent's title and id, and goes to the receiving agent's model provider as
-the rest of its conversation does. It stores
+workspace, on any task and whichever member started them, send one a
+message, and start a new one on its own task, without asking you first; a
+message is kept in the receiving agent's transcript under the sending
+agent's title, opening with the sending agent's title and id, and goes to
+the receiving agent's model provider as the rest of its conversation does,
+and an agent it starts runs as the member who started it, on that member's
+keys, and is told which agent started it. It stores
 under your account its name and its plan, one Markdown document, which begins as a copy of
 your plan template and is written by the call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an

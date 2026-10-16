@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
   createCodingAgent,
   fillCodingAgentTitle,
   lineSendersOf,
+  readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
@@ -24,7 +26,7 @@ import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { ACTION_RESULT_STATUS, type WireRecord } from "../../core.js";
+import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "../../core.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import {
@@ -39,6 +41,7 @@ import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
+import { START_NOTE_HEADING } from "./start.js";
 import { STEER_OUTCOME } from "./steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
@@ -168,8 +171,11 @@ async function fakeCoderEve(workspaceId: string) {
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
   const github = githubReaching([installation], undefined, undefined, (request) => {
     const { pathname } = new URL(request.url);
-    if (!pathname.startsWith("/eve/coder/v1/session/")) return undefined;
+    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
     sent.push({ path: pathname, headers: request.headers, body: request.body });
+    if (pathname === "/eve/coder/v1/session") {
+      return Response.json({ sessionId: sessionId() }, { status: 202 });
+    }
     return Response.json(
       { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
       { status: 202 },
@@ -400,6 +406,42 @@ test("message_agent sends nothing to an archived agent, an agent of another work
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
   );
   assert.equal(eve.sent.length, 0);
+});
+
+test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, telling it which agent started it and how to report back, leaves the starter's default as it stood, and starts once under the call's key", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const prompt = "Write the migration that adds the invitation's expiry.";
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, model: OPUS, effort: "low" },
+    "call-start",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const startedId = started.agent.id;
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
+  assert.equal(stored.planId, plans.invitations);
+  assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
+
+  assert.equal(eve.sent.length, 1);
+  const [opening] = eve.sent;
+  assert.equal(opening?.path, "/eve/coder/v1/session");
+  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
+  const message: string = JSON.parse(opening?.body ?? "").message;
+  assert.ok(message.startsWith(prompt), message);
+  assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
+  assert.ok(message.includes(`"${CALLER_TITLE}"`) && message.includes(caller.id), message);
+  // An agent's own pick of a model is no member's new default.
+  assert.equal((await database.run(readAccountPreferences(caller.userId)))?.codingAgent, undefined);
+
+  const again = await call(CODER_TOOL.START_AGENT, { prompt }, "call-start");
+  assert.ok(isRecord(again.agent));
+  assert.equal(again.agent.id, startedId);
+  assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
 test("an agent whose starter has left the workspace reaches no other agent", async () => {
