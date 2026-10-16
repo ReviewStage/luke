@@ -1312,7 +1312,8 @@ test("the repository chosen first is not said again among the others its runs wo
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
@@ -1361,7 +1362,8 @@ test("the agent a same-agent automation was saved with is not offered once its r
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
-  act(() => button("acme/web").click());
+  // The repository's row names it, then its owner after it.
+  act(() => button("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Choose an agent");
   act(() => picker(page, "Agent").click());

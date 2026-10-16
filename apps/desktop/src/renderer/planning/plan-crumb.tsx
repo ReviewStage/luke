@@ -43,6 +43,11 @@ import { RelativeTime } from "./relative-time";
  * wears You. The members are the plan's directory's (`member-directory.tsx`),
  * read once for the plan; until they answer, or if they never do, the count
  * stands alone, from the workspace's own count.
+ *
+ * Who can edit is never cut short: the names give way first. In a narrow
+ * column the crumb wraps rather than cutting the names to a letter, the
+ * repository and its separator onto a line together (desktop.css's
+ * `@container plan-document`).
  */
 
 /** How many faces the crumb's end draws before the count says the rest. */
@@ -412,7 +417,8 @@ export function PlanCrumb({
         </button>
       </Tooltip>
       {repository === null ? null : (
-        <>
+        // The separator and the repository wrap as one, so a narrow column never leaves the separator alone on a line.
+        <span className="plan-crumb-step">
           <ChevronRightIcon className="plan-crumb-separator" aria-hidden="true" />
           {/* Keyed by the workspace and then the repository, so a plan moved to
               another workspace reads its branch afresh, through that one's GitHub. */}
@@ -424,7 +430,7 @@ export function PlanCrumb({
               doors={doors.repository}
             />
           </Fragment>
-        </>
+        </span>
       )}
       {count === undefined ? null : (
         <People

@@ -149,7 +149,12 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   act(() => repositoryChip.click());
   await settle();
   assert.deepEqual(
-    [...document.querySelectorAll('[role="option"]')].map((row) => row.textContent),
+    // A row names the repository, then its owner after it.
+    [...document.querySelectorAll('[role="option"]')].map((row) =>
+      [".plan-compose-menu-detail", ".plan-compose-menu-name"]
+        .map((part) => row.querySelector(part)?.textContent)
+        .join("/"),
+    ),
     ["acme-corp/relay"],
     "the list is the chosen workspace's repositories",
   );

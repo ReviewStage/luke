@@ -2971,7 +2971,10 @@ ul.actor-stack {
   font-size: 12.5px;
 }
 
+/* The document's column answers its own width (`@container plan-document`
+   below), the room the summary's rail leaves it included. */
 .desktop-document {
+  container: plan-document / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -3097,6 +3100,14 @@ ul.actor-stack {
   text-underline-offset: 0.2em;
 }
 
+/* The "Edited by" line, over the document and in the plan's menu, wraps
+   between its words and names rather than cutting a name short, so no name
+   is ever cut to nothing beside the words around it. */
+.plan-edit-note,
+.plan-menu-note {
+  flex-wrap: wrap;
+}
+
 /* A line over a version: what it is compared with, or why it is not drawn. */
 .version-note {
   margin-top: 0;
@@ -3174,6 +3185,23 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
+}
+
+/* In a column under 480px the crumb wraps rather than cutting its names to a
+   letter: the workspace, then the repository with its separator, then who
+   can edit, each on a line of its own where they do not fit together. */
+@container plan-document (width < 480px) {
+  .plan-crumb {
+    flex-wrap: wrap;
+  }
+}
+
+/* In a column under 400px the title steps down to a section's size and a
+   half, so it no longer fills the first screen a few words a line. */
+@container plan-document (width < 400px) {
+  .desktop-document .plan-title .markdown-heading[data-level="1"] {
+    font-size: 1.5em;
+  }
 }
 
 /* The call bar ------------------------------------------------------------- */
@@ -5484,12 +5512,16 @@ button.automation-run:hover {
   text-align: right;
 }
 
+/* What a version did runs to two lines before it is cut short, so a
+   restore's row says which version it brought back in a column the folded
+   sidebar's width. */
 .version-row-summary {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A row's ⋯ stands in its time's place, which is always as wide as it, while
@@ -5835,7 +5867,8 @@ button.automation-run:hover {
 }
 
 /* Expanded where it cannot be pinned, the whole summary stands in a card
-   over the rail's own footprint, its top and right edges the rail's, drawn
+   over the rail's own footprint, its top and right edges the rail's, or the
+   column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
    as a menu is, and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
@@ -6200,14 +6233,15 @@ button.automation-run:hover {
 }
 
 /* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens; either fades where it
-   is cut. A row with no folder gives its name the whole width. */
-.tab-add-menu .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
+   a deep path never hides which file the row opens, and a repository's row
+   its name rather than its owner (`repository-chip.tsx`); either fades where
+   it is cut. A row with no folder gives its name the whole width. */
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
 }
 
-.tab-add-menu .plan-compose-menu-detail {
+:is(.tab-add-menu, .repository-chip) .plan-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;

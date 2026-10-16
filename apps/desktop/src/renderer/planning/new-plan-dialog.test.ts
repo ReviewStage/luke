@@ -371,7 +371,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
 
   assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
   assert.equal(
-    offered.includes("ReviewStage/luke"),
+    offered.some((words) => words?.startsWith("luke")),
     false,
     "the stranded repository is not offered",
   );
@@ -409,4 +409,54 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
 
   assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
   assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
+});
+
+test("the repository menu names each repository first and its owner after it, so two that share an owner tell apart, and finds one by its owner/name", async () => {
+  const owner = "northwind-platform";
+  const reached = (name: string) => ({
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    defaultBranch: "main",
+    private: true,
+    updatedAt: 1,
+  });
+  const dialog = await mount(undefined, undefined, {
+    recent: [],
+    read: () =>
+      Promise.resolve({
+        repositories: {
+          installed: true,
+          repositories: [
+            reached("customer-identity-and-access-management-service"),
+            reached("billing-ledger-and-invoicing-pipeline"),
+          ],
+          installationUrl: "https://github.com/apps/luke/installations/new",
+        },
+      }),
+  });
+  await openChip();
+  const rows = () =>
+    [...document.querySelectorAll('[role="option"]')].map((row) => [
+      row.querySelector(".plan-compose-menu-name")?.textContent,
+      row.querySelector(".plan-compose-menu-detail")?.textContent,
+    ]);
+
+  assert.deepEqual(rows(), [
+    ["customer-identity-and-access-management-service", owner],
+    ["billing-ledger-and-invoicing-pipeline", owner],
+  ]);
+  const search =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
+    assert.fail("the chip's menu opens");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, `${owner}/billing`);
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await dialog.press("Enter", search);
+  dialog.type("Ledger");
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(dialog.starts, [["Ledger", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
 });
