@@ -284,3 +284,20 @@ a.text-link {
 .markdown-deleted + .markdown-inserted {
   margin-left: 0.2em;
 }
+
+/* A chip stands with the punctuation written against it as one box no line
+   breaks inside (`link-glue.ts`), in a plan's words and a transcript's
+   alike, so a comma never starts a line alone after a chip and
+   an opening bracket never ends one alone before it. The box is held to the
+   column, and the chip in it gives way before it would push its comma past
+   the edge, so a long name in a narrow column still ellipsizes. */
+.link-glued {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.link-glued > * {
+  min-width: 0;
+}
