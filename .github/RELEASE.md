@@ -53,6 +53,14 @@ nothing.
    and the `changelog-screenshots` skill the method. Merge it through protected
    `main` like any other change.
 
+   Keep anything else out of the version PR. A change made of nothing but `CHANGELOG.md`,
+   the screenshots under `apps/web/public/changelog/`, and package `"version"` fields is
+   release-only (`scripts/release-only.mjs`): CI runs the TypeScript checks (the
+   repository checks, lint, typecheck, and the build that renders the changelog) and
+   web's tests, which parse the changelog, and its other test jobs and the Postgres job
+   report success without running, in the pull request and the merge queue alike. Any
+   other file in the change, or a manifest edit beyond its version, runs every check.
+
 2. **Confirm the hosted service is live.** The service deploys from `main` on merge while
    the desktop ships on the tag, so a build released ahead of its service answers 404
    where a feature expected an endpoint.
