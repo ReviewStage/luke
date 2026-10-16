@@ -41,6 +41,7 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
@@ -62,6 +63,7 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOverviewAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   type DictationTranscribeAnswerView,
@@ -498,6 +500,10 @@ export interface HostOperator {
   codingAgentChanges(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentChangesAnswerView>;
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them; or why there is none. */
+  codingAgentOverview(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -1433,6 +1439,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentChangesAnswerViewSchema),
+      ),
+    codingAgentOverview: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentOverviewAnswerViewSchema),
       ),
     providerKeysRead: () =>
       Effect.map(

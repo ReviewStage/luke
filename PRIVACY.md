@@ -363,6 +363,15 @@ someone on GitHub, as the tab does who opened and reviewed the pull request,
 it draws them by their GitHub avatar, which your Mac loads straight from
 GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP address.
 
+**A coding agent's pull request.** A coding agent's Pull request tab shows its
+pull request as GitHub holds it. Each time the tab opens, or you refresh it, our
+service reads it from GitHub with the same one-repository token: its title,
+description, branches, and whether it would merge; the name, App, state, and
+times of up to 100 checks on its head; its reviewers; and up to its 100 newest
+comments and reviews, each with its author and up to 8,000 characters of its
+words. It stores none of it, and Luke holds it in memory while the tab is open,
+never on disk.
+
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
 When a task conversation or a coding agent's session starts, our service

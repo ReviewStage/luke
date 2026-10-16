@@ -233,6 +233,10 @@ export function DesktopAgentPage({
   };
   const openChanges = (changed: string) =>
     sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
+  const openPullRequest = (published: string) =>
+    sidePanel.onChoose({
+      pullRequest: changesTabOf(control, published, sidePanel.changes).changes,
+    });
   const shown = plans.shown && !sidePanel.fullScreen;
   const cards = planCards({
     agents: control,
@@ -323,6 +327,7 @@ export function DesktopAgentPage({
                       views={views}
                       onOpenDelegation={openDelegation}
                       onOpenChanges={openChanges}
+                      onOpenPullRequest={openPullRequest}
                       onOpenTarget={openTarget}
                       cards={cards}
                     />

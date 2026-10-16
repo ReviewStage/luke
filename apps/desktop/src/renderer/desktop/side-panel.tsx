@@ -20,9 +20,11 @@ import {
   isChangesTab,
   isFileTab,
   isPageTab,
+  isPullRequestTab,
   isSubagentTab,
   isTerminalTab,
   type PageStripTab,
+  type PullRequestStripTab,
   type StripTab,
   type SubagentStripTab,
   sameTab,
@@ -51,6 +53,7 @@ import { FindScope } from "../find-in-tab";
 import { drawnVisibly, focusSeek } from "../focus-seek";
 import { panelTabPlace } from "../links-at-hand";
 import { AgentChangesTab, ChangesCard, peopleOf } from "../planning/agent-changes-tab";
+import { AgentPullRequestTab } from "../planning/agent-pull-request-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../planning/agent-tab";
 import {
@@ -89,6 +92,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type DrawnTabs,
   drawsChanges,
+  drawsPullRequest,
   drawsSubagent,
   drawsTerminal,
   type FileHistoryStep,
@@ -216,7 +220,7 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Changes, and its Terminal, and no plan's Board,
+ * agent's workers, its Changes, its Pull request, and its Terminal, and no plan's Board,
  * Code, Call, files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered.
  */
@@ -281,6 +285,7 @@ export function useColumnFocus(): ColumnFocus {
 export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
+  PULL_REQUESTS: "Pull requests",
   CHANGES: "Changes",
   PAGES: "Pages",
   TERMINAL: "Terminal",
@@ -394,15 +399,17 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * door for a file on the newest snippet of it. Then, under Changes, each
  * agent's pull request (`changesOffers`), named as its Changes tab is, with
  * the pull request's number beside it, found by its title and number too,
- * which opens the agent's Changes tab. The plan's coding agents are opened
- * from the plan's column's own "+" (`main-tabs.tsx`).
+ * which opens the agent's Changes tab, and under Pull requests the same
+ * pull requests again, named as each Pull request tab is, which open the
+ * agent's Pull request tab. The plan's coding agents are opened from the
+ * plan's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
   files: readonly ShownFile[];
-  /** The agents' Changes tabs on offer; none where the caller offers none. */
+  /** The agents' pull requests on offer, as Changes and as Pull request tabs; none where the caller offers none. */
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
@@ -456,6 +463,22 @@ export function panelEntries(input: {
       onPick: () => panel.onChoose({ changes: agentId }),
     };
   });
+  // Note that a Pull request tab's row is named by the key its tab is drawn
+  // under, because the pull request's page names its Changes row.
+  const pullRequestRows = changes.map(({ agentId, label, pullRequest }) => {
+    const look = tabLook({ kind: TAB_KIND.PULL_REQUEST, agentName: label });
+    const number = pullRequestNumberLabel(pullRequest);
+    return {
+      row: {
+        id: tabKey({ pullRequest: agentId }),
+        ...look,
+        detail: number,
+        terms: [look.label, pullRequest.title, number],
+        section: ADD_SECTION.PULL_REQUESTS,
+      },
+      onPick: () => panel.onChoose({ pullRequest: agentId }),
+    };
+  });
   const pageRows = pages.map((page) => ({
     row: {
       id: page.id,
@@ -478,7 +501,15 @@ export function panelEntries(input: {
     },
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows, ...terminalRows];
+  return [
+    ...kinds,
+    ...subagentRows,
+    ...fileRows,
+    ...pullRequestRows,
+    ...changesRows,
+    ...pageRows,
+    ...terminalRows,
+  ];
 }
 
 /** Every subagent the plan's work holds, with where its session stands, in the order started. */
@@ -494,6 +525,13 @@ function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agent = agents.agents?.find((each) => each.id === agentId);
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
   return tabLook({ kind: TAB_KIND.CHANGES, agentName });
+}
+
+/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it. */
+function pullRequestLook(agentId: string, agents: CodingAgentsControl): KindLook {
+  const agent = agents.agents?.find((each) => each.id === agentId);
+  const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return tabLook({ kind: TAB_KIND.PULL_REQUEST, agentName });
 }
 
 /**
@@ -546,6 +584,7 @@ function stripTabs(input: {
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
+  pullRequests: readonly PullRequestStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
@@ -561,7 +600,9 @@ function stripTabs(input: {
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
+  const { panel, unread, agents, subagents, files, changes, pullRequests, pages, terminals } =
+    input;
+  const { shown, held } = input;
   const { repository, copied, readWorker, onOpenAgent, shownAgent } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -622,26 +663,33 @@ function stripTabs(input: {
       close: () => panel.onClose({ file: path }),
     };
   });
-  // A Changes tab hangs its pull request's card, naming the agent whose it is.
-  const changesTabs = changes.map((tab) => {
-    const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
-    const pullRequest = agents.pullRequests.get(tab.changes);
-    const card =
-      subject.agent === undefined || pullRequest === undefined ? undefined : (
-        <ChangesCard
-          subject={subject}
-          models={agents.models}
-          pullRequest={pullRequest}
-          people={peopleOf(agents.changesPeople.get(tab.changes), pullRequest)}
-          onOpenAgent={() => onOpenAgent(tab.changes)}
-        />
-      );
-    return {
-      tab,
-      look: look(tab, { ...changesLook(tab.changes, agents), card }),
-      close: () => panel.onClose(tab),
-    };
-  });
+  // A Changes or Pull request tab hangs its pull request's card, naming the agent whose it is.
+  const pullRequestCard = (agentId: string) => {
+    const subject = agentSubject(agents, agentId, held, shownAgent === agentId);
+    const pullRequest = agents.pullRequests.get(agentId);
+    return subject.agent === undefined || pullRequest === undefined ? undefined : (
+      <ChangesCard
+        subject={subject}
+        models={agents.models}
+        pullRequest={pullRequest}
+        people={peopleOf(agents.changesPeople.get(agentId), pullRequest)}
+        onOpenAgent={() => onOpenAgent(agentId)}
+      />
+    );
+  };
+  const changesTabs = changes.map((tab) => ({
+    tab,
+    look: look(tab, { ...changesLook(tab.changes, agents), card: pullRequestCard(tab.changes) }),
+    close: () => panel.onClose(tab),
+  }));
+  const pullRequestTabs = pullRequests.map((tab) => ({
+    tab,
+    look: look(tab, {
+      ...pullRequestLook(tab.pullRequest, agents),
+      card: pullRequestCard(tab.pullRequest),
+    }),
+    close: () => panel.onClose(tab),
+  }));
   const pageTabs = pages.map(({ tab, line }) => ({
     tab,
     look: look(tab, tabLook({ kind: TAB_KIND.PAGE, title: line.title })),
@@ -669,7 +717,15 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
+  return [
+    ...fixed,
+    ...subagentTabs,
+    ...fileTabs,
+    ...changesTabs,
+    ...pullRequestTabs,
+    ...pageTabs,
+    ...terminalTabs,
+  ];
 }
 
 /**
@@ -705,6 +761,7 @@ function PanelTabs({
   workers,
   files,
   changes,
+  pullRequests,
   pages,
   terminals,
   shownFiles,
@@ -733,6 +790,8 @@ function PanelTabs({
   files: readonly OpenFile[];
   /** The open Changes tabs of the plan's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
+  /** The open Pull request tabs of the plan's agents, in the order opened. */
+  pullRequests: readonly PullRequestStripTab[];
   /** The open page tabs of the plan's pages, in the order opened. */
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the plan's agents, in the order opened. */
@@ -766,6 +825,7 @@ function PanelTabs({
     subagents,
     files,
     changes,
+    pullRequests,
     pages,
     terminals,
     shown,
@@ -1200,6 +1260,7 @@ function TabContent({
   onShowNote,
   onRevealed,
   onCloseTab,
+  onChooseTab,
   shellsList,
 }: {
   tab: SidePanelTab;
@@ -1250,6 +1311,8 @@ function TabContent({
   onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
+  /** Opens and chooses a tab of the panel, as a Pull request tab's Files changed opens its agent's Changes. */
+  onChooseTab: (tab: SidePanelTab) => void;
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
@@ -1281,6 +1344,17 @@ function TabContent({
           act(ACT_KIND.PLANNING_PAGE_SOURCE, { planId, pageId: page.id, version })
         }
         findActive={findActive}
+      />
+    );
+  }
+  if (isPullRequestTab(tab)) {
+    return (
+      <AgentPullRequestTab
+        key={tab.pullRequest}
+        agentId={tab.pullRequest}
+        control={agents}
+        shown={shown}
+        onOpenChanges={() => onChooseTab({ changes: tab.pullRequest })}
       />
     );
   }
@@ -1717,6 +1791,10 @@ export function SidePanel({
   const terminals = panel.terminals.filter((each) =>
     drawsTerminal(each, { planAgents: agents.agentIds }),
   );
+  // An agent's Pull request tab stands on the same terms as its Terminal tab.
+  const pullRequests = panel.pullRequests.filter((each) =>
+    drawsPullRequest(each, { planAgents: agents.agentIds }),
+  );
   // A page's tab stands while the plan lists the page.
   const planPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1732,11 +1810,13 @@ export function SidePanel({
           ? tab.file
           : isChangesTab(tab)
             ? changesLook(tab.changes, agents).label
-            : isPageTab(tab)
-              ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-              : isTerminalTab(tab)
-                ? TAB_WORDS.TERMINAL
-                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+            : isPullRequestTab(tab)
+              ? pullRequestLook(tab.pullRequest, agents).label
+              : isPageTab(tab)
+                ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
+                : isTerminalTab(tab)
+                  ? TAB_WORDS.TERMINAL
+                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1788,6 +1868,7 @@ export function SidePanel({
             workers={workers}
             files={files}
             changes={changes}
+            pullRequests={pullRequests}
             pages={pageTabs}
             terminals={terminals}
             shownFiles={offered}
@@ -1856,6 +1937,7 @@ export function SidePanel({
               onShowNote={showNote}
               onRevealed={revealed}
               onCloseTab={panel.onClose}
+              onChooseTab={panel.onChoose}
               shellsList={shellsList}
             />
           </FindScope>

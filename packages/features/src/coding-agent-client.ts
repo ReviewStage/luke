@@ -29,6 +29,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentWorkspaceListParams,
@@ -60,6 +61,7 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -98,6 +100,7 @@ import {
   agentChangesPath,
   agentInboxPath,
   agentMessagesPath,
+  agentOverviewPath,
   agentPath,
   agentPicturePath,
   agentPullRequestPath,
@@ -661,6 +664,16 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
+  overview(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewAnswerSchema, ROW_REFUSALS),
     );
   }
 

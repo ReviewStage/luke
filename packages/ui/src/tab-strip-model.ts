@@ -7,7 +7,7 @@
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
  * started, one subagent, one file, one agent's changes, one agent's
- * terminal, or one page. Two tabs are the
+ * pull request, one agent's terminal, or one page. Two tabs are the
  * same where they name the same thing, so a tab rebuilt on every render is
  * still the tab it was.
  *
@@ -26,7 +26,7 @@
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `planning/tab-look.tsx`): the plan's Inbox, a
  * draft agent's tab and the "+" row that opens one, an agent the window holds
- * nothing of, and an agent's Changes before its agent is read. The side panel's fixed kinds
+ * nothing of, and an agent's Changes or Pull request before its agent is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
@@ -34,12 +34,18 @@ export const TAB_WORDS = {
   NEW_AGENT: "New coding agent",
   CODING_AGENT: "Coding agent",
   CHANGES: "Changes",
+  PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
 } as const;
 
 /** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
 export function changesLabelOf(agentLabel: string): string {
   return `${TAB_WORDS.CHANGES}: ${agentLabel}`;
+}
+
+/** A Pull request tab's name for its agent's: the agent's own, after the word for what it shows. */
+export function pullRequestLabelOf(agentLabel: string): string {
+  return `${TAB_WORDS.PULL_REQUEST}: ${agentLabel}`;
 }
 
 /** One coding agent's tab, named by the agent it shows. */
@@ -75,6 +81,11 @@ export interface ChangesStripTab {
   readonly changes: string;
 }
 
+/** One agent's Pull request tab, named by the agent whose pull request it shows. */
+export interface PullRequestStripTab {
+  readonly pullRequest: string;
+}
+
 /** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
 export interface TerminalStripTab {
   readonly terminal: string;
@@ -93,6 +104,7 @@ export type StripTab =
   | SubagentStripTab
   | FileStripTab
   | ChangesStripTab
+  | PullRequestStripTab
   | TerminalStripTab
   | PageStripTab;
 
@@ -124,6 +136,11 @@ export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
   return tab instanceof Object && "changes" in tab;
 }
 
+/** Whether a tab is one agent's pull request. */
+export function isPullRequestTab(tab: StripTab): tab is PullRequestStripTab {
+  return tab instanceof Object && "pullRequest" in tab;
+}
+
 /** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
@@ -150,12 +167,13 @@ export function followedAgent(
 
 /**
  * The coding agent a tab is one of the agent's own: its tab, its Changes
- * tab, or its Terminal tab, which is where a terminal command means that
- * agent (`terminal-entry.ts`); none for any other tab.
+ * tab, its Pull request tab, or its Terminal tab, which is where a terminal
+ * command means that agent (`terminal-entry.ts`); none for any other tab.
  */
 export function agentOfTab(tab: StripTab): string | undefined {
   if (isAgentTab(tab)) return tab.agent;
   if (isChangesTab(tab)) return tab.changes;
+  if (isPullRequestTab(tab)) return tab.pullRequest;
   return isTerminalTab(tab) ? tab.terminal : undefined;
 }
 
@@ -170,23 +188,26 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
+  if (isPullRequestTab(a)) return isPullRequestTab(b) && a.pullRequest === b.pullRequest;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   return a === b;
 }
 
 /**
- * The key each agent's Terminal tab is drawn under, by agent, made the first
- * time it is asked for. Note that it is not the agent's id, because the
- * agent's Changes tab stands in the same strip under that.
+ * The keys each agent's Terminal and Pull request tabs are drawn under, by
+ * agent, each made the first time it is asked for. Note that neither is the
+ * agent's id, because the agent's Changes tab stands in the same strip
+ * under that.
  */
 const terminalKeys = new Map<string, string>();
+const pullRequestKeys = new Map<string, string>();
 
-function terminalKey(agentId: string): string {
-  const held = terminalKeys.get(agentId);
+function madeKey(keys: Map<string, string>, agentId: string): string {
+  const held = keys.get(agentId);
   if (held !== undefined) return held;
   const made = crypto.randomUUID();
-  terminalKeys.set(agentId, made);
+  keys.set(agentId, made);
   return made;
 }
 
@@ -194,13 +215,14 @@ function terminalKey(agentId: string): string {
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, a Terminal tab
- * by a key made for its agent (`terminalKey`), and a page's by the page's
- * own id.
+ * of the side panel, the one strip it stands in, is keyed by, a Terminal or
+ * Pull request tab by a key made for its agent (`madeKey`), and a page's by
+ * the page's own id.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
-  if (isTerminalTab(tab)) return terminalKey(tab.terminal);
+  if (isTerminalTab(tab)) return madeKey(terminalKeys, tab.terminal);
+  if (isPullRequestTab(tab)) return madeKey(pullRequestKeys, tab.pullRequest);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;

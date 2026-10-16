@@ -1559,6 +1559,253 @@ button.file-ref:hover .file-ref-path {
   user-select: text;
 }
 
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
+   bar, wearing the pull request's standing as a pill in its own colour and
+   its branches quiet beside it, over the page read top to bottom in one
+   scroller, its sections each under a quiet heading. */
+.pull-request-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-8);
+  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
+  color: var(--pull-request-tone);
+  font-weight: 600;
+}
+
+.pull-request-branches {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-page {
+  min-height: 0;
+  flex: 1;
+  padding: var(--space-12) var(--space-16) var(--space-24);
+  overflow-y: auto;
+}
+
+/* In the side panel, the page keeps to the reading measure a transcript
+   keeps to, so a panel filling the window reads in one column. */
+.side-panel-content .pull-request-page {
+  padding-inline: max(var(--space-16), var(--reading-room));
+}
+
+.pull-request-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  user-select: text;
+}
+
+.pull-request-number {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* Who opened it and its reviewers, in the Changes tab's voice, standing on
+   the page rather than across it. */
+.changes-people.pull-request-people {
+  padding: var(--space-6) 0 0;
+  border-bottom: 0;
+}
+
+.pull-request-quiet {
+  color: var(--text-tertiary);
+}
+
+/* Whether it would merge as it stands, boxed as GitHub's own box is, its
+   glyph in the colour of what it means: ready green, a wait amber, and
+   something to fix red. */
+.pull-request-merge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 0;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.pull-request-merge > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--merge-tone);
+}
+
+[data-merge-tone="ready"] {
+  --merge-tone: var(--state-complete);
+}
+
+[data-merge-tone="waiting"] {
+  --merge-tone: var(--state-attention);
+}
+
+[data-merge-tone="blocked"] {
+  --merge-tone: var(--danger);
+}
+
+.pull-request-section {
+  margin-top: var(--space-20);
+}
+
+.pull-request-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pull-request-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.pull-request-none {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+/* The checks, one boxed list, each row opening the check's page. */
+.pull-request-checks {
+  margin: 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  list-style: none;
+}
+
+.pull-request-checks > li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-check {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-12);
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+button.pull-request-check {
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-check:hover {
+  background: var(--raised);
+}
+
+.pull-request-check-glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--check-tone);
+}
+
+.pull-request-check-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+[data-check-state="passed"] {
+  --check-tone: var(--state-complete);
+}
+
+[data-check-state="failed"] {
+  --check-tone: var(--danger);
+}
+
+[data-check-state="pending"] {
+  --check-tone: var(--state-attention);
+}
+
+[data-check-state="skipped"] {
+  --check-tone: var(--text-tertiary);
+}
+
+.pull-request-check-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-check-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Words written on GitHub, drawn at the transcript's own size, a step over
+   the page's quiet lines, its headings no more than a step above that
+   (`PANEL_MARKDOWN_COMPONENTS`). */
+.pull-request-words {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+/* The comments and reviews, oldest first, each boxed under its head. */
+.pull-request-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-entry {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  font-size: 12.5px;
+}
+
+.pull-request-entry .changes-comment-state {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.pull-request-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
 .file-tab-snippet-label {
   margin: 0;
   padding: var(--space-8) var(--space-12) var(--space-4);

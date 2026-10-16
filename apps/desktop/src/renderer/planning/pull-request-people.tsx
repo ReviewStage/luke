@@ -107,6 +107,28 @@ function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   );
 }
 
+/** Someone the pull request names, by their face and name, hanging their card, as every actor is drawn. */
+export function PersonRef({
+  person,
+  agent,
+}: {
+  person: GitHubPerson;
+  agent: PullRequestAgent;
+}): React.JSX.Element {
+  const { actor, card } = useNamer(agent)(person);
+  return <ActorRef actor={actor} card={card} />;
+}
+
+/** Where a review left its reviewer, its glyph in its colour beside the words for it. */
+export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Element {
+  return (
+    <span className="changes-comment-state" data-review-state={state}>
+      <ReviewBadge state={state} />
+      {REVIEW_WORDS[state]}
+    </span>
+  );
+}
+
 /** The reviewers as a facepile, each face wearing where they stand and hanging their card. */
 function ReviewerPile({
   reviewers,
@@ -237,10 +259,7 @@ function ReviewComment({
     <li className="changes-comment">
       <span className="changes-comment-head">
         <ActorRef actor={actor} card={card} />
-        <span className="changes-comment-state" data-review-state={comment.state}>
-          <ReviewBadge state={comment.state} />
-          {REVIEW_WORDS[comment.state]}
-        </span>
+        <ReviewStanding state={comment.state} />
         <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
       </span>
       <p className="changes-comment-words">{comment.excerpt}</p>

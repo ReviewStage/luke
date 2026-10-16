@@ -91,20 +91,25 @@ type DiffLineKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW] | typeof DIFF_HUNK;
 const UNANSWERED: CodingAgentChangesAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
 
 /**
- * The agent's changes as last answered, none before the first read lands;
- * whether a read is out; and the door that reads them again. Every ask is
- * numbered, so only the latest one's answer is drawn.
+ * One agent's read as last answered, none before the first read lands;
+ * whether a read is out; and the door that reads it again. The read is
+ * asked as the tab first comes on screen and again the moment the agent
+ * ends, since that is when what it published settles; every ask is
+ * numbered, so only the latest one's answer is drawn, and a read that threw
+ * rather than answered lands as `unanswered`. The Changes and Pull request
+ * tabs read through it alike.
  */
-function useChangesRead(
+export function useAgentRead<A>(
   agentId: string,
   shown: boolean,
   ended: boolean,
-  read: CodingAgentsControl["readChanges"],
+  read: (agentId: string) => Promise<A>,
+  unanswered: A,
 ) {
-  const [answer, setAnswer] = useState<CodingAgentChangesAnswerView | undefined>(undefined);
+  const [answer, setAnswer] = useState<A | undefined>(undefined);
   const [out, setOut] = useState(false);
-  const latest = useRef(read);
-  latest.current = read;
+  const latest = useRef({ read, unanswered });
+  latest.current = { read, unanswered };
   const asked = useRef(0);
   // The agent's standing the last read on its own was asked for.
   const readFor = useRef<boolean | undefined>(undefined);
@@ -113,12 +118,12 @@ function useChangesRead(
     asked.current += 1;
     const ask = asked.current;
     setOut(true);
-    const settle = (next: CodingAgentChangesAnswerView) => {
+    const settle = (next: A) => {
       if (ask !== asked.current) return;
       setOut(false);
       setAnswer(next);
     };
-    latest.current(agentId).then(settle, () => settle(UNANSWERED));
+    latest.current.read(agentId).then(settle, () => settle(latest.current.unanswered));
   }, [agentId]);
 
   useEffect(() => {
@@ -349,7 +354,7 @@ export function AgentChangesTab({
   const { tell } = useAct();
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  const { answer, out, ask } = useChangesRead(agentId, shown, ended, control.readChanges);
+  const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const room = usePaneRoom(tree);
   const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;

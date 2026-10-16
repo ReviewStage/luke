@@ -5,6 +5,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
@@ -221,6 +222,8 @@ export interface CodingAgentsControl {
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
+  /** One read of an agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation. */
+  readOverview: (agentId: string) => Promise<CodingAgentOverviewAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
@@ -844,6 +847,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readOverview = useCallback<CodingAgentsControl["readOverview"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW, { agentId }),
+    [act],
+  );
+
   const readInbox = useCallback<InboxReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -923,6 +931,7 @@ export function useCodingAgents(input: {
     pullRequests: published.pullRequests,
     readChanges,
     changesPeople,
+    readOverview,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,

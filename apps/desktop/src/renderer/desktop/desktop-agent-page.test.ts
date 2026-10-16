@@ -390,10 +390,12 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
     runAppCommand(APP_COMMAND.NEW_TAB);
   });
   await settle();
-  const offer = [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) =>
-    (each.textContent ?? "").includes("#2911"),
-  );
-  assert.ok(offer, "the + offers the agent's pull request");
+  // Note that the pull request is offered twice, as its Pull request tab and as its Changes tab.
+  const offer = [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) => {
+    const words = each.textContent ?? "";
+    return words.includes("#2911") && words.includes("Changes");
+  });
+  assert.ok(offer, "the + offers the agent's pull request's changes");
   act(() => offer.click());
   await settle();
   const tabs = [...container.querySelectorAll("aside.side-panel [role='tab']")].map(
@@ -403,6 +405,44 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Ch
   assert.ok(
     tabs.some((label) => label.includes("Changes")),
     `the Changes tab stands in the panel: ${tabs.join(", ")}`,
+  );
+});
+
+test("an agent's pull request, picked from the panel's + as a pull request, opens in a Pull request tab beside its page", async () => {
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  const container = await mountPanelPage();
+
+  act(() => {
+    runAppCommand(APP_COMMAND.NEW_TAB);
+  });
+  await settle();
+  const offer = [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) => {
+    const words = each.textContent ?? "";
+    return words.includes("#2911") && words.includes("Pull request");
+  });
+  assert.ok(offer, "the + offers the agent's pull request");
+  act(() => offer.click());
+  await settle();
+  const tabs = [...container.querySelectorAll("aside.side-panel [role='tab']")].map(
+    (tab) => tab.textContent ?? "",
+  );
+
+  assert.ok(
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
 

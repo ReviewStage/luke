@@ -499,6 +499,9 @@ function PlanDocument({
   // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
   const openChanges = (agentId: string) =>
     sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
+  // Its pull request's chip opens the pull request itself there, under the same agent.
+  const openPullRequest = (agentId: string) =>
+    sidePanel.onChoose({ pullRequest: changesTabOf(agents, agentId, sidePanel.changes).changes });
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -755,6 +758,7 @@ function PlanDocument({
                         views={views}
                         onOpenDelegation={openDelegation}
                         onOpenChanges={openChanges}
+                        onOpenPullRequest={openPullRequest}
                         onOpenTarget={openTarget}
                         cards={cards}
                       />

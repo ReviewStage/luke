@@ -203,6 +203,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`changes:${agentId}`);
           return { pullRequest: null };
         }),
+      codingAgentOverview: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`overview:${agentId}`);
+          return { pullRequest: null };
+        }),
       providerKeysRead: () =>
         Effect.sync(() => {
           asked.push("keys");

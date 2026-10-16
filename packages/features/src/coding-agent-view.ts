@@ -6,6 +6,7 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
@@ -325,6 +326,14 @@ export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
+
+/** One agent's pull request as its Pull request tab draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewAnswerView = typeof codingAgentOverviewAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

@@ -538,6 +538,11 @@ export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
 }
 
+/** One agent's pull request as its Pull request tab draws it (GET): its description, checks, reviewers, and conversation as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview`;
+}
+
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
 export function agentTerminalsPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/terminals`;

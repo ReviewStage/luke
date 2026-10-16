@@ -9,6 +9,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentPage,
   type CodingAgentSummary,
+  MERGE_STATE,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -109,6 +110,25 @@ const CHANGES = {
       },
     ],
     truncated: false,
+  },
+};
+
+/** That pull request as its Pull request tab draws it. */
+const OVERVIEW = {
+  pullRequest: {
+    number: 123,
+    title: "Send the invite once",
+    url: "https://github.com/acme/relay/pull/123",
+    state: PULL_REQUEST_STATE.OPEN,
+    body: "Sends the invite once.",
+    base: "main",
+    head: "luke/invite-once",
+    createdAt: 1_800_000_000_000,
+    mergedAt: null,
+    merge: MERGE_STATE.CLEAN,
+    checks: [],
+    reviewers: [],
+    conversation: [],
   },
 };
 
@@ -261,6 +281,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`changes:${agentId}`);
         return CHANGES;
+      }),
+    overview: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview:${agentId}`);
+        return OVERVIEW;
       }),
     readProviderKeys: () =>
       Effect.sync(() => {
@@ -493,6 +518,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: AGENT_ID }),
+      OVERVIEW,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
         planId: PLAN_ID,
         after: INBOX_CURSOR_START,
@@ -559,6 +588,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
+      `overview:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,

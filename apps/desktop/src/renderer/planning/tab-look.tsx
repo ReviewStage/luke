@@ -1,8 +1,8 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
-import { changesLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
+import { changesLabelOf, pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { AppWindowIcon, BotIcon, FileDiffIcon, GitPullRequestIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -33,6 +33,8 @@ export const TAB_KIND = {
   AGENT: "agent",
   SUBAGENT: "subagent",
   CHANGES: "changes",
+  /** One agent's pull request: its description, checks, reviewers, and conversation. */
+  PULL_REQUEST: "pull-request",
   /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
   FILE: "file",
@@ -66,6 +68,11 @@ export type TabSubject =
     }
   | {
       readonly kind: typeof TAB_KIND.CHANGES;
+      /** The label of the agent whose pull request it is; none before the agent is read. */
+      readonly agentName: string | undefined;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.PULL_REQUEST;
       /** The label of the agent whose pull request it is; none before the agent is read. */
       readonly agentName: string | undefined;
     }
@@ -161,6 +168,14 @@ export function tabLook(subject: TabSubject): KindLook {
         icon: <FileDiffIcon />,
         label:
           subject.agentName === undefined ? TAB_WORDS.CHANGES : changesLabelOf(subject.agentName),
+      };
+    case TAB_KIND.PULL_REQUEST:
+      return {
+        icon: <GitPullRequestIcon />,
+        label:
+          subject.agentName === undefined
+            ? TAB_WORDS.PULL_REQUEST
+            : pullRequestLabelOf(subject.agentName),
       };
     case TAB_KIND.TERMINAL:
       // Note that the agent's name is not the label, because the tab says

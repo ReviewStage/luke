@@ -27,6 +27,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
@@ -48,6 +49,7 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOverviewAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
@@ -411,6 +413,8 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request's description, checks, reviewers, and conversation, which its Pull request tab draws. */
+  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -1188,6 +1192,13 @@ export const ACT = {
       isReadable(codingAgentChangesAnswerViewSchema),
     ),
     refusal: "Could not read the agent's changes on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewAnswerView>(
+      isReadable(codingAgentOverviewAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's pull request on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),

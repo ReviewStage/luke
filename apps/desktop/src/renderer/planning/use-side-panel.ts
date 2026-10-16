@@ -10,11 +10,13 @@ import {
   isChangesTab,
   isFileTab,
   isPageTab,
+  isPullRequestTab,
   isSubagentTab,
   isTerminalTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
+  type PullRequestStripTab,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -72,7 +74,10 @@ import { MAIN_TAB } from "./use-main-tabs";
  * stands once per agent, whose sandbox its shells run in, never once per
  * plan: it is held to the plan's agents as a Changes tab is, and kept
  * nowhere, since what it shows is a connection the next launch makes
- * afresh. Opening a file
+ * afresh. An agent's Pull request tab, opened from the "+", the Pull
+ * request chip at its tab's foot, or ⌘K, stands once per agent on the same
+ * terms as its Terminal tab: held to the plan's agents and kept nowhere, so
+ * a launch opens none. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -166,12 +171,13 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes or Terminal, or one page's. */
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes, Pull request, or Terminal, or one page's. */
 export type SidePanelTab =
   | FixedSidePanelTab
   | SubagentStripTab
   | FileStripTab
   | ChangesStripTab
+  | PullRequestStripTab
   | TerminalStripTab
   | PageStripTab;
 
@@ -391,6 +397,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on each plan, by plan. */
   readonly lastTerminals: Readonly<Record<string, string>>;
+  /** The open Pull request tabs, by agent, in the order opened. */
+  readonly pullRequests: readonly PullRequestStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -451,6 +459,8 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
+  /** The open Pull request tabs in the order opened, after the Terminal tabs; only those of the open plan's agents are drawn. */
+  pullRequests: readonly PullRequestStripTab[];
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -747,6 +757,10 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isTerminalTab(tab) && planId !== undefined && held.lastTerminals[planId] !== tab.terminal
       ? { ...held.lastTerminals, [planId]: tab.terminal }
       : held.lastTerminals;
+  const pullRequests =
+    isPullRequestTab(tab) && !held.pullRequests.some((each) => sameTab(each, tab))
+      ? [...held.pullRequests, tab]
+      : held.pullRequests;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
@@ -754,9 +768,10 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     pages === held.pages &&
     terminals === held.terminals &&
     lastTerminals === held.lastTerminals &&
+    pullRequests === held.pullRequests &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, pullRequests, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -933,6 +948,14 @@ export function drawsTerminal(
   return drawn.planAgents?.includes(tab.terminal) === true;
 }
 
+/** Whether the plan draws the agent's Pull request tab: once its agents are read and the agent is among them, as its Terminal tab is (`drawsTerminal`). */
+export function drawsPullRequest(
+  tab: PullRequestStripTab,
+  drawn: Pick<DrawnTabs, "planAgents">,
+): boolean {
+  return drawn.planAgents?.includes(tab.pullRequest) === true;
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -963,6 +986,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.pullRequests.filter((each) => drawsPullRequest(each, drawn)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -1025,7 +1049,12 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
           : isTerminalTab(tab)
             ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-            : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+            : isPullRequestTab(tab)
+              ? {
+                  ...held,
+                  pullRequests: held.pullRequests.filter((each) => !sameTab(each, tab)),
+                }
+              : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1200,6 +1229,7 @@ function settled(state: SidePanelState): HeldState {
     pages: [],
     terminals: [],
     lastTerminals: {},
+    pullRequests: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1297,6 +1327,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isPullRequestTab(kept)) return drawsPullRequest(kept, drawn) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
@@ -1588,6 +1619,7 @@ export function useSidePanel(
     pages: state.pages,
     terminals: state.terminals,
     lastTerminal: planId === undefined ? undefined : state.lastTerminals[planId],
+    pullRequests: state.pullRequests,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

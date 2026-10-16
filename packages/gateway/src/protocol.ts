@@ -147,6 +147,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
+  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
