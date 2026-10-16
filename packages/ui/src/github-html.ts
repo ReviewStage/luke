@@ -8,10 +8,13 @@
  * node, never as markdown, which would split the rendering at a blank line
  * inside a code block. `githubShapes` runs between the parse and the
  * sanitizer, while GitHub's classes still say what each part is, and
- * reshapes what GitHub dresses its way into what the window draws its own:
- * a highlighted block, or a diagram's source, into a fenced block in its
- * language, which the window colours as it colours any
- * (`transcript-markdown.tsx`), and a heading's permalink taken out.
+ * reshapes the one thing GitHub dresses its own way that the window would
+ * otherwise draw wrong: a highlighted block, or a diagram's source, which
+ * GitHub writes as a `<pre>` of coloured spans with no `<code>` in it, so
+ * that its lines would run together. Each becomes a fenced block in its
+ * language, which the window draws and colours as it does any
+ * (`transcript-markdown.tsx`). Everything else GitHub writes, a heading's
+ * permalink included, the sanitizer already leaves harmless.
  */
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
@@ -33,9 +36,6 @@ interface MarkdownRoot {
 
 /** The language GitHub's highlighting names on a block: `highlight-source-ts` and `highlight-text-md` alike. */
 const HIGHLIGHT_LANGUAGE = /^highlight-(?:source|text)-(.+)$/u;
-
-/** The class GitHub's rendering gives a heading's permalink. */
-const PERMALINK = "anchor";
 
 /** A node's classes, as the parsed tree holds them. */
 function classesOf(node: HtmlNode): readonly string[] {
@@ -70,7 +70,6 @@ function fenced(language: string, code: string): HtmlNode {
 function reshaped(node: HtmlNode): readonly HtmlNode[] {
   if (node.type !== "element") return [node];
   const classes = classesOf(node);
-  if (node.tagName === "a" && classes.includes(PERMALINK)) return [];
   // A diagram's source stands in a block naming its language (`<pre lang="mermaid">`).
   const named = node.tagName === "pre" ? node.properties?.lang : undefined;
   if (named !== undefined && named !== null) return [fenced(String(named), textOf(node))];

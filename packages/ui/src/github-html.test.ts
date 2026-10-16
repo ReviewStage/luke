@@ -5,9 +5,8 @@ import { githubShapes, wholeRendering } from "./github-html.js";
 /**
  * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
  * whole, and what GitHub dresses its way is reshaped into what the window
- * draws its own: a highlighted block into a fenced one in its language, a
- * diagram into a fenced mermaid block of its source, and a heading's
- * permalink and wrapper taken out. The trees are as the parse leaves them.
+ * draws its own: a highlighted block into a fenced one in its language, and
+ * a diagram into a fenced mermaid block of its source. The trees are as the parse leaves them.
  */
 
 /** A node of the parsed tree, as the step reads it. */
@@ -64,20 +63,6 @@ test("a diagram becomes a fenced mermaid block of its source", () => {
         element("pre", {}, [
           element("code", { className: ["language-mermaid"] }, [text("graph TD\nA-->B")]),
         ]),
-      ]),
-    ]),
-  ]);
-});
-
-test("a heading's permalink is taken out, deep in the tree", () => {
-  const heading = element("div", { className: ["markdown-heading"] }, [
-    element("h2", { className: ["heading-element"] }, [text("Summary")]),
-    element("a", { className: ["anchor"], href: "#summary" }, [element("svg", {})]),
-  ]);
-  assert.deepEqual(shaped(element("blockquote", {}, [heading])), [
-    element("blockquote", {}, [
-      element("div", { className: ["markdown-heading"] }, [
-        element("h2", { className: ["heading-element"] }, [text("Summary")]),
       ]),
     ]),
   ]);
