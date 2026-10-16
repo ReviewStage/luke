@@ -29,7 +29,6 @@ const SHEETS = [
   "markdown.css",
   "shortcut.css",
   "tooltip.css",
-  "skeleton.css",
   "sign-in.css",
   "tasks.css",
   "tailwind.css",
