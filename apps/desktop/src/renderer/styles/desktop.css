@@ -8412,8 +8412,10 @@ button.automation-run:hover {
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. */
-.person-column {
+   at the page's size beside their name and who they are here. It and the
+   Issues page stand that column under their toolbar, not Home's way down. */
+.person-column,
+.issues-column {
   margin-top: 0;
   gap: var(--space-24);
 }

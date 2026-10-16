@@ -123,8 +123,13 @@ beforeEach(() => {
           const { issueId, change } = request.payload;
           const was = standing.find((each) => each.id === issueId);
           if (changeRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.UNANSWERED };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+            const refused = {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
+            };
+            const held = heldChanges;
+            if (held === undefined) return Promise.resolve(refused);
+            return new Promise((resolve) => held.push(() => resolve(refused)));
           }
           if (was === undefined) {
             const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
@@ -208,9 +213,9 @@ async function settle(): Promise<void> {
 
 /** Each group's heading and its rows' identifiers and titles, top to bottom. */
 function groups(page: HTMLElement): [string, string[]][] {
-  return [...page.querySelectorAll(".issue-group")].map((group) => [
-    group.querySelector(".issue-group-head")?.textContent ?? "",
-    [...group.querySelectorAll(".issue-row")].map(
+  return [...page.querySelectorAll(".home-section")].map((group) => [
+    group.querySelector(".home-section-title")?.textContent ?? "",
+    [...group.querySelectorAll(".sidebar-task-item")].map(
       (row) =>
         `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
     ),
@@ -230,7 +235,7 @@ async function openIssue(issueId: string): Promise<HTMLElement> {
 
 /** The issue's title as its page draws it. */
 function titleOf(page: HTMLElement): string | undefined {
-  return page.querySelector(".issue-title")?.textContent ?? undefined;
+  return page.querySelector("[aria-label='Issue title']")?.textContent ?? undefined;
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -395,7 +400,7 @@ test("↓ and Return open the issue reached, read on its own page; Escape comes 
   });
   await settle();
   const back = document.activeElement;
-  assert.equal(back?.closest(".issue-row")?.getAttribute("data-issue-id"), issue(2).id);
+  assert.equal(back?.closest("[data-issue-id]")?.getAttribute("data-issue-id"), issue(2).id);
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
@@ -437,16 +442,17 @@ test("a priority picked on an issue's page is sent, and its chip names it", asyn
   assert.equal(picked(page, "Priority"), "Urgent");
 });
 
-test("the title pressed opens its field, and Return sends the new title and draws it", async () => {
+test("the title is the task page's own heading, written where it stands: Return sends the new title and draws it", async () => {
   standing = [issue(1, { title: "Fix login" })];
   const page = await openIssue(issue(1).id);
 
-  act(() => button("Fix login").click());
-  const field = page.querySelector<HTMLInputElement>("input[aria-label='Issue title']");
-  assert.ok(field, "the title's field opens");
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  assert.ok(title.matches(".task-title .markdown-heading.task-title-text[data-level='1']"));
   act(() => {
-    field.value = "Fix the login redirect";
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    title.focus();
+    title.textContent = "Fix the login redirect";
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   await settle();
 
@@ -454,6 +460,34 @@ test("the title pressed opens its field, and Return sends the new title and draw
     { issueId: issue(1).id, change: { title: "Fix the login redirect" } },
   ]);
   assert.equal(titleOf(page), "Fix the login redirect");
+});
+
+test("Escape in the title puts back the title it opened on, sends nothing, and leaves the issue's page standing", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  act(() => {
+    title.focus();
+    title.textContent = "Something else";
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.equal(titleOf(page), "Fix login");
+  assert.equal(closed, 0);
+});
+
+test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
+  standing = [issue(1)];
+  const page = mount();
+  await settle();
+
+  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
+  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
+  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
@@ -643,4 +677,47 @@ test("while a description's save is out the field takes no typing and no Escape,
   assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
   assert.equal(page.querySelector(".issue-description")?.textContent, "First draft");
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "First draft" } }]);
+});
+
+test("a Return that chooses a word the input method composes is the method's, and sends no title", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  act(() => {
+    title.focus();
+    title.textContent = "Fix ろぐいん";
+    title.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
+    );
+  });
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.equal(document.activeElement, title);
+});
+
+test("a refused rename answered while the title is written again puts nothing back over the newer words", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  changeRefused = true;
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title, "the title stands");
+  act(() => {
+    title.focus();
+    title.textContent = "First try";
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  act(() => {
+    title.focus();
+    title.textContent = "Second try, still typing";
+  });
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(titleOf(page), "Second try, still typing");
 });

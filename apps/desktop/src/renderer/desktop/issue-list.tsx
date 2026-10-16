@@ -12,8 +12,10 @@ import { PRIORITY_GLYPH, StatusGlyph } from "./issue-pickers";
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
  *
- * Every row is drawn as a sidebar row is, a button inside its item, so the
- * page's ↑ and ↓ move through the rows and Return opens the one reached.
+ * The headings and rows are Home's own (`desktop-home.tsx`): a section
+ * title with its count over the sidebar's rows, each a button inside its
+ * item, so the page's ↑ and ↓ move through the rows and Return opens the
+ * one reached.
  * The order is the view model's (`issue-list-model.ts`); nothing is sorted
  * here.
  */
@@ -38,7 +40,7 @@ function IssueRow({
     if (focused) row.current?.focus();
   }, [focused]);
   return (
-    <li className="sidebar-task-item home-row issue-row" data-issue-id={issue.id}>
+    <li className="sidebar-task-item home-row" data-issue-id={issue.id}>
       <button ref={row} type="button" className="sidebar-task" onClick={onOpen}>
         <span className="sidebar-task-line">
           <span className="home-row-picture">
@@ -85,15 +87,14 @@ export function IssueList({
       {issueGroups(issues).map((group) => (
         <section
           key={group.status}
-          className="issue-group"
+          className="home-section"
           aria-label={ISSUE_STATUS_WORDS[group.status]}
         >
-          <h2 className="issue-group-head">
-            <StatusGlyph status={group.status} />
-            <span className="issue-group-name">{ISSUE_STATUS_WORDS[group.status]}</span>
-            <span className="issue-group-count">{group.issues.length}</span>
+          <h2 className="home-section-title">
+            {ISSUE_STATUS_WORDS[group.status]}
+            <span className="home-section-count">{group.issues.length}</span>
           </h2>
-          <ul className="issue-rows">
+          <ul className="sidebar-tasks">
             {group.issues.map((issue) => (
               <IssueRow
                 key={issue.id}

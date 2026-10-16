@@ -7,11 +7,10 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { Skeleton, SkeletonRegion } from "../skeleton";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { IssueDetail } from "./issue-detail";
+import { IssueCrumbs, IssueDetail } from "./issue-detail";
 import { IssueList } from "./issue-list";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -43,9 +42,6 @@ const UNCHANGED_LINE = "Couldn't change the issue. Try again.";
 
 /** What a filing the service did not take says. */
 const UNFILED_LINE = "Couldn't create the issue. Try again.";
-
-/** The rows a read still out stands in for, by their widths. */
-const LIST_SKELETON = ["62%", "48%", "71%", "55%"] as const;
 
 /** The field a new issue's title is typed into, Return filing it. */
 function NewIssueField({
@@ -112,7 +108,7 @@ function ListPage({
     });
   };
   return (
-    <section ref={setRoot} className="issues-view" aria-label="Issues">
+    <section ref={setRoot} className="automations-view" aria-label="Issues">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">Issues</h1>
@@ -124,27 +120,21 @@ function ListPage({
           <NewIssueField key={workspace?.id} disabled={workspace === undefined} onFile={onFile} />
         </div>
       </header>
-      <div className="issues-scroll scroll-fade-top">
-        {read === undefined ? (
-          <SkeletonRegion label="Reading the issues…" className="issues-skeleton">
-            {LIST_SKELETON.map((width) => (
-              <div key={width} className="issues-skeleton-row">
-                <Skeleton width={width} />
-              </div>
-            ))}
-          </SkeletonRegion>
-        ) : "failure" in read ? (
+      <div className="automations-scroll scroll-fade-top">
+        {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : read.issues.length === 0 ? (
           <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
         ) : (
-          <IssueList
-            issues={read.issues}
-            workspaceName={workspace?.name ?? ""}
-            now={now}
-            focused={focused}
-            onOpen={(issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id })}
-          />
+          <div className="home-column issues-column">
+            <IssueList
+              issues={read.issues}
+              workspaceName={workspace?.name ?? ""}
+              now={now}
+              focused={focused}
+              onOpen={(issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id })}
+            />
+          </div>
         )}
       </div>
     </section>
@@ -163,16 +153,14 @@ function DetailFrame({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
   return (
-    <section className="issues-view" aria-label="Issue">
+    <section className="automations-view" aria-label="Issue">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ListTodoIcon />
-            Issues
-          </button>
+          <IssueCrumbs onBack={onBack} />
+          <ExperimentTag />
         </div>
       </header>
-      <div className="issues-scroll scroll-fade-top">
+      <div className="automations-scroll scroll-fade-top">
         {failure === undefined ? null : (
           <ReadFailure
             line={failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
