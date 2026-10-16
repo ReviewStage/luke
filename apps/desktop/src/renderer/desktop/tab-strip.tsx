@@ -266,53 +266,18 @@ function underTab(tab: HTMLElement): MenuPlacement {
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
-/** The custom property the strip is held to while it hides tabs: the room up to the end of its last whole tab (desktop.css). */
-const SHOWN_PROPERTY = "--tabs-shown";
-
-/**
- * The room the chevron after the strip takes from it, its width and the
- * row's gap before it, which the strip would have back without it; none
- * while no chevron stands.
- */
-function chevronRoom(strip: HTMLElement): number {
-  const chevron = strip.nextElementSibling;
-  if (!(chevron instanceof HTMLElement) || !chevron.matches(".tab-overflow")) return 0;
-  const row = strip.parentElement;
-  const gap = row === null ? 0 : Number.parseFloat(getComputedStyle(row).columnGap) || 0;
-  return chevron.getBoundingClientRect().width + gap;
-}
-
 /**
  * Marks each tab the strip does not show whole, which desktop.css draws not
  * at all rather than as a sliver at the strip's edge, and counts them. Note
  * that the chosen tab is counted but always drawn, so a scroll that cuts it
- * leaves what is seen of it in place. Tabs that would all fit in the room
- * the chevron takes count none, so a row grown wide enough for every tab
- * gives the chevron's room back to them. While it hides any, the strip is
- * held to the end of its last tab drawn, so a tab it cuts leaves no gap
- * before the chevron after it; it is let go first, so it is read at all the
- * room its row gives it.
+ * leaves what is seen of it in place.
  */
 function measureStrip(strip: HTMLElement): number {
-  strip.style.removeProperty(SHOWN_PROPERTY);
-  const pills = [...strip.querySelectorAll<HTMLElement>(TAB)];
-  const fits = strip.scrollWidth <= strip.clientWidth + chevronRoom(strip) + OVERFLOW_SLACK;
-  const hidden = fits && strip.scrollLeft === 0 ? [] : hiddenTabs(strip);
-  const shown = strip.getBoundingClientRect();
-  let end: number | undefined;
-  for (const tab of pills) {
+  const hidden = hiddenTabs(strip);
+  for (const tab of strip.querySelectorAll<HTMLElement>(TAB)) {
     const pill = tab.closest(".tab") ?? tab;
     const chosen = tab.getAttribute("aria-selected") === "true";
-    const cut = hidden.includes(tab);
-    pill.setAttribute("data-hidden", String(!chosen && cut));
-    const box = pill.getBoundingClientRect();
-    // The chosen tab is drawn however much of it shows, so the strip runs to the edge it is cut at.
-    const drawn = !cut || (chosen && box.right > shown.left && box.left < shown.right);
-    if (drawn) end = Math.max(end ?? 0, Math.min(box.right, shown.right));
-  }
-  if (hidden.length > 0 && end !== undefined) {
-    const inset = Number.parseFloat(getComputedStyle(strip).paddingRight) || 0;
-    strip.style.setProperty(SHOWN_PROPERTY, `${Math.ceil(end - shown.left + inset)}px`);
+    pill.setAttribute("data-hidden", String(!chosen && hidden.includes(tab)));
   }
   return hidden.length;
 }
@@ -372,9 +337,6 @@ function TabOverflow({
             trigger.onClick(event);
           }}
         >
-          <span className="tab-overflow-count" aria-hidden="true">
-            {count}
-          </span>
           <ChevronDownIcon />
         </button>
       </Tooltip>
@@ -443,43 +405,21 @@ export function TabStrip({
   // chosen tab in view as an editor keeps its active tab, at once rather
   // than gliding behind the edge being dragged, and hides the tabs it now
   // cuts short.
-  // The row is watched as well as the strip, because a strip held to its
-  // last whole tab does not grow with the room its row gains; and each tab,
-  // because a label settling into its own font once that has loaded, or
-  // renamed, narrows its tab within a strip that keeps its width.
-  const observer = useRef<ResizeObserver | null>(null);
   useLayoutEffect(() => {
     const node = strip.current;
     if (node === null) return;
-    const remeasure = () => {
+    const observer = new ResizeObserver(() => {
       const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
       if (chosen !== null) reveal(node, chosen, false);
       setHidden(measureStrip(node));
-    };
-    const watching = new ResizeObserver(remeasure);
-    observer.current = watching;
-    watching.observe(node);
-    if (node.parentElement !== null) watching.observe(node.parentElement);
-    // Note that the window's fonts are read where it has them; jsdom has none.
-    const fonts = "fonts" in document ? document.fonts : undefined;
-    fonts?.addEventListener("loadingdone", remeasure);
-    return () => {
-      watching.disconnect();
-      observer.current = null;
-      fonts?.removeEventListener("loadingdone", remeasure);
-    };
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
   // A tab opened, closed, or renamed moves which tabs the strip cuts short,
-  // and need not resize the strip, which may already be at its least; a
-  // tab newly drawn is watched from then on, and one closed let go.
-  const watched = useRef(new Set<Element>());
+  // and need not resize the strip, which may already be at its least.
   useLayoutEffect(() => {
-    if (strip.current === null) return;
-    const pills = new Set(strip.current.querySelectorAll(".tab"));
-    for (const pill of watched.current) if (!pills.has(pill)) observer.current?.unobserve(pill);
-    for (const pill of pills) observer.current?.observe(pill);
-    watched.current = pills;
-    setHidden(measureStrip(strip.current));
+    if (strip.current !== null) setHidden(measureStrip(strip.current));
   });
 
   // Note that a move's places count the tabs that move alone, as the drag
