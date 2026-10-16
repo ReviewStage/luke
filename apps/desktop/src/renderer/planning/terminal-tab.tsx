@@ -167,6 +167,11 @@ export function TerminalTab({
                 room.closeOver();
                 session.onChoose(id);
               },
+              // So does a shell started there, which the screen shows.
+              onCreate: () => {
+                room.closeOver();
+                session.onCreate();
+              },
             }}
             onOpenAgent={onOpenAgent}
             pane={room.beside.pane}

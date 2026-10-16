@@ -144,3 +144,13 @@ test("a peek goes once the pointer leaves it, though not for the box it stays fo
   const press = pressEscape(work);
   assert.deepEqual([standing(page), press.defaultPrevented], [PANE_FLOAT.CLOSED, true]);
 });
+
+test("the press on the toggle that opens the pane is no press inside it when the next press, outside, comes", () => {
+  const page = mount();
+  const toggle = part(page, ".toggle");
+  pressDown(toggle);
+  act(() => toggle.click());
+  assert.equal(standing(page), PANE_FLOAT.OPEN);
+  pressDown(part(page, "main"));
+  assert.equal(standing(page), PANE_FLOAT.CLOSED);
+});

@@ -45,6 +45,8 @@ export interface HoverPane {
   readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
   /** Puts the pane away at once, before it is drawn away, so a focus moved next is not held in it. */
   readonly close: () => void;
+  /** Opens the pane from its toggle, from away or from a peek, which takes the keyboard into it. */
+  readonly open: () => void;
   readonly onPress: () => void;
   readonly onPointerLeave: (event: { readonly relatedTarget: EventTarget | null }) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
@@ -97,32 +99,53 @@ export function useHoverPane(
     drawn.current = PANE_FLOAT.CLOSED;
     onState(PANE_FLOAT.CLOSED);
   }, [onState]);
+  // A peek opened by its toggle takes the keyboard as one opened from away does.
+  const toggled = useRef(false);
+  const open = useCallback(() => {
+    toggled.current = true;
+    onState(PANE_FLOAT.OPEN);
+  }, [onState]);
   useEffect(() => {
     const from = was.current;
     was.current = state;
+    const fromToggle = toggled.current;
+    toggled.current = false;
     const held = ref.current;
-    if (state !== PANE_FLOAT.OPEN || from !== PANE_FLOAT.CLOSED || held === null) return;
+    if (state !== PANE_FLOAT.OPEN || held === null) return;
+    if (from !== PANE_FLOAT.CLOSED && !(from === PANE_FLOAT.PEEK && fromToggle)) return;
     handBack.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     focusAt(held)?.focus();
-  }, [state, focusAt]);
+  }, [state, focusAt, ref]);
   useEffect(() => () => onState(PANE_FLOAT.CLOSED), [onState]);
-  // Note that the keyboard is brought back once it has landed outside, since
-  // a focus moved back while it is still leaving is overtaken by the one in
-  // flight, and never from a menu or a dialog the pane raised, nor once a
-  // press outside has put the pane away.
+  // Note that only Tab is held, the keyboard walking out of the pane brought
+  // back to its start once it has landed outside, since a focus moved back
+  // while it is still leaving is overtaken by the one in flight; a focus the
+  // pane's own choices move, a shell chosen handing the keyboard to its
+  // screen, is no walk out. Tab is read past a tree drawn in a shadow root,
+  // whose rows are no elements of the pane's own to count.
   useEffect(() => {
     const held = ref.current;
     if (!holdsKeyboard || state !== PANE_FLOAT.OPEN || held === null) return;
+    let tabbing = false;
+    const tab = (event: KeyboardEvent) => {
+      tabbing = event.key === "Tab" && !event.defaultPrevented;
+    };
     const hold = (event: FocusEvent) => {
+      const walked = tabbing;
+      tabbing = false;
       const to = event.target;
-      if (drawn.current !== PANE_FLOAT.OPEN || !(to instanceof Element)) return;
+      if (!walked || drawn.current !== PANE_FLOAT.OPEN || !(to instanceof Element)) return;
       if (held.contains(to) || to.closest(KEY_LAYERS) !== null) return;
       if (floatsNow(held)) focusAt(held)?.focus();
       else close();
     };
+    held.addEventListener("keydown", tab);
     document.addEventListener("focusin", hold);
-    return () => document.removeEventListener("focusin", hold);
+    return () => {
+      held.removeEventListener("keydown", tab);
+      document.removeEventListener("focusin", hold);
+    };
   }, [holdsKeyboard, state, focusAt, floatsNow, close, ref]);
   // Note that a floating pane need not hold the keyboard, a peek or one a
   // bare press opened leaving it in the work under it, so Escape is heard at
@@ -159,6 +182,7 @@ export function useHoverPane(
         go(...args);
       },
     close,
+    open,
     onPress: () => {
       if (state === PANE_FLOAT.PEEK) onState(PANE_FLOAT.OPEN);
     },
@@ -193,6 +217,8 @@ export function useFloatDismiss(float: FloatState): () => void {
   const { onState } = float;
   useEffect(() => {
     if (!floating) return;
+    // A press marked before the pane floated, its toggle's own, marks nothing now.
+    within.current = false;
     const press = () => {
       if (!within.current) onState(PANE_FLOAT.CLOSED);
       within.current = false;

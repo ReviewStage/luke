@@ -259,8 +259,7 @@ export function usePaneRoom(shown: {
       ...shown,
       over: pane.floating,
       peeked: over === PANE_FLOAT.PEEK,
-      onToggleOver: () =>
-        setOver((was) => (was === PANE_FLOAT.OPEN ? PANE_FLOAT.CLOSED : PANE_FLOAT.OPEN)),
+      onToggleOver: () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open()),
       float: {
         onPointerEnter: peek,
         onPointerLeave: (event) => {

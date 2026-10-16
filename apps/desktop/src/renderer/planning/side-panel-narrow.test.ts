@@ -184,7 +184,7 @@ test("the pointer at the tab's right edge floats the tree, though not with a but
   assert.ok(!treeDrawn(), "back over the diff, the tree goes");
 });
 
-test("a press of the toggle opens the tree with the keyboard in it, holds the keyboard there, and Escape puts it away and hands the keyboard back to the toggle", async () => {
+test("a press of the toggle opens the tree with the keyboard in it, holds the keyboard there against Tab, and Escape puts it away and hands the keyboard back to the toggle", async () => {
   const tab = await drawChangesTab();
   const { toggle, tree, treeDrawn } = changesParts(tab);
   toggle.focus();
@@ -196,8 +196,17 @@ test("a press of the toggle opens the tree with the keyboard in it, holds the ke
   const outside =
     tab.querySelector<HTMLButtonElement>('button[aria-label="Open on GitHub"]') ??
     assert.fail("the bar offers GitHub");
-  act(() => outside.focus());
-  assert.ok(held.contains(document.activeElement), "the keyboard is held in the tree");
+  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+    );
+    outside.focus();
+  });
+  assert.ok(
+    held.contains(document.activeElement),
+    "Tab walks the keyboard no further than the tree",
+  );
 
   act(() => {
     document.activeElement?.dispatchEvent(
@@ -206,6 +215,23 @@ test("a press of the toggle opens the tree with the keyboard in it, holds the ke
   });
   assert.ok(!treeDrawn(), "Escape takes the tree down");
   assert.ok(document.activeElement === toggle, "the keyboard is back on the toggle");
+});
+
+test("a press of the toggle over a peek opens the tree with the keyboard in it, and the press that opened it is no press inside it when the next press, on the diff, puts it away", async () => {
+  const { toggle, diff, tree, treeDrawn } = changesParts(await drawChangesTab());
+  pointerCross(diff, toggle);
+  act(() => {
+    toggle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  await act(async () => toggle.click());
+  assert.ok(
+    (tree() ?? assert.fail("the tree is drawn")).contains(document.activeElement),
+    "the keyboard lands in the tree",
+  );
+  act(() => {
+    diff.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  assert.ok(!treeDrawn(), "the first press on the diff takes the tree down");
 });
 
 test("a Changes tab numbers its diff on the new side alone, a removed line by its tint", async () => {

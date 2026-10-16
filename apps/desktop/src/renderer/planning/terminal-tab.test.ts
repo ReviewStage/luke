@@ -900,7 +900,13 @@ test("a list opened over the screen and then given room beside it by a widened p
   const screen =
     tab.container.querySelector<HTMLTextAreaElement>("textarea") ??
     assert.fail("the screen is drawn");
-  act(() => screen.focus());
+  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+    );
+    screen.focus();
+  });
   assert.ok(document.activeElement === screen, "the keyboard stays where it was taken");
   const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   act(() => {
@@ -942,6 +948,27 @@ test("in a side panel at its default width the shells float over the screen rath
   cross(toggle, screen, -10);
   assert.equal(drawn(), false, "leaving the toggle takes it down");
   assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
+});
+
+// Note that the test is given longer than most, for the reason the one above is.
+test("a shell started from the list floating over the screen takes the list down, its screen holding the keyboard", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  layContainersAt({ "side-panel": 280 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  await act(async () => toggle.click());
+  await tab.press("New shell");
+  const list = tab.container.querySelector(".terminal-shells");
+  assert.equal(list !== null && displayed(list), false, "the list is taken down");
+  assert.ok(
+    document.activeElement === tab.container.querySelector("textarea"),
+    "the new shell's screen holds the keyboard",
+  );
 });
 
 test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {
