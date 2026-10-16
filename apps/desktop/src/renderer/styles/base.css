@@ -682,6 +682,13 @@ body,
   color: var(--state-attention);
 }
 
+/* A quote in a failure or a notice keeps the tone's colour and is set off by
+   its rule alone, because a quote's quiet ink would read as words that are
+   not the fault or the notice. */
+.voice-caption:is([data-tone="error"], [data-tone="notice"]) .markdown-quote {
+  color: inherit;
+}
+
 /* Volume hint ------------------------------------------------------------- */
 
 /* Why the words above are the only part of Luke arriving: the Mac's output is

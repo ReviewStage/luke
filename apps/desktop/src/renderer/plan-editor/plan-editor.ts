@@ -1,4 +1,5 @@
 import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -139,6 +140,7 @@ export function markdownExtensions(
   pictures?: PlanEditorPictures | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
+    blockquote: { HTMLAttributes: { class: QUOTE_CLASS } },
     heading: false,
     paragraph: false,
     underline: false,

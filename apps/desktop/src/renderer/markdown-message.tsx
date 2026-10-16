@@ -1,3 +1,4 @@
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
@@ -354,6 +355,7 @@ const COMPONENTS: Components = {
   h5: ({ children }) => heading(5, children),
   h6: ({ children }) => heading(6, children),
   img: ({ alt }) => <>{alt ?? ""}</>,
+  blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
 /** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */

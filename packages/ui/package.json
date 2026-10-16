@@ -25,6 +25,7 @@
     "./held-link": "./src/held-link.js",
     "./link-route": "./src/link-route.js",
     "./link-face": "./src/link-face.js",
+    "./quote-face": "./src/quote-face.js",
     "./picture-cache": "./src/picture-cache.js",
     "./confirm-state": "./src/confirm-state.js",
     "./use-setting-write": "./src/use-setting-write.js",

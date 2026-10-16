@@ -11,8 +11,7 @@
 }
 
 .markdown > * + *,
-.markdown li > * + *,
-.markdown blockquote > * + * {
+.markdown li > * + * {
   margin-top: 0.5em;
 }
 
@@ -74,19 +73,38 @@
   white-space: pre;
 }
 
-.markdown blockquote {
-  margin: 0;
-  padding-left: 0.85em;
-  border-left: 0.2em solid var(--markdown-edge);
-  opacity: 0.8;
-  text-align: left;
-}
-
 .markdown ul,
 .markdown ol {
   margin: 0;
   padding-left: 1.5em;
   text-align: left;
+}
+
+/* A quote (`@luke/ui/quote-face`), drawn alike in a transcript, a sent
+   bubble, an Inbox item, the plan, and the plan's editor, as a thread or a
+   document draws one: flush with the words around it, set off by a thin rule
+   and a short step of room after it, in the quiet ink at the same size and
+   upright. A quote inside a quote adds one more rule and step and nothing
+   else. The ink is the quote's colour and not its opacity, so a picture or a
+   code block inside it stays at full strength. Note that the rules over its
+   blocks name the element and stand after the lists, so they outrank the
+   `.markdown p` and `.markdown ul` above, and the browser's own margins on a
+   transcript's paragraphs, which no reset reaches there. */
+.markdown-quote {
+  margin: 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--hairline-strong);
+  color: var(--text-secondary);
+  font-style: normal;
+  text-align: left;
+}
+
+blockquote.markdown-quote > * {
+  margin-block: 0;
+}
+
+blockquote.markdown-quote > * + * {
+  margin-top: 0.5em;
 }
 
 .markdown li + li {
