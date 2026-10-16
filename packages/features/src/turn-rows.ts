@@ -399,8 +399,16 @@ export function turnRows<B>(
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
-  if (held.calls + held.subagents + held.codingAgents === 0)
-    return groupedRows(keyed, read, turn.moving, true, said);
+  if (held.calls + held.subagents + held.codingAgents === 0) {
+    // Note that a lead with no call is not folded, but a block kept out still
+    // stands apart from it, because grouped with the lead's reasoning it would
+    // close with it.
+    if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true, said);
+    return [
+      ...groupedRows(lead, read, turn.moving, true, said),
+      ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said),
+    ];
+  }
   return [
     {
       kind: TURN_ROW.FOLDED,

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { calledPicturesOf, shownPicturesOf } from "./agent-pictures-model.js";
+import {
+  calledPicturesOf,
+  planPictureLine,
+  shownPicturesOf,
+  withoutPictureLine,
+  withPictureLine,
+} from "./agent-pictures-model.js";
 import { PICTURE_OMISSION } from "./conversation-picture-wire.js";
 import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
 
@@ -80,5 +86,47 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
     ]),
     [],
     "an image still carried as base64, as a transcript written before pictures were kept holds, is no picture to read",
+  );
+});
+
+test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes exactly that back out", () => {
+  const line = planPictureLine(
+    "Members [after]",
+    "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
+  );
+  assert.equal(line, "![Members \\[after\\]](https://tryluke.dev/acme/plan/5d8e/files/\\(3c9e\\))");
+
+  for (const plan of [
+    "# Teammate invitations\n\nInvite by email.\n",
+    "First line  \n",
+    "Ends on blank lines\n\n\n",
+    "No line break at its end",
+    "",
+  ]) {
+    const addition = withPictureLine(plan, line);
+    assert.ok(
+      addition.text.startsWith(plan),
+      `the text before is kept byte for byte: ${JSON.stringify(plan)}`,
+    );
+    assert.ok(addition.text.endsWith(`${line}\n`));
+    assert.match(addition.text, /(^|\n\n)!\[/u, "the picture stands as a paragraph of its own");
+    assert.equal(withoutPictureLine(addition.text, addition.added), plan);
+  }
+  assert.equal(
+    withoutPictureLine("# Moved\n\nThe line was edited away.\n", `\n${line}\n`),
+    undefined,
+    "an addition no longer standing is left for the developer to take out",
+  );
+  const afterBlank = withPictureLine("Intro\n\n", line);
+  assert.equal(afterBlank.added, `${line}\n`, "no line break is added after a blank line");
+  assert.equal(
+    withoutPictureLine(`Intro\n\nSee ${line}\nNext`, afterBlank.added),
+    undefined,
+    "a line moved into the developer's words is no paragraph of its own, and is left alone",
+  );
+  assert.equal(
+    withoutPictureLine(`${afterBlank.text}More words after it.\n`, afterBlank.added),
+    undefined,
+    "a line the developer wrote straight under is part of their paragraph, and is left alone",
   );
 });
