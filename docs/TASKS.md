@@ -180,8 +180,10 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   Created by, and, archived, under Archived tasks. Its row leads with the
   agent's harness mark, as its tab does, giving way to the working mark while
   it works, ends with its automation's clock and its time, and reads in
-  semibold while its end is unseen; a press opens the agent's own page. Pinning
-  one waits for a pin of its own (#2901 pinned tasks only).
+  semibold while its end is unseen; a press opens the agent's own page, and a
+  right-click offers its Copy link, the agent's own link under the listed
+  workspace, saying Link copied. Pinning one waits for a pin of its own (#2901
+  pinned tasks only).
 - Clicking a row opens that task on the document page (see "Leaving and
   resuming").
 - `New task` at the head of the list leaves any open task for the new-task

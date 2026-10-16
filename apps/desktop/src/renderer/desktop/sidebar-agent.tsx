@@ -1,11 +1,14 @@
 import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
+import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { agentPlace, useCopyLinkItem } from "../copy-link-item";
 import { useMemberDirectory } from "../member-directory";
 import { RelativeTime } from "../planning/relative-time";
 import { AgentGlyph, agentEndMark } from "../planning/tab-look";
 import { Tooltip } from "../tooltip";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 
 /**
  * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.
@@ -17,8 +20,12 @@ import { Tooltip } from "../tooltip";
  * it, the automation's clock, or a teammate's face where it ran on no
  * automation, and the failed mark once its turn failed. A press opens the
  * agent's own page, and it reads in semibold while it ended unseen, as its
- * tab does.
+ * tab does. A right-click offers its actions where the pointer is, as a
+ * task's row does: Copy link, the agent's own, as its page's ⋯ copies it.
  */
+
+/** What the row's menu is called, as the agent page's ⋯ is. */
+const ACTIONS_LABEL = "Agent actions";
 
 /** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
@@ -42,6 +49,7 @@ export function SidebarAgent({
   at,
   repository,
   face = true,
+  shown,
   onOpen,
 }: {
   agent: PlanlessAgent;
@@ -57,20 +65,32 @@ export function SidebarAgent({
   repository?: string | undefined;
   /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;
+  /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
+  shown: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
   const starter = starterOf(agent, face, reader);
+  const row = useRef<HTMLButtonElement | null>(null);
+  const menu = useActionMenu(shown);
+  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const groups: MenuAction[][] = copyLink === undefined ? [] : [[copyLink]];
   return (
     <li className="sidebar-plan-item">
       <Tooltip label={name}>
         <button
+          ref={row}
           type="button"
           className="sidebar-plan sidebar-agent"
           aria-current={current ? "page" : undefined}
+          data-menu-open={String(menu.open !== undefined)}
           data-unread={String(unread)}
-          onClick={onOpen}
+          onClick={() => {
+            menu.close(false);
+            onOpen();
+          }}
+          onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
         >
           <span className="sidebar-plan-line">
             <span className="sidebar-agent-glyph" aria-hidden="true">
@@ -89,6 +109,9 @@ export function SidebarAgent({
           </span>
         </button>
       </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
     </li>
   );
 }

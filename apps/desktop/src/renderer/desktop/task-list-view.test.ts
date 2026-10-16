@@ -6,15 +6,18 @@ import type { PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { plansControl } from "#testing/plans-control";
+import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand } from "../app-commands";
+import { ToastHost } from "../toast";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * task-list-view.test.ts -- the sidebar's Tasks section groups, orders,
@@ -49,6 +52,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   openedAgents = [];
+  copied = [];
   window.localStorage.clear();
   window.sessionStorage.clear();
   Object.defineProperty(window, "matchMedia", {
@@ -64,12 +68,17 @@ beforeEach(() => {
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        return Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
             ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
             : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
+        );
+      },
     },
   });
 });
@@ -152,6 +161,9 @@ function oneOff(
 /** The agents' pages the sidebar opened, in order. */
 let openedAgents: string[] = [];
 
+/** What the window copied, in order. */
+let copied: string[] = [];
+
 /** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
@@ -182,7 +194,15 @@ function mountSidebar(
   });
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(control))),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(DesktopSidebar, sidebarProps(control)),
+          createElement(ToastHost),
+        ),
+      ),
     ),
   );
   return container;
@@ -727,4 +747,61 @@ test("with every task archived but a one-off agent standing, the list holds the 
   );
   const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
   assert.ok(!notes.some((note) => note?.startsWith("Every task is archived")), notes.join(" | "));
+});
+
+test("a one-off agent's row offers Copy link on a right-click, copying the agent's link under its workspace, and says Link copied", async () => {
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE]);
+  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
+    (each) => each.textContent?.includes("Triage overnight issues") === true,
+  );
+  assert.ok(row, "the agent's row stands");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, ["https://tryluke.dev/acme/agent/a-1"]);
+  assert.equal(newestToastSays(), "Link copied");
+});
+
+test("a one-off agent's menu goes with a floating sidebar as it is put away", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const props = sidebarProps(
+    plansControl({
+      plans: [...TASKS],
+      workspace: { ...ACME, slug: "acme" },
+      workspaces: [{ ...ACME, slug: "acme" }],
+      me: DEAN,
+      listedAgents: { standing: [TRIAGE], archived: [] },
+    }),
+  );
+  const float = (overlay: (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY]) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(DesktopSidebar, {
+            ...props,
+            sidebar: { ...props.sidebar, collapsed: true, overlay },
+          }),
+        ),
+      ),
+    );
+  float(SIDEBAR_OVERLAY.OPEN);
+  await act(async () => undefined);
+  const row = container.querySelector<HTMLButtonElement>(".sidebar-agent");
+  assert.ok(row, "the agent's row stands");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const opened = document.querySelectorAll('[role="menuitem"]').length;
+
+  float(SIDEBAR_OVERLAY.CLOSED);
+
+  assert.equal(opened, 1);
+  assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });

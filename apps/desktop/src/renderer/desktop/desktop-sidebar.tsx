@@ -42,6 +42,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { LinkWorkspaceProvider } from "../copy-link-item";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -229,6 +230,7 @@ function PlanRows({
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             face={face}
+            shown={context.plans.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
           />
         ),
@@ -1439,12 +1441,16 @@ function SidebarColumn({
 /**
  * The sidebar, read against the listed workspace's members: a teammate's
  * face on a row, a creator's group's header, and the order of those groups
- * by the names their headers say.
+ * by the names their headers say. Its links are written under that
+ * workspace, which is every row's.
  */
 export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
+  const { workspace } = props.plans;
   return (
-    <MemberDirectory workspace={props.plans.workspace} readerId={props.plans.me}>
-      <SidebarColumn {...props} />
-    </MemberDirectory>
+    <LinkWorkspaceProvider value={workspace?.slug ?? workspace?.id}>
+      <MemberDirectory workspace={workspace} readerId={props.plans.me}>
+        <SidebarColumn {...props} />
+      </MemberDirectory>
+    </LinkWorkspaceProvider>
   );
 }
