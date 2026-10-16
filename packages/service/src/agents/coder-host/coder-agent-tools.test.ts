@@ -393,7 +393,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
   assert.equal(eve.sent.length, 0, "a list sends nothing");
 });
 
-test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent's name, and sent once under the call's key", async () => {
+test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent's name and model, and sent once under the call's key", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -429,9 +429,11 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
     ),
     true,
   );
+  // And by the model the sending agent runs on, which the window draws its harness by.
   assert.deepEqual(await database.run(lineSenderUnder(teammates, "call-1")), {
     kind: MESSAGE_SENDER.AGENT,
     name: CALLER_TITLE,
+    model: OPUS,
   });
 
   const again = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: teammates.id, text: NOTE });

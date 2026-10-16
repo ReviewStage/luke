@@ -35,7 +35,8 @@ import { AgentTab } from "./agent-tab";
  * agent carries their face and name over its bubble, as a teammate's line
  * on the Call tab does, and the reader's own carries none; Luke's carries
  * his tile, an automation's its own, GitHub's the login it names, another
- * coding agent's an agent's mark by its name, and a member's who has left the quiet
+ * coding agent's its harness's mark by its name, where the service says
+ * the model it runs on, and a member's who has left the quiet
  * outline, and a message from before senders were kept names nobody.
  * Synthetic throughout.
  */
@@ -104,6 +105,12 @@ const MESSAGES: readonly CodingAgentMessage[] = [
   }),
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
+  // A service that keeps the sending agent answers the model it runs on, which its harness is read off.
+  line("claude-agent", "The split view is merged.", {
+    name: "Split view",
+    agent: true,
+    model: "anthropic/claude-opus-5.5",
+  }),
   // A service older than the sender's kind names Luke by name alone.
   line("older", "Rebase again.", { name: "Luke" }),
 ];
@@ -208,6 +215,7 @@ test("each member sees a teammate's face and name over the teammate's messages a
     ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],
     // Another coding agent of the workspace is drawn as an agent, not a person, under its name.
     ["agent", ACTOR_KIND.AGENT, "Add PR overview tab"],
+    ["claude-agent", ACTOR_KIND.AGENT, "Split view"],
     ["older", ACTOR_KIND.SOMEONE, "Luke"],
   ];
   assert.deepEqual(deanSees, [
@@ -220,4 +228,20 @@ test("each member sees a teammate's face and name over the teammate's messages a
     ["dean", ACTOR_KIND.PERSON, "Dean Stratakos"],
     ...others,
   ]);
+});
+
+test("another agent's message wears the mark of the harness its model runs in, and the mark of no known harness where the service names no model", async () => {
+  await sendersFor(DEAN.userId);
+  const drawn = [...document.querySelectorAll(".is-user")];
+  const harnessOf = (id: string) => {
+    const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
+      ".message-sender .actor-mark",
+    );
+    const mark = sender?.querySelector(".harness-mark");
+    return mark === null || mark === undefined ? undefined : mark.tagName.toLowerCase();
+  };
+
+  // Claude Code's mark is its Clawd, drawn as an SVG.
+  assert.equal(harnessOf("claude-agent"), "svg");
+  assert.equal(harnessOf("agent"), undefined);
 });

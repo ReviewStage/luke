@@ -154,6 +154,14 @@ export const messages = pgTable(
      */
     senderName: text("sender_name"),
     /**
+     * The coding agent that sent the line, by its id, which the harness it
+     * runs in is read off; null on every other row, and on an agent's line
+     * sent before it was kept. Note that it is no reference, as `senderName`
+     * is none: an agent goes with its plan, and the line it sent another
+     * then names an agent no longer there, which reads as no harness.
+     */
+    senderAgentId: uuid("sender_agent_id"),
+    /**
      * The steps of its turn begun before the turn took the line in, on a
      * developer's line a coding agent's turn under way took after its first
      * step, so a reader draws the line among the turn's work where it

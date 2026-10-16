@@ -1678,7 +1678,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
-          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
+          [
+            "Take the split view.",
+            { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab", agentId: agent.id },
+          ],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -1708,8 +1711,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name, with no kind an older window would refuse.
-          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
+          // Another agent is marked as one beside its name and its model, with no kind an older window would refuse.
+          [
+            "Take the split view.",
+            { name: "Add PR overview tab", agent: true, model: agent.model },
+          ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);

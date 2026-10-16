@@ -989,6 +989,13 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * The catalog id of the model that agent runs on, which the window reads
+   * its harness's mark off; absent for any other sender, for an agent's line
+   * sent before it was kept or whose agent is gone, and from a service older
+   * than it.
+   */
+  model: EffectSchema.optionalKey(recordedChoice),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;

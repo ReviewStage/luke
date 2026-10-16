@@ -256,7 +256,11 @@ function senderOf(sent: LineSent): CodingAgentSender {
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
-      return { name: sent.name, agent: true };
+      return {
+        name: sent.name,
+        agent: true,
+        ...(sent.model === undefined ? undefined : { model: sent.model }),
+      };
   }
 }
 
