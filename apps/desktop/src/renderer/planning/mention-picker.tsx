@@ -845,9 +845,9 @@ function kindsOf(
     (planId !== NO_PLAN && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
   const known = skills?.known ?? [];
   const own: MentionKind[] = [
-    ...(treeKey(planId, source.workspaceId, repository) === undefined
+    ...(repository === null || treeKey(planId, source.workspaceId, repository) === undefined
       ? []
-      : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository ?? undefined }]),
+      : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
     ...(planId === NO_PLAN
       ? []
       : [

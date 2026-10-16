@@ -26,6 +26,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 
 const PLAN: Task = {
   ...DOCUMENT_PLAN,
+  repository: "acme/relay",
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
 };
 
@@ -69,13 +70,13 @@ afterEach(() => {
 });
 
 /** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: PlanMentionsValue) {
+async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const body = createElement(PlanBody, {
-    plan: PLAN,
+    plan,
     live: false,
     onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
     sectionLinks: {
@@ -311,6 +312,17 @@ function crumb(container: HTMLElement): string | undefined {
     undefined
   );
 }
+
+test("a plan with no repository offers no files and folders to narrow to", async () => {
+  const plan = await opened(undefined, { ...PLAN, repository: null });
+
+  await plan.typeAtEnd(" See @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Mention from"),
+    ["Mention from", ["Plan"]],
+  );
+});
 
 test("a bare @ in the plan narrows by its kind's row to the repository's paths, where → walks into a folder, ⌫ climbs out, and Enter writes the folder", async () => {
   const plan = await opened();
