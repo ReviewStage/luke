@@ -37,7 +37,11 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
  * planning call's notetaker does (`plans/plan-scribe.ts`), under the same
  * schema and through the plan's one write (`plan-notes.ts`), which journals
  * the save under the agent's id, so the planning model and the developer
- * read them on the next call and see which agent wrote what. Note that the call answers at once, whatever was
+ * read them on the next call and see which agent wrote what. A call's notes
+ * may land anywhere in the plan, its headings among it, and land together or
+ * not at all: one naming what the plan does not hold exactly once answers the
+ * plan as it stands, so the agent retries from it rather than from the text
+ * it was handed. Note that the call answers at once, whatever was
  * saved, because the agent's turn is its whole run and nothing is answered
  * to it mid-turn; an answer reaches it as a later message. A turn may take
  * only so many notes: past the cap the agent is told to go on and name the
@@ -111,8 +115,10 @@ export const EDIT_PLAN_TOOL = {
   name: "edit_plan",
   description:
     "Take notes on the plan this conversation implements, as its notetaker does: add a point " +
-    "under one of its headings, correct a phrase copied exactly from the saved text, or strike " +
-    "the line holding one. Use it to record a question the plan does not answer under its open " +
+    "under one of its headings, or replace text copied exactly from the saved plan, as much as " +
+    "names one place, headings and whole sections included, with what it becomes, or with " +
+    "nothing to delete it. A note's text may open headings of its own, so you can rename, " +
+    "split, merge, move, and drop sections. Use it to record a question the plan does not answer under its open " +
     "questions together with the assumption you go on under, to correct a fact you verified in " +
     "the code, to record a hard part you met, an interface you had to change, or a decision you " +
     "made, each under the heading it belongs to. Write a file, a pull request, or an issue a note names as a Markdown " +
@@ -120,8 +126,10 @@ export const EDIT_PLAN_TOOL = {
     "To add a picture, such as a screenshot of what you built, name its file in your sandbox " +
     "under pictures, with alt text saying what it shows. " +
     "Every save is recorded in the plan as yours. The developer reads the plan on their next " +
-    "call with Luke; you do not wait for an answer. A note naming a phrase the plan does not " +
-    `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes, each picture one.`,
+    "call with Luke; you do not wait for an answer. A call's notes and pictures land together " +
+    "or not at all: where one names text or a heading the plan does not hold exactly once, " +
+    "nothing is saved and the call answers the plan as it stands, to retry from. " +
+    `A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes, each picture one.`,
   inputSchema: EDIT_PLAN_INPUT,
 } as const;
 
@@ -135,7 +143,12 @@ export const PLAN_EDIT_REFUSAL = {
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
   ARCHIVED:
     "Not saved: this task is archived, so no picture can be added to its plan. Send the notes again without the pictures.",
+  CONFLICT:
+    "Not saved: none of this call's notes was taken, because one names what the plan does not hold exactly once. The plan as it stands is in current; retry from it.",
 } as const;
+
+/** The most of a missed note's find its answer repeats; the plan as it stands follows it whole. */
+const MISSED_FIND_CHARS = 200;
 
 /** Why a picture's file was not read (`inbox-image.ts`), in the words the model reads; each is followed by the path. */
 export const PLAN_PICTURE_FILE_REFUSAL = {
@@ -208,24 +221,37 @@ export function requestedNotes(input: UnparsedWireValue): number {
   return (notesOf(input)?.length ?? 0) + (picturesOf(input)?.length ?? 0);
 }
 
-/** What a call answers, as the model and the authored file read it: the notes taken and the ones passed over, or why nothing was saved. */
+/**
+ * What a call answers, as the model and the authored file read it: how many
+ * notes it took, or why nothing was saved, with the note that missed and the
+ * plan as it stands where the plan no longer holds what a note names.
+ */
 export type PlanEditResult =
+  | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly taken: number }
   | {
-      readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
-      readonly taken: number;
-      readonly missed: readonly string[];
-    }
-  | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
+      readonly status: typeof ACTION_RESULT_STATUS.REJECTED;
+      readonly reason: string;
+      readonly missed?: string;
+      readonly current?: string;
+    };
 
 export function planEditRejected(reason: string): PlanEditResult {
+  return refused(reason);
+}
+
+/** A refusal with nothing but its reason. */
+function refused(
+  reason: string,
+): Extract<PlanEditResult, { status: typeof ACTION_RESULT_STATUS.REJECTED }> {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** A note passed over, in the words the model reads: its kind and where it was aimed. */
+/** A note that missed, in the words the model reads: its kind and where it was aimed, a long find cut. */
 function missedNote(note: PlanNote): string {
-  return note.kind === NOTE_KIND.ADD
-    ? `${note.kind} under ${note.section}`
-    : `${note.kind} ${note.find}`;
+  if (note.kind === NOTE_KIND.ADD) return `${note.kind} under ${note.section}`;
+  const find =
+    note.find.length > MISSED_FIND_CHARS ? `${note.find.slice(0, MISSED_FIND_CHARS)}…` : note.find;
+  return `${note.kind} ${find}`;
 }
 
 /** A picture the call adds, with its file as read from the sandbox. */
@@ -258,7 +284,9 @@ interface PicturesRead {
 }
 
 /** Why a call's save was refused inside its transaction, so the pictures kept before it are rolled back with it. */
-class EditRefused extends Data.TaggedError("EditRefused")<{ readonly reason: string }> {}
+class EditRefused extends Data.TaggedError("EditRefused")<{
+  readonly refusal: Extract<PlanEditResult, { status: typeof ACTION_RESULT_STATUS.REJECTED }>;
+}> {}
 
 /**
  * The call's pictures read before anything is kept, or why none can be: the
@@ -302,10 +330,10 @@ function keptAsNotes(
     for (const { picture, file } of read.files) {
       const kept = yield* keepPlanAttachment(binding.userId, binding.planId, file);
       if (kept.status === PLAN_ATTACHMENT_KEEP.TOO_MANY) {
-        return yield* new EditRefused({ reason: PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES });
+        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES) });
       }
       if (kept.status === PLAN_ATTACHMENT_KEEP.NO_PLAN) {
-        return yield* new EditRefused({ reason: PLAN_EDIT_REFUSAL.ARCHIVED });
+        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.ARCHIVED) });
       }
       const address = planAttachmentAddress(
         { planId: binding.planId, attachmentId: kept.id },
@@ -352,14 +380,18 @@ export function recordPlanEdit(
     Effect.gen(function* () {
       const all = [...notes, ...(yield* keptAsNotes(binding, read))];
       const save = yield* saveNotes(binding, all, writer);
-      if (save.status !== PLAN_SAVE_STATUS.SAVED) {
-        return yield* new EditRefused({ reason: save.reason });
+      if (save.status === PLAN_SAVE_STATUS.CONFLICT) {
+        const refusal = {
+          ...refused(PLAN_EDIT_REFUSAL.CONFLICT),
+          missed: missedNote(save.missed),
+          current: save.current,
+        };
+        return yield* new EditRefused({ refusal });
       }
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        taken: all.length - save.missed.length,
-        missed: save.missed.map(missedNote),
-      } satisfies PlanEditResult;
+      if (save.status !== PLAN_SAVE_STATUS.SAVED) {
+        return yield* new EditRefused({ refusal: refused(save.reason) });
+      }
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, taken: all.length } satisfies PlanEditResult;
     });
   return Effect.gen(function* () {
     const read = yield* picturesInSandbox(binding, pictures, sandbox);
@@ -367,7 +399,7 @@ export function recordPlanEdit(
     const client = yield* SqlClient.SqlClient;
     return yield* client.withTransaction(saved(read.success));
   }).pipe(
-    Effect.catchTag("EditRefused", ({ reason }) => Effect.succeed(planEditRejected(reason))),
+    Effect.catchTag("EditRefused", ({ refusal }) => Effect.succeed(refusal)),
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
   );

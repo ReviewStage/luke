@@ -46,14 +46,13 @@
               "find": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 500,
-                "description": "A phrase copied exactly from the plan's saved text, long enough to name one place, and touching no heading."
+                "maxLength": 200000,
+                "description": "Text copied exactly from the plan's saved text, as much as names one place: a phrase, lines, or whole sections, headings and their #s included."
               },
               "text": {
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 200000,
-                "description": "What the phrase becomes."
+                "description": "What that text becomes, which may open headings of its own; empty to delete it, and a line the deletion leaves empty is taken out."
               }
             },
             "required": [
@@ -62,33 +61,11 @@
               "text"
             ],
             "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "remove"
-                ]
-              },
-              "find": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 500,
-                "description": "A phrase copied exactly from the line to strike, touching no heading."
-              }
-            },
-            "required": [
-              "kind",
-              "find"
-            ],
-            "additionalProperties": false
           }
         ]
       },
       "maxItems": 40,
-      "description": "The notes the latest lines call for, in order; empty when nothing new was said."
+      "description": "The notes the latest lines call for, in order, taken together or not at all; empty when nothing new was said."
     }
   },
   "required": [

@@ -49,6 +49,7 @@ import { CODER_REFUSAL } from "./bounds.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
+import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
@@ -431,31 +432,44 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       }),
   );
   it.effect(
-    "an agent's notes are taken into its plan as the notetaker's are, the ones the plan cannot take reported, and read back in the plan",
+    "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { userId, agent, admitted } = yield* openAgent(host);
-        const input = unparsedWire({
-          notes: [
-            {
-              kind: "add",
-              section: "Open questions",
-              text: "- Who may withdraw an invite? Going on as: the member who sent it.",
-            },
-            { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
-            { kind: "replace", find: "a phrase the plan never held", text: "an owner" },
-          ],
-        });
-
-        const answer = yield* host.editPlan(admitted, input, 0, noSandbox);
-
-        assert.deepEqual(answer, {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          taken: 2,
-          missed: ["replace a phrase the plan never held"],
-        });
         assert.ok(agent.planId !== null);
+        const before = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const notes = [
+          {
+            kind: "add",
+            section: "Open questions",
+            text: "- Who may withdraw an invite? Going on as: the member who sent it.",
+          },
+          { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
+        ];
+
+        const missed = yield* host.editPlan(
+          admitted,
+          unparsedWire({
+            notes: [...notes, { kind: "replace", find: "a phrase the plan never held", text: "x" }],
+          }),
+          0,
+          noSandbox,
+        );
+
+        assert.deepEqual(missed, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.CONFLICT,
+          missed: "replace a phrase the plan never held",
+          current: before.text,
+        });
+        const untouched = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.equal(untouched.text, before.text);
+        assert.deepEqual(untouched.agentEdits, []);
+
+        const answer = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
+
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         const sectionText = (heading: string) =>
           planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";

@@ -7,7 +7,7 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
-  type PlanNote,
+  type PlanAgentEdit,
 } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
 import type { UnparsedWireValue, WireRecord } from "@luke/wire";
@@ -279,17 +279,17 @@ const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
  * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, and a retracted point struck.
+You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, a retracted point deleted, and the doc reorganized when the call asks for it.
 
 The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or remove it. Answer with the notes the latest lines call for, in the order they were said:
+You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or delete it. Answer with the notes the latest lines call for, in the order they were said:
 
 - add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown "- " bullet, a line or two, added at the end of that section at the level of its other points, optionally followed by indented sub-bullets ("  - ") when the point genuinely has parts; never stack markers on one line ("- - "). A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
-- replace: a correction, where the developer corrected something the plan holds, or a section's template guidance you are filling. find is a phrase copied exactly from the saved text, as short as names one place; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does.
-- remove: a point the developer retracted or rejected, or guidance a section no longer needs. find is a phrase copied exactly from the line to strike.
+- replace: any other edit. find is text copied exactly from the saved plan, as short as names one place: a phrase, lines, or whole sections, headings and their #s included; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does. Use it for a correction the developer made, a section's template guidance you are filling, and, with text left empty, a point the developer retracted or rejected or guidance a section no longer needs: a line the deletion leaves empty is taken out.
 
-- Never rewrite or strike a heading: the headings are the developer's.
+- Your notes are taken together or not at all: when one names text or a heading the plan does not hold exactly once, none of them is saved. Copy every find and heading exactly.
+- Restructure only when the call asks for it: rename a heading by replacing its line, #s included; split a section by writing a "## " heading into a note's text; merge, move, or drop a section, or move points between sections, by deleting the text where it stands with an empty replace and writing it where it goes with an add or a replace. Otherwise keep the developer's headings as they stand.
 - Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
@@ -328,8 +328,8 @@ function noteWords(words: string): string {
   );
 }
 
-/** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck among them. */
-function agentNoteLine(note: PlanNote): string {
+/** One note an agent took, in a line: what it did, where, and its words, the text it replaced or deleted among them. */
+function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;

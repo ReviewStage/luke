@@ -567,14 +567,15 @@ function insideSpan(text: string, at: number): boolean {
 
 /**
  * Whether the index stands on an indented code block's line: indented by
- * four spaces or a tab, after a blank line or another such line, since an
- * indented line cannot interrupt a paragraph, and not under a list's item,
- * whose indented lines are the item's own.
+ * four spaces or a tab, at the text's start or after a blank line or another
+ * such line, since an indented line cannot interrupt a paragraph but has none
+ * to interrupt on the first line, and not under a list's item, whose
+ * indented lines are the item's own.
  */
 function insideIndented(text: string, at: number): boolean {
   const lines = text.split("\n");
   let start = 0;
-  let open = false;
+  let open = true;
   let inList = false;
   for (const line of lines) {
     const end = start + line.length;
@@ -590,8 +591,8 @@ function insideIndented(text: string, at: number): boolean {
   return false;
 }
 
-/** Whether the index stands in code, where markdown draws no link: a fenced block, an indented block, or a code span. */
-function insideCode(text: string, at: number): boolean {
+/** Whether the index stands in code, where markdown draws no link and no picture: a fenced block, an indented block, or a code span. */
+export function insideCode(text: string, at: number): boolean {
   return insideFence(text, at) || insideIndented(text, at) || insideSpan(text, at);
 }
 
