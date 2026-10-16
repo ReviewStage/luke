@@ -558,6 +558,24 @@ it.effect(
     }),
 );
 
+it.effect("video turned off while a restart reads the chosen avatar stays off", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true, avatar: VIDEO_AVATAR.ORION });
+    const socket = yield* f.openCall;
+    grantFor(socket, "request-1");
+    yield* settle();
+
+    assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false });
+    yield* settle();
+
+    assert.deepEqual(avatarSends(socket), [
+      start("request-1", VIDEO_AVATAR.ORION),
+      stop("request-1", AVATAR_STOP_REASON.SERVER_CLOSED),
+    ]);
+  }),
+);
+
 it.effect("a call opens with no avatar while the Video calls experiment is off", () =>
   Effect.gen(function* () {
     const f = yield* subject();

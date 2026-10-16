@@ -272,6 +272,8 @@ export class LiveSessionHolder {
   #avatarRequest: string | undefined;
   /** How many times the standing call's avatar was asked for again after a close this side did not start. */
   #avatarRestarts = 0;
+  /** The restart `closed` has queued while it reads the chosen avatar, which any stop or start meanwhile withdraws. */
+  #avatarRestartPending: object | undefined;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -690,6 +692,7 @@ export class LiveSessionHolder {
     if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
     const requestId = this.#options.createId();
     this.#avatarRequest = requestId;
+    this.#avatarRestartPending = undefined;
     start(requestId, avatar);
     if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
       this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
@@ -725,6 +728,9 @@ export class LiveSessionHolder {
    * whether there was an avatar asked for or up to take down.
    */
   stopAvatar(reason: AvatarStopReason): boolean {
+    // Note that a stop withdraws a queued restart even with nothing up,
+    // because video turned off while a restart is pending must stay off.
+    this.#avatarRestartPending = undefined;
     const session = this.#held;
     if (!session || session.ended) return false;
     const stop = session.opened.stopAvatar;
@@ -742,8 +748,8 @@ export class LiveSessionHolder {
    * again, and the avatar is asked for once more on each call before it is
    * left ended, where the tile offers to restart it. Answers whether it is
    * to be asked for again. The avatar is read afresh first, so a choice made
-   * while the last one stood is the one the restart asks for; a start asked
-   * for meanwhile, or the call's end, leaves the restart unasked.
+   * while the last one stood is the one the restart asks for; a stop or a
+   * start asked for meanwhile, or the call's end, leaves the restart unasked.
    */
   closed(reason: AvatarStopReason): boolean {
     const session = this.#held;
@@ -752,9 +758,11 @@ export class LiveSessionHolder {
     }
     if (this.#avatarRestarts >= AVATAR_RESTARTS_PER_CALL) return false;
     this.#avatarRestarts += 1;
+    const pending = {};
+    this.#avatarRestartPending = pending;
     this.#start(
       Effect.map(this.#chosenAvatar(), (avatar) => {
-        if (this.#held !== session || this.#avatarRequest !== undefined) return;
+        if (this.#avatarRestartPending !== pending || this.#held !== session) return;
         this.startAvatar(avatar);
       }),
     );
