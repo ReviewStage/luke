@@ -538,7 +538,8 @@ export function App(): React.JSX.Element {
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
-      // clearing, then letting go of the caret — so neither is a layer here.
+      // clearing, then letting go of the caret — so neither is a layer here,
+      // bar the caret Settings opens with, whose untouched Escape leaves it.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;

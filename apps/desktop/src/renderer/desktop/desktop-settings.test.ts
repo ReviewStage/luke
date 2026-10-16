@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -161,10 +162,12 @@ function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
   call,
+  onExit = ignore,
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
   call?: CallCardInput;
+  onExit?: () => void;
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
   return createElement(DesktopSettings, {
@@ -186,7 +189,7 @@ function SettingsHarness({
     },
     settings: { ...settingsProps(view, setView), ...(workspace ? { workspace } : undefined) },
     call,
-    onExit: ignore,
+    onExit,
   });
 }
 
@@ -375,6 +378,82 @@ function openIntegrationResult(page: HTMLElement, name: string): void {
   assert.ok(result, `the search finds ${name} under Integrations`);
   act(() => result.click());
 }
+
+/** Presses Escape where the caret stands, mid-composition where `composing`, the window answering what nothing nearer kept as its own Escape does. */
+function pressEscape(composing = false): void {
+  const leave = (event: KeyboardEvent) => {
+    if (event.key === "Escape") runAppCommand(APP_COMMAND.EXIT_SETTINGS);
+  };
+  window.addEventListener("keydown", leave);
+  act(() => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: composing }),
+    );
+  });
+  window.removeEventListener("keydown", leave);
+}
+
+/** Counts the searches the window reports opened. */
+function countSearchOpens() {
+  let opens = 0;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      recordSurfaceEvent: (event: string) => {
+        if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
+      },
+    },
+  });
+  return () => opens;
+}
+
+test("Settings opens with the caret in its search, uncounted as a search opened, and Escape there leaves Settings in one press", () => {
+  const searchesOpened = countSearchOpens();
+  let exits = 0;
+  const page = mount(createElement(SettingsHarness, { onExit: () => (exits += 1) }));
+  const field = fieldNamed(page, SIDEBAR_SEARCH);
+  assert.ok(document.activeElement === field, "the caret stands in the search");
+  assert.equal(searchesOpened(), 0);
+
+  // An input method's Escape dismisses its candidates and leaves nothing.
+  pressEscape(true);
+  assert.equal(exits, 0);
+  pressEscape();
+  assert.equal(exits, 1);
+
+  // A caret put back by hand is a search opened, and holds Escape as its own.
+  act(() => field?.blur());
+  act(() => field?.focus());
+  assert.equal(searchesOpened(), 1);
+  pressEscape();
+  assert.equal(exits, 1);
+  assert.ok(document.activeElement !== field, "the search let go of the caret");
+});
+
+test("once the opening caret's search is typed in, Escape clears it, then lets go of the caret, and only then leaves Settings", () => {
+  let exits = 0;
+  const page = mount(createElement(SettingsHarness, { onExit: () => (exits += 1) }));
+  const field = fieldNamed(page, SIDEBAR_SEARCH) ?? assert.fail("the sidebar's search");
+  typeInto(field, "voice");
+
+  pressEscape();
+  assert.equal(field.value, "");
+  assert.ok(document.activeElement === field, "the caret stands in the search");
+  pressEscape();
+  assert.ok(document.activeElement !== field, "the search let go of the caret");
+  assert.equal(exits, 0);
+  pressEscape();
+  assert.equal(exits, 1);
+});
+
+test("a caret already in the window as Settings opens keeps it", () => {
+  const landed = document.createElement("button");
+  document.body.append(landed);
+  landed.focus();
+  mount(createElement(SettingsHarness));
+  assert.ok(document.activeElement === landed, "the caret stays where it was");
+});
 
 test("Command-F lands in the Integrations page's own search while it shows, and in the sidebar's elsewhere", () => {
   const page = mount(createElement(SettingsHarness));
