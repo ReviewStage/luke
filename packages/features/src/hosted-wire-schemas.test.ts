@@ -17,6 +17,7 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
+import * as issueView from "./issue-view.js";
 import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
@@ -210,6 +211,14 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
     integrationRemoteCallSchema: integrationWire.integrationRemoteCallSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
+  "issue-view": {
+    issueListParamsSchema: issueView.issueListParamsSchema,
+    issueIdParamsSchema: issueView.issueIdParamsSchema,
+    issueCreateParamsSchema: issueView.issueCreateParamsSchema,
+    issueChangeParamsSchema: issueView.issueChangeParamsSchema,
+    issueListViewSchema: issueView.issueListViewSchema,
+    issueViewSchema: issueView.issueViewSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof issueView>,
   "issue-wire": {
     issueStatusSchema: issueWire.issueStatusSchema,
     issuePrioritySchema: issueWire.issuePrioritySchema,

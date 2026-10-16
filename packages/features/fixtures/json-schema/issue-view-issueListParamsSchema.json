@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "archived": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "workspaceId"
+  ],
+  "additionalProperties": false
+}
