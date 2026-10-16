@@ -66,7 +66,7 @@ const LOCAL_DEV_PRINCIPAL = "local-dev";
 
 const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 
-const PLAN = { name: "Teammate invitations" } as const;
+const TASK = { name: "Teammate invitations" } as const;
 const PLAN_SNAPSHOT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 const REPOSITORY = "acme/relay";
 const DELEGATED_TASK = "Count the invitation routes";
@@ -116,11 +116,11 @@ function readConversationRuntimeSessionId(
   );
 }
 
-function startAgent(run: Run, planId: string): Promise<CodingAgent> {
+function startAgent(run: Run, taskId: string): Promise<CodingAgent> {
   return run(
     Effect.map(
       createCodingAgent(LOCAL_DEV_PRINCIPAL, {
-        taskId: planId,
+        taskId: taskId,
         idempotencyKey: `eval-${Date.now()}-${Math.random()}`,
         model: "anthropic/claude-opus-5.5",
         effort: "high",
@@ -148,8 +148,8 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
-      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
-      const agent = await startAgent(run, plan.id);
+      const task = await run(startTask(LOCAL_DEV_PRINCIPAL, { ...TASK, repository: REPOSITORY }));
+      const agent = await startAgent(run, task.id);
 
       /** The Start as the route makes it: the first message of a typed turn on the agent's conversation, answered once the door has recorded the session on the conversation row. */
       const openSession = async (conversationId: string, message: string) => {
@@ -217,7 +217,7 @@ export default defineEval({
       // then the worker's answer in the agent's words, and the worker's own
       // session recorded under the child conversation the call names, on
       // that pair.
-      const delegating = await startAgent(run, plan.id);
+      const delegating = await startAgent(run, task.id);
       const delegation = await openSession(
         delegating.conversationId,
         `${SCRIPTED_DELEGATE}${DELEGATED_TASK}`,
@@ -273,7 +273,7 @@ export default defineEval({
 
       // A to-do write is a tool part of the agent's answer holding the
       // whole list as the model wrote it, answered at once.
-      const listing = await startAgent(run, plan.id);
+      const listing = await startAgent(run, task.id);
       const listed = await openSession(listing.conversationId, `${SCRIPTED_TODOS}${TODO_WORDS}`);
       (await t.target.attachSession(listed.sessionId)).succeeded();
       const listingAnswer = (await readMessagesByConversationTyped(run, listing.conversationId)).at(
@@ -300,7 +300,7 @@ export default defineEval({
       // A `/name` the developer types names one of the skills the session
       // is offered: the agent loads it with eve's own `load_skill`, a tool
       // part of its answer holding the skill's body, and follows it.
-      const skilled = await startAgent(run, plan.id);
+      const skilled = await startAgent(run, task.id);
       const [skill] = SCRIPTED_SKILLS;
       const named = await openSession(skilled.conversationId, `/${skill.name} for this week`);
       (await t.target.attachSession(named.sessionId)).succeeded();

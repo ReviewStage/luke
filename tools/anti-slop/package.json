@@ -1,6 +1,6 @@
 {
   "name": "@luke/anti-slop",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The repository's oxlint rules: Effect runtime edges, raw async primitives, type assertions, unsafe dictionaries, and Drizzle writes",

@@ -13,12 +13,12 @@
  *
  * A path is the repository's, from its root, without a leading or trailing
  * slash; the root itself is the empty path. A breadcrumb mounts the same
- * tree under its crumb (`../planning/file-breadcrumbs.tsx`), over the folder
+ * tree under its crumb (`../tasks/file-breadcrumbs.tsx`), over the folder
  * the crumb stands in, so its paths are that folder's, from it.
  *
  * The same bundle answers what icon a file's type draws as, so a file
- * attached to a message (`../planning/attached-file-chips.tsx`) or listed in
- * the plan's summary (`../desktop/plan-summary.tsx`) is drawn as the tree
+ * attached to a message (`../tasks/attached-file-chips.tsx`) or listed in
+ * the plan's summary (`../desktop/task-summary.tsx`) is drawn as the tree
  * draws it, without Pierre's icons riding in the bundle every window parses.
  */
 
@@ -115,7 +115,7 @@ export interface FileTreeHandle {
  * A file's type icon as the tree draws it: the symbol to draw, from the
  * sheet the bundle adds to the document the first time one is asked for,
  * and the type it stands for, which the panel colours it by
- * (`styles/planning.css`).
+ * (`styles/tasks.css`).
  */
 export interface FileTypeIcon {
   readonly symbol: string;

@@ -10,7 +10,7 @@ import type { AutomationSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
-import { useMinute } from "../planning/plan-time";
+import { useMinute } from "../tasks/task-time";
 
 /**
  * use-automations.ts -- the Automations pages' list: one workspace's automations, read when a page opens and each minute after, and the writes that make, change, and delete one.

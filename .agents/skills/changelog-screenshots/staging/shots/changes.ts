@@ -14,10 +14,10 @@
 
 import type { CodingAgentChangesAnswerView } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { pullRequestFiles } from "./changes-files";
 import { codingAgentAnswers } from "./coding-agent";
-import { SHOT_ID, shotPlanningView } from "./plan-document";
+import { SHOT_ID, shotTasksView } from "./plan-document";
 import type { ShotSpec } from "./shot-spec";
 
 /** The pull request #214 as its Changes tab reads it. */
@@ -34,7 +34,7 @@ function changesAnswer(): CodingAgentChangesAnswerView {
 export function changesShot(): ShotSpec {
   const changes = changesAnswer();
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: { ...FIXTURE_CLOSED_PANEL, width: 900 },
     answers: {
       ...codingAgentAnswers(),

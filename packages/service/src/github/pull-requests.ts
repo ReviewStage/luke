@@ -19,7 +19,9 @@
  * large to send, and the file says which rather than reading as unchanged.
  * Who a pull request names is read beside its files: who opened it, its
  * reviewers and where each stands, who authored its commits, and its
- * reviews that said something, each the first page GitHub answers.
+ * reviews that said something, each the first page GitHub answers. And a
+ * review's inline comments are read, by file and line, for the message
+ * that tells the agent on the pull request of that review (`agent-wakes.ts`).
  * A pull request's overview, which its Pull request tab draws, is read in
  * one go: the pull request whole, its description and its mergeability
  * among it, then at once every check on its head, one by one, its comments,
@@ -70,6 +72,8 @@ export interface GitHubPullRequest {
   readonly additions: number;
   readonly deletions: number;
   readonly changedFiles: number;
+  /** The login of who opened it, where GitHub named one. */
+  readonly author?: string;
 }
 
 /** What a read fails with: GitHub unreachable or answering off its shape. */
@@ -115,6 +119,8 @@ const PullRequestSchema = Schema.Struct({
   deletions: Schema.Number,
   changed_files: Schema.Number,
   head: Schema.Struct({ ref: Schema.String, sha: Schema.String }),
+  /** Who opened it; null where their account is gone. */
+  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -270,6 +276,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     additions: record.additions,
     deletions: record.deletions,
     changedFiles: record.changed_files,
+    ...(record.user == null ? undefined : { author: record.user.login }),
   };
 }
 
@@ -651,6 +658,61 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
     ),
     comments: commentsOf(reviews),
   };
+});
+
+/** One inline comment of a review: the file and the line it is on, where GitHub still places it, its words, and its page. */
+export interface GitHubReviewLineComment {
+  readonly path: string;
+  readonly line: number | undefined;
+  readonly body: string;
+  readonly url: string;
+}
+
+/** A review's inline comments, as GitHub lists them; a comment on a line since changed away keeps the line it was made on. */
+const ReviewLineCommentsSchema = Schema.Array(
+  Schema.Struct({
+    path: Schema.String,
+    line: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    original_line: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    body: Schema.String,
+    html_url: Schema.String,
+  }),
+);
+
+/**
+ * The most pages of a review's inline comments read, a hundred to a page:
+ * three hundred comments outrun any message they are told in, so a review
+ * longer still is cut there with the note that sends the agent to `gh`.
+ */
+const REVIEW_COMMENTS_MAX_PAGES = 3;
+
+/**
+ * The inline comments of one review of a pull request, in the order GitHub
+ * lists them, each by its file and line, read page by page up to the bound;
+ * none where the repository holds no such review.
+ */
+export const reviewLineComments = /* @__PURE__ */ Effect.fn("web/reviewLineComments")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+  reviewId: number,
+): Effect.fn.Return<
+  readonly GitHubReviewLineComment[],
+  PullRequestReadFailure,
+  HttpClient.HttpClient
+> {
+  const comments = yield* everyPage(
+    token,
+    `${repositoryPath(fullName)}/pulls/${number}/reviews/${reviewId}/comments`,
+    ReviewLineCommentsSchema,
+    REVIEW_COMMENTS_MAX_PAGES,
+  );
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line ?? comment.original_line ?? undefined,
+    body: comment.body,
+    url: comment.html_url,
+  }));
 });
 
 /**

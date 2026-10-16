@@ -12,7 +12,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { plansControl } from "#testing/plans-control";
+import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { ToastHost } from "../toast";
@@ -180,8 +180,8 @@ function mountSidebar(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const control = plansControl({
-    plans: [...plans],
+  const control = tasksControl({
+    tasks: [...plans],
     archived: [...archived],
     workspace,
     workspaces: [workspace],
@@ -215,7 +215,7 @@ function mountSidebar(
 
 /** The words each standing menu item says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".plan-menu-label") ?? item).textContent?.trim() ?? "";
+  return (item.querySelector(".task-menu-label") ?? item).textContent?.trim() ?? "";
 }
 
 /** The menu item that says `label`, in whichever menu stands. */
@@ -252,9 +252,9 @@ function taskRows(
 ): { name: string; repository: string | undefined; face: boolean }[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
-  return [...tasks.querySelectorAll(".sidebar-plan")].map((row) => ({
-    name: row.querySelector(".sidebar-plan-name")?.textContent ?? "",
-    repository: row.querySelector(".sidebar-plan-repository")?.textContent ?? undefined,
+  return [...tasks.querySelectorAll(".sidebar-task")].map((row) => ({
+    name: row.querySelector(".sidebar-task-name")?.textContent ?? "",
+    repository: row.querySelector(".sidebar-task-repository")?.textContent ?? undefined,
     face: row.querySelector(".actor-mark") !== null,
   }));
 }
@@ -278,8 +278,8 @@ test("a shared workspace's tasks group by repository until View options groups t
     { name: "Billing empty states", repository: undefined, face: false },
     { name: "Fix flaky deploy", repository: undefined, face: false },
   ]);
-  const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-plan`)].find(
-    (each) => each.querySelector(".sidebar-plan-name")?.textContent === "Billing empty states",
+  const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-task`)].find(
+    (each) => each.querySelector(".sidebar-task-name")?.textContent === "Billing empty states",
   );
   assert.ok(row, "the task has a row");
   act(() => {
@@ -307,7 +307,7 @@ test("ordered by Created, the tasks run newest started first and each row shows 
     taskRows(sidebar).map((row) => row.name),
     ["Fix flaky deploy", "Billing empty states", "Retry webhooks"],
   );
-  const times = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-plan time`)];
+  const times = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-task time`)];
   assert.deepEqual(
     times.map((time) => time.getAttribute("datetime")),
     [30, 20, 10].map((at) => new Date(at).toISOString()),
@@ -319,7 +319,7 @@ test("the pins stand in a section of their own above Tasks, whatever the view gr
   choose(sidebar, "Group by", "Creator");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(pinned?.querySelectorAll(".sidebar-plan-name") ?? [])].map((name) => name.textContent),
+    [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
     ["Release checklist"],
   );
   assert.ok(
@@ -389,7 +389,7 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   assert.equal(options?.getAttribute("data-filtered"), "true");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(pinned?.querySelectorAll(".sidebar-plan-name") ?? [])].map((name) => name.textContent),
+    [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
     ["Onboarding rewrite", "Release checklist"],
     "the pins stand unfiltered",
   );
@@ -552,8 +552,8 @@ test("choosing another workspace lets go of the archived view, so coming back op
       createElement(
         DesktopSidebar,
         sidebarProps(
-          plansControl({
-            plans: [...TASKS],
+          tasksControl({
+            tasks: [...TASKS],
             archived: [...ARCHIVED],
             workspace,
             workspaces: [ACME, other],
@@ -596,7 +596,7 @@ test("before the list is first read, the archived view says nothing of being emp
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const control = plansControl({ workspace: ACME, workspaces: [ACME], me: DEAN, listRead: false });
+  const control = tasksControl({ workspace: ACME, workspaces: [ACME], me: DEAN, listRead: false });
   act(() =>
     root.render(
       onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(control))),
@@ -696,7 +696,7 @@ test("a one-off agent stands among its repository's tasks by its last activity, 
   );
   assert.ok(row, "the agent's row stands");
   assert.ok(row.querySelector(".sidebar-agent-glyph svg"), "it leads with its harness mark");
-  assert.ok(row.querySelector(".sidebar-plan-time .actor-mark"), "it ends with its starter");
+  assert.ok(row.querySelector(".sidebar-task-time .actor-mark"), "it ends with its starter");
 
   act(() => row.click());
   assert.deepEqual(openedAgents, ["a-1"]);
@@ -739,7 +739,7 @@ test("an archived one-off agent stands only in the archived view, among the arch
 test("the agent whose page stands is the row the sidebar marks", () => {
   const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE], "a-1");
   const marked = [...sidebar.querySelectorAll('[aria-current="page"]')].map(
-    (row) => row.querySelector(".sidebar-plan-name")?.textContent,
+    (row) => row.querySelector(".sidebar-task-name")?.textContent,
   );
   assert.deepEqual(marked, ["Triage overnight issues"]);
 });
@@ -776,8 +776,8 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
   roots.push(root);
   const registry = AtomRegistry.make();
   const props = sidebarProps(
-    plansControl({
-      plans: [...TASKS],
+    tasksControl({
+      tasks: [...TASKS],
       workspace: { ...ACME, slug: "acme" },
       workspaces: [{ ...ACME, slug: "acme" }],
       me: DEAN,
@@ -828,7 +828,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [pinned, SWEEP]);
   const section = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(section?.querySelectorAll(".sidebar-plan-name") ?? [])].map((name) => name.textContent),
+    [...(section?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
     ["Triage overnight issues", "Release checklist"],
   );
   assert.ok(section?.querySelector(".sidebar-agent .sidebar-agent-glyph svg"), "it wears its mark");

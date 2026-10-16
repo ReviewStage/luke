@@ -320,22 +320,14 @@ export function useDraftsOwner(
   }, [change]);
 }
 
-/** Where a draft waits, as a mark reads it: an inbox's drafts by their plan alone, every card's alike. */
-type DraftedPlace =
-  | Exclude<DraftPlace, InboxPlace>
-  | { readonly kind: typeof DRAFT_PLACE.INBOX; readonly planId: string | null };
-
 /**
- * Where a draft waits, read off every draft. Note that it is an atom of its
- * own, compared by its contents, so a row or a tab marking a draft draws
- * again only as a draft comes or goes, never on each word typed.
+ * The plans a draft waits in, read off every draft, null for an agent with
+ * no plan. Note that it is an atom of its own, compared by its contents, so
+ * a row marking a draft draws again only as a draft comes or goes, never on
+ * each word typed.
  */
 const draftedAtom = Atom.withEquality(
-  Atom.make((get): readonly DraftedPlace[] =>
-    get(draftsAtom).map(({ place }) =>
-      place.kind === DRAFT_PLACE.INBOX ? { kind: place.kind, planId: place.planId } : place,
-    ),
-  ),
+  Atom.make((get): readonly (string | null)[] => get(draftsAtom).map(({ place }) => place.planId)),
   Equal.equals,
 );
 
@@ -417,53 +409,7 @@ export function useDraftWriter(): DraftWriter {
   );
 }
 
-/**
- * The tabs of a plan's column a draft can wait behind, each of which wears
- * the Draft pencil while another is chosen: its agents', its Inbox, and its
- * draft agent's, by the key it starts under.
- */
-export interface DraftTabs {
-  readonly agents: readonly string[];
-  readonly inbox: boolean;
-  readonly newAgents: readonly string[];
-}
-
-/** Whether a draft's place is behind one of `tabs`. */
-function behind(place: DraftedPlace, tabs: DraftTabs): boolean {
-  switch (place.kind) {
-    case DRAFT_PLACE.AGENT:
-      return tabs.agents.includes(place.agentId);
-    case DRAFT_PLACE.NEW_AGENT:
-      return tabs.newAgents.includes(place.draftId);
-    case DRAFT_PLACE.INBOX:
-      return tabs.inbox;
-  }
-}
-
-/**
- * Whether a plan holds a draft: one of its agents', its draft agent's, or
- * an inbox card's, past those behind `drawn`, the tabs of its column that
- * mark their own where it is open.
- */
-export function usePlanDrafted(planId: string, drawn?: DraftTabs): boolean {
-  return useAtomValue(draftedAtom, (places) =>
-    places.some(
-      (place) => place.planId === planId && (drawn === undefined || !behind(place, drawn)),
-    ),
-  );
-}
-
-/** The tabs of a plan's column whose box holds a draft. */
-export function useDraftedTabs(planId: string): DraftTabs {
-  const places = useAtomValue(draftedAtom);
-  return useMemo(() => {
-    const own = places.filter((place) => place.planId === planId);
-    return {
-      agents: own.flatMap((place) => (place.kind === DRAFT_PLACE.AGENT ? [place.agentId] : [])),
-      inbox: own.some((place) => place.kind === DRAFT_PLACE.INBOX),
-      newAgents: own.flatMap((place) =>
-        place.kind === DRAFT_PLACE.NEW_AGENT ? [place.draftId] : [],
-      ),
-    };
-  }, [places, planId]);
+/** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
+export function usePlanDrafted(planId: string): boolean {
+  return useAtomValue(draftedAtom, (plans) => plans.includes(planId));
 }

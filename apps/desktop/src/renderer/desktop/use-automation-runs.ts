@@ -3,7 +3,7 @@ import type { AutomationRunSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
-import { useMinute } from "../planning/plan-time";
+import { useMinute } from "../tasks/task-time";
 
 /**
  * use-automation-runs.ts -- one automation's runs as its page's panel draws them, read when the page opens and each minute after, and its Run now.

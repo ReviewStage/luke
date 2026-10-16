@@ -19,13 +19,13 @@ import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
-  NEW_PLAN: "new-plan",
+  NEW_TASK: "new-task",
   COPY_PLAN: "copy-plan",
   COPY_LINK: "copy-link",
-  ARCHIVE_PLAN: "archive-plan",
-  DELETE_PLAN: "delete-plan",
-  PREVIOUS_PLAN: "previous-plan",
-  NEXT_PLAN: "next-plan",
+  ARCHIVE_TASK: "archive-plan",
+  DELETE_TASK: "delete-plan",
+  PREVIOUS_TASK: "previous-plan",
+  NEXT_TASK: "next-plan",
   TOGGLE_SIDEBAR: "toggle-sidebar",
   TOGGLE_SIDE_PANEL: "toggle-side-panel",
   TOGGLE_FULL_SCREEN: "toggle-full-screen",
@@ -292,23 +292,23 @@ export interface AppShortcut {
  * menu's own items answer them.
  */
 export const APP_SHORTCUTS = {
-  [APP_COMMAND.NEW_PLAN]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
+  [APP_COMMAND.NEW_TASK]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
   // Note that ⇧⌘C, Linear's chord for a link, was Copy plan's first, so a link takes ⌥⌘C, where macOS copies a thing's address (Finder's Copy as Pathname).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, option: true } },
-  [APP_COMMAND.ARCHIVE_PLAN]: {
+  [APP_COMMAND.ARCHIVE_TASK]: {
     label: "Archive task",
     chord: { key: SHORTCUT_KEY.A, shift: true },
   },
-  [APP_COMMAND.DELETE_PLAN]: {
+  [APP_COMMAND.DELETE_TASK]: {
     label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
-  [APP_COMMAND.PREVIOUS_PLAN]: {
+  [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
   },
-  [APP_COMMAND.NEXT_PLAN]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
+  [APP_COMMAND.NEXT_TASK]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
     label: "Toggle panel",
@@ -456,11 +456,11 @@ export const APP_SHORTCUT_GROUPS = [
   {
     title: "Tasks",
     commands: [
-      APP_COMMAND.NEW_PLAN,
+      APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.COPY_LINK,
-      APP_COMMAND.ARCHIVE_PLAN,
-      APP_COMMAND.DELETE_PLAN,
+      APP_COMMAND.ARCHIVE_TASK,
+      APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
@@ -500,8 +500,8 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.BACK,
       APP_COMMAND.FORWARD,
-      APP_COMMAND.PREVIOUS_PLAN,
-      APP_COMMAND.NEXT_PLAN,
+      APP_COMMAND.PREVIOUS_TASK,
+      APP_COMMAND.NEXT_TASK,
     ],
   },
   {

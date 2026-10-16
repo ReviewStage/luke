@@ -9,14 +9,14 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { plansControl } from "#testing/plans-control";
+import { DOCUMENT_TASK } from "#testing/document-task";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
-import { HISTORY_READ } from "../planning/use-plan-history";
+import { HISTORY_READ } from "../tasks/use-plan-history";
 import { ToastHost } from "../toast";
-import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
@@ -72,11 +72,11 @@ afterEach(() => {
 
 /** The plan's version history over the window, its versions read. */
 function drawn(): HTMLElement {
-  const base = plansControl();
-  const plans = plansControl({
+  const base = tasksControl();
+  const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
-    activePlanId: DOCUMENT_PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, workspaceId: ACME.id } },
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
     workspaces: [ACME],
     history: {
       ...base.history,
@@ -106,7 +106,7 @@ function drawn(): HTMLElement {
             staged: false,
           },
           history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-          subject: planVersionSubject(plans),
+          subject: taskVersionSubject(plans),
           account: {
             status: ACCOUNT_STATUS.SIGNED_IN,
             email: "dev@example.com",
@@ -154,6 +154,6 @@ test("a version's row offers Copy link, which copies its plan's address under th
   assert.ok(item, "the row's menu offers Copy link");
   await act(async () => item.click());
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/version/2`]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/version/2`]);
   assert.equal(newestToastSays(), "Link copied");
 });

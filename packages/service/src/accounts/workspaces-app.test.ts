@@ -399,7 +399,7 @@ it.effect(
         const github = githubReaching([]);
 
         const named = [];
-        for (const name of ["Admin", "Sign in", "Changelog", "Personal team", "Acme"]) {
+        for (const name of ["Admin", "Sign in", "Changelog", "Tasks", "Personal team", "Acme"]) {
           named.push((yield* createAs(seams, github, ada, name)).slug);
         }
 
@@ -407,6 +407,7 @@ it.effect(
           "workspace-admin",
           "workspace-sign-in",
           "workspace-changelog",
+          "workspace-tasks",
           "workspace-personal-team",
           "acme",
         ]);

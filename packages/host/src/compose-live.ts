@@ -6,6 +6,7 @@ import {
   type TaskWorkFrame,
 } from "@luke/features";
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
+import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   carried,
   GATEWAY_EVENT,
@@ -20,7 +21,7 @@ import {
   voiceSetVideoParamsSchema,
 } from "@luke/gateway";
 import { isAgentWireTrace } from "@luke/gateway/devtrace";
-import { EXPERIMENT, experimentOn } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn } from "@luke/settings";
 import { unavailableLiveDiagnostics } from "@luke/voice";
 import { LiveSessionHolder } from "@luke/voice/live-session";
 import { readEither } from "@luke/wire/effect";
@@ -82,6 +83,13 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
   const kernel = yield* HostKernelTag;
   const { runMode } = kernel;
 
+  // Note that a settings file that cannot be read shows the default avatar,
+  // the one every call showed before there was a choice.
+  const videoAvatar: Effect.Effect<VideoAvatar> = settings.store.snapshot().pipe(
+    Effect.map(({ stored }) => stored.videoAvatar ?? APP_SETTING_SCHEMA.videoAvatar.default),
+    Effect.orElseSucceed(() => APP_SETTING_SCHEMA.videoAvatar.default),
+  );
+
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
     createId: kernel.createId,
@@ -91,6 +99,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
       Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.VIDEO_CALLS)),
       Effect.orElseSucceed(() => false),
     ),
+    videoAvatar,
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
@@ -160,17 +169,19 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     // about Luke's output, so this is the one ask that tells him to stop.
     [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
       Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
-    // The video toggle asks for Luke's avatar or takes it down with the
-    // developer's own reason; the grant the ask draws never comes back here.
+    // The video toggle asks for Luke's avatar, as the developer chose him in
+    // Settings, or takes it down with the developer's own reason; the grant
+    // the ask draws never comes back here.
     [GATEWAY_METHOD.VOICE_SET_VIDEO]: (params) => {
       const request = Result.getOrUndefined(readEither(voiceSetVideoParamsSchema)(params));
       if (!request) return invalid("on must be a boolean");
-      return Effect.sync(() =>
-        carried({
-          requested: request.on
-            ? service.startAvatar()
-            : service.stopAvatar(AVATAR_STOP_REASON.USER),
-        }),
+      if (!request.on) {
+        return Effect.sync(() =>
+          carried({ requested: service.stopAvatar(AVATAR_STOP_REASON.USER) }),
+        );
+      }
+      return Effect.map(videoAvatar, (avatar) =>
+        carried({ requested: service.startAvatar(avatar) }),
       );
     },
     // What the host knows about why voice is or is not available, carrying no

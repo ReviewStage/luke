@@ -56,16 +56,16 @@ const LOAD_MODULE = "await import(process.argv[1]);";
  */
 const LOAD_ENVIRONMENT = { PATH: process.env.PATH ?? "" } as const;
 
-async function emitFromPlan(): Promise<{
+async function emitFromTask(): Promise<{
   readonly outputDirectory: string;
   readonly paths: readonly string[];
 }> {
-  const plan = await functionBundlePlan(WEB);
-  const result = await build({ ...plan.options, write: false });
+  const task = await functionBundlePlan(WEB);
+  const result = await build({ ...task.options, write: false });
   const contentsOf = new Map(result.outputFiles.map((file) => [file.path, file.contents] as const));
   const outputDirectory = mkdtempSync(join(tmpdir(), "luke-build-output-"));
   const functions: EmittedFunction[] = [
-    ...plan.functions.map((definition) => {
+    ...task.functions.map((definition) => {
       const contents = contentsOf.get(join(WEB, "dist-functions", `${definition.file}.js`));
       assert.ok(contents, definition.file);
       return {
@@ -89,7 +89,7 @@ async function emitFromPlan(): Promise<{
 test("every planned function and every rewrite lands on a .func carrying the plan's configuration", {
   timeout: 180_000,
 }, async () => {
-  const { outputDirectory, paths } = await emitFromPlan();
+  const { outputDirectory, paths } = await emitFromTask();
   const functions = await webFunctions(WEB);
   assert.deepEqual(
     paths,
@@ -118,7 +118,7 @@ test("every planned function and every rewrite lands on a .func carrying the pla
 });
 
 test("each .func loads with nothing above it available", { timeout: 180_000 }, async () => {
-  const { outputDirectory, paths } = await emitFromPlan();
+  const { outputDirectory, paths } = await emitFromTask();
   for (const path of paths) {
     const directory = functionDirectory(outputDirectory, path);
     const loaded = spawnSync(

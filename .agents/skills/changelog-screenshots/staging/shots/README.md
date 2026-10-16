@@ -38,19 +38,19 @@ stages one shot of `.context/shots/SPEC.md`. Only a fixture run stages one.
   invitations" with PR #214, a running "Invite emails") and their answers.
 
 Hooks into the app are marked `Throwaway:` in a comment: `act.ts`, `app.tsx`,
-`update-row.ts`, `planning/use-plans-tab.ts`, `planning/use-plan-looks.ts`,
-`desktop/plan-summary.tsx`, `desktop/plan-actions.tsx`, `tooltip.tsx`,
+`update-row.ts`, `tasks/use-tasks-tab.ts`, `tasks/use-task-looks.ts`,
+`desktop/task-summary.tsx`, `desktop/task-actions.tsx`, `tooltip.tsx`,
 `desktop/command-palette.tsx`, `repository-picture.tsx`,
 `settings/integrations-page.tsx`, `styles/index.css` (imports `shots.css`), and
-`planning/planning-fixture.ts` (exports its views for reuse).
+`tasks/tasks-fixture.ts` (exports its views for reuse).
 
 ## Filling a stub (A `call.ts`, D `inbox.ts`, E `changes.ts`, F `skills.ts`, H `pages.ts`)
 
 Each stub already stages its layout and says in its header what is left. Edit
 only that file (and add files beside it) so shots can be filled in parallel:
 
-1. Build the data with `ago()`/`hoursAgo()` times; reuse `shotPlanningView`,
-   `shotPlan`, `SHOT_ID`, and `codingAgentAnswers()`.
+1. Build the data with `ago()`/`hoursAgo()` times; reuse `shotTasksView`,
+   `shotTask`, `SHOT_ID`, and `codingAgentAnswers()`.
 2. Answer the acts the surface reads under `answers`, keyed by `ACT_KIND.*`.
    A loop that re-asks as soon as an answer lands gets its page once
    (`after === "0:0"`) and `NEVER` after.

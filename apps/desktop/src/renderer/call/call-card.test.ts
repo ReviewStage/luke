@@ -25,7 +25,7 @@ import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
  * tab's tile presses.
  */
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** The browser's stream, which jsdom has none of: it holds the tracks it was made from. */
 class FakeMediaStream {
@@ -39,7 +39,7 @@ const LISTENING: VoiceView = {
   ...IDLE_VOICE_VIEW,
   voiceStatus: LIVE_STATUS.LISTENING,
   listening: true,
-  callTaskId: PLAN_ID,
+  callTaskId: TASK_ID,
 };
 
 const CARD: CallCardInput = {
@@ -183,7 +183,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
       createElement(
         "div",
         { className: "call-tab" },
-        createElement(CallTabVideo, { planId: PLAN_ID }),
+        createElement(CallTabVideo, { planId: TASK_ID }),
       ),
       createElement(CallCardDock, {
         call: { ...CARD, video },

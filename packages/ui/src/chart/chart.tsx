@@ -17,7 +17,9 @@ import { cn } from "../cn.js";
 import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
-const THEMES = { light: "", dark: ".dark" } as const;
+// A dark series colour applies where the page is drawn in the dark theme
+// (`data-luke-theme`, `@luke/ui`'s `tokens/surface.ts`).
+const THEMES = { light: "", dark: '[data-luke-theme="dark"]' } as const;
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
 type TooltipNameType = number | string;

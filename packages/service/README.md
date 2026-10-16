@@ -224,7 +224,7 @@ URLs, beside the sign-in's.
 The page draws a fixed card per status and interpolates nothing the address
 brought it; the desktop's repository chip picks the installation up by
 reading the workspace's repositories again when the window next takes focus
-(`apps/desktop/src/renderer/planning/repository-chip.tsx`).
+(`apps/desktop/src/renderer/tasks/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
@@ -853,6 +853,21 @@ runs every agent without that provider, and neither Settings nor the
 composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
 
+**The workspace Linear connector.** A workspace's own Linear grant, which
+the New plan picker lists issues through and a plan started from an issue
+reads it through, is held on a connector of its own, named by
+`LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
+Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
+server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
+401. So the workspace's must be Connect's own Linear connector
+(`vercel connect create linear`), whose Linear API OAuth tokens the GraphQL
+API takes, and Linear's MCP server takes too, for the agents a workspace's
+grant is handed to. Give it the `read` scope at least, and user subjects.
+Without the variable, no workspace can connect Linear. Since Linear's MCP
+server takes those tokens too, `LINEAR_CONNECTOR_UID` may name the same
+connector, which keeps Luke one app in Linear; its Linear app must be public
+for a workspace of any other Linear organization to sign in.
+
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
 (`https://mcp.slack.com/.well-known/oauth-authorization-server`: Slack's
@@ -1027,9 +1042,11 @@ it which agent started it; `archive_agent` and `unarchive_agent`, which
 archive an idle agent of the workspace, never itself or one still working,
 on the rule the Archive agent menu keeps for the agent's starter, recording
 the archiving agent and its reason on the archived agent's row
-(`archived_by`), and bring one back; and `list_tasks`, the workspace's open
-tasks. A list, a read, or a start of an agent, a list of tasks, and
-`show_page` answer each thing's mention ready to write, `[@name](link)` under
+(`archived_by`), and bring one back; `read_page`, a page shown on any task
+of the workspace by its id, its HTML cut on a line to a bound, which a
+mention of a page points the agent at; and `list_tasks`, the workspace's
+open tasks. A list, a read, or a start of an agent, a list of tasks,
+`show_page`, and `read_page` answer each thing's mention ready to write, `[@name](link)` under
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
 task's link, so its replies, Inbox items, and plan notes draw them as chips.
@@ -1780,7 +1797,7 @@ a task deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.
 `readTask` is the read Luke starts and resumes from, with the
 conversation `attachTaskConversation` associated, and it moves nothing.
-`src/tasks/tasks.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
+`src/tasks/tasks.test.ts` and `apps/web/tests/tasks-app.test.ts` hold both halves
 against a real dialect.
 
 Luke's judgment is the hosted brain run over a task conversation (`plan`), which
@@ -2535,7 +2552,10 @@ echoed. `src/voice/avatar.ts` answers them in turn on one fiber of the
 session's scope, so a stop right behind its start closes what that start
 opened. A start mints a session through `src/voice/keyframe.ts`, one
 `POST /v1/sessions` on Keyframe's API under `KEYFRAME_API_KEY` naming the
-persona `LUKE_KEYFRAME_PERSONA_ID` (a stock persona), and hands its grant to
+persona the start asked for: a start names the avatar the Mac chose by its key
+(`@luke/features/video-avatar`), never a persona id, and `keyframe.ts` maps
+each key to Keyframe's stock persona for it, while a start naming none or the
+default mints `LUKE_KEYFRAME_PERSONA_ID` (a stock persona). It hands its grant to
 the device socket and nowhere else: a grant joins once, so each start mints
 its own and none is kept, and the log keeps only the room's host. The key is
 the bearer of that one request. A failure is a fixed kind and Keyframe's

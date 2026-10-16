@@ -64,6 +64,7 @@ export const CALL_KIND = {
   UNARCHIVE_AGENT: "unarchive-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
+  READ_PAGE: "read-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
   SHOW_IMAGE: "show-image",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
@@ -106,6 +107,7 @@ export const CALL_WORDS = {
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
+  [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
@@ -113,6 +115,35 @@ export const CALL_WORDS = {
 
 /** What a row of a call that ran on the developer's own Mac says of where it ran, beside its line. */
 const ON_YOUR_MAC = "On your Mac";
+
+/**
+ * How a call about one coding agent says what it did where its row names
+ * the agent by its chip: the verb alone, the chip standing in the place of
+ * "the coding agent", and whether the row still says its subject after the
+ * chip. Note that a read, an archive, and an unarchive say none, because
+ * their subject is the agent itself, which the chip already names, while a
+ * message and a start keep the words they sent as the line's preview.
+ */
+const AGENT_CALL_WORDS = {
+  [CALL_KIND.READ_AGENT]: { verb: "Read", subject: false },
+  [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged", subject: true },
+  [CALL_KIND.START_AGENT]: { verb: "Started", subject: true },
+  [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived", subject: false },
+  [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived", subject: false },
+} as const satisfies Partial<Record<CallKind, { verb: string; subject: boolean }>>;
+
+type AgentCallKind = keyof typeof AGENT_CALL_WORDS;
+
+/** Whether a call is about one coding agent, which its row may name by the agent's chip. */
+export function isAgentCallKind(kind: CallKind): kind is AgentCallKind {
+  return Object.hasOwn(AGENT_CALL_WORDS, kind);
+}
+
+/** How the line of a call about one coding agent reads where the agent's chip follows its verb: the verb alone, then the words it sent where it sent any. */
+export function agentCallLine(kind: AgentCallKind, subject: string | undefined): CallLine {
+  const words = AGENT_CALL_WORDS[kind];
+  return { verb: words.verb, subject: words.subject ? subject : undefined, code: false };
+}
 
 /** Whether a call is a shell command, wherever it ran: its line may say its description, and its body draws it behind a prompt. */
 export function isCommandKind(kind: CallKind): boolean {

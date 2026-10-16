@@ -19,7 +19,8 @@
  * beside it, so two plans of one name can be told apart, and an archived
  * plan says so. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
- * place naming an agent does (`agent-ref.tsx`), a subagent
+ * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
+ * says so, its own page, a subagent
  * its tab as the side panel's "+" would, a file in a tab of its own as one
  * chosen in a File tab's tree would, a Settings page opens as the Settings
  * sidebar's row for it does, and a setting lands on its row as the settings
@@ -72,16 +73,6 @@ import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
-import { refusalLine } from "../planning/file-tab-model";
-import { markReadItem } from "../planning/plan-menu-items";
-import { TAB_KIND, tabLook } from "../planning/tab-look";
-import { type ReadMarks, useReadMarks } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
-import { useWorkspaceMembers } from "../planning/use-workspace-members";
-import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { settingsPageOf } from "../settings/pages";
 import {
@@ -91,16 +82,27 @@ import {
   settingsSearchEntries,
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
+import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { agentTabLabel } from "../tasks/coding-agent-model";
+import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
+import { refusalLine } from "../tasks/file-tab-model";
+import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
+import { markReadItem } from "../tasks/task-menu-items";
+import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
+import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
+import type { TasksControl } from "../tasks/use-tasks-tab";
+import { useWorkspaceMembers } from "../tasks/use-workspace-members";
+import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { planOf } from "./plan-actions";
-import { changesOffers, panelEntries, planWorkers } from "./side-panel";
+import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
+import { taskOf } from "./task-actions";
 import { WorkspaceRef } from "./workspace-ref";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
   ALL: "all",
-  PLANS: "plans",
+  TASKS: "plans",
   AGENTS: "agents",
   PEOPLE: "people",
   FILES: "files",
@@ -118,7 +120,7 @@ const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 /** Each filter's chip, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
-  [PALETTE_FILTER.PLANS]: "Tasks",
+  [PALETTE_FILTER.TASKS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
@@ -129,7 +131,7 @@ const FILTER_LABEL = {
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
   [PALETTE_FILTER.ALL]: "Search tasks, agents, people, files, actions, and settings…",
-  [PALETTE_FILTER.PLANS]: "Search tasks…",
+  [PALETTE_FILTER.TASKS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
   [PALETTE_FILTER.PEOPLE]: "Search people…",
   [PALETTE_FILTER.FILES]: "Search files…",
@@ -158,7 +160,7 @@ const FILES_READ = {
  * which plan and repository it is of, and its files by path, or why they
  * were not listed.
  */
-type FilesHeld = { planId: string; repository: string } & FilesRead;
+type FilesHeld = { taskId: string; repository: string } & FilesRead;
 
 type FilesRead =
   | { read: typeof FILES_READ.READING }
@@ -219,6 +221,9 @@ const FILTER_HINT = {
 
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
+
+/** What an archived task's or agent's detail says of it. */
+const ARCHIVED_WORD = "Archived";
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
@@ -381,8 +386,8 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
 }
 
 /** A plan's muted words: its repository, and whether it is archived. */
-function planDetail(plan: TaskSummary, archived: boolean): string | undefined {
-  const words = [plan.repository, archived ? "Archived" : null].filter((word) => word !== null);
+function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
+  const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
@@ -394,29 +399,29 @@ function planDetail(plan: TaskSummary, archived: boolean): string | undefined {
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it.
  */
-function planRows(
-  plans: PlansControl,
+function taskRows(
+  tasks: TasksControl,
   members: readonly WorkspaceMember[] | undefined,
-  open: (planId: string) => void,
+  open: (taskId: string) => void,
 ): readonly PaletteRow[] {
-  const listedId = plans.workspace?.id;
+  const listedId = tasks.workspace?.id;
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
-  const creatorOf = (plan: TaskSummary) =>
-    teammateCreator(plan, {
-      members: plan.workspaceId === listedId ? members : undefined,
-      readerId: plans.me,
+  const creatorOf = (task: TaskSummary) =>
+    teammateCreator(task, {
+      members: task.workspaceId === listedId ? members : undefined,
+      readerId: tasks.me,
     });
-  const elsewhereOf = (plan: TaskSummary): Workspace | undefined =>
-    listedId === undefined || plan.workspaceId === listedId
+  const elsewhereOf = (task: TaskSummary): Workspace | undefined =>
+    listedId === undefined || task.workspaceId === listedId
       ? undefined
-      : plans.workspaces.find((each) => each.id === plan.workspaceId);
-  const row = (plan: TaskSummary, archived: boolean): PaletteRow => {
-    const elsewhere = elsewhereOf(plan);
-    const creator = creatorOf(plan);
-    const createdBy = plan.createdBy?.name ?? null;
+      : tasks.workspaces.find((each) => each.id === task.workspaceId);
+  const row = (task: TaskSummary, archived: boolean): PaletteRow => {
+    const elsewhere = elsewhereOf(task);
+    const creator = creatorOf(task);
+    const createdBy = task.createdBy?.name ?? null;
     return {
-      ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
-      detail: planDetail(plan, archived),
+      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name }),
+      detail: taskDetail(task, archived),
       workspace: elsewhere,
       endMark:
         creator === undefined ? undefined : (
@@ -426,82 +431,120 @@ function planRows(
           </>
         ),
       creator: createdBy ?? undefined,
-      terms: [plan.name, plan.repository, elsewhere?.name ?? null, createdBy].filter(
+      terms: [task.name, task.repository, elsewhere?.name ?? null, createdBy].filter(
         (term) => term !== null,
       ),
-      onChoose: () => open(plan.id),
+      onChoose: () => open(task.id),
     };
   };
   const listedFirst = (list: readonly TaskSummary[]) => [
-    ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
-    ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
+    ...list.filter((task) => listedId === undefined || task.workspaceId === listedId),
+    ...list.filter((task) => listedId !== undefined && task.workspaceId !== listedId),
   ];
   // The pinned stand first, as the sidebar's; the rest by their last
   // activity, as the sidebar, Home's Recent, and the row's time read it.
   const standing = [
-    ...plans.plans.filter((plan) => plan.pinnedAt !== undefined),
+    ...tasks.tasks.filter((plan) => plan.pinnedAt !== undefined),
     ...orderTasks(
-      plans.plans.filter((plan) => plan.pinnedAt === undefined),
+      tasks.tasks.filter((plan) => plan.pinnedAt === undefined),
       TASK_ORDER.UPDATED,
     ),
   ];
   return [
     ...listedFirst(standing).map((plan) => row(plan, false)),
-    ...listedFirst(plans.archived).map((plan) => row(plan, true)),
+    ...listedFirst(tasks.archived).map((plan) => row(plan, true)),
   ];
 }
 
 /** Shows one of the side panel's tabs, the version history put away first so the tab is not shown behind it. */
-function shownOverHistory(plans: PlansControl, show: () => void): void {
-  if (plans.history.open) plans.history.onClose();
+function shownOverHistory(tasks: TasksControl, show: () => void): void {
+  if (tasks.history.open) tasks.history.onClose();
   show();
 }
 
 /**
  * The open plan's Inbox and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
- * lists them, each in its row's look and words, found by its row's words,
- * and beside the plan's name; none while no plan is open. An agent opens as
+ * lists them, then its archived agents (`archivedAgentRows`), each in its
+ * row's look and words, found by its row's words, and beside the plan's
+ * name; none while no plan is open. An agent opens as
  * its notification's click opens it, the Inbox the same way, and a
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
-function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
-  const planId = plans.activePlanId;
-  if (planId === undefined) return [];
-  const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
-  const workers = planWorkers(workRowsOf(plans.work.conversation, plans.work.callLive));
-  const inbox = inboxEntries(plans.agents, () => plans.onShowInbox(planId));
-  const agents = agentEntries(plans.mainTabs, plans.agents).map((entry) => ({
+function agentRows(tasks: TasksControl, show: (pick: () => void) => void): readonly PaletteRow[] {
+  const taskId = tasks.activeTaskId;
+  if (taskId === undefined) return [];
+  const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
+  const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
+  const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
-    onPick: () => plans.onShowAgent(planId, entry.row.id),
+    onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
   // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsPlanPanel(plans)
+  const subagents = holdsPlanPanel(tasks)
     ? panelEntries({
-        panel: plans.sidePanel,
+        panel: tasks.sidePanel,
         kinds: [],
         workers,
         files: [],
-        changes: changesOffers(plans.agents, plans.sidePanel.changes),
-      }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }))
+        changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
+      }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
   const entries = [...inbox, ...agents, ...subagents];
-  return entries.map(({ row, endMark, onPick, agent }) => ({
+  const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
-    detail: [row.detail, planName].filter((word) => word !== undefined).join(" · ") || undefined,
+    detail: [row.detail, taskName].filter((word) => word !== undefined).join(" · ") || undefined,
     endMark,
     card:
       agent === undefined ? undefined : (
         <AgentCard
-          subject={agentSubject(plans.agents, agent.id, NOTHING_HELD, false)}
-          models={plans.agents.models}
+          subject={agentSubject(tasks.agents, agent.id, NOTHING_HELD, false)}
+          models={tasks.agents.models}
         />
       ),
-    terms: [...(row.terms ?? [row.label]), ...(planName === undefined ? [] : [planName])],
+    terms: [...(row.terms ?? [row.label]), ...(taskName === undefined ? [] : [taskName])],
     onChoose: () => show(onPick),
   }));
+  return [...standing, ...archivedAgentRows(tasks, taskName, show)];
+}
+
+/**
+ * The open plan's archived agents, in the order started, each in its tab's
+ * look and found by its name as a standing one is, its detail saying it is
+ * archived before the plan's name, and hanging its card. Note that one opens
+ * on its own page, as an archived agent the sidebar lists does, because its
+ * tab is gone from the plan's column and its page is where it is read and
+ * brought back.
+ */
+function archivedAgentRows(
+  tasks: TasksControl,
+  taskName: string | undefined,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
+  const { agents } = tasks;
+  return (agents.archived ?? []).map((agent) => {
+    const look = tabLook({
+      kind: TAB_KIND.AGENT,
+      name: agentTabLabel(agent, agents.models),
+      agent,
+    });
+    return {
+      ...look,
+      detail: [ARCHIVED_WORD, taskName].filter((word) => word !== undefined).join(" · "),
+      endMark: agentEndMark(agent, true),
+      card: (
+        <AgentCard
+          subject={agentSubject(agents, agent.id, NOTHING_HELD, false)}
+          models={agents.models}
+        />
+      ),
+      terms: [look.label, ...(taskName === undefined ? [] : [taskName])],
+      onChoose: () => show(() => tasks.agentView.onOpen(agent.id)),
+    };
+  });
 }
 
 /**
@@ -540,8 +583,8 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 }
 
 /** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
-function holdsPlanPanel(plans: PlansControl): boolean {
-  return plans.agentView.agentId === undefined;
+function holdsPlanPanel(tasks: TasksControl): boolean {
+  return tasks.agentView.agentId === undefined;
 }
 
 /**
@@ -576,14 +619,14 @@ function copyLinkRows(
  * them.
  */
 function panelTabRows(
-  plans: PlansControl,
+  tasks: TasksControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (plans.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(plans)) return [];
+  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(tasks)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
-    const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
+    const pick = () => shownOverHistory(tasks, () => tasks.sidePanel.onChoose(tab));
     return { icon: look.icon, label, terms: [label], onChoose: () => show(pick) };
   });
 }
@@ -597,12 +640,12 @@ function panelTabRows(
  * ⇧⌘U is Automations' here.
  */
 function readMarkRows(
-  plans: PlansControl,
+  tasks: TasksControl,
   reads: ReadMarks,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
-  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
-  const { task: plan } = plans.region;
+  if (tasks.region.kind !== DOCUMENT_REGION.READY) return [];
+  const { task: plan } = tasks.region;
   if (plan.id !== reads.watched) return [];
   const item = markReadItem({
     unread: reads.markedUnread(plan.id),
@@ -625,11 +668,11 @@ function readMarkRows(
  * no pin.
  */
 function planPinRows(
-  plans: PlansControl,
+  tasks: TasksControl,
   reads: ReadMarks,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
-  const plan = reads.watched === undefined ? undefined : planOf(plans, reads.watched);
+  const plan = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (plan === undefined || plan.archivedAt !== undefined) return [];
   const pinned = plan.pinnedAt !== undefined;
   const label = pinned ? "Unpin task" : "Pin task";
@@ -639,7 +682,7 @@ function planPinRows(
       icon: pinned ? <UnpinIcon /> : <PinIcon />,
       label,
       terms: [label],
-      onChoose: () => choose(() => plans.onMarkPlan(plan.id, mark)),
+      onChoose: () => choose(() => tasks.onMarkTask(plan.id, mark)),
     },
   ];
 }
@@ -651,11 +694,11 @@ function planPinRows(
  * pin, as an archived task's row offers none.
  */
 function agentPinRows(
-  plans: PlansControl,
+  tasks: TasksControl,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
-  const { agentId } = plans.agentView;
-  const agent = plans.listedAgents.standing.find((each) => each.id === agentId);
+  const { agentId } = tasks.agentView;
+  const agent = tasks.listedAgents.standing.find((each) => each.id === agentId);
   if (agent === undefined) return [];
   const pinned = agent.pinnedAt !== undefined;
   const label = pinned ? "Unpin agent" : "Pin agent";
@@ -664,7 +707,7 @@ function agentPinRows(
       icon: pinned ? <UnpinIcon /> : <PinIcon />,
       label,
       terms: [label],
-      onChoose: () => choose(() => plans.onPinAgent(agent.id, !pinned)),
+      onChoose: () => choose(() => tasks.onPinAgent(agent.id, !pinned)),
     },
   ];
 }
@@ -818,7 +861,7 @@ export function CommandPalette({
   available,
   tab,
   onTabChange,
-  plans,
+  tasks: plans,
   links,
   settings,
   readFiles,
@@ -826,7 +869,7 @@ export function CommandPalette({
   available: boolean;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
-  plans: PlansControl;
+  tasks: TasksControl;
   /** The links the window can copy now, the most specific first, and their copy (`useCopyLink`). */
   links: CopyLink;
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
@@ -835,7 +878,7 @@ export function CommandPalette({
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the plan's repository in one read, which the Files rows are. */
-  readFiles: (planId: string) => Promise<TasksTreeAnswer>;
+  readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   if (open && !available) setOpen(false);
@@ -902,7 +945,7 @@ export function CommandPalette({
   };
   // A plan, and an agent's tab, are always opened on the Plans tab, as a
   // press in the sidebar is.
-  const onPlans = (run: () => void) =>
+  const onTasks = (run: () => void) =>
     choose(() => {
       if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
       run();
@@ -958,16 +1001,16 @@ export function CommandPalette({
   const members = useWorkspaceMembers(plans.workspace);
   const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
-  const planId = plans.activePlanId;
+  const taskId = plans.activeTaskId;
   const repository =
-    [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.repository ?? null;
+    [...plans.tasks, ...plans.archived].find((task) => task.id === taskId)?.repository ?? null;
   // The files held are the open plan's repository's, or none of its.
   const held =
-    files !== undefined && files.planId === planId && files.repository === repository
+    files !== undefined && files.taskId === taskId && files.repository === repository
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsPlanPanel(plans) && planId !== undefined && repository !== null;
+  const filesOpen = holdsPlanPanel(plans) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
@@ -976,18 +1019,18 @@ export function CommandPalette({
   // stay the same. A read that answers after a later one was asked is not
   // kept, since it may list an older branch than the later one does.
   useEffect(() => {
-    if (!filesAsked || planId === undefined || repository === null || held !== undefined) return;
+    if (!filesAsked || taskId === undefined || repository === null || held !== undefined) return;
     filesAsk.current += 1;
     const ask = filesAsk.current;
-    setFiles({ planId, repository, read: FILES_READ.READING });
+    setFiles({ taskId, repository, read: FILES_READ.READING });
     const keep = (read: FilesRead) => {
-      if (filesAsk.current === ask) setFiles({ planId, repository, ...read });
+      if (filesAsk.current === ask) setFiles({ taskId, repository, ...read });
     };
-    readFiles(planId).then(
+    readFiles(taskId).then(
       (answer) => keep(filesOf(answer)),
       () => keep({ read: FILES_READ.MISSED, notice: FILES_MISSED_LINE }),
     );
-  }, [filesAsked, planId, repository, held, readFiles]);
+  }, [filesAsked, taskId, repository, held, readFiles]);
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? query : undefined;
@@ -1005,19 +1048,19 @@ export function CommandPalette({
   // while open: every row a tier matches ranks above the next tier's.
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
-    [PALETTE_FILTER.PLANS]: () => [
-      plans.signedIn ? planRows(plans, members, (id) => onPlans(() => plans.onSelect(id))) : [],
+    [PALETTE_FILTER.TASKS]: () => [
+      plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onPlans)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
-      peopleRows(members, plans.me, (userId) => onPlans(() => plans.personView.onOpen(userId))),
+      peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
     ],
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(plans, onPlans),
+        ...panelTabRows(plans, onTasks),
         ...readMarkRows(plans, reads, choose),
         ...planPinRows(plans, reads, choose),
         ...agentPinRows(plans, choose),
@@ -1028,7 +1071,7 @@ export function CommandPalette({
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
-    onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
+    onTasks(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
       ? (filesOpen ? matchedPaths : []).map((path) =>

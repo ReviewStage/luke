@@ -26,7 +26,11 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * as its chip (`linkMention`), a bare address among them, so an agent that
  * writes a file's GitHub page or a Linear issue's address is drawn as a
  * developer's mention of it is. The `@` still says which links a developer
- * placed, which a writer must keep and an agent is handed (`mentionsIn`).
+ * placed, which a writer must keep (`mentionLinksIn`). An agent is handed
+ * those and, of Luke's own kinds alone, a bare address too
+ * (`handedMentionsIn`), since a plan's or a section's address pasted among
+ * words is drawn as its chip and means the same; a bare GitHub page or a
+ * Linear issue's address is the words' own, and is handed nothing.
  *
  * The target is the address the thing has on the web, so a mention copied
  * out of Luke, into Slack, a pull request or a mail, still leads somewhere
@@ -117,6 +121,8 @@ const MENTION_SIGIL = "@";
 /** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
 const LINK = {
   TASK_STEP: "plan",
+  /** The steps a task's link is read under: `plan`, which every release writes, and `task`, the next spelling. */
+  TASK_STEPS: new Set(["plan", "task"]),
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
 } as const;
@@ -202,6 +208,15 @@ const INDENTED_LINE = /^(?: {4}|\t)/u;
 
 /** A line that opens an item of a list, whose following indented lines are the item's rather than code. */
 const LIST_ITEM_LINE = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:\s|$)/u;
+
+/** An autolink as CommonMark reads one, `<scheme:address>`: a scheme of two to thirty-two characters, and no space or angle bracket after it. */
+const AUTOLINK = /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*)>/gu;
+
+/** An address written bare, as GFM's autolinks read one: `http://` or `https://` at a line's start or after a space, an emphasis mark, or a `(`, up to a space or a `<`. */
+const BARE_ADDRESS = /(?<![^\s*_~(])https?:\/\/[^\s<]+/gu;
+
+/** The punctuation GFM leaves off a bare address's end, as the sentence's rather than the address's. */
+const TRAILING_PUNCTUATION: ReadonlySet<string> = new Set(["?", "!", ".", ",", ":", "*", "_", "~"]);
 
 const taskIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
@@ -456,7 +471,7 @@ function planFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
   if (first !== "" || workspace === "" || id === undefined) return undefined;
   if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
-  if (step !== LINK.TASK_STEP) return undefined;
+  if (step === undefined || !LINK.TASK_STEPS.has(step)) return undefined;
   if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
   const taskId = decodedPart(id);
   if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.TASK, taskId };
@@ -778,22 +793,6 @@ function readableLink(href: string): string {
   return name.length <= bound ? name : `…${name.slice(-(bound - 1))}`;
 }
 
-/**
- * Words pasted whole that are one page of an integration's, as the mention
- * they become and its readable name; nothing for any other words, a file of
- * the plan's repository among them, which `repository` names.
- */
-export function pastedLinkMention(
-  words: string,
-  repository: string | null,
-): { readonly mention: Mention; readonly name: string } | undefined {
-  const address = words.trim();
-  if (address === "" || /\s/u.test(address)) return undefined;
-  const mention = decodeMention(address, repository);
-  if (mention?.kind !== MENTION_KIND.LINK) return undefined;
-  return { mention, name: readableLink(mention.url) };
-}
-
 /** Whether a link's label is a mention's: it starts with `@`. */
 export function isMentionLabel(label: string): boolean {
   return label.startsWith(MENTION_SIGIL) && label.length > MENTION_SIGIL.length;
@@ -803,6 +802,14 @@ export function isMentionLabel(label: string): boolean {
 export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
+
+/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, and a coding agent. */
+const LUKE_KINDS: ReadonlySet<Mention["kind"]> = new Set([
+  MENTION_KIND.TASK,
+  MENTION_KIND.SECTION,
+  MENTION_KIND.PAGE,
+  MENTION_KIND.AGENT,
+]);
 
 /** What a bare link's chip names a plan, a page, and an agent by, since its address holds no name of theirs. */
 const BARE_NAME = {
@@ -844,6 +851,26 @@ function bareName(mention: Mention): string {
     case MENTION_KIND.AGENT:
       return BARE_NAME.AGENT;
   }
+}
+
+/**
+ * Words pasted whole that are one address of Luke's own, a plan's, a
+ * section's, a page's, or an agent's, or one page of an integration's, as
+ * the mention they become and the name its bare address says of it
+ * (`bareName`), which a place holding the thing's own name may better;
+ * nothing for any other words, a file of the plan's repository among them,
+ * which `repository` names.
+ */
+export function pastedLinkMention(
+  words: string,
+  repository: string | null,
+): { readonly mention: Mention; readonly name: string } | undefined {
+  const address = words.trim();
+  if (address === "" || /\s/u.test(address)) return undefined;
+  const mention = decodeMention(address, repository);
+  if (mention === undefined) return undefined;
+  if (mention.kind !== MENTION_KIND.LINK && !LUKE_KINDS.has(mention.kind)) return undefined;
+  return { mention, name: bareName(mention) };
 }
 
 /** Whether a link's label is its target spelled out, as a bare address's is: the same address, however its characters are encoded. */
@@ -1024,6 +1051,93 @@ function destinationEnd(
   const closing = words.indexOf(quote, titleAt + 1);
   if (words[closing + 1] !== ")") return { stop: at };
   return { target, end: closing + 1 };
+}
+
+/** A bare address's end as GFM reads it: the sentence's punctuation after it left off, and a `)` that closes no `(` of its own. */
+function bareAddressOf(spelled: string): string {
+  let opens = 0;
+  let closes = 0;
+  for (const character of spelled) {
+    if (character === "(") opens += 1;
+    else if (character === ")") closes += 1;
+  }
+  // Note that the end is read back one character at a time, so a long run of punctuation costs one pass.
+  let end = spelled.length;
+  while (end > 0) {
+    const last = spelled[end - 1] ?? "";
+    if (last === ")" && closes > opens) closes -= 1;
+    else if (!TRAILING_PUNCTUATION.has(last)) break;
+    end -= 1;
+  }
+  return spelled.slice(0, end);
+}
+
+/**
+ * Every link written bare into the words, outside code: an inline
+ * link whose label is its target spelled out (`isBareLabel`), an autolink
+ * (`<address>`), and an address standing alone as GFM links one, each with
+ * its address as its label. An address inside any other link or picture is
+ * that link's, and is no bare one.
+ */
+function bareLinksIn(text: string): readonly MentionLink[] {
+  const found: MentionLink[] = [];
+  const taken: TextStretch[] = [];
+  for (let at = text.indexOf("["); at !== -1; at = text.indexOf("[", at + 1)) {
+    const close = labelEnd(text, at);
+    if (close === undefined || text[close + 1] !== "(") continue;
+    const link = destinationEnd(text, close + 2);
+    if (!("end" in link)) continue;
+    const picture = opensPicture(text, at);
+    taken.push({ start: picture ? at - 1 : at, end: link.end + 1 });
+    const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
+    if (picture || isMentionLabel(label) || !isBareLink(label, link.target)) continue;
+    found.push({ start: at, end: link.end + 1, label: link.target, target: link.target });
+  }
+  const isTaken = (start: number) =>
+    taken.some((stretch) => start >= stretch.start && start < stretch.end);
+  for (const autolink of text.matchAll(AUTOLINK)) {
+    // A link's destination between angle brackets is that link's, and no autolink.
+    if (isTaken(autolink.index)) continue;
+    const target = autolink[1] ?? "";
+    const end = autolink.index + autolink[0].length;
+    taken.push({ start: autolink.index, end });
+    found.push({ start: autolink.index, end, label: target, target });
+  }
+  for (const spelled of text.matchAll(BARE_ADDRESS)) {
+    const start = spelled.index;
+    if (isTaken(start)) continue;
+    const target = bareAddressOf(spelled[0]);
+    found.push({ start, end: start + target.length, label: target, target });
+  }
+  return found.filter((link) => !insideCode(text, link.start));
+}
+
+/**
+ * Every mention an agent is handed of the words, in order, standing outside
+ * code: each `@` link whose target names a mention (`mentionsIn`), and each
+ * address of Luke's own written bare (`bareLinksIn`), a plan's, a section's,
+ * a page's, or an agent's, as the window draws either as its chip. A bare
+ * address of any other kind, a file's GitHub page or a Linear issue's, is
+ * the words' own, and is handed nothing. At most `limit` are read, across
+ * both forms; any past them stay words.
+ */
+export function handedMentionsIn(
+  text: string,
+  repository: string | null,
+  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+): readonly MentionInWords[] {
+  const written = [...mentionLinksIn(text), ...bareLinksIn(text)].sort(
+    (first, second) => first.start - second.start,
+  );
+  const found: MentionInWords[] = [];
+  for (const link of written) {
+    if (found.length === limit) break;
+    const mention = decodeMention(link.target, repository);
+    if (mention === undefined) continue;
+    if (isMentionLabel(link.label) || LUKE_KINDS.has(mention.kind))
+      found.push({ ...link, mention });
+  }
+  return found;
 }
 
 /**

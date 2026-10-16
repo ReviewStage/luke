@@ -104,6 +104,10 @@
             ],
             "additionalProperties": false
           },
+          "sentAt": {
+            "type": "number",
+            "minimum": 0
+          },
           "arrivedIn": {
             "type": "object",
             "properties": {

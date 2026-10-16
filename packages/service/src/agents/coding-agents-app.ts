@@ -663,7 +663,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   const pin = readEither(codingAgentPinRequestSchema)(body);
   if (Result.isSuccess(pin)) {
     const pinned = yield* hostedStoreOrUnavailable(
-      pinCodingAgent(userId, agent.id, pin.success.pinned),
+      pinCodingAgent(userId, agent.id, pin.success.pinned, pin.success.position),
     );
     if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-luke-profile="desktop" data-luke-theme="system">
   <head>
     <meta charset="UTF-8" />
     <!--
@@ -9,10 +9,13 @@
       log), but the wildcard stays: LiveKit's client fails a refused join over
       to the regional hosts the project's /settings/regions answers, which sit
       on other *.livekit.cloud names no tighter source covers.
+      img-src names Keyframe's public storage for the stock avatars' cover
+      photos, which Settings › Experimental's Avatar menu loads as it draws
+      (`@luke/features/video-avatar`'s VIDEO_AVATAR_COVER_ORIGIN).
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; media-src 'self' blob: mediastream:; connect-src https://us.i.posthog.com https://us-assets.i.posthog.com wss://*.livekit.cloud https://*.livekit.cloud; worker-src blob:; object-src 'none'; frame-src luke-page:"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; media-src 'self' blob: mediastream:; connect-src https://us.i.posthog.com https://us-assets.i.posthog.com wss://*.livekit.cloud https://*.livekit.cloud; worker-src blob:; object-src 'none'; frame-src luke-page:"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Luke</title>

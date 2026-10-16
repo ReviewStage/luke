@@ -23,8 +23,8 @@ import { afterEach, beforeAll, test } from "vitest";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { plansControl, waitingOf } from "#testing/plans-control";
-import type { InboxChoice } from "../planning/use-plans-tab";
+import { tasksControl, waitingOf } from "#testing/tasks-control";
+import type { InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
 /**
@@ -178,18 +178,18 @@ async function inbox(options: {
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     return createElement(DesktopInbox, {
-      plans: plansControl({
+      tasks: tasksControl({
         workspace: options.listed,
-        plans: [PLAN],
+        tasks: [PLAN],
         inbox:
           options.planItems.length === 0
             ? []
             : [{ taskId: PLAN.id, items: options.planItems.map(waitingOf) }],
-        inboxPlans:
+        inboxTasks:
           options.planItems.length === 0
             ? []
             : [{ taskId: PLAN.id, items: options.planItems.length, updatedAt: 2_000 }],
-        inboxPlanless: sweep === undefined ? [] : [waitingSweep(sweep.item, sweep.workspaceId)],
+        inboxTaskless: sweep === undefined ? [] : [waitingSweep(sweep.item, sweep.workspaceId)],
         inboxView: {
           open: true,
           chosen,

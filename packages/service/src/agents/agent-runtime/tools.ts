@@ -68,6 +68,7 @@ const TOOL_ROLES = {
   [AGENT_TOOL.OPEN_PULL_REQUEST]: [CODER],
   [AGENT_TOOL.LOAD_SKILL]: [BRAIN, CODER],
   [AGENT_TOOL.SHOW_PAGE]: [BRAIN, CODER],
+  [AGENT_TOOL.READ_PAGE]: [BRAIN, CODER],
   [AGENT_TOOL.SHOW_IMAGE]: [CODER, CODER_WORKER],
   [AGENT_TOOL.SLEEP]: [CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };

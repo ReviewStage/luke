@@ -7,8 +7,8 @@ import {
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { AppInboxTask, AppInboxWaitingItem } from "@luke/host/app-state";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { agentStillWriting } from "../planning/coding-agent-model";
-import { INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
+import { agentStillWriting } from "../tasks/coding-agent-model";
+import { INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
 
 /**
  * factory-model.ts -- what the Factory tab draws: the task on a call with Luke, the agents building tasks, and what ships, each station leading with what waits on the developer, from the plan list, main's Inbox read, and the call.
@@ -112,7 +112,7 @@ export interface FactoryBlock {
 
 /** A pull request merged in the last day, and its task's last activity. */
 export interface FactoryShipped {
-  readonly plan: TaskSummary;
+  readonly task: TaskSummary;
   readonly pullRequest: TaskPullRequestLine;
   readonly at: number;
 }
@@ -204,7 +204,7 @@ function checksFailing(pullRequest: TaskPullRequestLine): boolean {
 }
 
 /** Where one plan stands: what of it stops, works, blocks, and shipped. */
-function placePlan(plan: TaskSummary, input: FactoryInput) {
+function placeTask(plan: TaskSummary, input: FactoryInput) {
   const agents = plan.agents?.agents ?? [];
   const items = input.waiting.find((each) => each.taskId === plan.id)?.items ?? [];
   const questions = items.map((item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan, item }));
@@ -233,7 +233,7 @@ function placePlan(plan: TaskSummary, input: FactoryInput) {
     input.now - at < LOOKBACK_MS
       ? pullRequestsOf(plan)
           .filter((pullRequest) => pullRequest.state === PULL_REQUEST_STATE.MERGED)
-          .map((pullRequest): FactoryShipped => ({ plan, pullRequest, at }))
+          .map((pullRequest): FactoryShipped => ({ task: plan, pullRequest, at }))
       : [];
   return { questions, failed, working, blocked, shipped };
 }
@@ -298,7 +298,7 @@ function kindsInOrder<T extends { readonly kind: string }>(
 /** The board as it stands now. */
 export function factoryBoard(input: FactoryInput): FactoryBoard {
   const plans = input.plans.filter((plan) => plan.archivedAt === undefined);
-  const placed = plans.map((plan) => placePlan(plan, input));
+  const placed = plans.map((plan) => placeTask(plan, input));
   const oneOff = placeOneOff(input);
   const stops = [
     ...placed.flatMap((each) => [...each.questions, ...each.failed]),
@@ -342,19 +342,19 @@ export function factoryWaiting(
   read: readonly InboxListed[],
   main: readonly AppInboxTask[],
 ): AppInboxTask[] {
-  const byPlan = new Map<string, Map<string, AppInboxWaitingItem>>();
+  const byTask = new Map<string, Map<string, AppInboxWaitingItem>>();
   const add = (planId: string, item: AppInboxWaitingItem) => {
-    const items = byPlan.get(planId) ?? new Map<string, AppInboxWaitingItem>();
+    const items = byTask.get(planId) ?? new Map<string, AppInboxWaitingItem>();
     if (!items.has(item.id)) items.set(item.id, item);
-    byPlan.set(planId, items);
+    byTask.set(planId, items);
   };
   for (const { holder, item } of read) {
-    if (holder.kind !== INBOX_HOLDER.PLAN) continue;
+    if (holder.kind !== INBOX_HOLDER.TASK) continue;
     const { id, agentId, title, postedAt } = item;
-    add(holder.plan.id, { id, agentId, title, postedAt });
+    add(holder.task.id, { id, agentId, title, postedAt });
   }
   for (const { taskId: planId, items } of main) for (const item of items) add(planId, item);
-  return [...byPlan].map(([planId, items]) => ({ taskId: planId, items: [...items.values()] }));
+  return [...byTask].map(([planId, items]) => ({ taskId: planId, items: [...items.values()] }));
 }
 
 /**
@@ -368,7 +368,7 @@ export function factoryOneOffWaiting(
   main: readonly AppInboxWaitingItem[],
 ): FactoryOneOffItem[] {
   const fromRead = read.flatMap(({ holder, item }) => {
-    if (holder.kind === INBOX_HOLDER.PLAN) return [];
+    if (holder.kind === INBOX_HOLDER.TASK) return [];
     const { id, agentId, title, postedAt } = item;
     return [{ agentId, item: { id, agentId, title, postedAt } }];
   });

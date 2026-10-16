@@ -14,11 +14,11 @@
  */
 
 import type { PageLine } from "@luke/features/page-wire";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";
 import { SHOT_PAGE_ID, SHOT_PAGE_TITLE, SHOT_PAGE_VERSIONS } from "./page-html";
-import { shotPlanningView } from "./plan-document";
+import { shotTasksView } from "./plan-document";
 import type { ShotSpec } from "./shot-spec";
 
 /** The page the Page tab opens on. */
@@ -44,7 +44,7 @@ function shotPages(): PageLine[] {
 
 export function pagesShot(): ShotSpec {
   return {
-    planning: shotPlanningView({ extra: { pages: shotPages() } }),
+    tasks: shotTasksView({ extra: { pages: shotPages() } }),
     sidePanel: { ...FIXTURE_CLOSED_PANEL, width: 920 },
     answers: codingAgentAnswers(),
     layout: { sidebarCollapsed: true, sidePanelTabs: [{ page: PAGE_ID }] },

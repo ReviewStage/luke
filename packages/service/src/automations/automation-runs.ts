@@ -54,6 +54,7 @@ import { type StartServices, startCodingAgent } from "../agents/coder-host/start
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { fenceable } from "../agents/fenced-text.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
@@ -172,15 +173,6 @@ function firingSentence(automation: Automation, run: ActedRun): string {
     case AUTOMATION_FIRING.WEBHOOK:
       return "its webhook was called";
   }
-}
-
-/**
- * Text written by someone other than the developer, its angle brackets and
- * ampersands spelled as entities, so it cannot close the fence it is read
- * inside and speak outside it.
- */
-function fenceable(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 /**

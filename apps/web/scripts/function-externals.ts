@@ -26,8 +26,8 @@ if (mode !== MODE.WRITE) {
   exit(2);
 }
 
-const plan = await functionBundlePlan(WEB);
-const result = await build({ ...plan.options, write: false });
+const task = await functionBundlePlan(WEB);
+const result = await build({ ...task.options, write: false });
 const actual = externalsByBundle(result.metafile, WEB);
 await writeFile(join(WEB, FUNCTION_EXTERNALS_FILE), externalsSource(actual));
 // biome-ignore lint/suspicious/noConsole: a script's output is its log.

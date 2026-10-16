@@ -48,11 +48,13 @@ import {
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
+  READ_PAGE_TOOL,
   runArchiveAgent,
   runListAgents,
   runListTasks,
   runMessageAgent,
   runReadAgent,
+  runReadPage,
   runStartAgent,
   runUnarchiveAgent,
   START_AGENT_TOOL,
@@ -245,6 +247,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
 - look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
+- read_page reads a page shown on any task of the workspace by its id, its HTML as it stands, before you revise it or tell the developer what it shows.
 - list_agents lists the coding agents of this task's workspace, or of one task of it (this task with thisTask, another by its taskId), each with its id, its title as the developer sees it, its status, what it last did, its task, and whether it is archived.
 - read_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
@@ -551,6 +554,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...READ_PAGE_TOOL,
+    run: (call, input) => runReadPage(call.agents, input),
   },
   {
     ...END_CALL_TOOL,

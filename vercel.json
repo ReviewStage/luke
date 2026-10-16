@@ -73,6 +73,14 @@
           "dest": "/api/default.js?route=plans/edit&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/comments/([^/]+)",
+          "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/comments",
+          "dest": "/api/default.js?route=plans/comments&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/attachments/([^/]+)",
           "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
         },

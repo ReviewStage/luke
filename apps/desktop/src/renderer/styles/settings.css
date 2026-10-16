@@ -338,7 +338,7 @@
   bottom: calc(100% + 6px);
 }
 
-.settings-picker .settings-picker-menu .plan-compose-menu-list {
+.settings-picker .settings-picker-menu .task-compose-menu-list {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
@@ -692,6 +692,23 @@
 .settings-row-mark > :is(svg, img) {
   width: 20px;
   height: 20px;
+}
+
+/* A row that belongs to the row above it, as a workspace's GitHub accounts
+   belong to GitHub's: inset to the words of its parent, past the parent's
+   mark and gap, so its hairline starts there too and the card reads as one
+   provider with its accounts under it. Its own mark is a tile a step
+   smaller than a provider's. */
+.settings-card > .settings-row.settings-row-nested {
+  min-height: 44px;
+  margin-left: calc(var(--space-16) + 20px + var(--space-12));
+  padding-left: 0;
+}
+
+.settings-row-nested > .settings-row-mark > .workspace-tile {
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
 }
 
 /* Where a row's subject stands, under its name: connected with the dot a

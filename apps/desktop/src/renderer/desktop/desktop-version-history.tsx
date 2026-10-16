@@ -17,7 +17,13 @@ import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
-import { centreWithin } from "../planning/code-pane";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { RetryRowLabel } from "../retry-button";
+import type { DialogConfirm } from "../settings/confirm-dialog";
+import { Shortcut } from "../shortcut";
+import { Skeleton, SkeletonRegion } from "../skeleton";
+import { BusyLabel } from "../spinner";
+import { centreWithin } from "../tasks/code-pane";
 import {
   type ChangedSection,
   changedSections,
@@ -31,25 +37,19 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-} from "../planning/plan-history-model";
-import type { MentionedPlan } from "../planning/plan-mentions";
-import { useMinute } from "../planning/plan-time";
-import { RelativeTime } from "../planning/relative-time";
+} from "../tasks/plan-history-model";
+import type { MentionedTask } from "../tasks/plan-mentions";
+import { RelativeTime } from "../tasks/relative-time";
+import { useMinute } from "../tasks/task-time";
 import {
   HISTORY_READ,
   type OpenedSections,
   type PlanHistoryControl,
   type ViewedVersion,
-} from "../planning/use-plan-history";
-import type { PlansControl } from "../planning/use-plans-tab";
-import { useFormerMembers, useWorkspaceMembers } from "../planning/use-workspace-members";
-import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { RetryRowLabel } from "../retry-button";
-import type { DialogConfirm } from "../settings/confirm-dialog";
-import { Shortcut } from "../shortcut";
-import { Skeleton, SkeletonRegion } from "../skeleton";
-import { BusyLabel } from "../spinner";
+} from "../tasks/use-plan-history";
+import type { TasksControl } from "../tasks/use-tasks-tab";
+import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
+import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
@@ -95,7 +95,7 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open plan's
- * (`planVersionSubject`), or the account's plan template's, whose versions
+ * (`taskVersionSubject`), or the account's plan template's, whose versions
  * are the developer's alone (`../settings/plan-template-history.tsx`).
  */
 
@@ -124,7 +124,7 @@ export interface VersionSubject {
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
   /** The plan the versions are of, which their mentions are read against; none for the account's own template. */
-  readonly plan?: MentionedPlan | undefined;
+  readonly task?: MentionedTask | undefined;
 }
 
 /** What the page says while the subject has no revision yet. */
@@ -250,7 +250,7 @@ function RevisionRow({
             <button
               ref={ellipsis}
               type="button"
-              className="sidebar-plan-mark"
+              className="sidebar-task-mark"
               aria-label={ACTIONS_LABEL}
               {...menu.trigger()}
               onContextMenu={showMenu}
@@ -533,7 +533,7 @@ function VersionPage({
         title={subject.title}
         noun={subject.noun}
         section={section}
-        plan={subject.plan}
+        task={subject.task}
       />
     );
   }
@@ -575,32 +575,32 @@ function VersionPage({
 }
 
 /** The open plan's history as the view's subject: its name, whether it is archived, its agents, and the places in the window its revisions were written. */
-export function planVersionSubject(plans: PlansControl): VersionSubject {
-  const { region, boundFor } = plans;
-  const plan = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
-  const workspace = plans.workspaces.find((each) => each.id === plan?.workspaceId);
+export function taskVersionSubject(tasks: TasksControl): VersionSubject {
+  const { region, boundFor } = tasks;
+  const task = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
+  const workspace = tasks.workspaces.find((each) => each.id === task?.workspaceId);
   return {
     workspace,
     // A version's mentions are read against the plan as it stands, as its page reads them.
-    plan:
-      plan === undefined
+    task:
+      task === undefined
         ? undefined
         : {
-            planId: plan.id,
-            place: { workspace: workspace?.slug ?? plan.workspaceId, repository: plan.repository },
+            taskId: task.id,
+            place: { workspace: workspace?.slug ?? task.workspaceId, repository: task.repository },
             anchors: new Set(
-              sectionAnchors(planSections(plan.document.body).map((section) => section.heading)),
+              sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
             ),
           },
-    versions: plans.history,
+    versions: tasks.history,
     noun: "plan",
-    title: plan?.name,
-    restorable: plan?.archivedAt === undefined,
-    shown: plans.shown,
-    agents: plans.agents.agents ?? [],
+    title: task?.name,
+    restorable: task?.archivedAt === undefined,
+    shown: tasks.shown,
+    agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
     onShowSource:
-      boundFor === undefined ? undefined : (source) => plans.onShowSource(boundFor, source),
+      boundFor === undefined ? undefined : (source) => tasks.onShowSource(boundFor, source),
     own: false,
   };
 }
@@ -643,7 +643,7 @@ export function DesktopVersionHistory({
   const members = useWorkspaceMembers(subject.workspace);
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
-  const linked = subject.plan;
+  const linked = subject.task;
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
@@ -756,7 +756,7 @@ export function DesktopVersionHistory({
                                 linkOf(
                                   {
                                     kind: LINK_PLACE.VERSION,
-                                    planId: linked.planId,
+                                    planId: linked.taskId,
                                     revision: line.seq,
                                   },
                                   linked.place.workspace,

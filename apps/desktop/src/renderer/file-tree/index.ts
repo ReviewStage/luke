@@ -27,7 +27,7 @@ import {
  * Pierre then draws the tree in a shadow root of its own, virtualised, so a
  * folder of thousands of entries draws only the rows in view; the panel's
  * look reaches it through the `--trees-*` properties the host element sets
- * (`styles/planning.css`), which a shadow root inherits.
+ * (`styles/tasks.css`), which a shadow root inherits.
  *
  * A file opens on a press, or on Return where the tree's keyboard stands on
  * it, read off the row Pierre drew, since Pierre tells a selection and not

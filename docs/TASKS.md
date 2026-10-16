@@ -159,10 +159,11 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   address as a member or an admin and sees the invitations still pending,
   each with its accept link to copy and send and a Cancel, under the Mac's
   own Better Auth session; an owner or admin removes a member, and anyone but
-  an owner leaves. Its Integrations group holds the GitHub row: for an owner
-  or admin, Connect, or once connected, "Connected" with one Manage menu
-  holding "Choose repositories on GitHub" and Disconnect; a member reads it
-  alone. Every way into Settings at a place takes one typed link,
+  an owner leaves. Its Integrations group holds the GitHub row, with every
+  connected GitHub account inset under it, Connected or suspended: for an
+  owner or admin, Connect, or once connected, one "Manage on GitHub", which
+  opens the GitHub page where accounts are added and repositories chosen;
+  a member reads it alone. Linear follows, its Disconnect in its ⋯. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@luke/settings/settings-views`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
   chosen workspace's tasks alone, New task starts in it, the repository chip
@@ -191,9 +192,17 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-task page shows.
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
-  while any task is pinned, newest pinned first, which no view filters. A
+  while any task is pinned, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
-  same way, and leaves its place among the tasks. ⌘K offers Pin task or
+  same way, and leaves its place among the tasks. Its rows, tabs pinned to
+  the sidebar among them, are dragged up and down it to the order the
+  developer wants, each drop drawn at once and put back with a toast when
+  the service refuses it; a pin not yet dragged stands on top, newest pinned
+  first. The order is fractional indexing (`@luke/features/pin-order`): a
+  dropped pin takes a key between its new neighbours', so one drop writes one
+  pin. A task's or an agent's place is the account's own, beside its pin, and
+  follows it to every Mac; a pinned tab's is this Mac's, as the tab's pin is.
+  A folded Pinned is not dragged. ⌘K offers Pin task or
   Unpin task for the task on screen, through its row menu's own Pin, and
   none for an archived task.
 - An archived task leaves the list. View options' **Archived tasks** turns
@@ -335,7 +344,7 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   with no mark, from another Mac, is unread once anything has been saved in
   it since it started.
 - The task's name, drawn as its title in the look of a `#` heading
-  (`planning/plan-title.tsx`), over its text, the saved `body` rendered as
+  (`planning/task-title.tsx`), over its text, the saved `body` rendered as
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
   The text is cut into sections as the service cuts it (`planSections` in
@@ -1289,7 +1298,7 @@ the exact shape.
 
 | Part | Reuse | New |
 | --- | --- | --- |
-| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
+| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
@@ -1368,12 +1377,12 @@ changes when a check is run, not when one is planned.
   the microphone row, and the captions during a call
   have never been seen running. `./scripts/evidence.sh` captures the window
   on the Tasks tab over a synthetic task
-  (`app-smoke-planning.png`, from `--profile planning`), on the
-  task's whiteboard (`app-smoke-planning-board.png`, from
-  `--profile planning-board`), on its transcript mid-call
-  (`app-smoke-planning-transcript.png`, from
-  `--profile planning-transcript`), on its Work tab mid-call
-  (`app-smoke-planning-work.png`, from `--profile planning-work`),
+  (`app-smoke-tasks.png`, from `--profile tasks`), on the
+  task's whiteboard (`app-smoke-tasks-board.png`, from
+  `--profile tasks-board`), on its transcript mid-call
+  (`app-smoke-tasks-transcript.png`, from
+  `--profile tasks-transcript`), on its Work tab mid-call
+  (`app-smoke-tasks-work.png`, from `--profile tasks-work`),
   and over
   the synthetic task list with none open (`app-smoke-expanded.png`, the
   window opening on Tasks), but neither
