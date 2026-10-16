@@ -58,8 +58,9 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
  * release is downloaded; or, once installing it failed, the download from
  * the releases page that Settings offers in its place, in the failure's red,
  * its hint saying what went wrong. One word each, so the account's name
- * keeps its room. It draws nothing in any other state, so the row carries no
- * control with nothing to do.
+ * keeps its room, and a narrow sidebar draws the glyph alone, named still
+ * and its hint saying the rest. It draws nothing in any other state, so the
+ * row carries no control with nothing to do.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
@@ -67,9 +68,14 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
   if (update.status === UPDATE_STATUS.READY) {
     return (
       <Tooltip label={`Restart to update to ${update.latestVersion}`}>
-        <button type="button" className="sidebar-update" onClick={updates.onInstall}>
+        <button
+          type="button"
+          className="sidebar-update"
+          aria-label="Restart"
+          onClick={updates.onInstall}
+        >
           <UpdateIcon />
-          Restart
+          <span className="sidebar-update-word">Restart</span>
         </button>
       </Tooltip>
     );
@@ -82,9 +88,10 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
         type="button"
         className="sidebar-update"
         data-failed="true"
+        aria-label="Download"
         onClick={updates.onOpenLatest}
       >
-        Download
+        <span className="sidebar-update-word">Download</span>
         <ExternalIcon />
       </button>
     </Tooltip>

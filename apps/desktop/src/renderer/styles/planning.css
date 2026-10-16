@@ -2072,9 +2072,33 @@ button.skill-chip:hover,
   row-gap: var(--space-8);
 }
 
+/* A box answered in words alone holds its round Send at the field's end
+   once the card is narrow, so the field keeps to one line and the thread
+   above it keeps its room. */
+.inbox-answer {
+  position: relative;
+}
+
 @container composer (max-width: 299px) {
   .inbox-answer-foot > .inbox-answer-quiet {
     display: none;
+  }
+
+  .inbox-answer:not([data-presses]) > textarea {
+    padding: var(--space-12) calc(30px + 2 * var(--space-6)) var(--space-12) var(--space-12);
+  }
+
+  .inbox-answer:not([data-presses]) > textarea::placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inbox-answer:not([data-presses]) > .inbox-answer-foot {
+    position: absolute;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    padding: 0;
   }
 
   .inbox-presses {

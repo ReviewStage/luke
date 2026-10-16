@@ -343,7 +343,7 @@ function FactoryRow({
   );
 }
 
-/** One station: its glyph, name, and the count of its rows, what waits on the developer first and then its work, or a line saying it holds nothing. */
+/** One station: its glyph, name, and the count of its rows, what waits on the developer first and then its work, or a line saying it holds nothing, marked idle so it keeps to its words. */
 function Station({
   step,
   needs = [],
@@ -356,7 +356,12 @@ function Station({
   const { name, Icon, idle } = STEPS[step];
   const held = needs.length + rows.length;
   return (
-    <section className="factory-step" data-step={step} aria-label={name}>
+    <section
+      className="factory-step"
+      data-step={step}
+      data-idle={held === 0 ? "" : undefined}
+      aria-label={name}
+    >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
         <span className="factory-name">{name}</span>

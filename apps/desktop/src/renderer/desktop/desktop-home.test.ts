@@ -27,6 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
@@ -200,6 +201,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 /** Every door the page opens, in order. */
@@ -645,4 +647,19 @@ test("a recent task a teammate created wears their face before its time, and the
     return face === null ? [] : [[row.querySelector(".sidebar-plan-name")?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});
+
+test("a row whose title runs long keeps the task or repository it is about in sight: the title gives way, and what it is about keeps a floor", async () => {
+  const { page } = mount();
+  await settle();
+  const style = layContainersAt({});
+  const abouts = [...page.querySelectorAll(".home-row-context")];
+  assert.equal(abouts.length, 8, "both sections' rows say what they are about");
+  for (const about of abouts) {
+    const title =
+      about.parentElement?.querySelector(".sidebar-plan-name") ?? assert.fail("a title");
+    assert.notEqual(getComputedStyle(title).flexShrink, "0", "the title gives way");
+    assert.notEqual(getComputedStyle(about).minWidth, "0px", "what it is about keeps a floor");
+  }
+  style.remove();
 });

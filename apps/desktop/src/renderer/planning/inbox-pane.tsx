@@ -863,6 +863,8 @@ function AnswerBox({
     <div className="agent-composer">
       {knownResponse(item.response) ? (
         <PromptInput
+          className="inbox-answer"
+          data-presses={byPress ? "" : undefined}
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
         >
@@ -1083,9 +1085,14 @@ export function InboxPane({
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
           <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-            <button type="button" className="toolbar-button inbox-back" onClick={onBack}>
+            <button
+              type="button"
+              className="toolbar-button inbox-back"
+              aria-label="Inbox"
+              onClick={onBack}
+            >
               <BackIcon />
-              Inbox
+              <span className="inbox-back-word">Inbox</span>
             </button>
           </Tooltip>
         )}
