@@ -27,7 +27,9 @@ import { workspaceReachableBy } from "./workspace-store.js";
  * the workspace row's own lock, whose `where` is the membership gate too, so
  * two filings at once never take one number and an account outside the
  * workspace files nothing. A change is one `update` over the row that stands,
- * stamped from the caller's clock. Every function is an effect over the
+ * under the row's own lock taken before the caller's clock is read, so
+ * changes at once land in the order they are stamped and each answers the
+ * issue as its own change left it. Every function is an effect over the
  * ambient `SqlClient` and names no database of its own.
  */
 
@@ -152,6 +154,20 @@ const findIssue = SqlSchema.findOneOption({
         .from(issue)
         .leftJoin(user, eq(user.id, issue.creatorId))
         .where(and(eq(issue.id, issueId), workspaceReachableBy(userId, issue.organizationId))),
+    ),
+});
+
+/** The issue's id, locked until the transaction ends, where the account is a member of its workspace: the lock orders two changes of it. */
+const lockReachableIssue = SqlSchema.findOneOption({
+  Request: IssueKeySchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, issueId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: issue.id })
+        .from(issue)
+        .where(and(eq(issue.id, issueId), workspaceReachableBy(userId, issue.organizationId)))
+        .for("update"),
     ),
 });
 
@@ -314,10 +330,17 @@ export function changeIssue(
   issueId: string,
   change: IssueChange,
 ): IssueStoreEffect<Option.Option<Issue>> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    const changed = yield* updateIssue({ ...change, userId, issueId, now });
-    if (Option.isNone(changed)) return Option.none();
-    return yield* readIssue(userId, issueId);
-  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        // Note that the row is locked before the clock is read, so two changes at once land in the order they are stamped.
+        const locked = yield* lockReachableIssue({ userId, issueId });
+        if (Option.isNone(locked)) return Option.none();
+        const now = yield* DateTime.nowAsDate;
+        const changed = yield* updateIssue({ ...change, userId, issueId, now });
+        if (Option.isNone(changed)) return Option.none();
+        return yield* readIssue(userId, issueId);
+      }),
+    ),
+  );
 }
