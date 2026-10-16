@@ -6,7 +6,8 @@
  *
  * - `POST /api/workspaces/linear/connect` takes an owner or admin of the
  *   workspace, asks Vercel Connect to begin a browser sign-in to Linear
- *   under the workspace's own id as the grant's subject, records the
+ *   under the workspace's own id as the grant's subject, on the workspace
+ *   Linear connector (`WorkspaceLinearConnect`), records the
  *   sign-in's one-time state on the workspace's row, and answers the address
  *   the desktop opens. The grant is the workspace's: every member reads
  *   every issue it reaches, a private team's among them, which the desktop
@@ -59,8 +60,8 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
   accountIntegrationConnect,
   INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnect,
-  revokeIntegrationGrant,
+  type IntegrationConnect,
+  WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import {
   linearIssueByIdentifier,
@@ -107,6 +108,7 @@ type Requirements =
   | HttpServerRequest.HttpServerRequest
   | DatabaseServices
   | IntegrationConnect
+  | WorkspaceLinearConnect
   | HttpClient.HttpClient;
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -163,11 +165,11 @@ function callbackUrl(requestUrl: string, state: string): string {
 }
 
 /**
- * POST: begins the workspace's Linear sign-in. Linear must be offered to
- * the admin's own account here (`accountIntegrationConnect`), so a
- * deployment that keeps Linear to some accounts keeps its workspaces to
- * them too. Connect is asked first, so a sign-in it refused leaves the row
- * as it stood.
+ * POST: begins the workspace's Linear sign-in, on the workspace Linear
+ * connector. Linear must be offered to the admin's own account here
+ * (`accountIntegrationConnect`), so a deployment that keeps Linear to some
+ * accounts keeps its workspaces to them too. Connect is asked first, so a
+ * sign-in it refused leaves the row as it stood.
  */
 const connectEndpoint = Effect.fn("web/workspaceLinearConnectEndpoint")(function* (
   seams: WorkspaceLinearAppSeams,
@@ -175,8 +177,11 @@ const connectEndpoint = Effect.fn("web/workspaceLinearConnectEndpoint")(function
   yield* onlyMethod(HTTP_METHOD.POST);
   const userId = yield* accountOf(seams);
   const workspace = yield* administeredWorkspace(userId);
-  const connector = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[LINEAR];
-  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const offered = (yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId)))[LINEAR];
+  const connector = yield* WorkspaceLinearConnect;
+  if (!offered.configured || !connector.configured) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const state = seams.mintState();
@@ -204,7 +209,7 @@ const callbackLanding = Effect.fn("web/workspaceLinearCallbackLanding")(function
 ): Effect.fn.Return<
   IntegrationLandingStatus,
   HostedRefusal,
-  DatabaseServices | IntegrationConnect
+  DatabaseServices | WorkspaceLinearConnect
 > {
   if (state === null || !STATE_PATTERN.test(state)) return INTEGRATION_LANDING_STATUS.EXPIRED;
   const row = yield* hostedStoreOrUnavailable(readWorkspaceIntegrationSignIn(state));
@@ -213,7 +218,7 @@ const callbackLanding = Effect.fn("web/workspaceLinearCallbackLanding")(function
   if (issuedAt === undefined || seams.now() - issuedAt > SIGN_IN_WINDOW_MS) {
     return INTEGRATION_LANDING_STATUS.EXPIRED;
   }
-  const connector = (yield* IntegrationConnect)[LINEAR];
+  const connector = yield* WorkspaceLinearConnect;
   if (!connector.configured) return INTEGRATION_LANDING_STATUS.UNAVAILABLE;
   const issued = yield* Effect.result(connector.token(row.organizationId, { fresh: true }));
   if (Result.isFailure(issued)) {
@@ -245,7 +250,7 @@ const connectedEndpoint = Effect.fn("web/workspaceLinearConnectedEndpoint")(func
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | IntegrationConnect
+  HttpServerRequest.HttpServerRequest | DatabaseServices | WorkspaceLinearConnect
 > {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const query = new URL(request.url, "https://localhost").searchParams;
@@ -269,7 +274,19 @@ const disconnectEndpoint = Effect.fn("web/workspaceLinearDisconnectEndpoint")(fu
   const userId = yield* accountOf(seams);
   const workspace = yield* administeredWorkspace(userId);
   yield* hostedStoreOrUnavailable(deleteWorkspaceIntegration(workspace.id, LINEAR));
-  yield* revokeIntegrationGrant({ provider: LINEAR, connectSubject: workspace.id });
+  const connector = yield* WorkspaceLinearConnect;
+  if (connector.configured) {
+    yield* connector
+      .revoke(workspace.id)
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            "Vercel Connect could not revoke a workspace Linear grant",
+            failure.message,
+          ),
+        ),
+      );
+  }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     workspace: yield* memberWorkspace(userId, workspace.id),
   });
@@ -298,7 +315,9 @@ const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* 
 /** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
 export function workspaceLinearApp(
   seams: WorkspaceLinearAppSeams,
-): WebRoutes<DatabaseServices | IntegrationConnect | HttpClient.HttpClient> {
+): WebRoutes<
+  DatabaseServices | IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient
+> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

@@ -23,17 +23,17 @@ import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { agentTabLabel } from "../planning/coding-agent-model";
-import { NEEDS_YOU } from "../planning/inbox-model";
-import { useMinute } from "../planning/plan-time";
-import { PullRequestMark } from "../planning/pull-request-mark";
-import { RelativeTime } from "../planning/relative-time";
-import { AgentGlyph, agentEndMark } from "../planning/tab-look";
-import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
-import { useWaitingItems, type WaitingItems } from "../planning/use-waiting-items";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
+import { agentTabLabel } from "../tasks/coding-agent-model";
+import { NEEDS_YOU } from "../tasks/inbox-model";
+import { PullRequestMark } from "../tasks/pull-request-mark";
+import { RelativeTime } from "../tasks/relative-time";
+import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
+import { useMinute } from "../tasks/task-time";
+import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
+import type { TasksControl } from "../tasks/use-tasks-tab";
+import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import {
@@ -54,7 +54,7 @@ import {
   factoryWaiting,
 } from "./factory-model";
 import { paneTiming } from "./pane-motion";
-import { planCardOf } from "./plan-card";
+import { taskCardOf } from "./task-card";
 import { useRowKeys } from "./use-row-keys";
 
 /**
@@ -109,9 +109,9 @@ function count(n: number, one: string, many: string): string {
 }
 
 /** A pull request opens on GitHub, where it is worked on and merged; one the service sent no page for opens its plan. */
-function openPullRequest(plans: PlansControl, plan: TaskSummary, pullRequest: TaskPullRequestLine) {
-  if (pullRequest.url === undefined) plans.onSelect(plan.id);
-  else plans.repositories.openGitHub(pullRequest.url);
+function openPullRequest(tasks: TasksControl, plan: TaskSummary, pullRequest: TaskPullRequestLine) {
+  if (pullRequest.url === undefined) tasks.onSelect(plan.id);
+  else tasks.repositories.openGitHub(pullRequest.url);
 }
 
 /** What a row's Copy link copies: what a press on it opens, a place in Luke, or a pull request's page on GitHub. */
@@ -142,41 +142,41 @@ interface FactoryRead {
  * Inbox item of theirs as Home reads them, so Factory and Home count the
  * same questions, and the call.
  */
-function useFactoryBoard(plans: PlansControl, now: number): FactoryRead {
-  const listed = plans.listed.plans;
-  const questions = useWaitingItems(plans);
+function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
+  const listed = tasks.listed.tasks;
+  const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
   const { items, readPlans } = questions;
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        plans.inbox.filter((each) => !readPlans.has(each.taskId)),
+        tasks.inbox.filter((each) => !readPlans.has(each.taskId)),
       ),
-    [items, readPlans, plans.inbox],
+    [items, readPlans, tasks.inbox],
   );
-  const oneOff = plans.listedAgents.standing;
+  const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
   const { readAgents } = questions;
   const oneOffWaiting = useMemo(
     () =>
       factoryOneOffWaiting(
         items,
-        plans.inboxPlanless.filter((each) => !readAgents.has(each.agentId)),
+        tasks.inboxTaskless.filter((each) => !readAgents.has(each.agentId)),
       ),
-    [items, readAgents, plans.inboxPlanless],
+    [items, readAgents, tasks.inboxTaskless],
   );
   const board = useMemo(
     () =>
       factoryBoard({
         plans: listed,
         waiting,
-        callTaskId: plans.callTaskId,
+        callTaskId: tasks.callTaskId,
         oneOff,
         oneOffWaiting,
         now,
       }),
-    [listed, waiting, plans.callTaskId, oneOff, oneOffWaiting, now],
+    [listed, waiting, tasks.callTaskId, oneOff, oneOffWaiting, now],
   );
   return { board, questions };
 }
@@ -249,7 +249,7 @@ function useFocusFollows(root: HTMLElement | null, board: FactoryBoard): void {
     const row = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
       (each) => each.dataset.factoryRow === key,
     );
-    row?.querySelector<HTMLElement>(".sidebar-plan")?.focus();
+    row?.querySelector<HTMLElement>(".sidebar-task")?.focus();
   }, [root, board]);
 }
 
@@ -298,18 +298,18 @@ function FactoryRow({
   const menu = useActionMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
-    <li className="sidebar-plan-item home-row inbox-row factory-row" data-factory-row={slide}>
+    <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>
       <Tooltip label={words} card={card}>
         <button
           type="button"
-          className="sidebar-plan"
+          className="sidebar-task"
           data-unread={String(waiting)}
           onClick={onOpen}
           onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
         >
-          <span className="sidebar-plan-line">
+          <span className="sidebar-task-line">
             <span className="home-row-picture">{glyph}</span>
-            <span className="sidebar-plan-name">{words}</span>
+            <span className="sidebar-task-name">{words}</span>
             {external ? (
               <span className="factory-external">
                 <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
@@ -318,7 +318,7 @@ function FactoryRow({
             ) : null}
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
             {actor === undefined ? null : <CreatorHeard actor={actor} />}
-            <span className="sidebar-plan-time">
+            <span className="sidebar-task-time">
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
               <RelativeTime at={at} now={now} hint={false} />
@@ -369,11 +369,11 @@ function Station({
       </h2>
       {held === 0 ? <p className="factory-idle">{idle}</p> : null}
       {needs.length === 0 ? null : (
-        <ul className="sidebar-plans factory-rows" data-needs="">
+        <ul className="sidebar-tasks factory-rows" data-needs="">
           {needs}
         </ul>
       )}
-      {rows.length === 0 ? null : <ul className="sidebar-plans factory-rows">{rows}</ul>}
+      {rows.length === 0 ? null : <ul className="sidebar-tasks factory-rows">{rows}</ul>}
     </section>
   );
 }
@@ -406,21 +406,21 @@ function useStarter(): (agent: Pick<TasklessAgent, "startedBy">) => Actor | unde
 
 /** The line, left to right, each station leading with what waits on the developer there. */
 function Line({
-  plans,
+  tasks,
   board,
   now,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   board: FactoryBoard;
   now: number;
 }): React.JSX.Element {
-  const card = (plan: TaskSummary) => planCardOf(plans, plan, now);
+  const card = (plan: TaskSummary) => taskCardOf(tasks, plan, now);
   const who = useWho();
   const started = useStarter();
-  const models = plans.agents.models;
+  const models = tasks.agents.models;
   const ask = (plan: TaskSummary, itemId: string) => {
-    plans.inboxView.onOpen();
-    plans.inboxView.onChoose({ planId: plan.id, itemId });
+    tasks.inboxView.onOpen();
+    tasks.inboxView.onChoose({ taskId: plan.id, itemId });
   };
   const talkRow = (plan: TaskSummary) => (
     <FactoryRow
@@ -433,7 +433,7 @@ function Line({
       at={taskTime(plan, TASK_ORDER.UPDATED)}
       card={card(plan)}
       link={{ place: { kind: LINK_PLACE.TASK, planId: plan.id } }}
-      onOpen={() => plans.onSelect(plan.id)}
+      onOpen={() => tasks.onSelect(plan.id)}
     />
   );
   // An agent with no task names its automation where the rows of a task name the task, and opens its own page.
@@ -458,8 +458,8 @@ function Line({
           waiting
           link={{ place: { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.id, itemId } }}
           onOpen={() => {
-            plans.inboxView.onOpen();
-            plans.inboxView.onChoose({ agentId: agent.id, itemId });
+            tasks.inboxView.onOpen();
+            tasks.inboxView.onChoose({ agentId: agent.id, itemId });
           }}
         />
       );
@@ -476,7 +476,7 @@ function Line({
         end={agentEndMark(agent, true)}
         waiting
         link={{ place: agentPlace({ id: agent.id, planId: null }) }}
-        onOpen={() => plans.agentView.onOpen(agent.id)}
+        onOpen={() => tasks.agentView.onOpen(agent.id)}
       />
     );
   };
@@ -517,7 +517,7 @@ function Line({
         waiting
         card={card(plan)}
         link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
-        onOpen={() => plans.onShowAgent(plan.id, agent.id)}
+        onOpen={() => tasks.onShowAgent(plan.id, agent.id)}
       />
     );
   };
@@ -534,7 +534,7 @@ function Line({
           actor={started(agent)}
           at={agent.activityAt}
           link={{ place: agentPlace({ id: agent.id, planId: null }) }}
-          onOpen={() => plans.agentView.onOpen(agent.id)}
+          onOpen={() => tasks.agentView.onOpen(agent.id)}
         />
       );
     }
@@ -552,7 +552,7 @@ function Line({
           at={agentMovedAt(plan, agent)}
           card={card(plan)}
           link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
-          onOpen={() => plans.onShowAgent(plan.id, agent.id)}
+          onOpen={() => tasks.onShowAgent(plan.id, agent.id)}
         />
       );
     }
@@ -569,7 +569,7 @@ function Line({
         external={pullRequest.url !== undefined}
         card={card(plan)}
         link={pullRequestLink(plan, pullRequest)}
-        onOpen={() => openPullRequest(plans, plan, pullRequest)}
+        onOpen={() => openPullRequest(tasks, plan, pullRequest)}
       />
     );
   };
@@ -587,22 +587,22 @@ function Line({
       waiting
       card={card(plan)}
       link={pullRequestLink(plan, pullRequest)}
-      onOpen={() => openPullRequest(plans, plan, pullRequest)}
+      onOpen={() => openPullRequest(tasks, plan, pullRequest)}
     />
   );
-  const shippedRow = ({ plan, pullRequest, at }: FactoryShipped) => (
+  const shippedRow = ({ task, pullRequest, at }: FactoryShipped) => (
     <FactoryRow
       key={pullRequest.url ?? pullRequest.number}
-      slide={pullRequest.url ?? plan.id}
+      slide={pullRequest.url ?? task.id}
       glyph={<PullRequestMark pullRequest={pullRequest} />}
       words={`#${pullRequest.number} merged`}
-      context={plan.name}
-      actor={who(plan)}
+      context={task.name}
+      actor={who(task)}
       at={at}
       external={pullRequest.url !== undefined}
-      card={card(plan)}
-      link={pullRequestLink(plan, pullRequest)}
-      onOpen={() => openPullRequest(plans, plan, pullRequest)}
+      card={card(task)}
+      link={pullRequestLink(task, pullRequest)}
+      onOpen={() => openPullRequest(tasks, task, pullRequest)}
     />
   );
   return (
@@ -656,7 +656,7 @@ const UNREAD_LINE = "Your tasks could not be read.";
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
 /** The window's Factory, in the plan's place: the line as it stands now. */
-export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.Element {
+export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
   const now = useMinute();
   const { board, questions } = useFactoryBoard(plans, now);
@@ -706,7 +706,7 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
             {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
             <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
               <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-                <Line plans={plans} board={board} now={now} />
+                <Line tasks={plans} board={board} now={now} />
               </MemberDirectory>
             </LinkWorkspaceProvider>
           </>

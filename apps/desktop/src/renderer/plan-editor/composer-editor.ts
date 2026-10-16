@@ -1,4 +1,12 @@
 import {
+  cutReply,
+  MESSAGE_BLOCK,
+  messageBlocks,
+  messageText,
+  QUOTE_GAP,
+  quoteOf,
+} from "@luke/ui/reply-quote";
+import {
   insideCode,
   mentionAt,
   skillTokens,
@@ -22,6 +30,7 @@ import {
   type ComposerEditorProps,
   type ComposerInput,
   type ComposerMark,
+  type ComposerQuote,
   type ComposerTrigger,
   type MentionNode,
 } from "./contract";
@@ -35,13 +44,18 @@ import {
 } from "./mention-node";
 
 /**
- * composer-editor.ts -- an agent's message box on TipTap: plain words, a line break, and a chosen skill as a chip, read out as the one string the message is.
+ * composer-editor.ts -- an agent's message box on TipTap: plain words, a line break, a chosen skill as a chip, and a quote of the agent's words as a block, read out as the one string the message is.
  *
  * The box holds nothing a textarea would not, so its schema is StarterKit
  * cut down to a document of paragraphs, text, a hard break, and undo: no
  * mark, no list, no input rule turns what is typed into anything but the
  * words typed. One node is added, the `skill` chip, an atom that one
- * Backspace takes out whole and that reads out as `/name`. The words leave
+ * Backspace takes out whole and that reads out as `/name`; and the quote,
+ * a block of the agent's words laid in by Reply where the caret stands
+ * (`insertQuote`), never edited, that one Backspace on the line under it
+ * takes out whole as it does a chip, and that reads out as a Markdown
+ * blockquote with a blank line around it (`@luke/ui/reply-quote`), read
+ * back into a block as the words are laid in again. The words leave
  * the editor one way, `onDraft`, as the string `textOf` reads off the
  * document; nothing hands them back in. A change from outside is one of
  * the handle's commands (`./contract.ts`): `clear` after a send, `replace`
@@ -83,6 +97,7 @@ const NAME_CHARACTER = /[A-Za-z0-9-]/u;
 const SPACE = " ";
 const NEWLINE = "\n";
 const SKILL_NODE = "skill";
+const QUOTE_NODE = "replyQuote";
 const HARD_BREAK_NODE = "hardBreak";
 
 /** A run of plain text in the words: where it starts in the string, and where in the document. */
@@ -102,15 +117,28 @@ function inlineText(node: PmNode): string {
   return node.type.name === HARD_BREAK_NODE ? NEWLINE : "";
 }
 
-/** The words a fragment stands for: its paragraphs a line each, or its inline nodes run together. */
+/** Whether a node is a quote block. */
+function isQuote(node: PmNode): boolean {
+  return node.type.name === QUOTE_NODE;
+}
+
+/** A quote block's words. */
+function quoteWords(node: PmNode): string {
+  return String(node.attrs.words);
+}
+
+/** The words a fragment stands for: its paragraphs a line each and its quotes each a blockquote set apart, or its inline nodes run together. */
 function fragmentText(fragment: Fragment): string {
-  const lines: string[] = [];
+  const blocks: ({ kind: "quote"; words: string } | { kind: "words"; lines: string[] })[] = [];
   let inline = "";
   fragment.forEach((node) => {
-    if (node.isBlock) lines.push(fragmentText(node.content));
-    else inline += inlineText(node);
+    const last = blocks.at(-1);
+    if (isQuote(node)) blocks.push({ kind: MESSAGE_BLOCK.QUOTE, words: quoteWords(node) });
+    else if (!node.isBlock) inline += inlineText(node);
+    else if (last?.kind === MESSAGE_BLOCK.WORDS) last.lines.push(fragmentText(node.content));
+    else blocks.push({ kind: MESSAGE_BLOCK.WORDS, lines: [fragmentText(node.content)] });
   });
-  return lines.length === 0 ? inline : lines.join(NEWLINE);
+  return blocks.length === 0 ? inline : messageText(blocks);
 }
 
 /** The words the document stands for, as the message sends them. */
@@ -122,8 +150,16 @@ function textOf(doc: PmNode): string {
 function textRuns(doc: PmNode): TextRun[] {
   const runs: TextRun[] = [];
   let offset = 0;
-  doc.forEach((paragraph, start, index) => {
-    if (index > 0) offset += NEWLINE.length;
+  let previous: PmNode | undefined;
+  doc.forEach((paragraph, start) => {
+    if (previous !== undefined) {
+      offset += isQuote(previous) || isQuote(paragraph) ? QUOTE_GAP.length : NEWLINE.length;
+    }
+    previous = paragraph;
+    if (isQuote(paragraph)) {
+      offset += quoteOf(quoteWords(paragraph)).length;
+      return;
+    }
     paragraph.forEach((child, childStart) => {
       const length = inlineText(child).length;
       if (child.isText) runs.push({ offset, pos: start + 1 + childStart, length });
@@ -193,8 +229,8 @@ function chipTokens(
   return [...mentions, ...skilled].sort((first, second) => first.start - second.start);
 }
 
-/** The document the words stand for: a paragraph per line, each `/name` of a known skill and each mention its chip. */
-function documentOf(schema: Schema, text: string, chipping: Chipping): PmNode {
+/** The paragraphs lines of words stand for: one per line, each `/name` of a known skill and each mention its chip. */
+function paragraphsOf(schema: Schema, text: string, chipping: Chipping): PmNode[] {
   const tokens = chipTokens(text, chipping);
   const paragraphs: PmNode[] = [];
   let lineStart = 0;
@@ -211,7 +247,24 @@ function documentOf(schema: Schema, text: string, chipping: Chipping): PmNode {
     paragraphs.push(schema.node("paragraph", null, children));
     lineStart = lineEnd + NEWLINE.length;
   }
-  return schema.topNodeType.create(null, paragraphs);
+  return paragraphs;
+}
+
+/**
+ * The document the words stand for: each quote set apart in them a quote
+ * block, and the lines between its paragraphs. Note that a quote ending the
+ * words has an empty line laid under it, because no caret can stand after
+ * a block that takes none.
+ */
+function documentOf(schema: Schema, text: string, chipping: Chipping): PmNode {
+  const blocks = messageBlocks(text);
+  const nodes = blocks.flatMap((block) =>
+    block.kind === MESSAGE_BLOCK.QUOTE
+      ? [schema.node(QUOTE_NODE, { words: block.words })]
+      : paragraphsOf(schema, block.lines.join(NEWLINE), chipping),
+  );
+  if (blocks.at(-1)?.kind === MESSAGE_BLOCK.QUOTE) nodes.push(schema.node("paragraph"));
+  return schema.topNodeType.create(null, nodes);
 }
 
 /** The words as a slice that lays in where a caret or a selection stands, its first and last lines joining the lines around them. */
@@ -248,11 +301,27 @@ function chipped(
   return tr.setMeta(CHIPPED_META, true);
 }
 
-/** The chip beside an empty selection taken out whole, before it for Backspace and after it for Delete; answers whether there was one. */
+/** The quote block beside an empty caret at a line's edge, the one above for Backspace at its start and the one below for Delete at its end, taken out whole; answers whether there was one. */
+function removedQuote(view: EditorView, back: boolean): boolean {
+  const { doc, selection } = view.state;
+  const { $from } = selection;
+  if ($from.depth !== 1) return false;
+  const atEdge = back ? $from.parentOffset === 0 : $from.parentOffset === $from.parent.content.size;
+  const index = $from.index(0) + (back ? -1 : 1);
+  if (!atEdge || index < 0 || index >= doc.childCount) return false;
+  const beside = doc.child(index);
+  if (!isQuote(beside)) return false;
+  const from = back ? $from.before(1) - beside.nodeSize : $from.after(1);
+  view.dispatch(view.state.tr.delete(from, from + beside.nodeSize).scrollIntoView());
+  return true;
+}
+
+/** The chip or the quote beside an empty selection taken out whole, before it for Backspace and after it for Delete; answers whether there was one. */
 function removedChip(view: EditorView, key: string): boolean {
   const { selection } = view.state;
   if (!selection.empty || (key !== "Backspace" && key !== "Delete")) return false;
   const back = key === "Backspace";
+  if (removedQuote(view, back)) return true;
   const beside = back ? selection.$from.nodeBefore : selection.$from.nodeAfter;
   if (beside?.type.name !== SKILL_NODE && beside?.type.name !== MENTION_NODE) return false;
   const from = back ? selection.from - 1 : selection.from;
@@ -388,11 +457,64 @@ function skillNode(drawChip: ComposerEditorProps["drawChip"], known: (name: stri
   });
 }
 
-/** What the box may hold: paragraphs, text, a hard break, and undo, StarterKit's and nothing more, and the chip. */
+/**
+ * The quote block: an atom no caret stands in and no key edits, read out as
+ * a blockquote, its look the panel's (`drawQuote`), with the press that
+ * takes it out. Note that its words stand in no attribute of the DOM, as a
+ * chip's name does not, so the recording masks them as text.
+ */
+function quoteNode(drawQuote: ComposerEditorProps["drawQuote"]) {
+  return Node.create({
+    name: QUOTE_NODE,
+    group: "block",
+    atom: true,
+    selectable: false,
+    draggable: false,
+    addAttributes() {
+      return { words: { default: "", rendered: false } };
+    },
+    parseHTML() {
+      return [
+        {
+          tag: "blockquote[data-quote]",
+          getAttrs: (element) => ({ words: element.textContent ?? "" }),
+        },
+      ];
+    },
+    renderHTML({ node }) {
+      return ["blockquote", { "data-quote": "" }, quoteWords(node)];
+    },
+    renderText({ node }) {
+      return quoteOf(quoteWords(node));
+    },
+    addNodeView() {
+      return ({ node, getPos, editor }) => {
+        const dom = document.createElement("div");
+        dom.contentEditable = "false";
+        dom.dataset.quote = "";
+        const quote: ComposerQuote = {
+          words: quoteWords(node),
+          remove: () => {
+            const pos = getPos();
+            if (pos === undefined || !editor.isEditable) return;
+            editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize));
+            editor.view.focus();
+          },
+        };
+        if (drawQuote === undefined) dom.textContent = quote.words;
+        const undraw = drawQuote?.(dom, quote) ?? (() => undefined);
+        return { dom, ignoreMutation: () => true, destroy: undraw };
+      };
+    },
+  });
+}
+
+/** What the box may hold: paragraphs, text, a hard break, and undo, StarterKit's and nothing more, the chips, and the quote block. */
 function composerExtensions(
   drawChip: ComposerEditorProps["drawChip"],
   known: (name: string) => boolean,
   drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  drawQuote: ComposerEditorProps["drawQuote"],
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     blockquote: false,
@@ -413,7 +535,7 @@ function composerExtensions(
     underline: false,
     trailingNode: false,
   });
-  return [kit, skillNode(drawChip, known), mentionNode(drawMention)];
+  return [kit, skillNode(drawChip, known), mentionNode(drawMention), quoteNode(drawQuote)];
 }
 
 /** What a mounted box keeps between its events: the skills it chips, whether it takes words, the last words and word it reported, and its marks. */
@@ -645,6 +767,53 @@ function laidInMention(
   editor.view.focus();
 }
 
+/** The quote laid in under the line the caret stands on, or in its place where the line is empty, an empty line under it holding the caret. */
+function quotedAt(editor: Editor, words: string): Transaction {
+  const { doc, selection, schema } = editor.state;
+  const { $from } = selection;
+  const line = doc.child($from.index(0));
+  const quote = schema.node(QUOTE_NODE, { words });
+  const from = $from.before(1);
+  const empty = line.type.name === "paragraph" && line.content.size === 0;
+  const tr = empty
+    ? editor.state.tr.replaceWith(from, from + line.nodeSize, quote)
+    : editor.state.tr.insert(from + line.nodeSize, quote);
+  const under = (empty ? from : from + line.nodeSize) + quote.nodeSize;
+  const next = tr.doc.nodeAt(under);
+  if (next === null || next.type.name !== "paragraph" || next.content.size > 0) {
+    tr.insert(under, schema.node("paragraph"));
+  }
+  return tr.setSelection(TextSelection.create(tr.doc, under + 1));
+}
+
+/**
+ * Words of the agent's laid in as a quote where the caret stands, cut from
+ * their end where the bound has no room for them whole, the box focused;
+ * nothing where it takes no words now or has no room for any.
+ */
+function laidInQuote(
+  editor: Editor,
+  state: ComposerState,
+  maxLength: number,
+  words: string,
+): boolean {
+  if (state.input !== COMPOSER_INPUT.EDITABLE || editor.state.selection.$from.depth !== 1) {
+    return false;
+  }
+  let kept = words;
+  while (kept !== "") {
+    const tr = quotedAt(editor, kept);
+    const over = textOf(tr.doc).length - maxLength;
+    if (over <= 0) {
+      editor.view.dispatch(tr.scrollIntoView());
+      editor.view.focus();
+      return true;
+    }
+    kept = cutReply(kept, kept.length - over);
+  }
+  return false;
+}
+
 /** A mark of the caret where it stands, carried through every change until its words land or it is let go. */
 function marked(editor: Editor, state: ComposerState, maxLength: number): ComposerMark {
   const mark = Symbol("mark");
@@ -692,11 +861,14 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   const guard = guardPlugin(state, props);
   const editor = new Editor({
     element: host,
+    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`, `../index.html`) refuses; the owner's stylesheet styles the box instead.
+    injectCSS: false,
     extensions: [
       ...composerExtensions(
         props.drawChip,
         (name) => state.skills.has(name),
         props.mentions?.drawMention,
+        props.drawQuote,
       ),
       Extension.create({ name: "composerGuard", addProseMirrorPlugins: () => [guard] }),
     ],
@@ -724,6 +896,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
         editor.schema.node(MENTION_NODE, { name: mention.name, target: mention.target }),
       ),
     insertMention: (mention) => laidInMention(editor, state, props.maxLength, mention),
+    insertQuote: (words) => laidInQuote(editor, state, props.maxLength, words),
     chooseSkillAtMention: (name) =>
       choseChip(editor, state.mentionTrigger, editor.schema.node(SKILL_NODE, { name })),
     setSkills: (skills) => {

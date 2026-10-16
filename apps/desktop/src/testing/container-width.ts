@@ -18,7 +18,7 @@ import path from "node:path";
 const STYLES = path.join(import.meta.dirname, "../renderer/styles");
 
 /** The panel's stylesheets, in the order `index.css` imports them. */
-const SHEETS = ["settings.css", "base.css", "markdown.css", "planning.css", "desktop.css"] as const;
+const SHEETS = ["settings.css", "base.css", "markdown.css", "tasks.css", "desktop.css"] as const;
 
 /** A named container query with one width condition: its name, its comparison, and its length. */
 const NAMED_QUERY =

@@ -145,8 +145,8 @@ const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.TASKS}?${new URLSearchPar
   [TASK_LIST_QUERY.ARCHIVED]: TASK_LIST_ARCHIVED.INCLUDE,
 })}`;
 
-/** What a plan's pin and archive change names: pinned or not, archived or not, or both. */
-export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "archived">;
+/** What a plan's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
+export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "archived">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;

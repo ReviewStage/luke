@@ -18,6 +18,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
@@ -35,13 +36,13 @@ import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, useActionMenu } from "../desktop/action-menu";
-import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
+import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { dayAndTimeText } from "../planning/plan-time";
 import { SpinnerRegion } from "../spinner";
+import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
@@ -69,7 +70,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
- * inset under GitHub's row with its letter's tile, Connected or suspended;
+ * inset under GitHub's row with its picture on GitHub, Connected or suspended;
  * an owner or an admin connects the first with Connect, and once one is,
  * Manage on GitHub opens the one GitHub page that both adds an account and
  * chooses an account's repositories, where which accounts and repositories
@@ -206,8 +207,8 @@ type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
 /** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
 const LINEAR_LINE = {
   CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: "Linear stopped honouring this connection. Connect again.",
-  EXPIRED_MEMBER: "Linear stopped honouring this connection. Ask an owner or admin.",
+  EXPIRED: "Linear stopped honoring this connection. Connect again.",
+  EXPIRED_MEMBER: "Linear stopped honoring this connection. Ask an owner or admin.",
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
@@ -987,16 +988,23 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
 
 /**
  * One connected account's row, inset under GitHub's so it reads as one of
- * GitHub's accounts rather than an integration of its own: its login's
- * letter on a tile, its login, and under it Connected, or that GitHub
- * suspended or removed its installation. The tile is a workspace's, keyed
- * by the login, since the desktop is told no account's picture.
+ * GitHub's accounts rather than an integration of its own: its picture on
+ * GitHub, an organization's logo or a person's avatar, its login, and under
+ * it Connected, or that GitHub suspended or removed its installation. The
+ * tile is a workspace's, keyed by the login, so the login's letter stands
+ * until the picture loads and wherever it fails to.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
     <div className="settings-row settings-row-nested">
       <span className="settings-row-mark">
-        <WorkspaceTile workspace={{ id: `github:${connection.login}`, name: connection.login }} />
+        <WorkspaceTile
+          workspace={{
+            id: `github:${connection.login}`,
+            name: connection.login,
+            pictureUrl: githubAccountPictureUrl(connection.login),
+          }}
+        />
       </span>
       <RowCopy
         name={connection.login}
@@ -1138,7 +1146,7 @@ function LinearCopy({
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honouring it, which opens Linear's
+ * or Connect again once Linear stopped honoring it, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
@@ -1388,7 +1396,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
         <span className="settings-copy">
           {editing ? (
-            <PlanNameField
+            <TaskNameField
               name={workspace.name}
               className="settings-input workspace-name-input"
               label="Workspace name"

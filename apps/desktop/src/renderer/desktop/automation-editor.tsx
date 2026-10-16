@@ -76,12 +76,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { AgentModelChip } from "../planning/agent-model-chip";
-import { AgentServersButton } from "../planning/agent-servers";
-import { ModelMenu } from "../planning/model-menu";
-import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
-import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
-import type { LeaveAsk, LeaveGuard } from "../planning/use-plans-tab";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
@@ -89,6 +83,12 @@ import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
+import { AgentModelChip } from "../tasks/agent-model-chip";
+import { AgentServersButton } from "../tasks/agent-servers";
+import { ModelMenu } from "../tasks/model-menu";
+import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip";
+import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
+import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { useDisclosure } from "../use-disclosure";
@@ -1220,11 +1220,11 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <div className="plan-compose-menu-note">
+          <div className="task-compose-menu-note">
             <Spinner label="Loading agents" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="plan-compose-menu-note">No agents of this workspace work in it yet.</p>
+          <p className="task-compose-menu-note">No agents of this workspace work in it yet.</p>
         ) : undefined
       }
       noMatch={NO_MATCH}
@@ -1243,7 +1243,7 @@ function RunsGroup({
   savedAgentId,
   workspace,
   problems,
-  planBacked,
+  taskBacked,
   repositories,
   onDraft,
 }: {
@@ -1254,7 +1254,7 @@ function RunsGroup({
   savedAgentId: string | null;
   workspace: Workspace | undefined;
   problems: DraftProblems;
-  planBacked: boolean;
+  taskBacked: boolean;
   repositories: RepositoryChooser;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
@@ -1271,13 +1271,13 @@ function RunsGroup({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Repository</strong>
-          {planBacked ? (
+          {taskBacked ? (
             <small>Its task's repository.</small>
           ) : also.length === 0 ? null : (
             <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
           )}
         </span>
-        {planBacked ? null : (
+        {taskBacked ? null : (
           <RepositoryChip
             key={repositories.scope}
             place={CHIP_PLACE.FIELD}
@@ -1338,7 +1338,7 @@ function EditorForm({
   automation,
   writes,
   problems,
-  planBacked,
+  taskBacked,
   workspace,
   offersOwner,
   repositories,
@@ -1351,7 +1351,7 @@ function EditorForm({
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
   problems: DraftProblems;
-  planBacked: boolean;
+  taskBacked: boolean;
   workspace: Workspace | undefined;
   offersOwner: boolean;
   repositories: RepositoryChooser;
@@ -1445,7 +1445,7 @@ function EditorForm({
         savedAgentId={savedAgentId}
         workspace={workspace}
         problems={problems}
-        planBacked={planBacked}
+        taskBacked={taskBacked}
         repositories={repositories}
         onDraft={onDraft}
       />
@@ -1517,7 +1517,7 @@ export function AutomationEditor({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // The webhook secret a write just minted, shown once on this page and gone when it is left.
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
-  const planBacked = automation !== undefined && automation.planId !== null;
+  const taskBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
@@ -1541,7 +1541,7 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const problems = draftProblems(draft, planBacked, new Date());
+  const problems = draftProblems(draft, taskBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -1662,7 +1662,7 @@ export function AutomationEditor({
               automation={automation}
               writes={writes}
               problems={shownProblems ? problems : {}}
-              planBacked={planBacked}
+              taskBacked={taskBacked}
               workspace={workspace}
               offersOwner={offersOwner}
               repositories={repositories}

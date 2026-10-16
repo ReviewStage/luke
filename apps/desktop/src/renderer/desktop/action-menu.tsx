@@ -22,7 +22,7 @@ import { useDisclosure } from "../use-disclosure";
  * closes it alone, and resting on another item closes it. A submenu is a
  * flyout, a second menu on its own surface beside the first, which stands
  * whole behind it; it is never a page drawn in the menu's place, as the MCP
- * popover's server page is (`../planning/agent-servers.tsx`). Closing hands
+ * popover's server page is (`../tasks/agent-servers.tsx`). Closing hands
  * focus back at once and plays the menu's exit after it: the menu is held
  * drawn, inert, until the exit is done, and opening it again in that time
  * takes it back as it stands.
@@ -269,7 +269,7 @@ function MenuItem({
   action: MenuAction;
   onChoose: () => void;
 }): React.JSX.Element {
-  const label = <span className="plan-menu-label">{action.label}</span>;
+  const label = <span className="task-menu-label">{action.label}</span>;
   const body = (
     <>
       <span className="menu-item-glyph">{action.icon}</span>
@@ -352,7 +352,7 @@ function SubmenuItem({
       }}
     >
       <span className="menu-item-glyph">{entry.icon}</span>
-      <span className="plan-menu-label">{entry.label}</span>
+      <span className="task-menu-label">{entry.label}</span>
       <span className="menu-item-end">
         <ChevronRightIcon aria-hidden="true" />
       </span>
@@ -434,7 +434,7 @@ function Submenu({
   return (
     <div
       ref={surface}
-      className="menu-surface plan-menu plan-submenu"
+      className="menu-surface task-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
       data-layer={layer}
@@ -574,7 +574,7 @@ export function ActionMenu({
   return createPortal(
     <div
       ref={drawn}
-      className="menu-surface plan-menu"
+      className="menu-surface task-menu"
       role="menu"
       aria-label={label}
       data-layer={layerOf(opener)}
@@ -587,15 +587,15 @@ export function ActionMenu({
     >
       {heading === undefined ? null : (
         <>
-          <div className="plan-menu-heading" role="none">
+          <div className="task-menu-heading" role="none">
             {heading}
           </div>
-          <hr className="plan-menu-rule" />
+          <hr className="task-menu-rule" />
         </>
       )}
       {groups.map((group, index) => (
         <Fragment key={group[0]?.label}>
-          {index > 0 ? <hr className="plan-menu-rule" /> : null}
+          {index > 0 ? <hr className="task-menu-rule" /> : null}
           {group.map((entry) =>
             "items" in entry ? (
               <SubmenuItem
@@ -612,8 +612,8 @@ export function ActionMenu({
       ))}
       {footer === undefined ? null : (
         <>
-          <hr className="plan-menu-rule" />
-          <div className="plan-menu-footer" role="none">
+          <hr className="task-menu-rule" />
+          <div className="task-menu-footer" role="none">
             {footer}
           </div>
         </>

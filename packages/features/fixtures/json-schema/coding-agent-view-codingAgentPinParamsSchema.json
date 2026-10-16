@@ -7,6 +7,9 @@
     },
     "pinned": {
       "type": "boolean"
+    },
+    "position": {
+      "type": "string"
     }
   },
   "required": [

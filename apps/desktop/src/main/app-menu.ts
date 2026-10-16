@@ -378,7 +378,7 @@ function fullMenuTemplate(
     {
       label: "File",
       submenu: [
-        commandItem(APP_COMMAND.NEW_PLAN),
+        commandItem(APP_COMMAND.NEW_TASK),
         SEPARATOR,
         commandItem(APP_COMMAND.NEW_TAB),
         menuItem(APP_COMMAND.NEW_TERMINAL),
@@ -389,8 +389,8 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_PLAN),
         commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
-        commandItem(APP_COMMAND.ARCHIVE_PLAN),
-        commandItem(APP_COMMAND.DELETE_PLAN),
+        commandItem(APP_COMMAND.ARCHIVE_TASK),
+        commandItem(APP_COMMAND.DELETE_TASK),
       ],
     },
     {
@@ -441,8 +441,8 @@ function fullMenuTemplate(
         { ...commandItem(APP_COMMAND.ZOOM_IN), label: "Zoom In" },
         commandItem(APP_COMMAND.ZOOM_OUT),
         SEPARATOR,
-        commandItem(APP_COMMAND.PREVIOUS_PLAN),
-        commandItem(APP_COMMAND.NEXT_PLAN),
+        commandItem(APP_COMMAND.PREVIOUS_TASK),
+        commandItem(APP_COMMAND.NEXT_TASK),
         ...(developerTools ? [SEPARATOR, developerItem(developerTools)] : []),
       ],
     },

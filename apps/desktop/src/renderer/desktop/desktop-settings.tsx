@@ -119,7 +119,8 @@ function GroupHeading({
  * under three headings, as Linear and Notion group theirs: the workspace the
  * plans' sidebar lists, by its tile and name, over its Members and GitHub;
  * Account, over what is the account's whichever workspace is listed; and
- * This Mac. Settings opens on Profile, Account's first page. The page has
+ * This Mac. Settings opens on Profile, Account's first page, with the caret
+ * in the search. The page has
  * no top bar: its title heads its column, under the window's drag strip,
  * and a page's reset ends the title's line. The Workspace page's title is
  * the listed workspace's name, since that is the workspace it shows. The

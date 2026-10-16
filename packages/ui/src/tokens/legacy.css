@@ -1,0 +1,119 @@
+/* legacy.css -- each app's own token names, read from the shared roles until the last caller of each moves onto the role.
+
+   The desktop and the site each named their tokens before there was a shared
+   set, and the two disagree on what a name means: the desktop's `--space-8`
+   is eight pixels, the site's sixty-four. So each app's names are restated
+   under its own profile and nowhere else, as an alias of the role that now
+   holds the value, and a sheet that spends an old name draws exactly what it
+   drew before. The Completion stack deletes these once nothing reads them.
+
+   An alias is resolved where it is declared, on the profile's root, so a
+   descendant that sets a role does not move the old name with it. */
+
+[data-luke-profile="desktop"] {
+  --font-mono: var(--luke-font-mono);
+
+  --space-2: var(--luke-space-2);
+  --space-4: var(--luke-space-4);
+  --space-6: var(--luke-space-6);
+  --space-8: var(--luke-space-8);
+  --space-12: var(--luke-space-12);
+  --space-16: var(--luke-space-16);
+  --space-20: var(--luke-space-20);
+  --space-24: var(--luke-space-24);
+  --space-32: var(--luke-space-32);
+  --space-40: var(--luke-space-40);
+  --space-48: var(--luke-space-48);
+
+  --control-height: var(--luke-control-height);
+  --control-radius: var(--luke-control-radius);
+  --control-glyph: var(--luke-control-icon);
+  --glyph-gap: var(--luke-icon-gap);
+  --control-gap: var(--luke-control-gap);
+  --section-gap: var(--luke-section-gap);
+  --page-inset: var(--luke-page-inset);
+  --menu-inset: var(--luke-menu-inset);
+  --menu-row-height: var(--luke-menu-row-height);
+  --menu-row-radius: var(--luke-menu-row-radius);
+  --menu-radius: var(--luke-menu-radius);
+
+  --text-primary: var(--luke-color-text);
+  --text-secondary: var(--luke-color-text-muted);
+  --text-tertiary: var(--luke-color-text-subtle);
+  --text-body: var(--luke-color-text-body);
+  --ink: var(--luke-color-ink);
+  --desktop-ground: var(--luke-color-ground);
+  --section-fill: var(--luke-color-surface);
+  --surface-popover: var(--luke-color-overlay);
+  --raised: var(--luke-color-fill-hover);
+  --raised-strong: var(--luke-color-fill-strong);
+  --selected: var(--luke-color-fill-selected);
+  --pressed: var(--luke-color-fill-pressed);
+  --hairline: var(--luke-color-border);
+  --hairline-strong: var(--luke-color-border-strong);
+  --selected-edge: var(--luke-color-border-selected);
+  --input-fill: var(--luke-color-input);
+  --input-fill-focus: var(--luke-color-input-focus);
+  --match-wash: var(--luke-color-match);
+  --scrollbar: var(--luke-color-scrollbar);
+
+  --message-sent: var(--luke-color-accent);
+  --on-accent: var(--luke-color-on-accent);
+  --on-accent-muted: var(--luke-color-on-accent-muted);
+  --focus-ring: var(--luke-color-focus-ring);
+
+  --danger: var(--luke-color-danger);
+  --danger-text: var(--luke-color-danger-text);
+  --danger-fill: var(--luke-color-danger-fill);
+  --state-attention: var(--luke-color-attention);
+  --state-complete: var(--luke-color-complete);
+  --state-working: var(--luke-color-working);
+  --state-merged: var(--luke-color-merged);
+
+  --switch-track: var(--luke-color-switch-track);
+  --switch-on: var(--luke-color-switch-on);
+  --switch-thumb: var(--luke-color-switch-thumb);
+  --switch-thumb-shadow: var(--luke-shadow-switch-thumb);
+  --tooltip-fill: var(--luke-color-tooltip);
+  --tooltip-edge: var(--luke-color-tooltip-edge);
+  --tooltip-text: var(--luke-color-tooltip-text);
+  --tooltip-chord: var(--luke-color-tooltip-chord);
+
+  --scrim: var(--luke-color-scrim);
+  --shadow-soft: var(--luke-color-shadow-soft);
+  --shadow: var(--luke-color-shadow);
+  --shadow-deep: var(--luke-color-shadow-deep);
+}
+
+[data-luke-profile="web"] {
+  --font-page: var(--luke-font-sans);
+  --font-code: var(--luke-font-mono);
+  --font-wordmark: var(--luke-font-display);
+
+  /* The site's scale counted steps of a 4px grid; each step is the length it was. */
+  --space-1: var(--luke-space-4);
+  --space-2: var(--luke-space-8);
+  --space-3: var(--luke-space-12);
+  --space-4: var(--luke-space-16);
+  --space-5: var(--luke-space-24);
+  --space-6: var(--luke-space-32);
+  --space-7: var(--luke-space-48);
+  --space-8: var(--luke-space-64);
+  --space-9: var(--luke-space-96);
+  --radius: var(--luke-control-radius);
+
+  --background: var(--luke-color-ground);
+  --foreground: var(--luke-color-text);
+  --card: var(--luke-color-surface);
+  --muted: var(--luke-color-fill-hover);
+  --muted-foreground: var(--luke-color-text-muted);
+  --border: var(--luke-color-border);
+  --primary: var(--luke-color-accent);
+  --primary-foreground: var(--luke-color-on-accent);
+  --accent-ink: var(--luke-color-accent-text);
+  --ring: var(--luke-color-focus-ring);
+  --attention: var(--luke-color-attention);
+  --attention-tint: var(--luke-color-attention-tint);
+  --complete: var(--luke-color-complete);
+  --complete-tint: var(--luke-color-complete-tint);
+}

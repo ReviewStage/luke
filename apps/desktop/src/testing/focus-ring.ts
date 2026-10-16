@@ -31,7 +31,7 @@ const SHEETS = [
   "tooltip.css",
   "skeleton.css",
   "sign-in.css",
-  "planning.css",
+  "tasks.css",
   "tailwind.css",
   "desktop.css",
   "call.css",

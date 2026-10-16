@@ -31,7 +31,7 @@ export interface CountNoun {
   readonly many: string;
 }
 
-const PLAN_NOUN: CountNoun = { one: "task", many: "tasks" };
+const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
 
 /**
  * A folded group's count of what it holds, shown after its name while the
@@ -40,7 +40,7 @@ const PLAN_NOUN: CountNoun = { one: "task", many: "tasks" };
  */
 function FoldedCount({
   count,
-  noun = PLAN_NOUN,
+  noun = TASK_NOUN,
   steady = false,
 }: {
   count: number;
@@ -61,7 +61,7 @@ export function SidebarGroupHeader({
   name,
   folded,
   count,
-  noun = PLAN_NOUN,
+  noun = TASK_NOUN,
   steady = false,
   trailing,
   actions,

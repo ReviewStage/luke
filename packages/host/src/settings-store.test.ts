@@ -4,6 +4,7 @@ import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
+import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
 import {
   type AccountPreferenceField,
@@ -207,6 +208,8 @@ const SAMPLE_VALUE = {
   // On is the default, so Off is the choice that has to survive a reopen.
   agentNotifications: false,
   macCommands: false,
+  // The deployment's own avatar is the default, so a stock one is the choice that has to survive a reopen.
+  videoAvatar: VIDEO_AVATAR.CELIA,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**

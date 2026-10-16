@@ -29,10 +29,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl, waitingOf } from "#testing/plans-control";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
+import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
-import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { PersonPage } from "./person-page";
 
 /**
@@ -181,9 +181,9 @@ const INBOXES = new Map<string, readonly InboxItem[]>([[RETRIES.id, [RETRY_429, 
 const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const SWEEP_ITEM: InboxItem = { ...item(9, "Quarantine the flaky test?", SWEEP_AGENT, MINUTE) };
 
-const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
+const HOLDING: Pick<TasksControl, "inbox" | "inboxTasks"> = {
   inbox: [{ taskId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
-  inboxPlans: [{ taskId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
+  inboxTasks: [{ taskId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
 };
 
 let root: Root | undefined;
@@ -266,17 +266,17 @@ function mount(userId: string, name?: string, memberCount = MEMBERS.length) {
 
 /** Dean's page by default, over the fixture workspace with `overrides`, every door it opens recorded. */
 function mountWith(
-  overrides: Partial<PlansControl>,
+  overrides: Partial<TasksControl>,
   userId = DEAN.userId,
   name?: string,
   memberCount = MEMBERS.length,
 ) {
   const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
-  const plans = plansControl({
+  const plans = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
-    plans: PLANS,
-    listed: { plans: PLANS, archived: [], ...HOLDING },
+    tasks: PLANS,
+    listed: { tasks: PLANS, archived: [], ...HOLDING },
     ...HOLDING,
     onSelect: (planId) => opened.plans.push(planId),
     onShowAgent: (planId, agentId) => opened.agents.push([planId, agentId]),
@@ -299,7 +299,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { plans, userId, name }),
+          createElement(PersonPage, { tasks: plans, userId, name }),
         ),
       ),
     ),
@@ -318,7 +318,7 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".sidebar-plan-name")].map((name) => name.textContent),
+      [...section.querySelectorAll(".sidebar-task-name")].map((name) => name.textContent),
     ]),
   );
 }
@@ -398,7 +398,7 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   button(page, "Retry budget dashboard").click();
 
   assert.deepEqual(opened.agents, [[RETRIES.id, BACKOFF.id]]);
-  assert.deepEqual(opened.inbox, ["inbox", { planId: RETRIES.id, itemId: RETRY_429.id }]);
+  assert.deepEqual(opened.inbox, ["inbox", { taskId: RETRIES.id, itemId: RETRY_429.id }]);
   assert.deepEqual(opened.plans, [DASHBOARD.id]);
 });
 
@@ -429,7 +429,7 @@ test("someone who left whom only the place that opened the page names keeps that
 
 test("the reader's own page lists no question of an agent with no task, whose starter nobody names", async () => {
   const { page } = mountWith({
-    inboxPlanless: [
+    inboxTaskless: [
       {
         id: SWEEP_ITEM.id,
         agentId: SWEEP_AGENT,
@@ -524,7 +524,7 @@ test("Copy link copies their page's link under the slug of the workspace it stan
     {
       workspaces: [{ ...ACME, slug: "acme" }],
       personView: {
-        ...plansControl().personView,
+        ...tasksControl().personView,
         userId: CHARLES.userId,
         workspaceId: ACME.id,
       },

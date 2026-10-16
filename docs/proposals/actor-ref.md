@@ -32,7 +32,7 @@ window anywhere:
 - The workspace members read carries `{userId, name, email, role}`, with no
   picture (`workspace-wire.ts`; the service's query is
   `packages/service/src/accounts/workspace-members.ts`).
-- `plan-crumb.tsx` passes `pictureUrl={undefined}`, and so does
+- `task-crumb.tsx` passes `pictureUrl={undefined}`, and so does
   `plan-history-model.ts`'s `personOf` for anyone but the reader.
 
 Only the reader's own sign-in picture travels (the sidebar, Settings, and
@@ -133,7 +133,7 @@ padding, so the words around it keep their spacing.
 | `desktop-version-history.tsx` `RevisionMark`, `plan-history-model.ts` `RevisionAuthor` and `authorName` | `ActorMark`, `Actor`, `actorName` |
 | `planning/agent-ref.tsx` `AgentRef` | `ActorRef`'s agent branch (`AgentSubject` and its builders stay) |
 | `plan-body.tsx` `editorOf`, `callOf`, `editedLine` | `editActor` plus `ActorRef` in `EditedLine` and `bylineOf` |
-| `plan-crumb.tsx`'s private `useWorkspaceMembers` | The window's member directory |
+| `task-crumb.tsx`'s private `useWorkspaceMembers` | The window's member directory |
 | `coding-agent-model.ts` `teammateStarter` (a name string) | A person actor |
 | The `string` callers in `TranscriptCallRow.caller` and `MacOwnerContext` | Person actors |
 
@@ -151,7 +151,7 @@ padding, so the words around it keep their spacing.
 | 7 | "On Charles Pan's Mac" (`ToolHeader` `place`) | Text in a pill | The pill holds the owner's disc |
 | 8 | Agent chat senders (worker 292) | Name only, as 292 builds it | `ActorRef` |
 | 9 | Plan ⋯ footer (worker 293) | "Created by / Last edited by", name only, as 293 builds it | `ActorRef` |
-| 10 | "5 can edit" and its card (`plan-crumb.tsx`) | Grey letters, no "You" | Photos, and "You" in the card |
+| 10 | "5 can edit" and its card (`task-crumb.tsx`) | Grey letters, no "You" | Photos, and "You" in the card |
 | 11 | Settings › Workspace › Members (`MemberRow`) | Name and "email · Role", no face | A 32px disc per row, and "You" |
 | 12 | Sidebar account (`sidebar-foot.tsx`) | `PersonAvatar` | `ActorMark`, no visible change |
 | 12 | Sidebar head | The workspace tile | Unchanged |

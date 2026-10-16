@@ -1,6 +1,6 @@
 {
   "name": "@luke/features",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -14,6 +14,7 @@
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
     "./agent-pictures-model": "./src/agent-pictures-model.js",
@@ -42,6 +43,7 @@
     "./models-wire": "./src/models-wire.js",
     "./page-wire": "./src/page-wire.js",
     "./picture-wire": "./src/picture-wire.js",
+    "./pin-order": "./src/pin-order.js",
     "./place-chip-model": "./src/place-chip-model.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./plan-attachment-wire": "./src/plan-attachment-wire.js",
@@ -97,7 +99,8 @@
     "@luke/wire": "workspace:*",
     "ai": "catalog:",
     "diff": "9.0.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "fractional-indexing": "3.2.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

@@ -7,8 +7,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { tasksControl } from "#testing/tasks-control";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 /** The switcher over the plans given, in sight or folded away. */
-function mount(plans: Partial<PlansControl>) {
+function mount(tasks: Partial<TasksControl>) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -58,7 +58,7 @@ function mount(plans: Partial<PlansControl>) {
         onRegistry(
           registry,
           createElement(WorkspaceSwitcher, {
-            plans: { ...plansControl(), ...plans },
+            tasks: { ...tasksControl(), ...tasks },
             inSight,
           }),
         ),
@@ -88,7 +88,7 @@ function open(switcher: HTMLButtonElement | null): void {
 
 /** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
-  return item.querySelector(".plan-menu-label")?.textContent ?? null;
+  return item.querySelector(".task-menu-label")?.textContent ?? null;
 }
 
 /** Chooses the open menu's item by its label. */

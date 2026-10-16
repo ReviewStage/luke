@@ -20,8 +20,8 @@ import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { macTerminalActRows } from "./mac-terminal-acts";
-import { planningActRows } from "./planning-acts";
 import { settingsActRows } from "./settings-rows";
+import { tasksActRows } from "./tasks-acts";
 import { terminalActRows, whenPageGone } from "./terminal-acts";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
@@ -108,13 +108,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...avatarActRows({ avatar }),
-    ...planningActRows({
+    ...tasksActRows({
       host: operator.host,
       openExternal: config.openExternal,
       serviceBaseUrl: config.hostedServiceBaseUrl,
-      activePlanId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutPlan: (planId) => {
-        voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      activeTaskId: () => state.snapshot().tasks.activeTaskId,
+      talkAboutTask: (taskId) => {
+        voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
       },
       voiceReady: () => {
         const snapshot = state.snapshot();

@@ -41,13 +41,13 @@ import { installEditorBundle, installEditorLayout, typeInComposer } from "#testi
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
 import { runAppCommand } from "../app-commands";
-import { archiveWords } from "../planning/coding-agent-model";
-import type { PlansControl } from "../planning/use-plans-tab";
-import { useSidePanel } from "../planning/use-side-panel";
+import { archiveWords } from "../tasks/coding-agent-model";
+import { useSidePanel } from "../tasks/use-side-panel";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
@@ -232,7 +232,7 @@ afterEach(() => {
 });
 
 /** The page of the agent, standing in the plan's place, as the window's plans control holds it. */
-function mount(plans: PlansControl = plansControl({})): HTMLElement {
+function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -243,7 +243,7 @@ function mount(plans: PlansControl = plansControl({})): HTMLElement {
         createElement(
           Fragment,
           null,
-          createElement(DesktopAgentPage, { plans, agentId: AGENT_ID }),
+          createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
           createElement(ToastHost),
         ),
       ),
@@ -308,7 +308,7 @@ function PanelPage(): React.JSX.Element {
     agents,
   );
   return createElement(DesktopAgentPage, {
-    plans: { ...plansControl({}), sidePanel },
+    tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
   });
 }
@@ -664,7 +664,7 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
     title: null,
   };
   const page = mount(
-    plansControl({
+    tasksControl({
       me: "user-dean",
       workspaces: [
         {
@@ -718,7 +718,7 @@ interface OpenedOrigin {
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
-  const head = card.querySelector<HTMLElement>("[data-plan-card] > summary");
+  const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
   return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
 }
@@ -728,7 +728,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
   const opened: unknown[] = [];
-  const plans = plansControl({ workspaces: [ACME] });
+  const plans = tasksControl({ workspaces: [ACME] });
   const page = mount({
     ...plans,
     automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
@@ -749,7 +749,7 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
   transcript = handedTranscript();
-  const page = mount(plansControl({ workspaces: [ACME] }));
+  const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
 
   const { sender } = origin(page);
@@ -760,7 +760,7 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
 test("with the Automations experiment off, an automation's agent names it plainly, with nothing to open", async () => {
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
-  const page = mount(plansControl({ workspaces: [ACME] }));
+  const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
 
   const { sender } = origin(page);
@@ -783,7 +783,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
     },
   ];
   transcript = handedTranscript();
-  const page = mount(plansControl({ me: "user-dean" }));
+  const page = mount(tasksControl({ me: "user-dean" }));
   await settle();
 
   const { sender } = origin(page);
@@ -807,7 +807,7 @@ test("too narrow for the line naming who sent it, it breaks between the automati
   ];
   transcript = handedTranscript();
   const styles = layContainersAt({});
-  const page = mount(plansControl({ me: "user-dean" }));
+  const page = mount(tasksControl({ me: "user-dean" }));
   await settle();
 
   const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
@@ -848,7 +848,7 @@ test("an automation's agent the model has not named yet is titled by its automat
 
 test("the page's ⋯ copies the agent's link, under its workspace, and says Link copied", async () => {
   const page = mount(
-    plansControl({
+    tasksControl({
       workspaces: [
         {
           id: "workspace-1",
@@ -900,7 +900,7 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
       archivedAt: 3,
     },
   ];
-  const page = mount(plansControl({ archived: [billing] }));
+  const page = mount(tasksControl({ archived: [billing] }));
   await settle();
 
   typeInComposer(page, "Ask @billing");
@@ -909,7 +909,7 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
   const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
   assert.deepEqual(
     rows.map((row) => [
-      row.querySelector(".plan-compose-menu-name")?.textContent,
+      row.querySelector(".task-compose-menu-name")?.textContent,
       row.querySelector(".mention-row-detail")?.textContent,
     ]),
     [["Bill by seat", "Billing · Archived"]],

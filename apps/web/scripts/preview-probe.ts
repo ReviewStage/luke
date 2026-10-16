@@ -173,7 +173,7 @@ const program = Effect.gen(function* () {
   const path = yield* Path.Path;
   const web = path.join(import.meta.dirname, "..");
   const repoRoot = path.join(web, "..", "..");
-  const plan = planProbes(door, yield* readProbePaths({ repoRoot, web }));
+  const task = planProbes(door, yield* readProbePaths({ repoRoot, web }));
   const target = yield* resolveTarget(bypassSecret);
   if ("kind" in target) {
     const notice = renderNotAffected(target);
@@ -184,7 +184,7 @@ const program = Effect.gen(function* () {
   const report: ProbeReport = {
     door,
     address: target.address,
-    results: yield* probeDeployment(target, plan),
+    results: yield* probeDeployment(target, task),
   };
   yield* write(renderReport(report));
   yield* appendStepSummary(renderSummary(report));

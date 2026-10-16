@@ -13,19 +13,19 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
-import { ChangesCard } from "../planning/agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "../planning/agent-ref";
-import type { CodingAgentsControl } from "../planning/use-coding-agents";
+import { tasksControl } from "#testing/tasks-control";
+import { ChangesCard } from "../tasks/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { changesOffers, changesTabOf } from "./side-panel";
 
-const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** An agent at rest on the plan, named by its title. */
 function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
   return {
     id,
-    planId: PLAN,
+    planId: TASK,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
@@ -57,7 +57,7 @@ const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 function agents(): CodingAgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
-    ...plansControl().agents,
+    ...tasksControl().agents,
     agents: [FIRST, SECOND, THIRD],
     agentIds: [FIRST.id, SECOND.id, THIRD.id],
     pullRequests: new Map([

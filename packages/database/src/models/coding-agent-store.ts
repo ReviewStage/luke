@@ -170,9 +170,10 @@ export interface CodingAgent {
   readonly createdAt: Date;
 }
 
-/** One agent with no plan as the sidebar lists it for its reader: the agent, and when the reader pinned it; null where they hold no pin of it. */
+/** One agent with no plan as the sidebar lists it for its reader: the agent, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
 export interface PlanlessCodingAgent extends CodingAgent {
   readonly pinnedAt: Date | null;
+  readonly pinPosition: string | null;
 }
 
 /** What a Start answered: the agent, and whether this Start made it or a retry found it. */
@@ -329,6 +330,7 @@ const CodingAgentRowSchema = Schema.Struct({
 const PlanlessAgentRowSchema = Schema.Struct({
   ...CodingAgentRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
+  pinPosition: Schema.NullOr(Schema.String),
 });
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -822,7 +824,11 @@ const findPlanlessAgents = SqlSchema.findAll({
   execute: ({ userId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_COLUMNS, pinnedAt: agentPin.pinnedAt })
+        .select({
+          ...CODING_AGENT_COLUMNS,
+          pinnedAt: agentPin.pinnedAt,
+          pinPosition: agentPin.position,
+        })
         .from(codingAgent)
         .leftJoin(
           agentPin,
@@ -959,6 +965,26 @@ const insertAgentPin = SqlSchema.void({
         .insert(agentPin)
         .values({ userId, codingAgentId: agentId, pinnedAt: now })
         .onConflictDoNothing(),
+    ),
+});
+
+/** The account's pin of the agent at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
+const placeAgentPin = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    position: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: ({ userId, agentId, position, now }) =>
+    Database.use((db) =>
+      db
+        .insert(agentPin)
+        .values({ userId, codingAgentId: agentId, position, pinnedAt: now })
+        .onConflictDoUpdate({
+          target: [agentPin.userId, agentPin.codingAgentId],
+          set: { position },
+        }),
     ),
 });
 
@@ -1502,7 +1528,8 @@ export function unarchiveCodingAgentFrom(
 
 /**
  * The account's own pin of the agent set as asked: from now, or from the
- * instant already standing, so pinning twice moves nothing; or taken away.
+ * instant already standing, so pinning twice moves nothing, at the position
+ * given where one is; or taken away.
  * Every other member's pin stands as it was. Nothing for an agent of a
  * workspace the account is not in, which is neither pinned nor unpinned,
  * nor for an agent on a plan, which stands under its plan rather than in
@@ -1512,12 +1539,15 @@ export function pinCodingAgent(
   userId: string,
   agentId: string,
   pinned: boolean,
+  position?: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
     if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
-    if (pinned) yield* insertAgentPin({ userId, agentId, now: yield* DateTime.nowAsDate });
-    else yield* deleteAgentPin({ userId, agentId });
+    const now = yield* DateTime.nowAsDate;
+    if (!pinned) yield* deleteAgentPin({ userId, agentId });
+    else if (position === undefined) yield* insertAgentPin({ userId, agentId, now });
+    else yield* placeAgentPin({ userId, agentId, position, now });
     return found;
   });
 }

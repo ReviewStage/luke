@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
-import { plansControl } from "#testing/plans-control";
+import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -129,7 +129,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       tab,
       onTabChange: setTab,
-      plans: plansControl({ page: TASKS_PAGE.HOME, onGoHome }),
+      tasks: tasksControl({ page: TASKS_PAGE.HOME, onGoHome }),
       history: {
         canGoBack: false,
         canGoForward: false,

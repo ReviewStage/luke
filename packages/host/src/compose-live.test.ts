@@ -9,6 +9,7 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
@@ -96,11 +97,14 @@ function videoCallsOn(store: SettingsStore) {
   return Effect.orDie(store.cacheExperiments(DEVELOPER.email, { [EXPERIMENT.VIDEO_CALLS]: true }));
 }
 
-function subject(options: { videoOnCall?: boolean } = {}) {
+function subject(options: { videoOnCall?: boolean; avatar?: VideoAvatar } = {}) {
   return Effect.gen(function* () {
     const store = yield* settingsStore();
     if (options.videoOnCall) {
       yield* videoCallsOn(store);
+    }
+    if (options.avatar !== undefined) {
+      yield* Effect.orDie(store.set("videoAvatar", options.avatar));
     }
     const answerCreate = (socket: FakeLiveSocket) => {
       socket.onSent((data) => {
@@ -210,8 +214,13 @@ function avatarSends(socket: FakeLiveSocket) {
     .filter((frame) => String(frame.type).startsWith("avatar."));
 }
 
-function start(requestId: string) {
-  return { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId };
+/** The start `requestId` names, with the avatar it asks for where that is not the default. */
+function start(requestId: string, avatar?: VideoAvatar) {
+  return {
+    type: VOICE_SERVICE_FRAME.AVATAR_START,
+    requestId,
+    ...(avatar === undefined ? undefined : { avatar }),
+  };
 }
 
 function stop(requestId: string, reason: AvatarStopReason) {
@@ -520,6 +529,50 @@ it.effect("a call opens with the avatar asked for where video is on for calls", 
 
     assert.deepEqual(avatarSends(socket), [start("request-1")]);
     assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.STARTING);
+  }),
+);
+
+it.effect(
+  "every start asks for the avatar chosen in Settings as it stands then: the call's first, the restart after a close this side did not start, and the toggle's",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject({ videoOnCall: true, avatar: VIDEO_AVATAR.ORION });
+      const socket = yield* f.openCall;
+      grantFor(socket, "request-1");
+      yield* settle();
+      // A choice made while the avatar stands is the one its restart asks for.
+      yield* Effect.orDie(f.store.set("videoAvatar", VIDEO_AVATAR.SELENE));
+      assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
+      yield* settle();
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false });
+      yield* Effect.orDie(f.store.set("videoAvatar", VIDEO_AVATAR.LYRA));
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+
+      assert.deepEqual(
+        avatarSends(socket)
+          .filter((frame) => frame.type === VOICE_SERVICE_FRAME.AVATAR_START)
+          .map((frame) => frame.avatar),
+        [VIDEO_AVATAR.ORION, VIDEO_AVATAR.SELENE, VIDEO_AVATAR.LYRA],
+      );
+      assert.deepEqual(avatarSends(socket).at(-1), start("request-3", VIDEO_AVATAR.LYRA));
+    }),
+);
+
+it.effect("video turned off while a restart reads the chosen avatar stays off", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true, avatar: VIDEO_AVATAR.ORION });
+    const socket = yield* f.openCall;
+    grantFor(socket, "request-1");
+    yield* settle();
+
+    assert.equal(f.live.service.closed(AVATAR_STOP_REASON.SERVER_CLOSED), true);
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false });
+    yield* settle();
+
+    assert.deepEqual(avatarSends(socket), [
+      start("request-1", VIDEO_AVATAR.ORION),
+      stop("request-1", AVATAR_STOP_REASON.SERVER_CLOSED),
+    ]);
   }),
 );
 

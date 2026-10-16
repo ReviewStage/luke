@@ -14,7 +14,7 @@ import { OpenPage } from "../src/OpenPage";
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 let root: Root | undefined;
 
@@ -46,16 +46,16 @@ function press(link: HTMLAnchorElement): void {
 }
 
 test("the press opens the plan's section in the app, in the app's own scheme", () => {
-  const page = pageAt(`/acme/plan/${PLAN_ID}#rollout`);
+  const page = pageAt(`/acme/plan/${TASK_ID}#rollout`);
 
   assert.equal(
     linkNamed(page, "Open in Luke")?.getAttribute("href"),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
 });
 
 test("a press is followed by a line saying what to check, which leads to the landing page", () => {
-  const page = pageAt(`/acme/plan/${PLAN_ID}`);
+  const page = pageAt(`/acme/plan/${TASK_ID}`);
   assert.equal(page.querySelector('[role="status"]')?.textContent, "");
 
   const open = linkNamed(page, "Open in Luke");
@@ -68,7 +68,7 @@ test("a press is followed by a line saying what to check, which leads to the lan
 });
 
 test("the way to Luke is the landing page, never a download, on a plan's page and on any other", () => {
-  for (const address of [`/acme/plan/${PLAN_ID}`, "/acme/plans/x"]) {
+  for (const address of [`/acme/plan/${TASK_ID}`, "/acme/plans/x"]) {
     const page = pageAt(address);
     const hrefs = Array.from(page.querySelectorAll("a")).map((link) => link.getAttribute("href"));
 

@@ -915,7 +915,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksPin: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN, { taskId: params.taskId, pinned: params.pinned }),
+        client.call(GATEWAY_METHOD.TASKS_PIN, {
+          taskId: params.taskId,
+          pinned: params.pinned,
+          ...(params.position === undefined ? undefined : { position: params.position }),
+        }),
         (answer) => record(answer)?.changed === true,
       ),
     tasksPinRepository: (params) =>
@@ -1404,6 +1408,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_PIN, {
           agentId: params.agentId,
           pinned: params.pinned,
+          ...(params.position === undefined ? undefined : { position: params.position }),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

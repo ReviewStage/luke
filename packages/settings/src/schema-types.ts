@@ -1,6 +1,7 @@
 import type { ProductSettingValue } from "@luke/features/analytics";
 import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
+import type { ExperimentChoices } from "./experiments.js";
 import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
@@ -45,6 +46,8 @@ export const SETTING_SECTION = {
   MAIN: "main",
   /** The voice controls, below the permission that lets Luke listen. */
   CONTROLS: "controls",
+  /** The Video calls experiment's own rows, drawn beneath its switch on the Experimental page. */
+  VIDEO_CALLS: "video-calls",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
@@ -101,8 +104,8 @@ export interface SettingGuardResult<Value> {
  * can no longer lead to a page without its row.
  */
 export interface SettingsVisibility {
-  /** The runtime facts a row's own condition is judged from. */
-  settings: RuntimeStatus;
+  /** The runtime facts a row's own condition is judged from, and the experiments the account has on. */
+  settings: RuntimeStatus & { experiments: ExperimentChoices };
   /**
    * Voice available and the microphone granted: until both, the Voice page
    * holds only the way in.
@@ -112,10 +115,12 @@ export interface SettingsVisibility {
   accountDrawn: boolean;
 }
 
-/** One option a row's control draws: the token it stores by, and the words it shows. */
+/** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */
 export interface SettingOption {
   value: string;
   label: string;
+  /** The address of a small picture drawn ahead of the words, such as an avatar's face. */
+  picture?: string;
 }
 
 /**

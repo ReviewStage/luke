@@ -183,13 +183,13 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   padding: 0;
 }
 
-.call-card-plan {
+.call-card-task {
   display: block;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.call-card-plan[data-overflow="true"] {
+.call-card-task[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 

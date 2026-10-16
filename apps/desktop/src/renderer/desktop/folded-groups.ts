@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { useState } from "react";
-import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
+import { INBOX_GROUPING, type InboxGrouping } from "../tasks/inbox-model";
 
 /**
  * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned, the repositories', and the creators', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
@@ -29,7 +29,9 @@ const STORAGE_KEY = {
   GROUPS: "luke.sidebarFoldedGroups",
   CREATORS: "luke.sidebarFoldedCreators",
   PINNED: "luke.sidebarPinnedFolded",
-  INBOX_PLANS: "luke.inboxFoldedPlans",
+  INBOX_TASKS: "luke.inboxFoldedTasks",
+  /** Where the Inbox's task groups were kept before tasks had their name. */
+  INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
@@ -64,7 +66,7 @@ const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.Stri
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The Inbox's folded plans, by id. */
-const storedPlans = Schema.fromJsonString(Schema.Array(Schema.String));
+const storedTasks = Schema.fromJsonString(Schema.Array(Schema.String));
 
 /** How wide the Inbox's list stands. */
 const storedWidth = Schema.fromJsonString(Schema.Finite);
@@ -86,10 +88,24 @@ interface Folds {
 
 const OPEN: Folds = { groups: [], creators: [], pinned: false };
 
-/** A kept value, or `fallback` where none was kept, it no longer reads, or storage refuses the read. */
-export function readKept<A>(key: string, schema: Schema.Codec<A, string>, fallback: A): A {
+/**
+ * A kept value, or `fallback` where none was kept, it no longer reads, or
+ * storage refuses the read. Note that a value an earlier version kept under
+ * `earlier` is read where `key` holds none, because the key was renamed and
+ * the developer's choice should not be forgotten for it; the next write
+ * keeps it under `key`.
+ */
+export function readKept<A>(
+  key: string,
+  schema: Schema.Codec<A, string>,
+  fallback: A,
+  earlier?: string,
+): A {
   try {
-    const decoded = Schema.decodeUnknownOption(schema)(window.localStorage.getItem(key));
+    const held = window.localStorage.getItem(key);
+    const text =
+      held === null && earlier !== undefined ? window.localStorage.getItem(earlier) : held;
+    const decoded = Schema.decodeUnknownOption(schema)(text);
     return Option.getOrElse(decoded, () => fallback);
   } catch {
     return fallback;
@@ -172,22 +188,24 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
 }
 
 /** Which of the Inbox's plan groups are folded, and the press that folds or unfolds one. */
-export interface InboxPlanFolds {
-  folded: (planId: string) => boolean;
-  toggle: (planId: string) => void;
+export interface InboxTaskFolds {
+  folded: (taskId: string) => boolean;
+  toggle: (taskId: string) => void;
 }
 
 /** The Inbox's plan groups, each open until it is first folded, and kept as it is pressed. */
-export function useInboxPlanFolds(): InboxPlanFolds {
-  const [folded, setFolded] = useState(() => readKept(STORAGE_KEY.INBOX_PLANS, storedPlans, []));
+export function useInboxTaskFolds(): InboxTaskFolds {
+  const [folded, setFolded] = useState(() =>
+    readKept(STORAGE_KEY.INBOX_TASKS, storedTasks, [], STORAGE_KEY.INBOX_TASKS_EARLIER),
+  );
   return {
-    folded: (planId) => folded.includes(planId),
-    toggle: (planId) => {
-      const next = folded.includes(planId)
-        ? folded.filter((held) => held !== planId)
-        : [...folded, planId];
+    folded: (taskId) => folded.includes(taskId),
+    toggle: (taskId) => {
+      const next = folded.includes(taskId)
+        ? folded.filter((held) => held !== taskId)
+        : [...folded, taskId];
       setFolded(next);
-      writeKept(STORAGE_KEY.INBOX_PLANS, storedPlans, next);
+      writeKept(STORAGE_KEY.INBOX_TASKS, storedTasks, next);
     },
   };
 }
@@ -224,7 +242,7 @@ export function useInboxViewChoices(): InboxViewChoices {
     readKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, false),
   );
   const [grouping, setGrouping] = useState<InboxGrouping>(() =>
-    readKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, INBOX_GROUPING.PLAN),
+    readKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, INBOX_GROUPING.TASK),
   );
   return {
     waitingOnly,

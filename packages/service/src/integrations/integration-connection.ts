@@ -58,6 +58,7 @@ import {
   accountIntegrationConnect,
   INTEGRATION_CONNECT_FAILURE,
   type IntegrationConnect,
+  type WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import {
   expireIntegrationConnection,
@@ -243,7 +244,7 @@ export function integrationAccessToken(
 ): Effect.Effect<
   IntegrationTokenAnswer,
   never,
-  DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient
+  DatabaseServices | IntegrationConnect | WorkspaceLinearConnect | GitHubApp | HttpClient.HttpClient
 > {
   const { provider } = account;
   return Effect.gen(function* () {

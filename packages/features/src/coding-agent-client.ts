@@ -626,7 +626,11 @@ export class HostedCodingAgentClient {
       this.#call.send({
         method: HTTP_METHOD.PATCH,
         path: agentPath(agentId),
-        body: JSON.stringify({ pinned: request.pinned }),
+        body: JSON.stringify(
+          request.position === undefined
+            ? { pinned: request.pinned }
+            : { pinned: request.pinned, position: request.position },
+        ),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
     );

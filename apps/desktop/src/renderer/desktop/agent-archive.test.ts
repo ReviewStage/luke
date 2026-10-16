@@ -11,7 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { codingAgentsControl } from "#testing/plans-control";
+import { codingAgentsControl } from "#testing/tasks-control";
 import { ArchivedAgents } from "./agent-archive";
 
 /**
@@ -55,7 +55,7 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   const fold = container.querySelector<HTMLButtonElement>("button[aria-expanded]");
   act(() => fold?.click());
   const row = container.querySelector<HTMLElement>(
-    ".plan-summary-archived-agent .plan-summary-row",
+    ".task-summary-archived-agent .task-summary-row",
   );
   assert.ok(row, "the archived agent is listed");
   act(() => {
@@ -98,7 +98,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
   );
   act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
   const row = container.querySelector<HTMLElement>(
-    ".plan-summary-archived-agent .plan-summary-row",
+    ".task-summary-archived-agent .task-summary-row",
   );
   act(() => {
     row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

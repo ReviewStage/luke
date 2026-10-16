@@ -16,7 +16,7 @@ import path from "node:path";
 const STYLES = path.join(import.meta.dirname, "../renderer/styles");
 
 /** The sheets a fade is written in: the fade itself, and the sheet of the logs that start it beneath a band of their own. */
-export const FADE_SHEET = { FADE: "base.css", LOGS: "planning.css" } as const;
+export const FADE_SHEET = { FADE: "base.css", LOGS: "tasks.css" } as const;
 export type FadeSheet = (typeof FADE_SHEET)[keyof typeof FADE_SHEET];
 
 /** The keyframes that ease a scroller's top fade in, and its foot's out (base.css). */
