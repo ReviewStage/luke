@@ -99,6 +99,16 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import {
+  type IssueListView,
+  type IssueView,
+  issueChangeParamsSchema,
+  issueCreateParamsSchema,
+  issueIdParamsSchema,
+  issueListParamsSchema,
+  issueListViewSchema,
+  issueViewSchema,
+} from "@luke/features/issue-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
   type MacRepositoriesAnswer,
@@ -440,6 +450,11 @@ export const ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** The listed workspace's issues: listed, one read, one filed, and one changed. */
+  ISSUES_LIST: "issues.list",
+  ISSUES_READ: "issues.read",
+  ISSUES_CREATE: "issues.create",
+  ISSUES_CHANGE: "issues.change",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -1267,6 +1282,26 @@ export const ACT = {
     payload: actSchema(automationIdParamsSchema),
     result: wireResult<AutomationView>(isReadable(automationViewSchema)),
     refusal: "Could not make a new webhook secret on this system.",
+  },
+  [ACT_KIND.ISSUES_LIST]: {
+    payload: actSchema(issueListParamsSchema),
+    result: wireResult<IssueListView>(isReadable(issueListViewSchema)),
+    refusal: "Could not read the issues on this system.",
+  },
+  [ACT_KIND.ISSUES_READ]: {
+    payload: actSchema(issueIdParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not read the issue on this system.",
+  },
+  [ACT_KIND.ISSUES_CREATE]: {
+    payload: actSchema(issueCreateParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not create the issue on this system.",
+  },
+  [ACT_KIND.ISSUES_CHANGE]: {
+    payload: actSchema(issueChangeParamsSchema),
+    result: wireResult<IssueView>(isReadable(issueViewSchema)),
+    refusal: "Could not change the issue on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,

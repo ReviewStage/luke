@@ -19,6 +19,7 @@ import { automationActRows } from "./automation-acts";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
+import { issueActRows } from "./issue-acts";
 import { macTerminalActRows } from "./mac-terminal-acts";
 import { settingsActRows } from "./settings-rows";
 import { tasksActRows } from "./tasks-acts";
@@ -165,6 +166,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...integrationActRows({ host: operator.host }),
     ...automationActRows({ host: operator.host }),
+    ...issueActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
