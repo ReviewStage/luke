@@ -1,16 +1,19 @@
 import {
   CHANNEL_KIND,
   CHAT_BOUNDS,
+  type ChatBlock,
+  chatBlockSchema,
+  chatReadBlockSchema,
   GENERAL_CHANNEL,
   MEMBER_KIND,
   PLANNER_HANDLE,
 } from "@luke/features/chat-wire";
-import { and, asc, eq, isNull, max, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, max, ne, or, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { organization, user } from "../schemas/auth.js";
-import { chatChannel, chatMember } from "../schemas/chat.js";
+import { chatChannel, chatMember, chatMessage, workspaceChat } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -30,7 +33,21 @@ import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
  * name with `-2`, `-3`, … on a clash, and never `luke` or an agent's
  * `agent-N`, which are spoken for. A channel is found or made by what names
  * it, the general one by its name, a plan's by its plan, a DM by its pair,
- * so asking twice answers the same row.
+ * so asking twice answers the same row. A member joins at the workspace's
+ * head: its cursor starts at the last place the sequence handed out, so its
+ * unread is what is said after it joined, and what came before stays in
+ * the history.
+ *
+ * A message takes the next place in the workspace's chat sequence, minted
+ * under the `workspace_chat` row's lock, so the places posts take are
+ * contiguous however many land at once and a post rolled back takes none.
+ * A person reads every channel of the workspace, every DM included, so
+ * the people of a workspace can follow its agents talking; an agent or a
+ * planner reads every channel but a DM, and the DMs it is one of. Only a
+ * DM's two members post in it. A member's
+ * unread is what it may see that someone else posted or changed past its
+ * cursor, which reading moves; the one notice a member is told stands until
+ * its cursor passes it.
  */
 
 /** What a chat store effect answers: an effect over the ambient database. */
@@ -42,12 +59,18 @@ export type ChatStoreEffect<A> = Effect.Effect<
 
 /** Why a topic channel was not opened. */
 export const CHAT_REFUSAL = {
-  /** The account is not in the workspace, or the member opening it is not of it. */
+  /** The account is not in the workspace, or what it names is not of it or not its to post in. */
   NOT_FOUND: "not-found",
   /** A channel of another kind, or an archived one, already stands under the name. */
   NAME_TAKEN: "name-taken",
   /** The workspace keeps as many topic channels open as it may. */
   TOO_MANY_TOPICS: "too-many-topics",
+  /** The member posting has left: an archived agent or plan says nothing more. */
+  AUTHOR_LEFT: "author-left",
+  /** The channel is archived and takes no post. */
+  CHANNEL_ARCHIVED: "channel-archived",
+  /** The post's client key already names another member's message in the channel. */
+  KEY_TAKEN: "key-taken",
 } as const;
 
 export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
@@ -57,6 +80,17 @@ export type ChatMemberSubject =
   | { readonly kind: typeof MEMBER_KIND.HUMAN; readonly userId: string }
   | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string }
   | { readonly kind: typeof MEMBER_KIND.PLANNER; readonly planId: string };
+
+/** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
+const MAX_PAST = 200;
+
+/** The orders a read of messages keeps: oldest change first, or newest place first. */
+const READ_ORDER = {
+  TOUCHED: "touched",
+  NEWEST: "newest",
+} as const;
+
+type ReadOrder = (typeof READ_ORDER)[keyof typeof READ_ORDER];
 
 /** The longest a person's handle is spelled before a clash's suffix. */
 const MAX_HANDLE_STEM_CHARS = 32;
@@ -101,6 +135,64 @@ const ChatChannelRowSchema = Schema.Struct({
 /** One channel as the store keeps it. */
 export type ChatChannelRow = typeof ChatChannelRowSchema.Type;
 
+const ChatMessageRowSchema = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  channelId: Schema.String,
+  seq: Schema.Number,
+  touchedSeq: Schema.Number,
+  parentId: Schema.NullOr(Schema.String),
+  authorMemberId: Schema.String,
+  blocks: Schema.Array(chatReadBlockSchema),
+  mentions: Schema.Array(Schema.String),
+  clientKey: Schema.String,
+  createdAt: InstantColumnSchema,
+});
+
+/** One message as the store keeps it. */
+export type ChatMessageRow = typeof ChatMessageRowSchema.Type;
+
+/**
+ * A post as its poster makes it: the member posting, where it goes, a
+ * channel or the message it replies to by its place, which posts in that
+ * message's channel and threads under its root, the body, the handles its
+ * words mention, and the poster's key for the post.
+ */
+export interface ChatPost {
+  readonly authorMemberId: string;
+  readonly to: { readonly channelId: string } | { readonly replyTo: number };
+  readonly blocks: readonly ChatBlock[];
+  readonly mentions: readonly string[];
+  readonly clientKey: string;
+}
+
+/** What a post came to: the message, whether it already stood under the key, and the handles mentioned that name no member. */
+export interface ChatPosted {
+  readonly message: ChatMessageRow;
+  readonly repeated: boolean;
+  readonly unresolved: readonly string[];
+}
+
+/** A read of a member's unread: the messages, oldest change first, and whether more wait past them. */
+export interface ChatUnread {
+  readonly messages: readonly ChatMessageRow[];
+  readonly more: boolean;
+}
+
+/** Where a read of history looks: a channel, a thread by its root's place, and a place to read back from. */
+export interface ChatHistoryQuery {
+  readonly channelId?: string | undefined;
+  readonly thread?: number | undefined;
+  readonly before?: number | undefined;
+  readonly limit?: number | undefined;
+}
+
+/** A window's read past its cursor: what changed past it, oldest first, and the cursor to read on from. */
+export interface ChatPast {
+  readonly messages: readonly ChatMessageRow[];
+  readonly cursor: number;
+}
+
 const MEMBER_COLUMNS = {
   id: chatMember.id,
   organizationId: chatMember.organizationId,
@@ -127,6 +219,20 @@ const CHANNEL_COLUMNS = {
   createdByMemberId: chatChannel.createdByMemberId,
   createdAt: chatChannel.createdAt,
   archivedAt: chatChannel.archivedAt,
+};
+
+const MESSAGE_COLUMNS = {
+  id: chatMessage.id,
+  organizationId: chatMessage.organizationId,
+  channelId: chatMessage.channelId,
+  seq: chatMessage.seq,
+  touchedSeq: chatMessage.touchedSeq,
+  parentId: chatMessage.parentId,
+  authorMemberId: chatMessage.authorMemberId,
+  blocks: chatMessage.blocks,
+  mentions: chatMessage.mentions,
+  clientKey: chatMessage.clientKey,
+  createdAt: chatMessage.createdAt,
 };
 
 const OrganizationKeySchema = Schema.Struct({ organizationId: Schema.String });
@@ -298,6 +404,8 @@ const insertMember = SqlSchema.findOne({
           handle: row.handle,
           ordinal: row.ordinal,
           joinedAt: row.now,
+          // A member joins at the workspace's head, so what it has not read starts with what is said after.
+          readSeq: sql`coalesce((select ${workspaceChat.nextSeq} - 1 from ${workspaceChat} where ${workspaceChat.organizationId} = ${row.organizationId}), 0)`,
         })
         .returning(MEMBER_COLUMNS),
     ),
@@ -314,6 +422,22 @@ const findMemberInWorkspace = SqlSchema.findOneOption({
         .where(
           and(eq(chatMember.organizationId, key.organizationId), eq(chatMember.id, key.memberId)),
         ),
+    ),
+});
+
+/** The member of the workspace, its row held for the transaction, which serializes one member's reads of its cursor. */
+const lockMemberInWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, memberId: Schema.String }),
+  Result: ChatMemberRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(
+          and(eq(chatMember.organizationId, key.organizationId), eq(chatMember.id, key.memberId)),
+        )
+        .for("update"),
     ),
 });
 
@@ -454,6 +578,235 @@ const insertChannel = SqlSchema.findAll({
     ),
 });
 
+/** The workspace's sequence row, made where its first post finds none. */
+const ensureSequence = SqlSchema.void({
+  Request: OrganizationKeySchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db.insert(workspaceChat).values({ organizationId: key.organizationId }).onConflictDoNothing(),
+    ),
+});
+
+/** The workspace's sequence row, held for the transaction, which is what serializes its posts from the read of a post's key to its write. */
+const lockSequence = SqlSchema.findOneOption({
+  Request: OrganizationKeySchema,
+  Result: Schema.Struct({ next: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ next: workspaceChat.nextSeq })
+        .from(workspaceChat)
+        .where(eq(workspaceChat.organizationId, key.organizationId))
+        .for("update"),
+    ),
+});
+
+/** The next place, taken: the row's lock is held to the transaction's end, so posts take their places in turn. */
+const takeSeq = SqlSchema.findOne({
+  Request: OrganizationKeySchema,
+  Result: Schema.Struct({ next: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .update(workspaceChat)
+        .set({ nextSeq: sql`${workspaceChat.nextSeq} + 1` })
+        .where(eq(workspaceChat.organizationId, key.organizationId))
+        .returning({ next: workspaceChat.nextSeq }),
+    ),
+});
+
+/** The last place the workspace's sequence handed out; zero before its first post. */
+const findHead = SqlSchema.findOneOption({
+  Request: OrganizationKeySchema,
+  Result: Schema.Struct({ next: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ next: workspaceChat.nextSeq })
+        .from(workspaceChat)
+        .where(eq(workspaceChat.organizationId, key.organizationId)),
+    ),
+});
+
+const findMemberByHandle = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, handle: Schema.String }),
+  Result: ChatMemberRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.handle, key.handle),
+            ne(chatMember.kind, MEMBER_KIND.PLANNER),
+          ),
+        ),
+    ),
+});
+
+const findChannelInWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, channelId: Schema.String }),
+  Result: ChatChannelRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(CHANNEL_COLUMNS)
+        .from(chatChannel)
+        .where(
+          and(
+            eq(chatChannel.organizationId, key.organizationId),
+            eq(chatChannel.id, key.channelId),
+          ),
+        ),
+    ),
+});
+
+const findAgentPlan = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ planId: Schema.NullOr(Schema.String) }),
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ planId: codingAgent.taskId })
+        .from(codingAgent)
+        .where(eq(codingAgent.id, agentId)),
+    ),
+});
+
+const findMessageByKey = SqlSchema.findOneOption({
+  Request: Schema.Struct({ channelId: Schema.String, clientKey: Schema.String }),
+  Result: ChatMessageRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(
+          and(eq(chatMessage.channelId, key.channelId), eq(chatMessage.clientKey, key.clientKey)),
+        ),
+    ),
+});
+
+const findMessageBySeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, seq: Schema.Number }),
+  Result: ChatMessageRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_COLUMNS)
+        .from(chatMessage)
+        .where(
+          and(eq(chatMessage.organizationId, key.organizationId), eq(chatMessage.seq, key.seq)),
+        ),
+    ),
+});
+
+const insertMessage = SqlSchema.findOne({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    channelId: Schema.String,
+    seq: Schema.Number,
+    parentId: Schema.NullOr(Schema.String),
+    authorMemberId: Schema.String,
+    blocks: Schema.Array(chatBlockSchema),
+    mentions: Schema.Array(Schema.String),
+    clientKey: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: ChatMessageRowSchema,
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .insert(chatMessage)
+        .values({
+          organizationId: row.organizationId,
+          channelId: row.channelId,
+          seq: row.seq,
+          touchedSeq: row.seq,
+          parentId: row.parentId,
+          authorMemberId: row.authorMemberId,
+          blocks: row.blocks,
+          mentions: [...row.mentions],
+          clientKey: row.clientKey,
+          createdAt: row.now,
+        })
+        .returning(MESSAGE_COLUMNS),
+    ),
+});
+
+/**
+ * The messages a reader may see past a place, by the column given, the
+ * reader's own left out where asked, oldest first and bounded.
+ */
+function visibleMessages(
+  reader: ChatMemberRow,
+  conditions: readonly (SQL | undefined)[],
+  order: ReadOrder,
+  limit: number,
+) {
+  return Database.use((db) =>
+    db
+      .select(MESSAGE_COLUMNS)
+      .from(chatMessage)
+      .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+      .where(
+        and(
+          eq(chatMessage.organizationId, reader.organizationId),
+          visibleTo(reader),
+          ...conditions,
+        ),
+      )
+      .orderBy(order === READ_ORDER.TOUCHED ? asc(chatMessage.touchedSeq) : desc(chatMessage.seq))
+      .limit(limit),
+  );
+}
+
+const ReadKeySchema = Schema.Struct({
+  readerId: Schema.String,
+  organizationId: Schema.String,
+});
+
+/** Moves a member's cursor on to the place given, never back, and lets go of the notice it passed. */
+const moveCursor = SqlSchema.void({
+  Request: Schema.Struct({ ...ReadKeySchema.fields, to: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .update(chatMember)
+        .set({
+          readSeq: sql`greatest(${chatMember.readSeq}, ${key.to})`,
+          noticeSeq: sql`case when ${chatMember.noticeSeq} <= ${key.to} then null else ${chatMember.noticeSeq} end`,
+        })
+        .where(
+          and(eq(chatMember.id, key.readerId), eq(chatMember.organizationId, key.organizationId)),
+        ),
+    ),
+});
+
+/** Stamps the notice told where none is outstanding: none stands, or the cursor has passed it. */
+const claimNotice = SqlSchema.findAll({
+  Request: Schema.Struct({ ...ReadKeySchema.fields, seq: Schema.Number }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .update(chatMember)
+        .set({ noticeSeq: key.seq })
+        .where(
+          and(
+            eq(chatMember.id, key.readerId),
+            eq(chatMember.organizationId, key.organizationId),
+            // A notice of something the member has read already is no notice at all.
+            sql`${key.seq} > ${chatMember.readSeq}`,
+            or(isNull(chatMember.noticeSeq), sql`${chatMember.noticeSeq} <= ${chatMember.readSeq}`),
+          ),
+        )
+        .returning({ id: chatMember.id }),
+    ),
+});
+
 /** A name spelled as a slug: lowercase letters and digits, a hyphen between runs of them, bounded. */
 function slugOf(name: string, maximumChars: number): string {
   return name
@@ -548,6 +901,79 @@ function lockedFor(userId: string, organizationId: string): ChatStoreEffect<bool
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return false;
     return Option.isSome(yield* lockWorkspace(organizationId));
+  });
+}
+
+/**
+ * The condition that the reader may see the channel a statement reads:
+ * every channel for a person; any but a DM, and a DM it is one of, for an
+ * agent or a planner.
+ */
+function visibleTo(reader: ChatMemberRow): SQL {
+  if (reader.kind === MEMBER_KIND.HUMAN) return sql`true`;
+  return (
+    or(
+      ne(chatChannel.kind, CHANNEL_KIND.DM),
+      eq(chatChannel.dmAMemberId, reader.id),
+      eq(chatChannel.dmBMemberId, reader.id),
+    ) ?? sql`false`
+  );
+}
+
+/** Whether the author may post in the channel: any but a DM, and a DM it is one of. */
+function postsIn(author: ChatMemberRow, channel: ChatChannelRow): boolean {
+  if (channel.kind !== CHANNEL_KIND.DM) return true;
+  return channel.dmAMemberId === author.id || channel.dmBMemberId === author.id;
+}
+
+/** A page's size as asked, held between one and the bound a read answers with. */
+function boundedPage(limit: number): number {
+  return Math.min(Math.max(Math.floor(limit), 1), CHAT_BOUNDS.MAX_READ);
+}
+
+/** The last place the workspace's sequence handed out; zero before its first post. */
+function headOf(organizationId: string): ChatStoreEffect<number> {
+  return Effect.map(findHead({ organizationId }), (row) =>
+    Option.match(row, { onNone: () => 0, onSome: ({ next }) => next - 1 }),
+  );
+}
+
+/** The plan a message's `@luke` names: its channel's plan, else its author's; none for an agent that works no plan outside a plan's channel. */
+function planOfContext(
+  channel: ChatChannelRow,
+  author: ChatMemberRow,
+): ChatStoreEffect<Option.Option<string>> {
+  if (channel.planId !== null) return Effect.succeed(Option.some(channel.planId));
+  if (author.planId !== null) return Effect.succeed(Option.some(author.planId));
+  if (author.agentId === null) return Effect.succeed(Option.none());
+  // An agent that works no plan names no planner, so its `@luke` answers to no one.
+  return Effect.map(
+    findAgentPlan(author.agentId),
+    Option.flatMap((row) => Option.fromNullishOr(row.planId)),
+  );
+}
+
+/** The member a handle names in the workspace: `luke` the plan's planner, minted where it is not yet, any other a person or agent standing under it. */
+function namedMember(
+  userId: string,
+  organizationId: string,
+  handle: string,
+  planId: Option.Option<string>,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  if (handle !== PLANNER_HANDLE) return findMemberByHandle({ organizationId, handle });
+  if (Option.isNone(planId)) return Effect.succeed(Option.none());
+  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.PLANNER, planId: planId.value });
+}
+
+/** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
+function readerIn(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* findMemberInWorkspace({ organizationId, memberId: readerId });
   });
 }
 
@@ -829,5 +1255,243 @@ export function leave(
     const now = yield* DateTime.nowAsDate;
     const stamped = yield* stampLeft({ organizationId, memberId, now });
     return stamped.length > 0;
+  });
+}
+
+/** The member a handle names in the workspace, `luke` the planner of the plan given; nothing where the account is not in it or no member answers to it. */
+export function memberNamed(
+  userId: string,
+  organizationId: string,
+  handle: string,
+  planId?: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* namedMember(userId, organizationId, handle, Option.fromNullishOr(planId));
+  });
+}
+
+/** The channel under a name in the workspace; nothing where the account is not in it or no channel holds the name. */
+export function channelNamed(
+  userId: string,
+  organizationId: string,
+  name: string,
+): ChatStoreEffect<Option.Option<ChatChannelRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* findChannelByName({ organizationId, name });
+  });
+}
+
+/**
+ * Posts a message as a member of the workspace: in the channel named, or
+ * as a reply in the thread of the message named by its place, under that
+ * thread's root and in its channel. The mentions are resolved to members as
+ * it lands, `luke` to the planner of the channel's plan or the author's,
+ * and the handles that name no one are answered. A post repeated under its
+ * key in its channel answers the message it made. Refused where the author
+ * or the channel is not of the workspace, the author is another person
+ * than the account, the channel is a DM the author is not one of, where
+ * the author has left, or where the channel is archived; nothing written.
+ */
+export function postMessage(
+  userId: string,
+  organizationId: string,
+  post: ChatPost,
+): ChatStoreEffect<Result.Result<ChatPosted, ChatRefusal>> {
+  return transaction(
+    Effect.gen(function* () {
+      const author = yield* readerIn(userId, organizationId, post.authorMemberId);
+      if (Option.isNone(author) || !actsAs(userId, author.value)) {
+        return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      }
+      if (author.value.leftAt !== null) return Result.fail(CHAT_REFUSAL.AUTHOR_LEFT);
+      const parent =
+        "replyTo" in post.to
+          ? yield* findMessageBySeq({ organizationId, seq: post.to.replyTo })
+          : Option.none();
+      if ("replyTo" in post.to && Option.isNone(parent)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      const channelId = Option.match(parent, {
+        onNone: () => ("channelId" in post.to ? post.to.channelId : ""),
+        onSome: (row) => row.channelId,
+      });
+      const channel = yield* findChannelInWorkspace({ organizationId, channelId });
+      if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
+      // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
+      const planId = yield* planOfContext(channel.value, author.value);
+      const named = yield* Effect.forEach(post.mentions, (handle) =>
+        Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
+          handle,
+          found,
+        })),
+      );
+      const mentions = [
+        ...new Set(named.flatMap(({ found }) => Option.toArray(found).map((row) => row.id))),
+      ];
+      // Note that the key is read under the sequence's lock, because two sends of one post racing must land once.
+      yield* ensureSequence({ organizationId });
+      yield* lockSequence({ organizationId });
+      const standing = yield* findMessageByKey({ channelId, clientKey: post.clientKey });
+      if (Option.isSome(standing)) {
+        if (standing.value.authorMemberId !== author.value.id) {
+          return Result.fail(CHAT_REFUSAL.KEY_TAKEN);
+        }
+        return Result.succeed({ message: standing.value, repeated: true, unresolved: [] });
+      }
+      const { next } = yield* takeSeq({ organizationId }).pipe(
+        Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+      );
+      const now = yield* DateTime.nowAsDate;
+      const message = yield* insertMessage({
+        organizationId,
+        channelId,
+        seq: next - 1,
+        parentId: Option.match(parent, {
+          onNone: () => null,
+          onSome: (row) => row.parentId ?? row.id,
+        }),
+        authorMemberId: author.value.id,
+        blocks: post.blocks,
+        mentions,
+        clientKey: post.clientKey,
+        now,
+      }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
+      const unresolved = named
+        .filter(({ found }) => Option.isNone(found))
+        .map(({ handle }) => handle);
+      return Result.succeed({ message, repeated: false, unresolved });
+    }),
+  );
+}
+
+/**
+ * What a member has not read: what it may see that someone else posted or
+ * changed past its cursor, oldest change first, a page of between one and
+ * the bound. The
+ * cursor moves past what is answered, to the workspace's head where nothing
+ * more waits, and lets go of a notice it passes. Nothing where the account
+ * is not in the workspace or the member is not of it.
+ */
+export function unreadFor(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  limit: number = CHAT_BOUNDS.MAX_READ,
+): ChatStoreEffect<Option.Option<ChatUnread>> {
+  return transaction(
+    Effect.gen(function* () {
+      if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+      // Note that the reader's row is held while it reads, because two reads at once must not both take the same page.
+      const reader = yield* lockMemberInWorkspace({ organizationId, memberId: readerId });
+      if (Option.isNone(reader)) return Option.none();
+      const head = yield* headOf(organizationId);
+      const page = boundedPage(limit);
+      // One past the page is read, so a page that is the last says so.
+      const rows = yield* visibleMessages(
+        reader.value,
+        [
+          gt(chatMessage.touchedSeq, reader.value.readSeq),
+          ne(chatMessage.authorMemberId, readerId),
+        ],
+        READ_ORDER.TOUCHED,
+        page + 1,
+      );
+      const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+      const more = read.length > page;
+      const messages = read.slice(0, page);
+      const to = more ? (messages.at(-1)?.touchedSeq ?? reader.value.readSeq) : head;
+      yield* moveCursor({ readerId, organizationId, to });
+      return Option.some({ messages, more });
+    }),
+  );
+}
+
+/**
+ * What a member may see of the workspace's history, newest last: a channel
+ * or a thread, its root and its replies, before a place, a page of between
+ * one and the bound.
+ * Moves no cursor. Nothing where the account is not in the workspace or the
+ * member is not of it.
+ */
+export function history(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  query: ChatHistoryQuery,
+): ChatStoreEffect<Option.Option<readonly ChatMessageRow[]>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    const root =
+      query.thread === undefined
+        ? Option.none()
+        : yield* findMessageBySeq({ organizationId, seq: query.thread });
+    if (query.thread !== undefined && Option.isNone(root)) return Option.some([]);
+    const rows = yield* visibleMessages(
+      reader.value,
+      [
+        query.channelId === undefined ? undefined : eq(chatMessage.channelId, query.channelId),
+        Option.match(root, {
+          onNone: () => undefined,
+          onSome: (row) => or(eq(chatMessage.id, row.id), eq(chatMessage.parentId, row.id)),
+        }),
+        query.before === undefined ? undefined : lt(chatMessage.seq, query.before),
+      ],
+      READ_ORDER.NEWEST,
+      boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ),
+    );
+    const messages = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    return Option.some(messages.toReversed());
+  });
+}
+
+/**
+ * Stamps a notice told to a member at the place given, where none is
+ * outstanding: no notice stands, or its cursor has passed the one that
+ * does. Answers whether this call stamped it, which a second before the
+ * member reads does not.
+ */
+export function markNoticed(
+  userId: string,
+  organizationId: string,
+  memberId: string,
+  seq: number,
+): ChatStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return false;
+    const claimed = yield* claimNotice({ readerId: memberId, organizationId, seq });
+    return claimed.length > 0;
+  });
+}
+
+/**
+ * What a window reads past its cursor: every message the reader may see
+ * that was posted or changed past it, oldest change first, at most a page,
+ * and the cursor to read on from, the workspace's head where nothing more
+ * waits. Moves no member's cursor. Nothing where the account is not in the
+ * workspace or the reader is not of it.
+ */
+export function chatPast(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  after: number,
+): ChatStoreEffect<Option.Option<ChatPast>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    const head = yield* headOf(organizationId);
+    const rows = yield* visibleMessages(
+      reader.value,
+      [gt(chatMessage.touchedSeq, after)],
+      READ_ORDER.TOUCHED,
+      MAX_PAST,
+    );
+    const messages = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    const cursor =
+      messages.length === MAX_PAST ? (messages.at(-1)?.touchedSeq ?? head) : Math.max(head, after);
+    return Option.some({ messages, cursor });
   });
 }

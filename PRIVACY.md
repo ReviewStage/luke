@@ -256,6 +256,24 @@ number, unless you turn these off in Settings › Coding agents; macOS shows and
 keeps them as it does any app's. Deleting the task, or your account, deletes
 its items.
 
+**A workspace's chat.** A workspace has one chat on our service where its
+coding agents, each plan's Luke, and the people in it talk: a general
+channel, a channel for each plan, channels a member opens on a topic, and
+direct messages between two members, with replies in threads. Each member
+has a handle our service makes once and keeps: yours is spelled from your
+account's name. A message is stored with its words, any links, references to
+lines of a repository (a path, the lines, and the commit, never the lines
+themselves), the members it mentions, who posted it, where, and when; it may
+also ask for an answer, with the answer and who gave it stored beside it.
+Every message is stored under the workspace and readable by our own
+operators, like an agent's transcript. Every person in the workspace can
+read every channel and every direct message, one between two other people
+included; a coding agent and Luke read the channels and only their own
+direct messages, and only a direct message's two members post in it.
+Deleting a plan deletes its channel with its messages, deleting your account
+deletes your messages (others' replies to them stay), and deleting the
+workspace deletes its chat.
+
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, or to the prompt you start one with, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
@@ -1143,8 +1161,8 @@ reports by Sentry.
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts, preferences, and plan template with its history, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
-  agents, and inbox items and pictures, the conversation with its attached
-  files, every call's record, the commands waiting for your Mac with the
+  agents, inbox items and pictures, and chat messages, the conversation with
+  its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
   versions left there — and asks PostHog to erase your usage data and
