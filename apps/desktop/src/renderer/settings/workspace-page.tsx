@@ -45,6 +45,7 @@ import { SpinnerRegion } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
+import { OneLine } from "./one-line";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
@@ -412,7 +413,7 @@ function MemberRow({
             {member.name}
             {userId === readerId ? <YouBadge /> : null}
           </strong>
-          <small>{member.email}</small>
+          <OneLine as="small" text={member.email} />
         </span>
         <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
         {slotted && !acting ? <span className="settings-act-slot" aria-hidden="true" /> : null}
@@ -960,10 +961,10 @@ function Invitations({
           ]}
         >
           <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />
-          <RowCopy
-            name={one.email}
-            line={`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}
-          />
+          <span className="settings-copy">
+            <OneLine as="strong" text={one.email} />
+            <small>{`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}</small>
+          </span>
           {/* Luke sends no mail: the accept link is copied and sent by hand. */}
           <button
             type="button"

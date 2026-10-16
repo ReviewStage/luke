@@ -15,6 +15,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import {
   focusByKeyboard,
@@ -525,4 +526,75 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
   await act(async () => item.click());
 
   assert.deepEqual(copied, ["https://tryluke.dev/acme/settings/workspace"]);
+});
+
+/** The page's row whose name begins `name`. */
+function rowNamed(page: HTMLElement, name: string): HTMLElement {
+  return (
+    [...page.querySelectorAll<HTMLElement>(".settings-row")].find((row) =>
+      row.querySelector(".settings-copy strong")?.textContent?.startsWith(name),
+    ) ?? assert.fail(`no ${name} row`)
+  );
+}
+
+/** How a row lays out what it holds: whether it wraps, and the least room its words keep. */
+function layout(row: HTMLElement) {
+  const words = row.querySelector(".settings-copy") ?? assert.fail("a row without words");
+  return { wraps: getComputedStyle(row).flexWrap, words: getComputedStyle(words).minWidth };
+}
+
+test("a page too narrow for a row's words beside its control drops the control under the words, which keep the row's first line, and a page wide enough keeps them side by side", () => {
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
+  const rows = () => ["Theme", "Zoom"].map((name) => layout(rowNamed(page, name)));
+
+  // The page column beside the page list at its widest, in the smallest window.
+  const narrow = layContainersAt({ settings: 270 });
+  try {
+    assert.deepEqual(rows(), [
+      { wraps: "wrap", words: "60%" },
+      { wraps: "wrap", words: "60%" },
+    ]);
+  } finally {
+    narrow.remove();
+  }
+  // The same window with the page list at its own width.
+  const wide = layContainersAt({ settings: 406 });
+  try {
+    assert.deepEqual(
+      rows().map((row) => row.wraps),
+      ["nowrap", "nowrap"],
+    );
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the plan template's title line drops its history and Reset under the title where the column is too narrow for both, rather than breaking the title inside a word", async () => {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: { kind: string }) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: true } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const line =
+    page.querySelector<HTMLElement>(".plan-page-head .plan-title-line") ??
+    assert.fail("no title line");
+  assert.ok(line.querySelector(".plan-title-actions"), "the actions stand on the title's line");
+
+  const sheets = layContainersAt({});
+  try {
+    assert.equal(getComputedStyle(line).flexWrap, "wrap");
+  } finally {
+    sheets.remove();
+  }
 });

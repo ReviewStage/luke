@@ -6,6 +6,7 @@ import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
+import { OneLine } from "./one-line";
 import { SettingsGroup } from "./settings-group";
 
 /**
@@ -42,7 +43,7 @@ export function AccountSection({
         {/* The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue. */}
         <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />
         <span className="settings-copy">
-          <strong>{account.email}</strong>
+          <OneLine as="strong" text={account.email} />
           <small className="account-provider">
             Signed in with
             <ProviderMark provider={account.provider} />

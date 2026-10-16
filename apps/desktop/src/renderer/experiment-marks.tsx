@@ -1,5 +1,6 @@
 import type { Experiment } from "@luke/settings";
 import { MessageSquareIcon } from "lucide-react";
+import { FoldingButton } from "./folding-button";
 import { useOpenFeedback } from "./open-feedback";
 
 /**
@@ -11,7 +12,8 @@ import { useOpenFeedback } from "./open-feedback";
  * neutral, hairlined, and sitting on the title's baseline (`.experiment-tag`
  * in desktop.css). Send feedback is the window's labelled toolbar button,
  * the same box, weight, and glyph as every other act in a page's toolbar,
- * and opens the feedback dialog about the page's own experiment.
+ * its words folding away where a narrow toolbar folds its acts', and opens
+ * the feedback dialog about the page's own experiment.
  */
 
 /** The quiet tag after an experiment's title. */
@@ -23,9 +25,10 @@ export function ExperimentTag(): React.JSX.Element {
 export function SendFeedbackButton({ experiment }: { experiment: Experiment }): React.JSX.Element {
   const openFeedback = useOpenFeedback();
   return (
-    <button type="button" className="toolbar-button" onClick={() => openFeedback(experiment)}>
-      <MessageSquareIcon />
-      Send feedback
-    </button>
+    <FoldingButton
+      label="Send feedback"
+      glyph={<MessageSquareIcon />}
+      onClick={() => openFeedback(experiment)}
+    />
   );
 }

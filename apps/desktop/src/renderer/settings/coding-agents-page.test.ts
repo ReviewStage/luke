@@ -20,6 +20,7 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { layContainersAt } from "#testing/container-width";
 import {
   focusedSegment,
   pressKeyIn,
@@ -201,6 +202,22 @@ test("Effort and Context are each a radio group, the stored value checked and th
     { model: OPUS.id, effort: "medium" },
     { model: OPUS.id, effort: "medium", contextWindow: CONTEXT_WINDOW.STANDARD },
   ]);
+});
+
+test("the Effort control gives way to a row narrower than its segments, wrapping them inside its trough, rather than running its last past the card", async () => {
+  const page = await mount();
+  const effort = segmentedGroup(page, "Effort");
+
+  const sheets = layContainersAt({});
+  try {
+    const drawn = getComputedStyle(effort);
+    assert.deepEqual(
+      { shrinks: drawn.flexShrink, widest: drawn.maxWidth, wraps: drawn.flexWrap },
+      { shrinks: "1", widest: "100%", wraps: "wrap" },
+    );
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("a refusal goes once any row's save lands, Fast's after an effort is kept and the effort's after Fast is, since every row writes the one default", async () => {

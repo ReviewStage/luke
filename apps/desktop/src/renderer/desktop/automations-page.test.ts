@@ -34,8 +34,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -1176,6 +1178,88 @@ test("the list and an automation's page each say they are an experiment, and eac
   act(() => button("Send feedback").click());
 
   assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
+});
+
+/** The pill the pointer resting on `element` raises, or nothing where it raises none. */
+function pillOver(element: Element): string | undefined {
+  act(() => element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
+  act(() => element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  return pill;
+}
+
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
+  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
+  const acts = () =>
+    ["Automations", "Send feedback", "Run now"].map((name) => {
+      const press =
+        [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
+        assert.fail(`no ${name}`);
+      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
+      return {
+        name,
+        drawn: shown(words),
+        labelled: press.getAttribute("aria-label"),
+        pill: pillOver(press),
+      };
+    });
+
+  // A 760 window's toolbar, past the traffic lights.
+  const narrow = layContainersAt({ "automation-toolbar": 570 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
+      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+    ]);
+    assert.equal(shown(status), false);
+  } finally {
+    narrow.remove();
+  }
+  const wide = layContainersAt({ "automation-toolbar": 1100 });
+  try {
+    act(() => relayout());
+    assert.deepEqual(acts(), [
+      { name: "Automations", drawn: true, labelled: null, pill: undefined },
+      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
+      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+    ]);
+    assert.equal(shown(status), true);
+  } finally {
+    wide.remove();
+  }
+});
+
+test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
+
+  assert.equal(pillOver(crumb), undefined);
+  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
+  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
+  act(() => relayout());
+  assert.equal(pillOver(crumb), SWEEP.name);
+});
+
+test("the Owner menu is as wide as its widest owner's name, within a bound, so a long workspace name reads whole beside its check", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  act(() => picker(page, "Owner").click());
+  const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
+
+  const sheets = layContainersAt({});
+  try {
+    const drawn = getComputedStyle(menu);
+    assert.deepEqual([drawn.width, drawn.maxWidth], ["max-content", "400px"]);
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {
