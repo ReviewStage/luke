@@ -1216,6 +1216,19 @@ ul.actor-stack {
   box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
 }
 
+/* Note that a square no face overlaps stands bare in the pile as in a line,
+   without the ring too, because a ring of a ground it does not stand on
+   would frame it. */
+.actor-stack
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+):not([data-tiled="true"]) {
+  box-shadow: none;
+}
+
 /* Note that the badge stands over the next face, which overlaps this one's corner. */
 .actor-stack-badge {
   position: absolute;

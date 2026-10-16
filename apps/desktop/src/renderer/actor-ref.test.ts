@@ -214,6 +214,10 @@ test("a facepile's square overlapping nothing stands bare: a pile's lone face, a
     piled.every((mark) => groundOf(mark) === "none"),
     "no square overlapping nothing is tiled",
   );
+  assert.ok(
+    piled.every((mark) => getComputedStyle(mark).getPropertyValue("box-shadow") === "none"),
+    "no square overlapping nothing is ringed",
+  );
 });
 
 /** The words of the card an actor named in a line hangs once the pointer rests on its name. */
