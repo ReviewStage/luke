@@ -121,6 +121,12 @@
     flex: 1;
   }
 
+  /* A field's chevron stands at its far end whatever its words are, a
+     name that fills the field or bare words that do not. */
+  .luke-chip[data-look="field"] .luke-chip-face > .settings-chevron {
+    margin-left: auto;
+  }
+
   .luke-chip[data-look="field"] .luke-chip-name {
     flex: 1;
     text-align: left;

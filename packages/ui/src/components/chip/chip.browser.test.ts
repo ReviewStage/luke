@@ -85,6 +85,35 @@ test("a chip that keeps the keyboard while unavailable fades all it holds, its r
   expect(field && getComputedStyle(field).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
+test("a field's chevron stands at its far end, with bare words as with a name", async () => {
+  const { container } = await mount(
+    createElement(
+      "div",
+      { style: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 } },
+      createElement(
+        "div",
+        { style: { width: 104, display: "flex" } },
+        createElement(Chip, { look: CHIP_LOOK.FIELD, chevron: true, children: "Member" }),
+      ),
+      createElement(
+        "div",
+        { style: { width: 104, display: "flex" } },
+        createElement(Chip, {
+          look: CHIP_LOOK.FIELD,
+          chevron: true,
+          children: createElement(ChipName, { children: "Member" }),
+        }),
+      ),
+    ),
+  );
+  for (const chip of container.querySelectorAll("button")) {
+    chip.style.width = "104px";
+    const face = chip.querySelector(".luke-chip-face")?.getBoundingClientRect();
+    const chevron = chip.querySelector(".settings-chevron")?.getBoundingClientRect();
+    expect(chevron?.right).toBe(face?.right);
+  }
+});
+
 for (const surface of [
   surfaceAttributes(PROFILE.DESKTOP, THEME.DARK),
   surfaceAttributes(PROFILE.DESKTOP, THEME.LIGHT),
