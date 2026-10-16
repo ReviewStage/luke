@@ -24,7 +24,7 @@ import { useFileViewSettings } from "./file-view-settings";
  *
  * An agent's Changes tab hangs the same menu with its own actions over the
  * same two settings (`LinesMenu`), so a diff's lines are numbered and
- * wrapped as every File tab's are, and adds the diff's own two under them.
+ * wrapped as every File tab's are.
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
@@ -34,19 +34,15 @@ const REFUSED = "This file is too large to copy whole. Open it on GitHub instead
 /**
  * The ⋯ at the end of a bar over lines: the actions given, then, under a
  * rule, the File tabs' two settings as checks, which every run of lines
- * drawn in the panel's code type follows, and any settings of the bar's
- * own after them.
+ * drawn in the panel's code type follows.
  */
 export function LinesMenu({
   label,
   actions,
-  looks = [],
 }: {
   /** What the ⋯ and its menu are called. */
   label: string;
   actions: readonly MenuAction[];
-  /** Settings only this bar's lines follow, as checks under the File tabs' own. */
-  looks?: readonly MenuAction[];
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   const { settings, change } = useFileViewSettings();
@@ -65,7 +61,6 @@ export function LinesMenu({
         checked: settings.wordWrap,
         onSelect: () => change({ wordWrap: !settings.wordWrap }),
       },
-      ...looks,
     ],
   ];
 

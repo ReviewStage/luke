@@ -26,11 +26,7 @@
               ]
             },
             "html": {
-              "type": "string",
-              "maxLength": 3000000
-            },
-            "cut": {
-              "type": "boolean"
+              "type": "string"
             },
             "base": {
               "type": "string",
@@ -275,8 +271,7 @@
                   "html": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "maxLength": 3000000
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -284,8 +279,7 @@
                     ]
                   },
                   "body": {
-                    "type": "string",
-                    "maxLength": 3000000
+                    "type": "string"
                   },
                   "at": {
                     "type": "number",
@@ -318,7 +312,6 @@
             "url",
             "state",
             "html",
-            "cut",
             "base",
             "head",
             "createdAt",

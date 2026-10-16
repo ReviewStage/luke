@@ -221,7 +221,6 @@ export const namedOverview = /* @__PURE__ */ Effect.fn("web/namedOverview")(func
     url: pullRequest.url,
     state: pullRequest.state,
     html: overview.html,
-    cut: overview.cut,
     earlier: overview.earlier,
     base: overview.base,
     head: overview.head,

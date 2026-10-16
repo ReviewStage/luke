@@ -860,15 +860,6 @@ export const CONVERSATION_ENTRY = {
 } as const;
 
 export const OVERVIEW_BOUNDS = {
-  /**
-   * The most characters of words one read carries, the description's and
-   * the conversation's together, each whole: the description first, then the
-   * conversation's newest entries while they fit, the rest left on GitHub and
-   * counted. Note that the bound is the answer's rather than an entry's, so
-   * no entry is ever cut, and it keeps a read well under the 4.5 MB a
-   * Vercel function may answer.
-   */
-  MAX_WORDS_CHARS: 3_000_000,
   /** The most checks one read lists; a head with more lists its first. */
   MAX_CHECKS: 100,
   /** The most entries of the conversation one read carries, the newest kept, the rest counted. */
@@ -899,11 +890,6 @@ const pullRequestCheckSchema = EffectSchema.Struct({
 
 export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
 
-/** Words a read carries, whole, within the answer's bound. */
-const overviewWords = EffectSchema.String.check(
-  EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_WORDS_CHARS),
-);
-
 /**
  * One entry of a pull request's conversation: a comment on it, or a review
  * and where it left its reviewer; who; their words whole, as GitHub renders
@@ -915,8 +901,8 @@ const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
   by: githubPersonSchema,
   state: EffectSchema.optionalKey(reviewStateSchema),
-  html: EffectSchema.NullOr(overviewWords),
-  body: overviewWords,
+  html: EffectSchema.NullOr(EffectSchema.String),
+  body: EffectSchema.String,
   at: countedNumber,
   url: EffectSchema.String,
 });
@@ -925,15 +911,14 @@ export type ConversationEntry = typeof conversationEntrySchema.Type;
 
 /**
  * One agent's pull request as its Pull request tab draws it (GET): where it
- * stands, its title, number, and page; its description whole as GitHub
- * renders it (`body_html`), empty where it has none, and none with `cut`
- * where it alone runs past the answer's bound; the
+ * stands, its title, number, and page; its description as GitHub renders
+ * it (`body_html`), empty where it has none; the
  * branch it merges into and the one it merges from; when it was opened, and
  * merged where it was; whether it would merge as it stands; every check on
  * its head; who opened it, who the agent writes as on GitHub, and its
  * reviewers and where each stands; and its conversation, oldest first, its
- * newest entries kept whole while they fit the answer's bounds, with how
- * many earlier ones were left on GitHub (`earlier`). Null where the agent
+ * newest entries kept up to the bound, with how many earlier ones were left
+ * on GitHub (`earlier`). Null where the agent
  * has opened none yet.
  */
 export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
@@ -943,8 +928,7 @@ export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
       title: EffectSchema.String,
       url: EffectSchema.String,
       state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
-      html: overviewWords,
-      cut: EffectSchema.Boolean,
+      html: EffectSchema.String,
       base: overviewName,
       head: overviewName,
       createdAt: countedNumber,

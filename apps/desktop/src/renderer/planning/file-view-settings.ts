@@ -1,5 +1,5 @@
 /**
- * file-view-settings.ts -- how every File tab draws its lines: with or without their numbers, wrapped or scrolling sideways, and a diff's in one column or side by side, its changed words marked or not, kept across launches.
+ * file-view-settings.ts -- how every File tab draws its lines: with or without their numbers, wrapped or scrolling sideways, kept across launches.
  *
  * The choice is the window's own, as the sidebar's fold is
  * (`../desktop/sidebar-collapse.ts`): no other window draws a File tab and
@@ -7,12 +7,6 @@
  * crossing to the settings file. One choice holds for every File tab, and a
  * change in one is drawn at once in every other, as an editor's view
  * settings are.
- *
- * A Changes tab's diff follows two more, as a review tool's diff settings
- * do: whether it is drawn unified or split, the old side beside the new,
- * and whether a changed line marks the words it changed. A choice kept
- * before those two were offered reads with them at their defaults, so the
- * first two are never lost to a launch.
  */
 
 import { Option, Schema } from "effect";
@@ -21,28 +15,15 @@ import { useSyncExternalStore } from "react";
 /** The storage key the choice is kept under. */
 const FILE_VIEW_SETTINGS_KEY = "luke.file-view";
 
-/** How a Changes tab lays out its diff: one column of lines, or the old side beside the new. */
-export const DIFF_LAYOUT = {
-  UNIFIED: "unified",
-  SPLIT: "split",
-} as const;
-
 const fileViewSettingsSchema = Schema.Struct({
   lineNumbers: Schema.Boolean,
   wordWrap: Schema.Boolean,
-  diffLayout: Schema.optionalKey(Schema.Literals(Object.values(DIFF_LAYOUT))),
-  changedWords: Schema.optionalKey(Schema.Boolean),
 });
 
-type FileViewSettings = Required<typeof fileViewSettingsSchema.Type>;
+type FileViewSettings = typeof fileViewSettingsSchema.Type;
 
-/** How a File tab draws until it is told otherwise: numbered and wrapped, as it always has been, a diff unified with its changed words marked. */
-const DEFAULT_SETTINGS: FileViewSettings = {
-  lineNumbers: true,
-  wordWrap: true,
-  diffLayout: DIFF_LAYOUT.UNIFIED,
-  changedWords: true,
-};
+/** How a File tab draws until it is told otherwise: numbered and wrapped, as it always has been. */
+const DEFAULT_SETTINGS: FileViewSettings = { lineNumbers: true, wordWrap: true };
 
 const decodeSettings = Schema.decodeUnknownOption(Schema.fromJsonString(fileViewSettingsSchema));
 
@@ -54,7 +35,7 @@ function readSettings(): FileViewSettings {
   } catch {
     // The default stands.
   }
-  return { ...DEFAULT_SETTINGS, ...Option.getOrElse(decodeSettings(stored), () => ({})) };
+  return Option.getOrElse(decodeSettings(stored), () => DEFAULT_SETTINGS);
 }
 
 let current: FileViewSettings | undefined;

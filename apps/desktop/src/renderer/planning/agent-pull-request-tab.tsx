@@ -99,7 +99,6 @@ const PULL_REQUEST_WORDS = {
   FAILED: "The pull request could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
   NO_DESCRIPTION: "No description provided.",
-  LONG_DESCRIPTION: "This description is too long to show here. Read it on GitHub",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
   /** What the conversation says of the earlier entries a read left on GitHub, by how many. */
@@ -168,7 +167,7 @@ const CHECK_WORDS = {
   [CHECK_STATE.SKIPPED]: "skipped",
 } as const satisfies Record<CheckState, string>;
 
-/** The order the checks are listed in, by where each stands: what asks for a look first. */
+/** The order the checks' counts are said in, by where each stands: what asks for a look first, as the service lists the checks themselves. */
 const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.FAILED,
   CHECK_STATE.PENDING,
@@ -367,20 +366,19 @@ function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
   );
 }
 
-/** Every check, what asks for a look first, under a count of each standing. */
+/** Every check, in the order the service ranks them, failures first, under a count of each standing. */
 function Checks({ checks }: { checks: readonly PullRequestCheck[] }): React.JSX.Element {
-  const listed = CHECK_ORDER.flatMap((state) => checks.filter((check) => check.state === state));
   const counts = CHECK_ORDER.flatMap((state) => {
     const count = checks.filter((check) => check.state === state).length;
     return count === 0 ? [] : [`${count} ${CHECK_WORDS[state]}`];
   });
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
-      {listed.length === 0 ? (
+      {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
         <ul className="pull-request-checks">
-          {listed.map((check, at) => (
+          {checks.map((check, at) => (
             // Note that two checks may share a name across Apps, so a row is keyed by its place too.
             <CheckRow key={`${at}`} check={check} />
           ))}
@@ -534,15 +532,7 @@ function PullRequestPage({
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
       <Checks checks={pullRequest.checks} />
       <Section title="Description">
-        {pullRequest.cut ? (
-          <button
-            type="button"
-            className="pull-request-more pull-request-none"
-            onClick={() => openLink(pullRequest.url)}
-          >
-            {PULL_REQUEST_WORDS.LONG_DESCRIPTION}
-          </button>
-        ) : pullRequest.html === "" ? (
+        {pullRequest.html === "" ? (
           <p className="pull-request-quiet pull-request-none">
             {PULL_REQUEST_WORDS.NO_DESCRIPTION}
           </p>

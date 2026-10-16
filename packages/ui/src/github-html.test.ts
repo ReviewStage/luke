@@ -56,29 +56,29 @@ test("a highlighted block becomes a fenced block in its language, holding its wo
 
 test("a diagram becomes a fenced mermaid block of its source", () => {
   const diagram = element("section", { dataType: "mermaid" }, [
-    element("div", { className: ["js-render-enrichment-target"], dataPlain: "graph TD\nA-->B\n" }),
-    element("pre", { lang: "mermaid" }, [text("graph TD\nA-->B")]),
+    element("div", {}, [element("pre", { lang: "mermaid" }, [text("graph TD\nA-->B")])]),
   ]);
   assert.deepEqual(shaped(diagram), [
-    element("pre", {}, [
-      element("code", { className: ["language-mermaid"] }, [text("graph TD\nA-->B")]),
+    element("section", { dataType: "mermaid" }, [
+      element("div", {}, [
+        element("pre", {}, [
+          element("code", { className: ["language-mermaid"] }, [text("graph TD\nA-->B")]),
+        ]),
+      ]),
     ]),
   ]);
 });
 
-test("a heading's permalink and its wrapper are taken out, and a plain block's wrapper too, deep in the tree", () => {
+test("a heading's permalink is taken out, deep in the tree", () => {
   const heading = element("div", { className: ["markdown-heading"] }, [
     element("h2", { className: ["heading-element"] }, [text("Summary")]),
     element("a", { className: ["anchor"], href: "#summary" }, [element("svg", {})]),
   ]);
-  const snippet = element("div", { className: ["snippet-clipboard-content"] }, [
-    element("pre", {}, [element("code", {}, [text("plain")])]),
-  ]);
-  const quoted = element("blockquote", {}, [heading, snippet]);
-  assert.deepEqual(shaped(quoted), [
+  assert.deepEqual(shaped(element("blockquote", {}, [heading])), [
     element("blockquote", {}, [
-      element("h2", { className: ["heading-element"] }, [text("Summary")]),
-      element("pre", {}, [element("code", {}, [text("plain")])]),
+      element("div", { className: ["markdown-heading"] }, [
+        element("h2", { className: ["heading-element"] }, [text("Summary")]),
+      ]),
     ]),
   ]);
 });

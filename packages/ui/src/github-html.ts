@@ -9,10 +9,9 @@
  * inside a code block. `githubShapes` runs between the parse and the
  * sanitizer, while GitHub's classes still say what each part is, and
  * reshapes what GitHub dresses its way into what the window draws its own:
- * a highlighted block into a fenced one in its language, which the window
- * colours as it colours any (`transcript-markdown.tsx`), a diagram into a
- * fenced `mermaid` block of its source, and a heading's permalink, and the
- * wrappers around a heading or a block, taken out.
+ * a highlighted block, or a diagram's source, into a fenced block in its
+ * language, which the window colours as it colours any
+ * (`transcript-markdown.tsx`), and a heading's permalink taken out.
  */
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
@@ -35,15 +34,8 @@ interface MarkdownRoot {
 /** The language GitHub's highlighting names on a block: `highlight-source-ts` and `highlight-text-md` alike. */
 const HIGHLIGHT_LANGUAGE = /^highlight-(?:source|text)-(.+)$/u;
 
-/** GitHub's classes on the parts these steps reshape. */
-const GITHUB_CLASS = {
-  ANCHOR: "anchor",
-  HIGHLIGHT: "highlight",
-  HEADING: "markdown-heading",
-  SNIPPET: "snippet-clipboard-content",
-} as const;
-
-const MERMAID = "mermaid";
+/** The class GitHub's rendering gives a heading's permalink. */
+const PERMALINK = "anchor";
 
 /** A node's classes, as the parsed tree holds them. */
 function classesOf(node: HtmlNode): readonly string[] {
@@ -74,37 +66,17 @@ function fenced(language: string, code: string): HtmlNode {
   };
 }
 
-/** The first descendant the test admits, depth first. */
-function findIn(node: HtmlNode, test: (each: HtmlNode) => boolean): HtmlNode | undefined {
-  for (const child of node.children ?? []) {
-    if (test(child)) return child;
-    const found = findIn(child, test);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-}
-
 /** What one node of GitHub's rendering becomes: itself, nodes in its place, or nothing. */
 function reshaped(node: HtmlNode): readonly HtmlNode[] {
   if (node.type !== "element") return [node];
   const classes = classesOf(node);
-  if (node.tagName === "a" && classes.includes(GITHUB_CLASS.ANCHOR)) return [];
-  if (node.tagName === "section" && node.properties?.dataType === MERMAID) {
-    const source = findIn(node, (each) => (each.properties?.dataPlain ?? undefined) !== undefined);
-    const code = String(source?.properties?.dataPlain ?? textOf(node)).trim();
-    return [fenced(MERMAID, code)];
-  }
-  if (node.tagName === "div" && classes.includes(GITHUB_CLASS.HIGHLIGHT)) {
-    const language = classes.map((each) => HIGHLIGHT_LANGUAGE.exec(each)?.[1]).find(Boolean);
-    const pre = findIn(node, (each) => each.tagName === "pre");
-    if (language !== undefined && pre !== undefined) return [fenced(language, textOf(pre))];
-  }
-  if (
-    node.tagName === "div" &&
-    (classes.includes(GITHUB_CLASS.HEADING) || classes.includes(GITHUB_CLASS.SNIPPET))
-  ) {
-    return reshapeChildren(node.children ?? []);
-  }
+  if (node.tagName === "a" && classes.includes(PERMALINK)) return [];
+  // A diagram's source stands in a block naming its language (`<pre lang="mermaid">`).
+  const named = node.tagName === "pre" ? node.properties?.lang : undefined;
+  if (named !== undefined && named !== null) return [fenced(String(named), textOf(node))];
+  const highlighted = classes.map((each) => HIGHLIGHT_LANGUAGE.exec(each)?.[1]).find(Boolean);
+  if (node.tagName === "div" && highlighted !== undefined)
+    return [fenced(highlighted, textOf(node))];
   node.children = reshapeChildren(node.children ?? []);
   return [node];
 }

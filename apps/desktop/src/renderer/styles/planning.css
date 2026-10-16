@@ -1408,66 +1408,13 @@ button.file-ref:hover .file-ref-path {
   font-style: italic;
 }
 
-/* A narrow panel numbers a unified diff's lines on the new side alone, so
-   the code keeps the room a second gutter would take; a removed line, which
-   has no new number, still reads by its tint. A split side holds one gutter
-   of its own and keeps it. */
+/* A narrow panel numbers a diff's lines on the new side alone, so the
+   code keeps the room a second gutter would take; a removed line, which
+   has no new number, still reads by its tint. */
 @container side-panel (max-width: 359px) {
-  .code-line[data-diff]:not(.diff-split-side) > .code-line-number:first-child {
+  .code-line[data-diff] > .code-line-number:first-child {
     display: none;
   }
-}
-
-/* The words a changed line changed (Highlight changed words), a deeper
-   tint of the line's own over the run its side alone holds. */
-.code-diff-word {
-  border-radius: 2px;
-  background: transparent;
-  color: inherit;
-}
-
-.code-line[data-diff="added"] .code-diff-word {
-  background: color-mix(in srgb, var(--state-complete) 34%, transparent);
-}
-
-.code-line[data-diff="removed"] .code-diff-word {
-  background: color-mix(in srgb, var(--danger) 34%, transparent);
-}
-
-/* A diff split side by side (Split view): one grid of two columns, the old
-   side's lines on the left and the new side's on the right, so a row's two
-   sides stand level however either wraps; a row is its two sides alone, and
-   a hunk's header runs across both. Unwrapped, each column is as wide as
-   its longest line and never under half the tab, and the two scroll
-   sideways together. */
-.file-tab-lines[data-diff-layout="split"] {
-  display: grid;
-  align-content: start;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.file-tab-lines[data-diff-layout="split"][data-wrap="false"] {
-  grid-template-columns: minmax(50%, max-content) minmax(50%, max-content);
-}
-
-.file-tab-lines[data-diff-layout="split"] > .code-line {
-  grid-column: 1 / -1;
-}
-
-.diff-split-row {
-  display: contents;
-}
-
-.diff-split-side {
-  min-width: 0;
-}
-
-.diff-split-side + .diff-split-side {
-  border-left: 1px solid var(--hairline);
-}
-
-.diff-split-side[data-diff="empty"] {
-  background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--hairline) 4px 5px);
 }
 
 /* The tree's search field and its filter, in one row over the tree: the

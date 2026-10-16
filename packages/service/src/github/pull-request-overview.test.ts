@@ -241,7 +241,6 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.ok(overview !== undefined);
         assert.equal(overview.state, PULL_REQUEST_STATE.OPEN);
         assert.equal(overview.html, '<p dir="auto">Sends the invite <strong>once</strong>.</p>');
-        assert.equal(overview.cut, false);
         assert.equal(overview.base, "main");
         assert.equal(overview.head, "luke/invite-once");
         assert.equal(overview.createdAt, Date.parse("2026-10-15T09:00:00Z"));
@@ -334,7 +333,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.equal(overview.state, PULL_REQUEST_STATE.MERGED);
         assert.equal(overview.mergedAt, Date.parse("2026-10-16T12:00:00Z"));
         assert.equal(overview.merge, MERGE_STATE.UNKNOWN);
-        assert.deepEqual([overview.html, overview.cut], ["", false], "no description is no cut");
+        assert.equal(overview.html, "", "no description is drawn as none");
         assert.deepEqual(overview.checks, []);
         assert.equal(
           overview.conversation[0]?.html,
@@ -345,67 +344,27 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
       }),
   );
 
-  it.effect(
-    "the newest entries are kept whole while they fit the room the description leaves, at most a hundred, and the earlier ones are counted",
-    () =>
-      Effect.gen(function* () {
-        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
-        const comment = (at: number, html: string) => ({
-          user: CHARLES,
-          body: "words",
-          body_html: html,
-          created_at: new Date(Date.parse("2026-10-15T10:00:00Z") + at * 60_000).toISOString(),
-          html_url: `${PAGE}#issuecomment-${at}`,
-        });
-        // The description leaves room for the two newest comments and not the one before them.
-        const third = OVERVIEW_BOUNDS.MAX_WORDS_CHARS / 3;
-        const filled = yield* overviewOf(
-          workspace,
-          repository({
-            pull: pull({ body_html: "d".repeat(third) }),
-            comments: [
-              comment(1, "small"),
-              comment(2, "a".repeat(third + 100)),
-              comment(3, "small"),
-              comment(4, "b".repeat(third - 10)),
-            ],
-          }),
-        );
-        assert.ok(filled !== undefined);
-        assert.equal(filled.html.length, third, "the description stands whole");
-        assert.deepEqual(
-          filled.conversation.map((entry) => entry.url),
-          [`${PAGE}#issuecomment-3`, `${PAGE}#issuecomment-4`],
-          "an entry that does not fit ends the run, so a smaller one before it is not drawn alone",
-        );
-        assert.equal(filled.earlier, 2);
-
-        const many = yield* overviewOf(
-          workspace,
-          repository({
-            pull: pull(),
-            comments: Array.from({ length: OVERVIEW_BOUNDS.MAX_ENTRIES + 5 }, (_, at) =>
-              comment(at, "<p>hi</p>"),
-            ),
-          }),
-        );
-        assert.ok(many !== undefined);
-        assert.equal(many.conversation.length, OVERVIEW_BOUNDS.MAX_ENTRIES);
-        assert.equal(many.conversation[0]?.url, `${PAGE}#issuecomment-5`, "the newest are kept");
-        assert.equal(many.earlier, 5);
-
-        const huge = yield* overviewOf(
-          workspace,
-          repository({
-            pull: pull({ body_html: "d".repeat(OVERVIEW_BOUNDS.MAX_WORDS_CHARS + 1) }),
-          }),
-        );
-        assert.deepEqual(
-          [huge?.html, huge?.cut],
-          ["", true],
-          "a description alone past the bound says so",
-        );
-      }),
+  it.effect("the newest hundred entries are kept, oldest first, and the earlier ones counted", () =>
+    Effect.gen(function* () {
+      const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+      const many = yield* overviewOf(
+        workspace,
+        repository({
+          pull: pull(),
+          comments: Array.from({ length: OVERVIEW_BOUNDS.MAX_ENTRIES + 5 }, (_, at) => ({
+            user: CHARLES,
+            body: "hi",
+            body_html: "<p>hi</p>",
+            created_at: new Date(Date.parse("2026-10-15T10:00:00Z") + at * 60_000).toISOString(),
+            html_url: `${PAGE}#issuecomment-${at}`,
+          })),
+        }),
+      );
+      assert.ok(many !== undefined);
+      assert.equal(many.conversation.length, OVERVIEW_BOUNDS.MAX_ENTRIES);
+      assert.equal(many.conversation[0]?.url, `${PAGE}#issuecomment-5`, "the newest are kept");
+      assert.equal(many.earlier, 5);
+    }),
   );
 
   it.effect(

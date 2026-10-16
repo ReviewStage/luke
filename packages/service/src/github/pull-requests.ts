@@ -747,7 +747,6 @@ const SUCCESS = "success";
 export interface GitHubOverview {
   readonly pullRequest: GitHubPullRequest;
   readonly html: string;
-  readonly cut: boolean;
   readonly base: string;
   readonly head: string;
   readonly createdAt: number;
@@ -893,43 +892,16 @@ function wordsOf(body: string | null | undefined, html: string | null | undefine
     : { html: rendered, body: "", said: words !== "" };
 }
 
-/** How many characters of words an entry carries. */
-function charsOf(entry: GitHubConversationEntry): number {
-  return (entry.html ?? entry.body).length;
-}
-
-/** The conversation as a read carries it: its newest entries that fit, oldest first, and how many earlier ones were left. */
+/** The conversation as a read carries it: its newest entries, oldest first, and how many earlier ones were left. */
 interface KeptConversation {
   readonly conversation: readonly GitHubConversationEntry[];
   readonly earlier: number;
 }
 
 /**
- * The newest entries, whole, while they fit both bounds, the count and the
- * characters `room` leaves, and how many earlier ones were left on GitHub.
- * Note that an entry that does not fit ends the run rather than being
- * passed over, so what is drawn is always every entry since some moment.
- */
-function newestThatFit(
-  entries: readonly GitHubConversationEntry[],
-  room: number,
-): KeptConversation {
-  const kept: GitHubConversationEntry[] = [];
-  let left = room;
-  for (let at = entries.length - 1; at >= 0; at -= 1) {
-    const entry = entries[at];
-    if (entry === undefined || kept.length === OVERVIEW_BOUNDS.MAX_ENTRIES) break;
-    if (charsOf(entry) > left) break;
-    left -= charsOf(entry);
-    kept.push(entry);
-  }
-  return { conversation: kept.reverse(), earlier: entries.length - kept.length };
-}
-
-/**
  * The conversation: every comment that says something and every review
- * that decides or says something, in time order, the newest kept whole
- * while they fit the room the description leaves (`newestThatFit`). A
+ * that decides or says something, in time order, the newest kept up to the
+ * bound and the earlier ones counted. A
  * review that only commented and said nothing is the wrapper GitHub makes
  * for comments on lines, which this read does not list, and a draft review
  * is its author's alone, so neither is an entry.
@@ -938,7 +910,6 @@ function conversationOf(
   comments: typeof IssueCommentsSchema.Type,
   reviews: typeof ReviewsSchema.Type,
   pageUrl: string,
-  room: number,
 ): KeptConversation {
   const said = comments.flatMap((comment): GitHubConversationEntry[] => {
     const { said, ...words } = wordsOf(comment.body, comment.body_html);
@@ -970,18 +941,9 @@ function conversationOf(
       },
     ];
   });
-  return newestThatFit(
-    [...said, ...reviewed].sort((a, b) => a.at - b.at),
-    room,
-  );
-}
-
-/** The description whole as GitHub renders it, or none, with `cut`, where it alone runs past the answer's bound. */
-function descriptionOf(html: string | null | undefined): { html: string; cut: boolean } {
-  const rendered = html?.trim() ?? "";
-  return rendered.length > OVERVIEW_BOUNDS.MAX_WORDS_CHARS
-    ? { html: "", cut: true }
-    : { html: rendered, cut: false };
+  const entries = [...said, ...reviewed].sort((a, b) => a.at - b.at);
+  const conversation = entries.slice(-OVERVIEW_BOUNDS.MAX_ENTRIES);
+  return { conversation, earlier: entries.length - conversation.length };
 }
 
 /**
@@ -1015,10 +977,9 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     { concurrency: "unbounded" },
   );
   const pullRequest = pullRequestOf(pull);
-  const description = descriptionOf(pull.body_html);
   return Option.some({
     pullRequest,
-    ...description,
+    html: pull.body_html?.trim() ?? "",
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
     createdAt: timeOf(pull.created_at) ?? 0,
@@ -1027,11 +988,6 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     checks,
     author: pull.user === null ? undefined : accountOf(pull.user),
     reviewers: reviewersOf(reviews, (pull.requested_reviewers ?? []).map(accountOf)),
-    ...conversationOf(
-      comments,
-      reviews,
-      pullRequest.url,
-      OVERVIEW_BOUNDS.MAX_WORDS_CHARS - description.html.length,
-    ),
+    ...conversationOf(comments, reviews, pullRequest.url),
   });
 });
