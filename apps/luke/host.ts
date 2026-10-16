@@ -6,8 +6,14 @@ import {
   type BrainHostSeams,
   productionBrainHostSeams,
 } from "@luke/service/agents/brain-host/production";
+import {
+  PLAN_EDIT_REFUSAL,
+  type PlanEditResult,
+  planEditRejected,
+} from "@luke/service/agents/coder-host/plan-edit";
 import { hostedEnvironment } from "@luke/service/environment";
-import { Effect } from "effect";
+import type { UnparsedWireValue } from "@luke/wire";
+import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { runAgent } from "./runtime.js";
 
@@ -65,4 +71,24 @@ export function integrationConnectionsFor(
   role: typeof AGENT_ROLE.BRAIN | typeof AGENT_ROLE.BRAIN_WORKER,
 ) {
   return edge.integrationConnections(role);
+}
+
+/**
+ * One `edit_plan` call's notes taken into the plan the session's conversation
+ * is about, for the tool's step: admitted as the session's current one, so a
+ * conversation that rotated on saves nothing; a refusal is a result, never a
+ * throw, since a throw from the step would be retried.
+ */
+export function editPlanNotes(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+): Promise<PlanEditResult> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
+      return yield* host.editPlan(admitted.success, input);
+    }).pipe(Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE)))),
+  );
 }

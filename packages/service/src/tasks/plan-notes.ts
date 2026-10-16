@@ -34,8 +34,8 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
  * A plan is one Markdown text (`@luke/features/plan-document`). Its callers
- * are a task call's notetaker (`tasks/plan-scribe.ts`) and a coding
- * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
+ * are Luke's own `edit_plan` (`agents/brain-host/plan-edit.ts`) and a coding
+ * agent's (`coder-host/plan-edit.ts`), whose models answer with
  * notes (`@luke/features/plan-template`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as

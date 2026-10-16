@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
-import { openTaskConversation, readTask } from "@luke/database/models/task-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
@@ -13,7 +13,6 @@ import {
   readVoiceTranscriptSegmentsBySession,
   startTask,
 } from "@luke/database/testing";
-import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -25,7 +24,6 @@ import {
 } from "@luke/live";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
-import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
@@ -40,12 +38,9 @@ import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/bra
 import { MESSAGE_ROLE } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
-import type { PlanDraft } from "../tasks/plan-scribe.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
-import { delegated, heard, said, sessionStarted } from "../testing/live-events.js";
-import { scriptedScribeModel } from "../testing/scribe-model.js";
+import { delegated, heard, sessionStarted } from "../testing/live-events.js";
 import { settled } from "../testing/settle.js";
-import { added } from "../testing/task-contents.js";
 import { hostedLiveExchange } from "./live-exchange.js";
 
 /**
@@ -192,11 +187,6 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 async function stand(
   target: TaskTarget,
   options: {
-    readonly scribe?: {
-      readonly taskId: string;
-      readonly model: LanguageModel;
-      readonly onDraft?: (draft: PlanDraft) => void;
-    };
     /** A session an earlier exchange stood on, attached to again as a device's re-attach finds it: already started. */
     readonly reattach?: string;
     /** Whether eve takes the session's exploring as it starts. */
@@ -254,7 +244,6 @@ async function stand(
         eve,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
-        ...(options.scribe === undefined ? undefined : { scribe: options.scribe }),
       }),
       scope,
     ),
@@ -359,42 +348,6 @@ it.live(
         segments.map((segment) => segment.text),
         ["What needs me?"],
       );
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "a call's notetaker drafts what the developer said to the device and saves it into the plan",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const problem = "Only an admin can add someone to a workspace.";
-      const drafts: PlanDraft[] = [];
-      const f = yield* Effect.promise(() =>
-        stand(target, {
-          scribe: {
-            taskId: target.taskId,
-            model: scriptedScribeModel([{ notes: [added(PLAN_HEADING.CONTEXT, problem)] }]).model,
-            onDraft: (draft) => drafts.push(draft),
-          },
-        }),
-      );
-      f.socket.receive(said("What's the problem today?", 0, 1_200));
-      f.socket.receive(heard("Only admins can add people.", 1_500, 3_000));
-      const body = () =>
-        database.run(
-          Effect.map(readTask(target.userId, target.taskId), (stored) =>
-            Option.match(stored, { onNone: () => "", onSome: (found) => found.task.document.body }),
-          ),
-        );
-      yield* settled(
-        () => drafts.at(-1)?.savedAt !== undefined,
-        "the saved plan to be drafted to the device",
-        async () => `reports ${JSON.stringify(f.reports)}`,
-      );
-      const saved = yield* Effect.promise(body);
-      assert.ok(saved.includes(problem));
-      assert.equal(drafts.at(-1)?.document.body, saved);
       yield* Effect.promise(() => f.exchange.stop());
     }),
 );
