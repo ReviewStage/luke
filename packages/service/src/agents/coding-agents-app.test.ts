@@ -1921,6 +1921,35 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message mentioning people hands a member of the agent's workspace by their role, never their email, and someone of another workspace the sender is also in as not a member",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, sent } = yield* startedAgent(eve, { running: true });
+        // The sender and the other account share a second workspace, which is not the agent's.
+        const elsewhere = yield* openWorkspace(other);
+        yield* joinWorkspace(elsewhere, owner);
+        const place = { workspace: "acme", repository: task.repository };
+        const mention = (userId: string, name: string) =>
+          mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, name, place);
+        const words = `Ask ${mention(owner, "Me")} and ${mention(other, "Stranger")}.`;
+
+        yield* sent(words);
+
+        const message = eve.sent.at(-1)?.message.message;
+        assert.ok(Array.isArray(message));
+        const part = message[1];
+        assert.ok(part?.type === "text");
+        assert.match(
+          part.text,
+          /The developer pointed you at [^\n]+, an owner of your workspace\./u,
+        );
+        assert.ok(!part.text.includes("@"), part.text);
+        assert.match(part.text, /The person "Stranger": not a member of your workspace\./u);
+      }),
+  );
+
+  it.effect(
     "a message mentioning an MCP server that eve does not take leaves no server for a later turn",
     () =>
       Effect.gen(function* () {

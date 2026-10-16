@@ -766,6 +766,29 @@ test("an agent on no task is mentioned by its own Luke link under the workspace,
   }
 });
 
+test("a person is mentioned by their page's Luke link under the workspace, read back by either scheme, pasted or written bare as their mention, and a step or a fragment past their id names nothing", () => {
+  const person: Mention = { kind: MENTION_KIND.PERSON, userId: "user_Ab-9" };
+  const page = "https://tryluke.dev/acme/person/user_Ab-9";
+
+  assert.equal(encodeMention(person, PLACE), page);
+  assert.deepEqual(decodeMention(page, null), person);
+  assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/person/user_Ab-9", null), person);
+  assert.deepEqual(linkMention("@Dana Reyes", page, null), { mention: person, name: "Dana Reyes" });
+  assert.deepEqual(pastedLinkMention(page, REPOSITORY), { mention: person, name: "Person" });
+  assert.deepEqual(
+    handedMentionsIn(`Ask ${page} or [@Dana](${page}).`, REPOSITORY).map(({ mention }) => mention),
+    [person, person],
+  );
+  for (const target of [
+    "https://tryluke.dev/acme/person/user_Ab-9/tasks",
+    "https://tryluke.dev/acme/person/user_Ab-9#top",
+    "https://tryluke.dev/acme/person/",
+    "https://tryluke.dev/acme/person/user%2F9",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
 test("words pasted whole that are an address of Luke's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
   const pasted = (words: string) => pastedLinkMention(words, REPOSITORY);
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
