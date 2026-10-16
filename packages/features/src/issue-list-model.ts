@@ -1,7 +1,10 @@
 import {
+  ISSUE_PRIORITY,
   ISSUE_PRIORITY_RANK,
+  ISSUE_STATUS,
   ISSUE_STATUS_ORDER,
   type Issue,
+  type IssuePriority,
   type IssueStatus,
 } from "./issue-wire.js";
 
@@ -23,6 +26,24 @@ const FALLBACK_PREFIX = "ISSUE";
 /** The most characters a prefix spells. */
 const MAX_PREFIX_CHARS = 4;
 
+/** Each status as a group's heading and a picker's row say it. */
+export const ISSUE_STATUS_WORDS = {
+  [ISSUE_STATUS.BACKLOG]: "Backlog",
+  [ISSUE_STATUS.TODO]: "Todo",
+  [ISSUE_STATUS.IN_PROGRESS]: "In Progress",
+  [ISSUE_STATUS.DONE]: "Done",
+  [ISSUE_STATUS.CANCELED]: "Canceled",
+} as const satisfies Record<IssueStatus, string>;
+
+/** Each priority as a row's mark and a picker's row say it. */
+export const ISSUE_PRIORITY_WORDS = {
+  [ISSUE_PRIORITY.NONE]: "No priority",
+  [ISSUE_PRIORITY.URGENT]: "Urgent",
+  [ISSUE_PRIORITY.HIGH]: "High",
+  [ISSUE_PRIORITY.MEDIUM]: "Medium",
+  [ISSUE_PRIORITY.LOW]: "Low",
+} as const satisfies Record<IssuePriority, string>;
+
 /** One status's issues, as the list draws them under its heading. */
 export interface IssueGroup {
   readonly status: IssueStatus;
@@ -35,12 +56,17 @@ function byPressing(a: Issue, b: Issue): number {
   return rank === 0 ? b.updatedAt - a.updatedAt : rank;
 }
 
+/** Every status's issues in the list's order, each sorted, an empty status among them: a board's columns. */
+export function issueColumns(issues: readonly Issue[]): readonly IssueGroup[] {
+  return ISSUE_STATUS_ORDER.map((status) => ({
+    status,
+    issues: issues.filter((issue) => issue.status === status).toSorted(byPressing),
+  }));
+}
+
 /** The issues grouped by status in the list's order, each group sorted, and no group empty. */
 export function issueGroups(issues: readonly Issue[]): readonly IssueGroup[] {
-  return ISSUE_STATUS_ORDER.flatMap((status) => {
-    const standing = issues.filter((issue) => issue.status === status).toSorted(byPressing);
-    return standing.length === 0 ? [] : [{ status, issues: standing }];
-  });
+  return issueColumns(issues).filter((group) => group.issues.length > 0);
 }
 
 /**
