@@ -3115,6 +3115,15 @@ ul.actor-stack {
   text-overflow: ellipsis;
 }
 
+/* Or its chip, as the transcript draws one, which cuts its own name to the
+   line: held to the line's width so a narrow line cuts the title, never the
+   state after it. */
+.agent-origin-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* A teammate's call at its divider: their mark and name, then when it
    started, centred on the mark, every space kept. */
 .call-caller {

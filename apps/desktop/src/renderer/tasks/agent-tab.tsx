@@ -80,12 +80,14 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { linkChip } from "./mention-chip";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
+import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
@@ -712,7 +714,13 @@ function TaskSender({
   );
 }
 
-/** The issue or pull request an automation's GitHub event named, by number and title, opening on GitHub where the event gave its address. */
+/**
+ * The issue or pull request an automation's GitHub event named, by number
+ * and title: where the event gave its address, its chip, as the transcript
+ * draws a link to it, wearing GitHub's mark for where it stands and opening
+ * it on GitHub (`mention-chip.tsx`); a link opening on GitHub where the
+ * address names no chip; and its words alone where the event gave none.
+ */
 function OriginSubject({
   subject,
   openGitHub,
@@ -720,10 +728,13 @@ function OriginSubject({
   subject: NonNullable<CodingAgentOrigin["subject"]>;
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
+  const doors = useMentionDoors();
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
   if (url === undefined) return <span className="agent-origin-subject">{words}</span>;
+  const chip = linkChip(url, words, doors);
+  if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
     <a
       className="text-link agent-origin-subject"
