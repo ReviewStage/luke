@@ -1,4 +1,4 @@
-import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -1021,7 +1021,10 @@ export function isDelegation(
  * refused, which answers no agent.
  */
 export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.START_CODING_AGENT) {
+  if (
+    part.kind !== AGENT_PART.TOOL ||
+    (part.tool !== AGENT_TOOL.START_AGENT && part.tool !== RETIRED_TOOL.START_CODING_AGENT)
+  ) {
     return undefined;
   }
   const target = toolTarget(part);

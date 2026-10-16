@@ -618,13 +618,18 @@ function planningToolView(
       return namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question");
     case AGENT_TOOL.WITHDRAW_QUESTION:
       return namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question");
-    case AGENT_TOOL.LIST_CODING_AGENTS:
+    // An agent tool is read alike under its name and the one it had on Luke's calls before every agent was offered it.
+    case AGENT_TOOL.LIST_AGENTS:
+    case RETIRED_TOOL.LIST_CODING_AGENTS:
       return namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined);
-    case AGENT_TOOL.READ_CODING_AGENT:
+    case AGENT_TOOL.READ_AGENT:
+    case RETIRED_TOOL.READ_CODING_AGENT:
       return namedCall(CALL_KIND.READ_AGENT, input, output, "agentId");
-    case AGENT_TOOL.MESSAGE_CODING_AGENT:
+    case AGENT_TOOL.MESSAGE_AGENT:
+    case RETIRED_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
-    case AGENT_TOOL.START_CODING_AGENT:
+    case AGENT_TOOL.START_AGENT:
+    case RETIRED_TOOL.START_CODING_AGENT:
       // Note that a start journaled before the prompt had its name carries it as `task`.
       return namedCall(
         CALL_KIND.START_AGENT,
@@ -786,15 +791,18 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
   [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
-  [AGENT_TOOL.READ_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.MESSAGE_CODING_AGENT, namedAgent],
-  [AGENT_TOOL.START_CODING_AGENT, startedAgent],
+  [AGENT_TOOL.READ_AGENT, namedAgent],
+  [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
+  [AGENT_TOOL.START_AGENT, startedAgent],
+  [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
+  [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],

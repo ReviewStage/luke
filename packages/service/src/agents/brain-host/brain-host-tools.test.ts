@@ -51,10 +51,10 @@ import {
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import {
   CODING_AGENT_TOOL_REFUSAL,
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  MESSAGE_AGENT_TOOL,
+  START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
-  START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
@@ -298,7 +298,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
   });
   const call = await callerOn(acting, plan, eve.services);
 
-  const sent = await call(MESSAGE_CODING_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION });
+  const sent = await call(MESSAGE_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION });
   assert.deepEqual(sent, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     delivery: STEER_OUTCOME.SENT,
@@ -321,7 +321,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
   assert.deepEqual(await database.run(lineSenderUnder(agent, "call-1")), {
     kind: MESSAGE_SENDER.LUKE,
   });
-  const again = await call(MESSAGE_CODING_AGENT_TOOL.name, {
+  const again = await call(MESSAGE_AGENT_TOOL.name, {
     agentId: agent.id,
     text: INSTRUCTION,
   });
@@ -331,14 +331,14 @@ test("a message to the plan's agent steers its session as the deployment acting 
   const stranger = await planConversation(undefined, RELAY_FULL_NAME);
   const strangersAgent = await agentOn(stranger.userId, stranger.planId);
   assert.deepEqual(
-    await call(MESSAGE_CODING_AGENT_TOOL.name, { agentId: strangersAgent.id, text: INSTRUCTION }),
+    await call(MESSAGE_AGENT_TOOL.name, { agentId: strangersAgent.id, text: INSTRUCTION }),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT },
   );
   assert.equal(eve.sent.length, 1);
 
   const unsecured = await callerOn(brainHost(seams), plan, eve.services);
   assert.deepEqual(
-    await unsecured(MESSAGE_CODING_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION }),
+    await unsecured(MESSAGE_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION }),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
   );
   assert.equal(eve.sent.length, 1);
@@ -358,7 +358,7 @@ test("a member speaking in the plan conversation a teammate opened messages the 
   });
   const call = await callerOn(acting, plan, eve.services, [], member);
 
-  const sent = await call(MESSAGE_CODING_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION });
+  const sent = await call(MESSAGE_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION });
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   assert.equal(sent.delivery, STEER_OUTCOME.SENT);
   assert.equal(eve.sent.length, 1);
@@ -398,7 +398,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   });
   const call = await callerOn(acting, plan, eve.services, CATALOG);
 
-  const started = await call(START_CODING_AGENT_TOOL.name, {});
+  const started = await call(START_AGENT_TOOL.name, {});
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   const agent = startedAgentOf(started);
   assert.deepEqual(agent, {
@@ -423,12 +423,12 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.match(JSON.parse(opening?.body ?? "").message, /^# Teammate invitations/u);
 
   // The same call run again is the same agent, and opens nothing again.
-  const again = await call(START_CODING_AGENT_TOOL.name, {});
+  const again = await call(START_AGENT_TOOL.name, {});
   assert.equal(startedAgentOf(again).id, agent.id);
   assert.equal(eve.sent.length, 1);
 
   const tasked = await call(
-    START_CODING_AGENT_TOOL.name,
+    START_AGENT_TOOL.name,
     { prompt: TASK, model: SOL, effort: "low" },
     "call-2",
   );
@@ -439,34 +439,30 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.equal(second.modelName, "GPT-6.1 Sol");
   assert.equal(JSON.parse(eve.sent[1]?.body ?? "").message, TASK);
   // The agents it started are the ones the other tools then read.
-  const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
+  const listed = await call(LIST_AGENTS_TOOL.name, {});
   assert.ok(Array.isArray(listed.agents));
   assert.deepEqual(
     listed.agents.map((each) => (isRecord(each) ? each.id : undefined)),
     [agent.id, second.id],
   );
 
-  const refused = await call(START_CODING_AGENT_TOOL.name, { model: SOL, effort: "max" }, "call-3");
+  const refused = await call(START_AGENT_TOOL.name, { model: SOL, effort: "max" }, "call-3");
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
   assert.match(String(refused.reason), /openai\/gpt-6\.1-sol \(low, high\)/u);
   assert.match(String(refused.reason), /anthropic\/claude-opus-5\.5 \(low, medium, high, max\)/u);
-  assert.deepEqual(await call(START_CODING_AGENT_TOOL.name, { model: SOL }, "call-4"), {
+  assert.deepEqual(await call(START_AGENT_TOOL.name, { model: SOL }, "call-4"), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
   });
   assert.equal(eve.sent.length, 2);
 
   // A call the model made under the tool's earlier words names its prompt `task`, and starts on it all the same.
-  const earlier = await call(
-    START_CODING_AGENT_TOOL.name,
-    { task: "Draft the release notes." },
-    "call-6",
-  );
+  const earlier = await call(START_AGENT_TOOL.name, { task: "Draft the release notes." }, "call-6");
   assert.equal(earlier.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(earlier));
   assert.equal(JSON.parse(eve.sent[2]?.body ?? "").message, "Draft the release notes.");
 
   const unsecured = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
-  assert.deepEqual(await unsecured(START_CODING_AGENT_TOOL.name, {}, "call-5"), {
+  assert.deepEqual(await unsecured(START_AGENT_TOOL.name, {}, "call-5"), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
@@ -484,7 +480,7 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   });
   const call = await callerOn(acting, plan, eve.services, CATALOG);
 
-  const started = await call(START_CODING_AGENT_TOOL.name, { note: INSTRUCTION });
+  const started = await call(START_AGENT_TOOL.name, { note: INSTRUCTION });
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   const agent = startedAgentOf(started);
   const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
@@ -494,11 +490,7 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   assert.match(opening, /^# Teammate invitations/u);
   assert.ok(opening.endsWith(`\n\n## Note from the developer\n\n${INSTRUCTION}`), opening);
 
-  const tasked = await call(
-    START_CODING_AGENT_TOOL.name,
-    { prompt: TASK, note: INSTRUCTION },
-    "call-2",
-  );
+  const tasked = await call(START_AGENT_TOOL.name, { prompt: TASK, note: INSTRUCTION }, "call-2");
   assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
   assert.equal(eve.sent.length, 2);
   assert.equal(
@@ -516,7 +508,7 @@ test("Luke's one start carries what the developer said beyond the plan: the note
     "LUKE-142/fix-the-thing",
     { workspace: "acme", repository: RELAY_FULL_NAME },
   );
-  const linked = await call(START_CODING_AGENT_TOOL.name, { note: `Fix ${issue}.` }, "call-3");
+  const linked = await call(START_AGENT_TOOL.name, { note: `Fix ${issue}.` }, "call-3");
   assert.equal(linked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(linked));
   assert.equal(eve.sent.length, 3);
   const parts: unknown = JSON.parse(eve.sent[2]?.body ?? "").message;

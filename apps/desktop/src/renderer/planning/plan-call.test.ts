@@ -255,7 +255,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     [
       workerCall(styling),
       toolCall(
-        AGENT_TOOL.START_CODING_AGENT,
+        AGENT_TOOL.START_AGENT,
         "s",
         { task: "Ship the invoice export" },
         { output: { status: "accepted", agent: { id: "agent-9" } } },
