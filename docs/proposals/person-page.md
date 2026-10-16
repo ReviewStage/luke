@@ -55,8 +55,9 @@ time.
 ## 2. Recommended: B, a person's page in the workspace you are in
 
 Pressing any named person opens their page, the way pressing an agent or an
-automation opens theirs. Their card gains an **Open profile** door under a
-rule, the same way "Open agent" and "Open automation" sit on theirs.
+automation opens theirs. Their hover card is read, never a door: Dean later
+decided that no hover card carries an "Open" button, since pressing the name
+it hangs from already opens what it names.
 
 The page stands in the plan's place, as Factory, Automations and an agent's
 page do (`STAND_IN.PERSON {userId}`), and Back returns from it. Its head is:
@@ -159,8 +160,7 @@ check that each event's item is one the viewer may open.
    - the page itself on Home's parts;
    - its tests.
 2. `feat(desktop): a press on a person opens their page`. The person branch
-   and `PersonCard`'s Open profile door go through one `usePersonDoor`. The
-   PR also covers:
+   of `ActorRef` goes through one `useActorDoor`. The PR also covers:
    - a former member's page;
    - Open on GitHub for a GitHub user who isn't a member;
    - the crumb card's rows;
@@ -185,17 +185,16 @@ check that each event's item is one the viewer may open.
 ## 7. Decisions, recommendation first
 
 1. **Direction.** B (or A, C, D).
-2. **What presses.** Named people, a card's people rows, and the Open profile
-   door. Piles and row faces don't.
+2. **What presses.** Named people and a card's people rows. Piles and row
+   faces don't, and no hover card carries an Open button (Dean, later).
 3. **Pressing yourself.** Your own page, whose Edit profile opens Settings ›
    Profile (or go straight to Settings › Profile).
 4. **Scope.** The listed workspace only.
 5. **A former member.** A read-only page (or no press).
-6. **A GitHub user who isn't a member.** The press opens GitHub (or only the
-   card's door does).
+6. **A GitHub user who isn't a member.** The press opens GitHub.
 7. **v1 sections.** Working now, Waiting on their answer, Created, Agents,
    Automations. No Activity, presence or last active.
-8. **Door words.** Open profile (or View profile).
+8. **Door words.** Open profile, in menus only: Settings › Members' ⋯.
 9. **Actions.** Their tasks in sidebar, plus ⋯ for the rest. No Message and
    no Mention.
 10. **Placement.** A stand-in page with Back, no sidebar row, and a ⌘K People

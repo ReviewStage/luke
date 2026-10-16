@@ -2159,6 +2159,9 @@ export function usePlansTab(input: {
       name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
         setHistoryFor(undefined);
+        // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
+        // asked before it, answering late, lists nothing and leaves nothing over it.
+        navigations.current += 1;
         // Note that the workspace is listed first, because the page reads the listed workspace's
         // work, and only listed, as a link's place is: reopening its last plan behind the page
         // would only hide it again, and a reopen refused would take the page with it.
