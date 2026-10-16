@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { NodeRuntime } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { runWebMigrations } from "@luke/database/core/migrator";
+import { waitingOutNeonComputeLimit } from "@luke/database/core/neon-compute-limit";
 import { databaseOverPgClient } from "@luke/database/core/query";
 import { POOL_LIMITS } from "@luke/service/db";
 import { Config, Effect, Layer } from "effect";
@@ -19,11 +20,15 @@ const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
 const migrateConfiguredDatabase = Effect.gen(function* () {
   const url = yield* migrationConnectionString;
-  const applied = yield* runWebMigrations().pipe(
-    Effect.provide(
-      Layer.provideMerge(
-        databaseOverPgClient,
-        PgClient.layer({ url, maxConnections: POOL_LIMITS.max }),
+  // Note that the wait wraps the client's layer too, because Neon refuses the
+  // compute as the connection opens, so each attempt needs a client of its own.
+  const applied = yield* waitingOutNeonComputeLimit(
+    runWebMigrations().pipe(
+      Effect.provide(
+        Layer.provideMerge(
+          databaseOverPgClient,
+          PgClient.layer({ url, maxConnections: POOL_LIMITS.max }),
+        ),
       ),
     ),
   );
