@@ -120,9 +120,6 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../../packages/wire
       react:
         specifier: 'catalog:'
         version: 19.2.8

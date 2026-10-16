@@ -8,7 +8,6 @@ import {
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -20,7 +19,15 @@ import { CatalogSection } from "../section";
  * one that asks for a field to be filled.
  */
 
-const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+/** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
+type ActionResult = Awaited<ReturnType<Parameters<typeof useConfirmDialog>[1]>>;
+
+const ACCEPTED: ActionResult = { status: "accepted" };
+
+/** An act refused, saying why. */
+function refused(reason: string): ActionResult {
+  return { status: "rejected", reason };
+}
 
 /** A button that asks `question` before its act, which answers with `answer`. */
 function Asking({
@@ -47,7 +54,7 @@ function Asking({
 
 /** A key whose deletion is refused the first time, so the refusal and the second try can be seen. */
 function RefusedOnce(): React.JSX.Element {
-  const [refused, setRefused] = useState(false);
+  const [triedOnce, setTriedOnce] = useState(false);
   return (
     <Asking
       label="Delete key…"
@@ -58,12 +65,9 @@ function RefusedOnce(): React.JSX.Element {
         running: "Deleting",
       }}
       answer={() => {
-        if (refused) return ACCEPTED;
-        setRefused(true);
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "The keychain is locked. Unlock it and try again.",
-        };
+        if (triedOnce) return ACCEPTED;
+        setTriedOnce(true);
+        return refused("The keychain is locked. Unlock it and try again.");
       }}
     />
   );
@@ -74,11 +78,7 @@ function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve(
-      name.trim() === ""
-        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "Name the workspace." }
-        : ACCEPTED,
-    ),
+    Promise.resolve(name.trim() === "" ? refused("Name the workspace.") : ACCEPTED),
   );
   return (
     <>
