@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import type { ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -46,7 +46,7 @@ import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
-import { useFailedRunToasts } from "./desktop/failed-runs";
+import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { prefetchEditorBundle } from "./editor-bundle";
@@ -65,7 +65,7 @@ import { type AgentPlace, useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { OpenLinkProvider } from "./planning/use-open-link";
-import { AUTOMATIONS_PAGE, useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
+import { useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
@@ -333,21 +333,6 @@ export function App(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   useEffect(() => window.luke.onShowAgent(openAgent), [openAgent]);
-  // A failed run's notification clicked, or its toast's View: the Plans tab, on that automation.
-  const openAutomations = useRef(plans.automationsView.onOpen);
-  openAutomations.current = plans.automationsView.onOpen;
-  const openAutomation = useCallback(
-    (automationId: string) =>
-      guardLeave(() => {
-        changeTab(PANEL_TAB.PLANS);
-        openAutomations.current({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
-      })(),
-    [changeTab, guardLeave],
-  );
-  useEffect(
-    () => window.luke.onShowAutomation(({ automationId }) => openAutomation(automationId)),
-    [openAutomation],
-  );
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -371,6 +356,18 @@ export function App(): React.JSX.Element {
   const workspacesUnread = plans.workspaces.length === 0 && !plans.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => window.luke.onShowLink(openLink), [openLink]);
+  // A failed run's notification clicked, or its toast's View: the run's own link, so it opens in its automation's workspace as any link does.
+  const openRunLink = useRef(openLukeLink);
+  openRunLink.current = openLukeLink;
+  const openFailedRun = useCallback(
+    ({ automationId, runId, workspaceId }: FailedRunPlace) =>
+      openRunLink.current({
+        workspace: workspaceId,
+        place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId },
+      }),
+    [],
+  );
+  useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
   const showPlan = useRef(plans.onShowPlan);
@@ -411,7 +408,7 @@ export function App(): React.JSX.Element {
   // unseen dot.
   useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
   // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
-  useFailedRunToasts(openAutomation);
+  useFailedRunToasts(openFailedRun);
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
   const showInbox = useRef(plans.onShowInbox);
   showInbox.current = plans.onShowInbox;

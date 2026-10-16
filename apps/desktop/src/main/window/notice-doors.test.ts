@@ -43,6 +43,7 @@ function doors() {
   const surface = electronNoticeDoors({
     toPanels: ignore,
     inboxToPanels: ignore,
+    failedRunToPanels: ignore,
     onAnswered: (status) => answers.push(status),
     report: ignore,
   });

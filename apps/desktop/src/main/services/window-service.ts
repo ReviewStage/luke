@@ -8,6 +8,7 @@ import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type {
   AgentEndToast,
   AgentPlace,
+  FailedRunPlace,
   FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
@@ -109,8 +110,8 @@ export interface WindowService extends DesktopService {
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
   toastInboxItem: (item: InboxItemToast) => void;
-  /** Asks the panels to open an automation: a failed run's notification's click. */
-  showAutomation: (automationId: string) => void;
+  /** Asks the panels to open a failed run in its automation's workspace: its notification's click. */
+  showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
   toastFailedRun: (run: FailedRunToast) => void;
   /**
@@ -302,12 +303,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onInboxItemOpened, item);
   }
 
-  function showAutomation(automationId: string): void {
-    panels.broadcast(channels.onShowAutomation, { automationId });
+  function showFailedRun(place: FailedRunPlace): void {
+    panels.broadcast(channels.onShowFailedRun, place);
   }
 
-  function toastFailedRun(run: FailedRunToast): void {
-    panels.broadcast(channels.onRunFailed, run);
+  function toastFailedRun({ place, words, detail }: FailedRunToast): void {
+    panels.broadcast(channels.onRunFailed, { ...place, words, detail });
   }
 
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
@@ -453,7 +454,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showInboxItem,
     showSettings,
     toastInboxItem,
-    showAutomation,
+    showFailedRun,
     toastFailedRun,
     toastAgentEnd,
     onPanelFocusChanged,

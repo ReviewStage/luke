@@ -19,19 +19,26 @@ import { useEffect, useRef, useState } from "react";
 import { TOAST_TONE, useToast } from "../toast";
 import { readKept, writeKept } from "./folded-groups";
 
-/** What a failed run's toast offers, to open its automation. */
+/** What a failed run's toast offers, to open the run. */
 const VIEW_LABEL = "View";
 
 /** Where the failures seen are kept in the renderer's storage. */
 const STORAGE_KEY = "luke.seenFailedRuns";
 
-/** The instant of the newest failure seen of each automation, by its id. */
-const storedSeen = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Finite));
+/** The newest failed run seen of each automation, by the automation's id. */
+const storedSeen = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
 
-type Seen = Readonly<Record<string, number>>;
+type Seen = Readonly<Record<string, string>>;
 
-/** Says each failed run main hands the window, `view` opening its automation. */
-export function useFailedRunToasts(view: (automationId: string) => void): void {
+/** Where a failed run stands to be opened: the run, in its automation, in the workspace it stands in. */
+export interface FailedRunPlace {
+  readonly automationId: string;
+  readonly runId: string;
+  readonly workspaceId: string;
+}
+
+/** Says each failed run main hands the window, `view` opening that run. */
+export function useFailedRunToasts(view: (place: FailedRunPlace) => void): void {
   const toast = useToast();
   // Read through a ref, because the caller hands a new closure each render
   // and the subscription is owed to the window, not to a render.
@@ -39,14 +46,17 @@ export function useFailedRunToasts(view: (automationId: string) => void): void {
   viewing.current = view;
   useEffect(
     () =>
-      window.luke.onRunFailed(({ automationId, words, detail }) =>
+      window.luke.onRunFailed(({ automationId, runId, workspaceId, words, detail }) =>
         toast({
           words,
           detail,
           waits: true,
           persists: true,
           tone: TOAST_TONE.FAILED,
-          action: { label: VIEW_LABEL, onPress: () => viewing.current(automationId) },
+          action: {
+            label: VIEW_LABEL,
+            onPress: () => viewing.current({ automationId, runId, workspaceId }),
+          },
         }),
       ),
     [toast],
@@ -54,12 +64,15 @@ export function useFailedRunToasts(view: (automationId: string) => void): void {
 }
 
 /**
- * Whether a run of the account's own automation failed since that
- * automation was last opened on this Mac, among `failedRuns`, the listed
- * workspace's. The automation `opened` sees its failure as it opens.
+ * Whether a run of the account's own automation in the listed workspace
+ * failed since that automation was last opened on this Mac, among
+ * `failedRuns`, every workspace's. The automation `opened` sees its newest
+ * failure as it opens. Note that a failure is told by its run's id rather
+ * than its instant, because two runs may fail within one millisecond.
  */
 export function useFailedRunsMark(
   failedRuns: readonly AccountFailedRun[],
+  workspaceId: string | undefined,
   opened: string | undefined,
   staged: boolean,
 ): boolean {
@@ -68,21 +81,21 @@ export function useFailedRunsMark(
   );
   const openedRun = failedRuns.find((run) => run.automationId === opened);
   useEffect(() => {
-    if (openedRun === undefined || (seen[openedRun.automationId] ?? 0) >= openedRun.failedAt) {
-      return;
-    }
-    // Note that only the automations still failing are kept, because one whose failures aged out of the read has nothing left to mark.
+    if (openedRun === undefined || seen[openedRun.automationId] === openedRun.id) return;
+    // Note that only the automations still failing are kept, in every workspace, because one whose failures aged out of the read has nothing left to mark.
     const next = Object.fromEntries(
       failedRuns.flatMap((run) => {
-        const at =
-          run.automationId === openedRun.automationId ? run.failedAt : seen[run.automationId];
-        return at === undefined ? [] : [[run.automationId, at]];
+        const runId = run.automationId === openedRun.automationId ? run.id : seen[run.automationId];
+        return runId === undefined ? [] : [[run.automationId, runId]];
       }),
     );
     setSeen(next);
     if (!staged) writeKept(STORAGE_KEY, storedSeen, next);
   }, [openedRun, failedRuns, seen, staged]);
   return failedRuns.some(
-    (run) => run.automationId !== opened && run.failedAt > (seen[run.automationId] ?? 0),
+    (run) =>
+      (workspaceId === undefined || run.workspaceId === workspaceId) &&
+      run.automationId !== opened &&
+      seen[run.automationId] !== run.id,
   );
 }

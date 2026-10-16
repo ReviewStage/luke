@@ -116,7 +116,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * on no badge, since nothing answers it. A run that failed since the last
  * answer is announced once by the same doors and gates, in the failed tone,
  * under its automation's name, and its click or its toast's View opens that
- * automation; nothing is said while the account has Automations off.
+ * run, in its automation's workspace; nothing is said while the account has Automations off.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
@@ -165,9 +165,16 @@ export interface AgentEndToast {
   failed: boolean;
 }
 
-/** A run that failed to start as the window's own toast says it: the automation its View opens, the words, and the automation's name under them. */
-export interface FailedRunToast {
+/** Where a failed run's click takes the developer: the run, in its automation, in the workspace it stands in. */
+export interface FailedRunPlace {
   automationId: string;
+  runId: string;
+  workspaceId: string;
+}
+
+/** A run that failed to start as the window's own toast says it: the run its View opens, the words, and the automation's name under them. */
+export interface FailedRunToast {
+  place: FailedRunPlace;
   words: string;
   detail: string;
 }
@@ -234,8 +241,8 @@ export interface AgentNoticesDependencies {
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
   /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
-  /** Brings Luke forward on an automation: a failed run's notification's click. */
-  openAutomation: (automationId: string) => void;
+  /** Brings Luke forward on a failed run, in its automation's workspace: its notification's click. */
+  openFailedRun: (place: FailedRunPlace) => void;
   /** Whether the account has Automations on, without which no failed run is announced. */
   automationsOn: () => boolean;
   openPlanlessItem: (item: {
@@ -663,15 +670,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function announceFailedRun(run: AccountFailedRun): void {
       if (!dependencies.automationsOn()) return;
       const words = failedRunText(run.reason);
+      const place = { automationId: run.automationId, runId: run.id, workspaceId: run.workspaceId };
       if (focused) {
-        doors.toastFailedRun({ automationId: run.automationId, words, detail: run.automationName });
+        doors.toastFailedRun({ place, words, detail: run.automationName });
         return;
       }
       if (dependencies.notifying()) {
         doors.post({
           title: run.automationName,
           body: words,
-          onClick: () => dependencies.openAutomation(run.automationId),
+          onClick: () => dependencies.openFailedRun(place),
         });
       }
     }

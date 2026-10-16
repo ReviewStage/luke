@@ -176,7 +176,7 @@ function fixture() {
         planless.push(next.planless);
         failedRuns.push(next.failedRuns);
       },
-      openAutomation: (automationId) => openedAutomations.push(automationId),
+      openFailedRun: (place) => openedAutomations.push(place.automationId),
       automationsOn: () => automationsOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openPlanlessItem: (item) => openedPlanless.push(item),
@@ -896,7 +896,7 @@ it.effect(
 
       assert.deepEqual(f.runsToasted, [
         {
-          automationId: AUTOMATION_ID,
+          place: { automationId: AUTOMATION_ID, runId: RUN_ID, workspaceId: "workspace-acme" },
           words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
           detail: "Flaky test sweep",
         },

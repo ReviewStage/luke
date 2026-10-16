@@ -1040,6 +1040,7 @@ function SidebarColumn({
   const { place: automationsPlace } = plans.automationsView;
   const automationFailed = useFailedRunsMark(
     plans.failedRuns,
+    plans.workspace?.id,
     inAutomations && automationsPlace.kind === AUTOMATIONS_PAGE.EDIT
       ? automationsPlace.automationId
       : undefined,

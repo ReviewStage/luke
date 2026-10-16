@@ -283,9 +283,9 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInboxItem(item);
         },
-        openAutomation: (automationId) => {
+        openFailedRun: (place) => {
           windows.panels.focusExpanded();
-          windows.showAutomation(automationId);
+          windows.showFailedRun(place);
         },
         automationsOn: () =>
           experimentOn(

@@ -290,16 +290,20 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * A failed run's notification clicked: the panel is to open its
-   * automation. An event, as an agent's notification's click is, because it
-   * is an ask the window answers once.
+   * A failed run's notification clicked: the panel is to open the run, in
+   * its automation's workspace. An event, as an agent's notification's click
+   * is, because it is an ask the window answers once.
    */
-  onShowAutomation: entry({
+  onShowFailedRun: entry({
     kind: "subscribe",
-    channel: "app:show-automation",
+    channel: "app:show-failed-run",
     args: noArgs,
-    result: result<{ automationId: string }>(
-      (value) => isRecord(value) && isWireString(value.automationId),
+    result: result<{ automationId: string; runId: string; workspaceId: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.automationId) &&
+        isWireString(value.runId) &&
+        isWireString(value.workspaceId),
     ),
   }),
   /**
@@ -410,16 +414,24 @@ export const BRIDGE = {
   /**
    * A run of one of the account's automations failed to start while the
    * window was focused: the panel says so in its toast, in the failed tone,
-   * whose View opens the automation. An event, as an agent's end is.
+   * whose View opens the run. An event, as an agent's end is.
    */
   onRunFailed: entry({
     kind: "subscribe",
     channel: "app:run-failed",
     args: noArgs,
-    result: result<{ automationId: string; words: string; detail: string }>(
+    result: result<{
+      automationId: string;
+      runId: string;
+      workspaceId: string;
+      words: string;
+      detail: string;
+    }>(
       (value) =>
         isRecord(value) &&
         isWireString(value.automationId) &&
+        isWireString(value.runId) &&
+        isWireString(value.workspaceId) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

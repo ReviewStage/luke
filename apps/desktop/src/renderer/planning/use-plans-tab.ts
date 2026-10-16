@@ -427,7 +427,7 @@ export interface PlansControl {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** What waits on the developer from agents with no plan, as main's read last answered: what the window's Inbox lists beside the plans' and counts with them. */
   inboxPlanless: readonly AppInboxPlanlessItem[];
-  /** The newest run of each of the account's own automations in the listed workspace that failed to start lately, which marks the sidebar's Automations until it is opened. */
+  /** The newest run of each of the account's own automations that failed to start lately, every workspace's, which marks the sidebar's Automations of the run's workspace until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
@@ -895,15 +895,7 @@ export function usePlansTab(input: {
       : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
   );
   const listedWorkspaceId = listedWorkspace?.id;
-  const { inboxWaiting, inboxPlans, failedRuns } = input;
-  // An automation's failed run marks the sidebar of the workspace it stands in, whose automations the window lists.
-  const listedFailedRuns = useMemo(
-    () =>
-      listedWorkspaceId === undefined
-        ? failedRuns
-        : failedRuns.filter((run) => run.workspaceId === listedWorkspaceId),
-    [failedRuns, listedWorkspaceId],
-  );
+  const { inboxWaiting, inboxPlans } = input;
   const listedInbox = useMemo(
     () => ({
       inbox: inWorkspace(inboxWaiting, planning.plans, listedWorkspaceId),
@@ -2181,7 +2173,7 @@ export function usePlansTab(input: {
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
     inboxPlanless: input.inboxPlanless,
-    failedRuns: listedFailedRuns,
+    failedRuns: input.failedRuns,
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
