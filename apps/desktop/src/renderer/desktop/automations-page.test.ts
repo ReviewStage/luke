@@ -2068,8 +2068,8 @@ test("an automation whose task opens with no code review settings shows no Code 
 /** The suggestion named, under the list. */
 function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
   const found = [
-    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-row-open"),
-  ].find((each) => each.querySelector(".automation-row-name")?.textContent === name);
+    ...page.querySelectorAll<HTMLButtonElement>("[aria-label='Suggested'] .automation-suggestion"),
+  ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
   assert.ok(found, `no suggestion ${name}`);
   return found;
 }

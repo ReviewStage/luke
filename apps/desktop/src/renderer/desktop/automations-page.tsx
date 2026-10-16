@@ -212,9 +212,10 @@ function AutomationList({
 }
 
 /**
- * The automations Luke suggests, under a heading of their own: each one's
- * glyph, its name over what it does, and one press, which opens a new
- * automation's page filled in from its preset.
+ * The automations Luke suggests, under a heading of their own, each a card:
+ * the glyph of what fires it, its name over what it does, and a plus, the
+ * whole card one press that opens a new automation's page filled in from
+ * its preset.
  */
 function SuggestedAutomations({
   disabled,
@@ -226,27 +227,26 @@ function SuggestedAutomations({
   return (
     <section className="settings-group automation-suggestions" aria-label="Suggested">
       <h2 className="settings-group-title">Suggested</h2>
-      <div className="settings-card">
+      <div className="automation-suggestion-cards">
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
           return (
-            <div key={name} className="automation-suggestion">
-              <button
-                type="button"
-                className="automation-row-open"
-                disabled={disabled}
-                onClick={() => onStart(name)}
-              >
+            <button
+              key={name}
+              type="button"
+              className="automation-suggestion"
+              disabled={disabled}
+              onClick={() => onStart(name)}
+            >
+              <span className="automation-suggestion-head">
                 <span className="automation-suggestion-glyph" aria-hidden="true">
                   {glyph}
                 </span>
-                <span className="automation-row-copy">
-                  <span className="automation-row-name">{preset.name}</span>
-                  <span className="automation-suggestion-detail">{preset.description}</span>
-                </span>
                 <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
-              </button>
-            </div>
+              </span>
+              <span className="automation-suggestion-name">{preset.name}</span>
+              <span className="automation-suggestion-detail">{preset.description}</span>
+            </button>
           );
         })}
       </div>

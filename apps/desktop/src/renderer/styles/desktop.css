@@ -4806,25 +4806,14 @@ body:has(.app-stage[data-capture="true"])
   overflow: visible;
 }
 
-/* With no automations yet, the empty state and the suggestions under it
-   stand together in the middle of the room, rather than the suggestions
-   pushed to its foot by the state filling it. */
-.automations-scroll > .empty-state:has(+ .automation-suggestions) {
-  flex: none;
-  margin-top: auto;
-}
-
-.empty-state + .automation-suggestions {
-  margin-top: var(--space-32);
-  margin-bottom: auto;
+.automations-empty > .automation-suggestions {
+  margin-top: var(--space-16);
 }
 
 /* One automation's row: its clock wearing its newest run's state, its name
    over what fires it, its owner, when it runs next in the tertiary ink, a
-   failure's mark, and its switch, divided by the card's hairlines. A
-   suggestion under the list is drawn as one. */
-.automation-row,
-.automation-suggestion {
+   failure's mark, and its switch, divided by the card's hairlines. */
+.automation-row {
   position: relative;
   display: flex;
   min-height: 52px; /* off-scale */
@@ -4937,8 +4926,7 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
-.automation-row:hover,
-.automation-suggestion:hover {
+.automation-row:hover {
   background: var(--raised);
 }
 
@@ -4946,18 +4934,67 @@ body:has(.app-stage[data-capture="true"])
   outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
 }
 
-:root[data-keyboard="true"]
-  :is(.automation-row, .automation-suggestion):has(> .automation-row-open:focus-visible) {
+:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
-/* A suggested automation's row, under the list: the glyph of what fires it,
-   its name over what it does, read whole, and a plus at its end, the whole
-   row one press that opens a new automation filled in from it. */
-.automation-suggestion-glyph {
+/* The suggested automations, each a card of its own in a grid that wraps
+   as more are suggested: the glyph of what fires it on a tile, a plus at
+   its corner, its name, and what it does, read whole. The whole card is one
+   press, lifting to the raised fill under the pointer. */
+.automation-suggestion-cards {
+  display: grid;
+  gap: var(--space-12);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
+}
+
+.automation-suggestion {
   display: flex;
-  flex: none;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-6);
+  padding: var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  color: inherit;
+  text-align: left;
+}
+
+.automation-suggestion:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.automation-suggestion:focus-visible {
+  outline: none;
+}
+
+:root[data-keyboard="true"] .automation-suggestion:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) / -2);
+}
+
+.automation-suggestion:disabled {
+  opacity: 0.5;
+}
+
+.automation-suggestion-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.automation-suggestion-glyph {
+  display: grid;
+  width: 32px; /* off-scale */
+  height: 32px; /* off-scale */
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--raised);
   color: var(--text-secondary);
 }
 
@@ -4967,19 +5004,25 @@ body:has(.app-stage[data-capture="true"])
   height: 16px;
 }
 
-.automation-suggestion-detail {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
 .automation-suggestion-add {
   flex: none;
   color: var(--text-tertiary);
 }
 
-.automation-suggestion:has(> .automation-row-open:disabled) {
-  pointer-events: none;
-  opacity: 0.5;
+.automation-suggestion:hover:not(:disabled) .automation-suggestion-add {
+  color: var(--text-primary);
+}
+
+.automation-suggestion-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.automation-suggestion-detail {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its
