@@ -773,6 +773,7 @@ test("a person is mentioned by their page's Luke link under the workspace, read 
   assert.equal(encodeMention(person, PLACE), page);
   assert.deepEqual(decodeMention(page, null), person);
   assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/person/user_Ab-9", null), person);
+  assert.deepEqual(decodeMention(`${page}/`, null), person);
   assert.deepEqual(linkMention("@Dana Reyes", page, null), { mention: person, name: "Dana Reyes" });
   assert.deepEqual(pastedLinkMention(page, REPOSITORY), { mention: person, name: "Person" });
   assert.deepEqual(
@@ -781,6 +782,7 @@ test("a person is mentioned by their page's Luke link under the workspace, read 
   );
   for (const target of [
     "https://tryluke.dev/acme/person/user_Ab-9/tasks",
+    "https://tryluke.dev/acme/person/user_Ab-9//",
     "https://tryluke.dev/acme/person/user_Ab-9#top",
     "https://tryluke.dev/acme/person/",
     "https://tryluke.dev/acme/person/user%2F9",

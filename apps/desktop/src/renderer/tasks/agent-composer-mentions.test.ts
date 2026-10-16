@@ -1376,3 +1376,24 @@ test("off a members' directory an @ offers no people", async () => {
 
   assert.deepEqual(peopleListed(container), []);
 });
+
+test("a person's page pasted into the box becomes their chip called by their name, and one of another workspace pastes as the words it is", async () => {
+  const { container, sent } = await memberBox();
+  const here = "https://tryluke.dev/acme/person/u_dana";
+  const elsewhere = "https://tryluke.dev/other/person/u_dana";
+
+  typeInComposer(container, "Ask ");
+  pasteInComposer(container, here);
+  typeInComposer(container, "not ");
+  pasteInComposer(container, elsewhere);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Dana Reyes"],
+  );
+  assert.deepEqual(sent, [`Ask [@Dana Reyes](${here}) not ${elsewhere}`]);
+});

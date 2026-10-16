@@ -480,9 +480,10 @@ function taskFields(taskId: string | undefined, rest: readonly string[], hash: s
     : { kind: MENTION_KIND.AGENT, taskId, agentId };
 }
 
-/** The fields a person's address spells after the workspace, `/person/<userId>`, with nothing after it. */
+/** The fields a person's address spells after the workspace, `/person/<userId>`, with nothing after it but the trailing slash a Luke link is read with (`luke-link.ts`). */
 function personFields(id: string, rest: readonly string[], hash: string) {
-  if (rest.length > 0 || hash !== "") return undefined;
+  const trailing = rest.length === 1 && rest[0] === "";
+  if ((rest.length > 0 && !trailing) || hash !== "") return undefined;
   return { kind: MENTION_KIND.PERSON, userId: decodedPart(id) };
 }
 
