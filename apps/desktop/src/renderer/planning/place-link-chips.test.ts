@@ -37,6 +37,8 @@ import { OpenLinkProvider } from "./use-open-link";
 const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNNAMED_AGENT = "9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f";
+const TRIAGE_AGENT = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
+const TRIAGE = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
 const PAGE = "26494df1-595a-4364-abf7-85781c65a9f8";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
@@ -91,6 +93,23 @@ const STATE: AppStateSnapshot = (() => {
     planning: {
       ...IDLE_PLANNING_VIEW,
       plans: [TASK],
+      planlessAgents: [
+        {
+          id: TRIAGE_AGENT,
+          planId: null,
+          turnId: null,
+          title: "Triage new Sentry issues",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          createdAt: AT,
+          automationId: TRIAGE,
+          automationName: "Nightly triage",
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          activityAt: AT,
+        },
+      ],
       pages: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }],
     },
     inbox: {
@@ -170,6 +189,8 @@ test("a bare link to a place the window knows is called by its name, the task's 
       `${HOME}/plan/${PLAN}/inbox/${ITEM}`,
       `${HOME}/plan/${PLAN}/agent/${AGENT}/message/msg_1`,
       `${HOME}/person/${SAM}`,
+      `${HOME}/agent/${TRIAGE_AGENT}`,
+      `${HOME}/automation/${TRIAGE}`,
     ].join(" and "),
     [],
   );
@@ -181,6 +202,8 @@ test("a bare link to a place the window knows is called by its name, the task's 
     ["place", "Keep expired links?"],
     ["place", "Message from Expire old invitations"],
     ["place", "Sam Okafor"],
+    ["place", "Triage new Sentry issues"],
+    ["place", "Nightly triage"],
   ]);
   assert.deepEqual(
     [...container.querySelectorAll("a")].map((link) => link.textContent),
