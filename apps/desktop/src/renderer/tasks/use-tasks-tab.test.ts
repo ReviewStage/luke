@@ -683,6 +683,64 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
+test("the plan's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+  const listed = {
+    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+  };
+  const tab = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const column = () => tab.control().mainTabs;
+  const agent = { agent: AGENT_ID };
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent]);
+
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [agent]);
+  assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
+  act(() => tab.control().onReopenClosedTab?.());
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent], "⇧⌘T opens it first again");
+  assert.equal(column().tab, MAIN_TAB.PLAN);
+  act(() => column().onClose(MAIN_TAB.PLAN));
+
+  const launched = mount({ shown: true, tasks: OPEN }, listed);
+  await settle();
+  const again = () => launched.control().mainTabs;
+  assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
+
+  act(() => again().onClose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN]);
+  assert.equal(again().tab, MAIN_TAB.PLAN, "a column with no other tab is back on the plan");
+  act(() => again().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN], "alone, it does not close");
+  act(() => again().onChoose(agent));
+  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN, agent], "it stays open beside a tab opened since");
+});
+
+test("a closed plan's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  const archived = { ...RUNNING_AGENT, archivedAt: 5 };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        listed = [archived];
+        return Promise.resolve({ agent: archived });
+      },
+    },
+  );
+  await settle();
+  const column = () => tab.control().mainTabs;
+  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+
+  await act(() => tab.control().agents.onArchive(AGENT_ID, true));
+  await settle();
+  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
+  act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
+  assert.equal(column().tabs[0], MAIN_TAB.PLAN, "the plan's tab stands beside the draft's");
+  assert.equal(column().tabs.length, 2);
+});
+
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
