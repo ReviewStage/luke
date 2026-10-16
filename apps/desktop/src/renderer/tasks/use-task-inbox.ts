@@ -59,8 +59,9 @@ import {
  * posted its item again, is let go, since the service deleted it too. A
  * picture landing before the hook's own read of the items does is kept all
  * the same, since the Inbox draws an item from its list's read first and
- * nothing would ask for the picture again. A read that did not answer is
- * held as failed, and the card offers to try again.
+ * nothing would ask for the picture again; one landing after that read,
+ * which no item names, is not. A read that did not answer is held as
+ * failed, and the card offers to try again.
  *
  * What the developer has put on a card and not sent is its draft, kept by
  * item at the revision it was written against (`../composer-drafts.ts`), so
@@ -207,8 +208,10 @@ export function useTaskInbox(input: {
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
-  // The attachments the items name now, so a picture an item no longer names is let go.
+  // The attachments the items name now, so a picture an item no longer names is let go, and one landing for it after the read is not kept.
   const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
+  const namedNow = useRef({ read: held.read, named });
+  namedNow.current = { read: held.read, named };
   useEffect(() => {
     setImages((standing) => imagesNamed(standing, named));
   }, [named]);
@@ -340,14 +343,12 @@ export function useTaskInbox(input: {
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another plan is kept for nobody. Note that one
-          // landing before this hook's read names it is kept, because the Inbox's pane draws the item
-          // from its list's read first, and a picture dropped here is never asked for again.
-          setImages((standing) =>
-            latest.current.taskId === askedOn
-              ? new Map(standing).set(attachmentId, image)
-              : standing,
-          );
+          // An image landing after the window moved to another plan, or after this hook's read let its
+          // item's block go, is kept for nobody. Note that one landing before that read is kept, because
+          // the Inbox's pane draws the item from its list's read first, and nothing would ask again.
+          const { read, named: namedThen } = namedNow.current;
+          const kept = latest.current.taskId === askedOn && (!read || namedThen.has(attachmentId));
+          setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
         });
     },
     [images, taskId],
