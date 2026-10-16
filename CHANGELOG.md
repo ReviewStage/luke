@@ -64,6 +64,10 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.16.1 — 2026-10-16
+
+A probe of the release-only CI path; never merged.
+
 ## 0.16.0 — 2026-10-16
 
 ### Links that say what they point at
