@@ -215,10 +215,9 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
  * ignore rule, and the `routes` the `/api/` rewrites are generated into,
  * because Vercel evaluates a service's routes only once a request has
  * entered it and ignores a `routes` key left at the top level; the eve
- * service owns its own build; the top-level `ignoreCommand` skips the whole
- * deployment when nothing it builds from changed (`scripts/vercel-ignore.sh`);
- * and the top-level `rewrites` are the public routing that sends `/eve/v1/*`
- * to eve and everything else to the web service.
+ * service owns its own build; and the top-level `rewrites` are the public
+ * routing that sends `/eve/v1/*` to eve and everything else to the web
+ * service.
  */
 const WebService = Schema.Struct({
   root: Schema.String,
@@ -257,7 +256,6 @@ const ServiceRewriteSchema = Schema.Struct({
 
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
-  ignoreCommand: Schema.String,
   services: Schema.Struct({ web: WebService, luke: EveService, dev: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),

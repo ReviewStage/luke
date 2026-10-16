@@ -9,12 +9,12 @@ import { type TestContext, test } from "vitest";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SCRIPT = "scripts/vercel-ignore.sh";
 
-// SAFETY: the file is this repository's own vercel.json, read for its deployment's ignore step.
-const { ignoreCommand } = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8")) as {
-  readonly ignoreCommand: string;
+// SAFETY: the file is this repository's own vercel.json, read for its services' ignore steps.
+const { services } = JSON.parse(readFileSync(join(ROOT, "vercel.json"), "utf8")) as {
+  readonly services: Readonly<Record<string, { readonly ignoreCommand: string }>>;
 };
 
-/** What Vercel makes of the step's exit: zero skips the deployment, anything else builds it. */
+/** What Vercel makes of the steps' exits: the deployment is skipped when every service's exits zero, and built otherwise. */
 const VERDICT = { SKIP: "skip", BUILD: "build" } as const;
 type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
@@ -64,20 +64,23 @@ function commit(root: string, path: string): string {
   return git(root, "rev-parse", "HEAD");
 }
 
-/** Runs the deployment's own ignoreCommand at the head, from `directory`, as Vercel would. */
+/** Runs every service's own ignoreCommand at the head, from `directory`, as Vercel would. */
 function decide(root: string, previous?: string, directory = root): Verdict {
-  const ran = spawnSync("bash", ["-c", ignoreCommand], {
-    cwd: directory,
-    encoding: "utf8",
-    env: {
-      PATH: process.env.PATH,
-      HOME: root,
-      GIT_CONFIG_NOSYSTEM: "1",
-      // Note that a branch with no successful deployment yet carries the variable empty.
-      VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
-    },
+  const skipped = Object.values(services).every(({ ignoreCommand }) => {
+    const ran = spawnSync("bash", ["-c", ignoreCommand], {
+      cwd: directory,
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        GIT_CONFIG_NOSYSTEM: "1",
+        // Note that a branch with no successful deployment yet carries the variable empty.
+        VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
+      },
+    });
+    return ran.status === 0;
   });
-  return ran.status === 0 ? VERDICT.SKIP : VERDICT.BUILD;
+  return skipped ? VERDICT.SKIP : VERDICT.BUILD;
 }
 
 test("a push that changes only the desktop app or the docs is skipped, from whichever directory the step runs in", async (t) => {

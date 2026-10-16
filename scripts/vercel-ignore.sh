@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Vercel's Ignored Build Step for the whole deployment: exits 0, which skips
-# the deployment, when nothing any service builds from changed since the last
-# deployment of this branch that succeeded, and non-zero, which builds it,
-# otherwise.
+# Vercel's Ignored Build Step, the same for every service: exits 0, which
+# skips the service, when nothing any service builds from changed since the
+# last deployment of this branch that succeeded, and non-zero, which builds
+# it, otherwise. One verdict for all three means a deployment either skips
+# whole or builds whole. Vercel refuses a top-level `ignoreCommand` beside
+# `services` (observed on #2989), so each service names this script.
 #
-#   scripts/vercel-ignore.sh           decide, as `vercel.json`'s `ignoreCommand`
+#   scripts/vercel-ignore.sh           decide, as each service's `ignoreCommand`
 #   scripts/vercel-ignore.sh --paths   print the deployed tree, one pathspec a line
 #
 # The deployed tree is every path the web, luke and dev services install or
@@ -17,11 +19,11 @@ set -uo pipefail
 # and this script. `scripts/preview-address.sh` reads the same list, so a
 # skipped commit is known to serve what its nearest built ancestor serves.
 #
-# Note that this is the deployment's step, not each service's: since the
-# project's Root Directory became the repository root (#2876) Vercel's own
-# "not affected" skip sees every push as affecting it, and the services' own
-# `ignoreCommand`s were observed skipping nothing (2026-10-15), so every push
-# of a desktop-only branch built all three services.
+# Note that since the project's Root Directory became the repository root
+# (#2876), Vercel's own "not affected" skip sees every push as affecting it,
+# and the `git diff HEAD^ HEAD` the services named before this script were
+# observed skipping nothing (2026-10-15), so every push of a desktop-only
+# branch built all three services and woke its branch's Neon compute.
 #
 # The base is `VERCEL_GIT_PREVIOUS_SHA`, the commit of this branch's last
 # deployment that succeeded, when the clone holds it, so every commit pushed
