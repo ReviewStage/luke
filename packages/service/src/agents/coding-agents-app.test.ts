@@ -65,7 +65,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { planListAnswerSchema } from "@luke/features/plan-wire";
+import { PLAN_LIST_ARCHIVED, planListAnswerSchema } from "@luke/features/plan-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -1242,6 +1242,54 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         });
         assert.equal(ranNow.origin?.runBy?.userId, owner);
         assert.equal(ranNow.origin?.subject, undefined);
+      }),
+  );
+
+  it.effect(
+    "the plan list carries an agent with no plan beside the plans, as its own page reads it and when it last moved, for a member of its workspace, an archived one only where asked for, and for no one else",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const listed = (bearer: string, archived?: string) =>
+          Effect.map(ask(request(PLANS, bearer, { archived })), (answered) =>
+            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const page = readAnswer(
+          codingAgentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT, owner, { id: agent.id })),
+        ).agent;
+
+        const standing = yield* listed(owner);
+        const outside = yield* listed(other);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ archivedAt: new Date() })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const archived = yield* listed(owner);
+        const included = yield* listed(owner, PLAN_LIST_ARCHIVED.INCLUDE);
+
+        const [only, ...rest] = standing.planlessAgents ?? [];
+        assert.ok(only !== undefined);
+        const { activityAt, ...read } = only;
+        assert.deepEqual([read, rest], [page, []]);
+        assert.ok(activityAt >= page.createdAt);
+        assert.equal(standing.plans.find((each) => each.id === plan.id)?.agents, undefined);
+        assert.deepEqual(outside.planlessAgents, []);
+        assert.deepEqual(archived.planlessAgents, []);
+        assert.deepEqual(
+          included.planlessAgents?.map((each) => each.id),
+          [agent.id],
+        );
       }),
   );
 

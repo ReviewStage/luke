@@ -4,6 +4,7 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
+  planlessAgentSchema,
   storedObjectSchema,
   turnRecordFields,
 } from "./coding-agent-wire.js";
@@ -387,6 +388,8 @@ export const githubConnectionSchema = EffectSchema.Struct({
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
+  /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
+  planlessAgents: EffectSchema.optionalKey(EffectSchema.Array(planlessAgentSchema)),
   listStatus: planningReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),

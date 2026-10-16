@@ -21,6 +21,7 @@ import {
   archiveUnmovedCodingAgent,
   delegationsOf,
   lineSendersOf,
+  listPlanlessCodingAgents,
   listWorkspaceCodingAgents,
   readCodingAgent,
   recordCodingAgentAuthor,
@@ -31,6 +32,7 @@ import {
 } from "../coding-agent-store.js";
 import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
+import { createPlan } from "../plan-store.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
@@ -250,11 +252,15 @@ const openWorkspace = (userId: string) =>
     return id;
   });
 
-/** An agent of the workspace on no plan, as an automation's run leaves one, on the repository and at the instant given where they are. */
+/** An agent of the workspace, on no plan as an automation's run leaves one unless a plan is given, on the repository and at the instant given where they are. */
 const planlessAgent = (
   userId: string,
   organizationId: string,
-  patch: { readonly repository?: string; readonly createdAt?: Date } = {},
+  patch: {
+    readonly repository?: string;
+    readonly createdAt?: Date;
+    readonly planId?: string;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -265,6 +271,7 @@ const planlessAgent = (
       organizationId,
       userId,
       conversationId,
+      ...(patch.planId === undefined ? undefined : { planId: patch.planId }),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       prompt: "Sweep the flaky tests.",
@@ -450,6 +457,53 @@ it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
           Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
           CODING_AGENT_AUTHOR.APP_UNLINKED,
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents with no plan of an account", (it) => {
+  it.effect(
+    "every agent with no plan in the account's workspaces is listed newest first, by any member, an archived one only where asked for, none on a plan, and none for an account outside them",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const elsewhere = yield* openWorkspace(outsider);
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(member).values({
+            id: randomUUID(),
+            organizationId: workspace,
+            userId: teammate,
+            role: "member",
+            createdAt: new Date("2026-10-14T12:00:00Z"),
+          }),
+        );
+        const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
+        const task = yield* createPlan(starter, { organizationId: workspace, name: "Billing" });
+        const oldest = yield* planlessAgent(starter, workspace, { createdAt: at(8) });
+        yield* planlessAgent(starter, workspace, { createdAt: at(9), planId: task.id });
+        const archived = yield* planlessAgent(teammate, workspace, { createdAt: at(10) });
+        const newest = yield* planlessAgent(teammate, workspace, { createdAt: at(11) });
+        const outside = yield* planlessAgent(outsider, elsewhere, { createdAt: at(12) });
+        yield* Effect.flatMap(Database, (db) =>
+          db
+            .update(codingAgent)
+            .set({ archivedAt: at(13) })
+            .where(eq(codingAgent.id, archived.agentId)),
+        );
+        const ids = (agents: readonly { readonly id: string }[]) => agents.map((agent) => agent.id);
+
+        assert.deepEqual(ids(yield* listPlanlessCodingAgents(starter)), [
+          newest.agentId,
+          oldest.agentId,
+        ]);
+        assert.deepEqual(
+          ids(yield* listPlanlessCodingAgents(teammate, { includeArchived: true })),
+          [newest.agentId, archived.agentId, oldest.agentId],
+        );
+        assert.deepEqual(ids(yield* listPlanlessCodingAgents(outsider)), [outside.agentId]);
       }),
   );
 });

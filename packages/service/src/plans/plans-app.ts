@@ -55,7 +55,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
-import { withPlanAgents } from "../agents/plan-agents.js";
+import { listPlanlessAgents, withPlanAgents } from "../agents/plan-agents.js";
 import { retireSessions } from "../agents/retire-sessions.js";
 import {
   PLAN_LIST_ARCHIVED,
@@ -446,7 +446,7 @@ function listsArchived(request: Request): boolean {
   return asked === PLAN_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans; POST starts one with an empty document, its repository confirmed and its Linear issue read first. */
+/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue read first. */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: PlansAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
@@ -457,12 +457,16 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
+    const includeArchived = listsArchived(request);
     const plans = yield* hostedStoreOrUnavailable(
-      Effect.flatMap(listPlans(userId, { includeArchived: listsArchived(request) }), (listed) =>
+      Effect.flatMap(listPlans(userId, { includeArchived }), (listed) =>
         withPlanAgents(userId, listed),
       ),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans });
+    const planlessAgents = yield* hostedStoreOrUnavailable(
+      listPlanlessAgents(userId, { includeArchived }),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans, planlessAgents });
   }
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(planCreateRequestSchema)(body);

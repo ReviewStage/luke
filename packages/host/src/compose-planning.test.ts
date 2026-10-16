@@ -17,6 +17,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
+  type PlanlessAgent,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -108,6 +109,8 @@ interface FakeService extends PlanningClient {
   plans: Plan[];
   /** What the list says of each plan's coding agents, by plan id; a plan with none says nothing. */
   agents: Record<string, PlanAgentsSummary>;
+  /** The agents with no plan the list carries beside the plans. */
+  planlessAgents: PlanlessAgent[];
   listFails: boolean;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
@@ -240,6 +243,7 @@ function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
     plans,
     agents: {},
+    planlessAgents: [],
     listFails: false,
     deleteFails: false,
     listGate: Effect.void,
@@ -593,10 +597,13 @@ function fakeService(plans: Plan[]): FakeService {
           ? { ok: false as const, failure: PLAN_CALL_FAILURE.UNANSWERED }
           : {
               ok: true as const,
-              answer: service.plans.map((each) => {
-                const agents = service.agents[each.id];
-                return agents === undefined ? summary(each) : { ...summary(each), agents };
-              }),
+              answer: {
+                plans: service.plans.map((each) => {
+                  const agents = service.agents[each.id];
+                  return agents === undefined ? summary(each) : { ...summary(each), agents };
+                }),
+                planlessAgents: service.planlessAgents,
+              },
             };
         yield* service.listGate;
         return answer;
@@ -903,6 +910,41 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.activePlanId, BILLING);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
   }),
+);
+
+it.effect(
+  "the window's refresh lists the agents with no plan beside the plans, and a list read that fails keeps them",
+  () =>
+    Effect.gen(function* () {
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing]);
+      const triage: PlanlessAgent = {
+        id: "6f1c1f9e-5a8e-4f52-9d6c-2b7a0d1e3c41",
+        planId: null,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: "Triage overnight Sentry issues",
+        createdAt: 30,
+        status: CODING_AGENT_STATUS.COMPLETED,
+        turnId: null,
+        automationId: "0b9d6c7e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        automationName: "Morning Sentry triage",
+        workspaceId: ACME.id,
+        repository: "acme/api",
+        activityAt: 45,
+      };
+      service.planlessAgents = [triage];
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const read = [last()?.plans, last()?.planlessAgents];
+      service.listFails = true;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(read, [[summary(billing)], [triage]]);
+      assert.equal(last()?.listStatus, PLANNING_READ.FAILED);
+      assert.deepEqual(last()?.planlessAgents, [triage]);
+    }),
 );
 
 it.effect(

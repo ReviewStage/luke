@@ -754,6 +754,26 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     ),
 });
 
+/** Every agent with no plan in the account's workspaces, newest started first. */
+const findPlanlessAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, includeArchived }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(
+          and(
+            isNull(codingAgent.planId),
+            agentReachableBy(userId),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id)),
+    ),
+});
+
 const updateAgentPublished = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -968,6 +988,18 @@ export function listWorkspaceCodingAgents(
     repository: options.repository ?? null,
     limit: options.limit,
   });
+}
+
+/**
+ * Every agent with no plan in the account's workspaces, by any member,
+ * newest started first, the archived ones only where `includeArchived` asks:
+ * what the plan list carries beside the plans, read by the same gate.
+ */
+export function listPlanlessCodingAgents(
+  userId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): CodingAgentStoreEffect<readonly CodingAgent[]> {
+  return findPlanlessAgents({ userId, includeArchived: options.includeArchived ?? false });
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */

@@ -1,5 +1,10 @@
 import { Schema as EffectSchema } from "effect";
-import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  planlessAgentSchema,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
@@ -429,10 +434,18 @@ export const planSchema = EffectSchema.Struct({
 
 export type Plan = typeof planSchema.Type;
 
-/** The plan list (GET): every plan the account owns, newest started first, the archived ones only where the query asks for them. */
+/**
+ * The plan list (GET): every plan the account owns, newest started first,
+ * and beside them every agent with no plan in the account's workspaces,
+ * newest started first, the archived ones of each only where the query asks
+ * for them. The agents are absent from a service before them.
+ */
 export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
+  planlessAgents: EffectSchema.optionalKey(EffectSchema.Array(planlessAgentSchema)),
 });
+
+export type PlanListAnswer = typeof planListAnswerSchema.Type;
 
 /** A started, opened, or changed plan (POST, GET, PATCH), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
