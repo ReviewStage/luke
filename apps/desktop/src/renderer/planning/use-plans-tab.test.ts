@@ -1048,6 +1048,46 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(tab.shownInboxes.at(-1), null);
 });
 
+test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().personView.onOpen("user-charles", "Charles Pan"));
+  const opened = tab.control().personView.userId;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const afterSwitch = tab.control().personView.userId;
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
+
+  assert.equal(opened, "user-charles");
+  assert.equal(afterSwitch, undefined);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
+test("a person's page opened in another workspace lists it without reopening its last plan, so no refused reopen takes the page with it", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, ACME, PLATFORM],
+        activePlanId: "alerts",
+      },
+    },
+    OPENS,
+  );
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+  });
+  const opensBefore = opensAsked(tab.payloads).length;
+
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", ACME.id));
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(opensAsked(tab.payloads).length, opensBefore);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
+
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads
@@ -1062,6 +1102,28 @@ const OPENS = {
   [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
   [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
 };
+
+test("a person's page opened while a plan's open is still out stands when the open answers late, listing nothing over it", async () => {
+  let answer: (opened: boolean) => void = () => undefined;
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } },
+    {
+      [ACT_KIND.PLANNING_SELECT]: () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+      [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+    },
+  );
+
+  act(() => tab.control().onSelect("alerts"));
+  act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
+  await act(async () => answer(true));
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().personView.userId, "user-maya");
+});
 
 test("a plan opened from another workspace says the window switched, and Back lists the workspace left with the plan that stood open there", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);

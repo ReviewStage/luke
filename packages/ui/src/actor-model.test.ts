@@ -85,6 +85,7 @@ test("a member named on the wire is read against the workspace's members: their 
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Lee Park",
+    userId: "user-lee",
   });
   // Before the members answer, the wire's name stands alone and nobody is taken for gone.
   assert.deepEqual(personActor({ userId: "user-lee", name: "Lee Park" }, undefined, SAM.userId), {
@@ -239,6 +240,7 @@ test("a task wears its creator only where someone other than the reader created 
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Dana Reyes",
+    userId: DANA.userId,
   });
   assert.deepEqual(teammateCreator({ ownerId: "user-gone" }, SAM_READS), {
     kind: ACTOR_KIND.SOMEONE,
@@ -287,7 +289,12 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
   );
   assert.deepEqual(
     githubActor({ login: "leepark", bot: false, userId: "user-lee" }, place),
-    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: "leepark" },
+    {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: "leepark",
+      userId: "user-lee",
+    },
     "a linked login the members no longer list has left",
   );
 

@@ -14,6 +14,7 @@ import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastSays } from "#testing/toast";
 import { MemberDirectory } from "../member-directory";
+import { OpenPersonProvider } from "../person-door";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -513,6 +514,31 @@ test("a task's card says who created it where others share its workspace, the re
   assert.deepEqual(details(charles, PERSONAL), []);
   // A service that names no creator leaves the card as it was.
   assert.deepEqual(details(OTHER, STAGE), []);
+});
+
+test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {
+  const opened: string[] = [];
+  const plans = plansControl({ me: DEAN.userId, workspaces: [STAGE] });
+  const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
+  const drawn = (inWindow: boolean) => {
+    const card = planCardOf(plans, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
+    return mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: inWindow
+          ? createElement(OpenPersonProvider, { value: (id: string) => opened.push(id) }, card)
+          : card,
+      }),
+    ).querySelector<HTMLElement>(".plan-card-creator");
+  };
+
+  const line = drawn(true);
+  assert.equal(line?.tagName, "BUTTON");
+  act(() => line?.click());
+  assert.deepEqual(opened, [CHARLES.userId]);
+  unmountAll();
+  assert.equal(drawn(false)?.tagName, "SPAN");
 });
 
 test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {

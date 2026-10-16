@@ -11,6 +11,7 @@ import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/work
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { useCreator, useMemberDirectory } from "../member-directory";
+import { useActorDoor } from "../person-door";
 import { RepositoryPicture } from "../repository-picture";
 import { Tooltip } from "../tooltip";
 import { useMinute } from "./plan-time";
@@ -98,7 +99,49 @@ function CreatedBy({ creation }: { creation: Creation }): React.JSX.Element {
   );
 }
 
-/** The card hung from the crumb's end: who created the task, then everyone who can edit, by name and role. */
+/** One member in the people card: their face, name, You for the reader, and role, a press opening their page where the window offers one. */
+function PersonRow({
+  member,
+  readerId,
+  creator,
+}: {
+  member: WorkspaceMember;
+  readerId: string | undefined;
+  /** Whether they created the task, which their role's words say first. */
+  creator: boolean;
+}): React.JSX.Element {
+  const actor = memberActor(member, readerId);
+  const door = useActorDoor(actor);
+  const words = (
+    <>
+      <ActorMark actor={actor} size={ACTOR_SIZE.ROW} />
+      <span className="plan-crumb-person">{member.name}</span>
+      {member.userId === readerId ? <YouBadge /> : null}
+      <span className="plan-crumb-role">
+        {creator ? `Creator · ${ROLE_WORDS[member.role]}` : ROLE_WORDS[member.role]}
+      </span>
+    </>
+  );
+  return (
+    <li>
+      {door === undefined ? (
+        <span className="plan-crumb-person-row">{words}</span>
+      ) : (
+        <button
+          type="button"
+          className="plan-crumb-person-row"
+          data-card-choice=""
+          aria-label={`Open ${member.name}'s profile`}
+          onClick={door}
+        >
+          {words}
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** The card hung from the crumb's end: who created the task, then everyone who can edit, by name and role, each opening their page. */
 function PeopleCard({
   workspace,
   members,
@@ -135,16 +178,12 @@ function PeopleCard({
           <CardRule />
           <ul className="plan-crumb-people-list">
             {creatorFirst(members, creation).map((member) => (
-              <li key={member.userId}>
-                <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.ROW} />
-                <span className="plan-crumb-person">{member.name}</span>
-                {member.userId === readerId ? <YouBadge /> : null}
-                <span className="plan-crumb-role">
-                  {member.userId === creation?.userId
-                    ? `Creator · ${ROLE_WORDS[member.role]}`
-                    : ROLE_WORDS[member.role]}
-                </span>
-              </li>
+              <PersonRow
+                key={member.userId}
+                member={member}
+                readerId={readerId}
+                creator={member.userId === creation?.userId}
+              />
             ))}
           </ul>
         </>

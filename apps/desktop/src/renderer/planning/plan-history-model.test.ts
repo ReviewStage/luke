@@ -420,6 +420,7 @@ test("a teammate's revision wears their face as the workspace's members list the
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Charles Pan",
+    userId: CHARLES.userId,
   });
 });
 

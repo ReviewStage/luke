@@ -26,6 +26,7 @@ import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
+import { useActorDoor } from "./person-door";
 import { useMinute } from "./planning/plan-time";
 import { RelativeTime } from "./planning/relative-time";
 import { AgentMark } from "./planning/tab-look";
@@ -49,8 +50,9 @@ import { Tooltip } from "./tooltip";
  * (`ACTOR_SIZE`), so a byline, a facepile, and a list row read level
  * whoever is in them. Named in a line, an actor is its mark and its name as
  * one target that hangs its card (`ActorRef`); a press opens what has a
- * page of its own, an agent or an automation, and a person's card is read
- * and not followed, since the window has no page for a person. Every mark is
+ * page of its own: an agent's tab, an automation's page, a person's page,
+ * the page of someone who left, or a GitHub account's on GitHub
+ * (`person-door.tsx`); a card is read, never a door, since its name already is one. Every mark is
  * hidden from a screen reader, since its name always stands beside it or in
  * its card; a picture's address is masked by session replay as its text is.
  */
@@ -259,7 +261,7 @@ function ActorHead({
   );
 }
 
-/** A person's card: their face, name, email, and role, then what they last did here where the place knows. Read, never followed. */
+/** A person's card: their face, name, email, and role, then what they last did here where the place knows. A press on their name, not the card, opens their page. */
 export function PersonCard({
   actor,
   latest,
@@ -340,7 +342,7 @@ const GITHUB_WORDS = {
   OUTSIDE: "Not in this workspace",
 } as const;
 
-/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. Read, never followed. */
+/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. A press on their name opens their page on GitHub. */
 function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
@@ -432,7 +434,8 @@ function actorCard(actor: Actor): ReactNode {
  * An actor named in a line: its mark and its name as one target, hanging
  * `card`, or the card its kind hangs where the place adds nothing. With
  * `onOpen` it is a button that opens the actor's page, an agent's tab or an
- * automation's page; otherwise its press is the line's own.
+ * automation's page; a person, someone who left, and a GitHub account open
+ * their own (`useActorDoor`); otherwise its press is the line's own.
  */
 export function ActorRef({
   actor,
@@ -450,6 +453,9 @@ export function ActorRef({
   possessive?: boolean;
 }): React.JSX.Element {
   const name = actorName(actor, { sentence, possessive });
+  // A person's own door, their page or GitHub's, where the place hands none.
+  const door = useActorDoor(actor);
+  const open = onOpen ?? door;
   const inner = (
     <>
       <ActorMark actor={actor} />
@@ -458,12 +464,12 @@ export function ActorRef({
   );
   return (
     <Tooltip label={actorName(actor)} card={card ?? actorCard(actor)}>
-      {onOpen === undefined ? (
+      {open === undefined ? (
         <span className="actor-ref" data-kind={actor.kind}>
           {inner}
         </span>
       ) : (
-        <button type="button" className="actor-ref" data-kind={actor.kind} onClick={onOpen}>
+        <button type="button" className="actor-ref" data-kind={actor.kind} onClick={open}>
           {inner}
         </button>
       )}

@@ -127,6 +127,10 @@ const RETRY_429 = item(1, "Retry 429s too?", BACKOFF.id, 8 * MINUTE);
 const ROLLOUT = item(2, "Ship the limiter at 10%?", LIMITER.id, 20 * MINUTE);
 const INBOXES = new Map<string, readonly InboxItem[]>([[RETRIES.id, [RETRY_429, ROLLOUT]]]);
 
+/** An agent an automation started with no task, and the question it waits on in Acme. */
+const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
+const SWEEP_ITEM: InboxItem = { ...item(9, "Quarantine the flaky test?", SWEEP_AGENT, MINUTE) };
+
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   inbox: [{ planId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
   inboxPlans: [{ planId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
@@ -146,6 +150,10 @@ beforeEach(() => {
       act: (request: Act) => {
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+          const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
           const value: CodingAgentInboxAnswerView = {
@@ -175,6 +183,11 @@ interface Opened {
 
 /** `userId`'s page over the fixture workspace, read by Dean, opened knowing `name`, every door it opens recorded. */
 function mount(userId: string, name?: string) {
+  return mountWith({}, userId, name);
+}
+
+/** Dean's page by default, over the fixture workspace with `overrides`, every door it opens recorded. */
+function mountWith(overrides: Partial<PlansControl>, userId = DEAN.userId, name?: string) {
   const opened: Opened = { plans: [], agents: [], inbox: [] };
   const plans = plansControl({
     me: DEAN.userId,
@@ -191,6 +204,7 @@ function mount(userId: string, name?: string) {
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
     },
+    ...overrides,
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -309,4 +323,26 @@ test("someone who left whom only the place that opened the page names keeps that
   await settle();
 
   assert.deepEqual(head(page), ["Lee Park", "Former member"]);
+});
+
+test("the reader's own page lists no question of an agent with no task, whose starter nobody names", async () => {
+  const { page } = mountWith({
+    inboxPlanless: [
+      {
+        id: SWEEP_ITEM.id,
+        agentId: SWEEP_AGENT,
+        title: SWEEP_ITEM.title,
+        postedAt: SWEEP_ITEM.postedAt,
+        agentTitle: "Flake sweep",
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: null,
+        automationName: null,
+        repository: "acme/relay",
+        workspaceId: ACME.id,
+      },
+    ],
+  });
+  await settle();
+
+  assert.deepEqual(sections(page)["Waiting on you"], ["Ship the limiter at 10%?"]);
 });

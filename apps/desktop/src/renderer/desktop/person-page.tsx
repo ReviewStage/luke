@@ -159,10 +159,11 @@ function PersonColumn({
   const person = personActor(ref, members, readerId);
   const page = personPage(userId, listed);
   const you = userId === plans.me;
-  // An item is theirs where its task's row says they started its agent; an agent with no plan is the reader's own.
   const read = useWaitingItems(plans);
-  const waiting = read.items.filter(({ holder, item }) =>
-    holder.kind === INBOX_HOLDER.PLAN ? agentStarter(holder.plan, item.agentId) === userId : you,
+  // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
+  const waiting = read.items.filter(
+    ({ holder, item }) =>
+      holder.kind === INBOX_HOLDER.PLAN && agentStarter(holder.plan, item.agentId) === userId,
   );
   const { inboxView } = plans;
   const openItem = ({ holder, item }: InboxListed) => {

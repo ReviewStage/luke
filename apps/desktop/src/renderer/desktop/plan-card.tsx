@@ -11,6 +11,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { useCreator, useMemberDirectory } from "../member-directory";
+import { useActorDoor } from "../person-door";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
@@ -165,7 +166,8 @@ export function RepositoryDetail({
 /**
  * Who created the task, under its repository: their face and "Created by
  * Charles Pan · 3d ago", "Created by you", or a member who left saying so,
- * read against the members of the directory around the card.
+ * read against the members of the directory around the card, a press
+ * opening their page where the window offers one.
  */
 function CreatorDetail({
   plan,
@@ -177,9 +179,10 @@ function CreatorDetail({
   now: number;
 }): React.JSX.Element {
   const creator = useCreator(plan, readerId);
+  const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
-  return (
-    <span className="plan-card-detail plan-card-creator">
+  const words = (
+    <>
       <span className="plan-card-glyph">
         <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
       </span>
@@ -187,7 +190,14 @@ function CreatorDetail({
         {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
         <RelativeTime at={plan.createdAt} now={now} hint={false} ago />
       </span>
-    </span>
+    </>
+  );
+  return door === undefined ? (
+    <span className="plan-card-detail plan-card-creator">{words}</span>
+  ) : (
+    <button type="button" className="plan-card-detail plan-card-creator" onClick={door}>
+      {words}
+    </button>
   );
 }
 
