@@ -771,7 +771,7 @@ function agentOrigin(input: {
   };
 }
 
-/** Who wrote or said a message, over it: their mark and their name, hanging their card. */
+/** Who wrote or said a message: their mark and their name, hanging their card. */
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <span className="message-sender">
@@ -790,10 +790,20 @@ export interface ArrivedLine {
 const NO_ARRIVED: readonly ArrivedLine[] = [];
 
 /**
+ * A sent message's actions, set in the line under its bubble rather than
+ * floated on a card over its corner: they still show only while the
+ * pointer or the keyboard is on the message, but take their place in the
+ * line, so the sender beside them never moves.
+ */
+const SENT_ACTIONS_CLASS = "static border-0 bg-transparent p-0 shadow-none";
+
+/**
  * One message: the plan the agent was handed, as a card; a message the
- * developer sent it since, as the developer's bubble; or one of the
- * agent's own turns, with a copy of its words under it where it has any,
- * ending once it has finished on how long it worked and when it ended.
+ * developer sent it since, as the developer's bubble, with a quiet line
+ * under it holding its Copy and Copy link and, at the bubble's edge, who
+ * sent it; or one of the agent's own turns, with a copy of its words under
+ * it where it has any, ending once it has finished on how long it worked
+ * and when it ended.
  * A line that reached a turn while it ran is drawn inside it, as its own
  * bubble between the work before it and the work after it.
  */
@@ -846,17 +856,25 @@ export function AgentMessage({
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role} data-message-id={message.id}>
-        {named}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
-          <>
-            <MessageContent>
-              <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
-                <SentWords text={words} />
-              </SentToAgent>
-            </MessageContent>
-            <CopyMessageAction words={words} messageId={message.id} />
-          </>
+          <MessageContent>
+            <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
+              <SentWords text={words} />
+            </SentToAgent>
+          </MessageContent>
+        )}
+        {words === "" && named === null ? null : (
+          <div className="message-meta">
+            {words === "" ? null : (
+              <CopyMessageAction
+                words={words}
+                messageId={message.id}
+                className={SENT_ACTIONS_CLASS}
+              />
+            )}
+            {named}
+          </div>
         )}
       </Message>
     );

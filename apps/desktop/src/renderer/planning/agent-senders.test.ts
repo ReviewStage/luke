@@ -32,7 +32,7 @@ import { AgentTab } from "./agent-tab";
 
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
- * agent carries their face and name over its bubble, as a teammate's line
+ * agent carries their face and name under its bubble, as a teammate's line
  * on the Call tab does, and the reader's own carries none; Luke's carries
  * his tile, an automation's its own, GitHub's the login it names, another
  * coding agent's an agent's mark by its name, and a member's who has left the quiet
@@ -119,8 +119,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn over it. */
-async function sendersFor(reader: string): Promise<readonly Seen[]> {
+/** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`. */
+async function drawnFor(reader: string): Promise<readonly Element[]> {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -174,6 +174,12 @@ async function sendersFor(reader: string): Promise<readonly Seen[]> {
   });
   const drawn = [...container.querySelectorAll(".is-user")];
   assert.equal(drawn.length, MESSAGES.length);
+  return drawn;
+}
+
+/** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
+async function sendersFor(reader: string): Promise<readonly Seen[]> {
+  const drawn = await drawnFor(reader);
   return drawn.flatMap((message, index): Seen[] => {
     const sender = message.querySelector<HTMLElement>(".message-sender .actor-ref");
     if (sender === null) return [];
@@ -185,7 +191,7 @@ async function sendersFor(reader: string): Promise<readonly Seen[]> {
   });
 }
 
-test("each member sees a teammate's face and name over the teammate's messages and none over their own, Luke, an automation, and another agent each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
+test("each member sees a teammate's face and name under the teammate's messages and none under their own, Luke, an automation, and another agent each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
@@ -220,4 +226,34 @@ test("each member sees a teammate's face and name over the teammate's messages a
     ["dean", ACTOR_KIND.PERSON, "Dean Stratakos"],
     ...others,
   ]);
+});
+
+/** What a sent message draws, in the order a reader meets it: its words, its Copy, and who sent it. */
+function readingOrder(message: Element, words: string): readonly string[] {
+  const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && text.textContent !== words) text = walker.nextNode();
+  const seen: [string, Node | null][] = [
+    ["words", text],
+    ["Copy", message.querySelector('button[aria-label="Copy"]')],
+    ["sender", message.querySelector(".message-sender")],
+  ];
+  return seen
+    .flatMap(([name, node]) => (node === null ? [] : [{ name, node }]))
+    .sort((a, b) =>
+      a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    )
+    .map((each) => each.name);
+}
+
+test("a sent message keeps its bubble on top, with its Copy and then who sent it on the line under it", async () => {
+  const drawn = await drawnFor(DEAN.userId);
+  const byId = (id: string) => drawn[MESSAGES.findIndex((each) => each.id === id)];
+  const charles = byId("charles");
+  const own = byId("dean");
+  assert.ok(charles !== undefined && own !== undefined);
+  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender"]);
+  // The reader's own message names nobody, and still offers its Copy under the bubble.
+  assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
+  Reflect.deleteProperty(window, "luke");
 });
