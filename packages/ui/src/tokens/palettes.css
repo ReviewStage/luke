@@ -1,0 +1,212 @@
+/* palettes.css -- the semantic colours of each app, in its dark and its light theme.
+
+   A theme is an attribute beside the profile (`data-luke-theme`): `dark`,
+   `light`, or, on the desktop, `system`, which follows the Mac's appearance
+   (Luke's own Theme setting drives it through `nativeTheme.themeSource`).
+   Every role is set by both profiles in both themes, and `tokens.test.ts`
+   holds every palette to the same set of names.
+
+   The desktop writes each role once, as `light-dark()`, and a theme is only
+   its `color-scheme`: `system` answers `prefers-color-scheme` on the frame the
+   Mac flips, without a render, and without a second copy of the light values
+   that a media query would need. The site writes each theme as a block of
+   its own, because it is read by browsers older than `light-dark()`.
+
+   A colour belongs here when a shared component draws with it. One that only
+   one surface spends (a terminal's sixteen inks, a file icon's, a workspace
+   tile's hue) stays in that app's stylesheet. */
+
+[data-luke-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-luke-theme="light"] {
+  color-scheme: light;
+}
+
+[data-luke-theme="system"] {
+  color-scheme: light dark;
+}
+
+[data-luke-profile="desktop"] {
+  --luke-color-text: light-dark(rgba(0, 0, 0, 0.88), rgba(255, 255, 255, 0.95));
+  --luke-color-text-muted: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.56));
+  --luke-color-text-subtle: light-dark(rgba(0, 0, 0, 0.56), rgba(255, 255, 255, 0.5));
+  /* A document's running text, a step under the text so a page of it does not glare. */
+  --luke-color-text-body: light-dark(rgba(0, 0, 0, 0.8), rgba(255, 255, 255, 0.86));
+  /* The text at full strength, for the one control drawn in it. */
+  --luke-color-ink: light-dark(#000, #fff);
+  --luke-color-accent-text: light-dark(#0a72a8, #5cd5ff);
+
+  --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
+  /* A settings group's ground, a card's. */
+  --luke-color-surface: light-dark(#fff, rgba(255, 255, 255, 0.022));
+  /* What floats over the window: the sidebar's step above the ground in the
+     dark, where lighter is nearer, and white in the light, where a shadow
+     says it instead. */
+  --luke-color-overlay: light-dark(#fff, #111114);
+  --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
+  --luke-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
+  --luke-color-fill-selected: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.2));
+  --luke-color-fill-pressed: light-dark(rgba(0, 0, 0, 0.11), rgba(255, 255, 255, 0.26));
+  --luke-color-border: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
+  --luke-color-border-strong: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.12));
+  --luke-color-border-selected: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.32));
+  --luke-color-input: light-dark(#fff, rgba(0, 0, 0, 0.4));
+  --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.55));
+  --luke-color-match: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.16));
+  --luke-color-scrollbar: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.18));
+
+  /* The accent the primary button, a switch that is on, and the keyboard's
+     ring draw in: the system's own default blue, in either appearance. */
+  --luke-color-accent: #0071e3;
+  --luke-color-on-accent: #fff;
+  --luke-color-on-accent-muted: rgba(255, 255, 255, 0.65);
+  --luke-color-focus-ring: #0071e3;
+
+  /* The one destructive colour: a ground it can sit on, the words that read
+     on that ground, and a destructive button's fill deep enough for white. */
+  --luke-color-danger: light-dark(#e0383e, #ff7e7e);
+  --luke-color-danger-text: light-dark(#b8232a, #ff9b9b);
+  --luke-color-danger-fill: #d4373a;
+  --luke-color-attention: light-dark(#a65400, #ffa049);
+  --luke-color-complete: light-dark(#18794e, #6fdca4);
+  /* A state's ink as the ground of a pill that carries it. */
+  --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
+  --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
+  --luke-color-working: light-dark(#0a72a8, #5cd5ff);
+  --luke-color-merged: light-dark(#8250df, #c3a0ff);
+
+  --luke-color-switch-track: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.09));
+  --luke-color-switch-on: #0071e3;
+  --luke-color-switch-thumb: light-dark(#fff, rgba(255, 255, 255, 0.95));
+  /* A hint is a dark pill in either appearance, as the system's own are. */
+  --luke-color-tooltip: #0b0b0c;
+  --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
+  --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
+  --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
+
+  --luke-color-scrim: light-dark(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.55));
+  --luke-color-shadow-soft: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
+  --luke-color-shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
+  --luke-color-shadow-deep: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6));
+  /* The system's own switch lifts a white thumb off a grey track in the light, and draws none in the dark. */
+  --luke-shadow-switch-thumb:
+    0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
+    0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), transparent);
+}
+
+/* The site's light ground is shadcn/ui's stock light theme warmed off pure
+   white, its accent Luke's cyan as a fill and darkened to a teal as ink. A
+   page without a theme of its own is this one. */
+[data-luke-profile="web"],
+[data-luke-profile="web"][data-luke-theme="light"] {
+  --luke-color-text: oklch(0.145 0 0);
+  --luke-color-text-muted: oklch(0.556 0 0);
+  --luke-color-text-subtle: oklch(0.556 0 0);
+  --luke-color-text-body: oklch(0.145 0 0);
+  --luke-color-ink: #000;
+  --luke-color-accent-text: #0d6e80;
+
+  --luke-color-ground: #fbfbfa;
+  --luke-color-surface: oklch(1 0 0);
+  --luke-color-overlay: oklch(1 0 0);
+  --luke-color-fill-hover: oklch(0.97 0 0);
+  --luke-color-fill-strong: oklch(0.97 0 0);
+  --luke-color-fill-selected: oklch(0.97 0 0);
+  --luke-color-fill-pressed: oklch(0.97 0 0);
+  --luke-color-border: oklch(0.922 0 0);
+  --luke-color-border-strong: oklch(0.922 0 0);
+  --luke-color-border-selected: oklch(0.145 0 0);
+  --luke-color-input: oklch(1 0 0);
+  --luke-color-input-focus: oklch(1 0 0);
+  --luke-color-match: rgba(0, 0, 0, 0.09);
+  --luke-color-scrollbar: rgba(0, 0, 0, 0.2);
+
+  --luke-color-accent: #5cd5ff;
+  --luke-color-on-accent: #04121a;
+  --luke-color-on-accent-muted: rgba(4, 18, 26, 0.65);
+  /* The ring owes 3:1 against the ground (WCAG 2.2, 1.4.11), which the cyan
+     cannot pay on a light page. */
+  --luke-color-focus-ring: oklch(0.145 0 0);
+
+  --luke-color-danger: #e0383e;
+  --luke-color-danger-text: #b8232a;
+  --luke-color-danger-fill: #d4373a;
+  --luke-color-attention: #9a5300;
+  --luke-color-complete: #0f7a4e;
+  --luke-color-attention-tint: #fdf0e2;
+  --luke-color-complete-tint: #e6f5ed;
+  --luke-color-working: #0d6e80;
+  --luke-color-merged: #8250df;
+
+  --luke-color-switch-track: rgba(0, 0, 0, 0.14);
+  --luke-color-switch-on: #0d6e80;
+  --luke-color-switch-thumb: #fff;
+  --luke-color-tooltip: #0b0b0c;
+  --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
+  --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
+  --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
+
+  --luke-color-scrim: rgba(0, 0, 0, 0.25);
+  --luke-color-shadow-soft: rgba(0, 0, 0, 0.08);
+  --luke-color-shadow: rgba(0, 0, 0, 0.12);
+  --luke-color-shadow-deep: rgba(0, 0, 0, 0.2);
+  --luke-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+
+/* The admin dashboard's and the OAuth cards' dark ground, the product's state
+   palette on it verbatim. */
+[data-luke-profile="web"][data-luke-theme="dark"] {
+  --luke-color-text: rgba(255, 255, 255, 0.92);
+  --luke-color-text-muted: rgba(255, 255, 255, 0.56);
+  --luke-color-text-subtle: rgba(255, 255, 255, 0.56);
+  --luke-color-text-body: rgba(255, 255, 255, 0.92);
+  --luke-color-ink: #fff;
+  --luke-color-accent-text: #0d6e80;
+
+  --luke-color-ground: #08090b;
+  /* A step above the page (1.06:1) lets a card read before its border does. */
+  --luke-color-surface: #101114;
+  --luke-color-overlay: #101114;
+  --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
+  --luke-color-fill-strong: rgba(255, 255, 255, 0.05);
+  --luke-color-fill-selected: rgba(255, 255, 255, 0.05);
+  --luke-color-fill-pressed: rgba(255, 255, 255, 0.05);
+  --luke-color-border: rgba(255, 255, 255, 0.08);
+  --luke-color-border-strong: rgba(255, 255, 255, 0.08);
+  --luke-color-border-selected: rgba(255, 255, 255, 0.92);
+  --luke-color-input: #101114;
+  --luke-color-input-focus: #101114;
+  --luke-color-match: rgba(255, 255, 255, 0.16);
+  --luke-color-scrollbar: rgba(255, 255, 255, 0.18);
+
+  --luke-color-accent: #5cd5ff;
+  --luke-color-on-accent: #04121a;
+  --luke-color-on-accent-muted: rgba(4, 18, 26, 0.65);
+  --luke-color-focus-ring: rgba(255, 255, 255, 0.92);
+
+  --luke-color-danger: #ff7e7e;
+  --luke-color-danger-text: #ff9b9b;
+  --luke-color-danger-fill: #d4373a;
+  --luke-color-attention: #ffa049;
+  --luke-color-complete: #6fdca4;
+  --luke-color-attention-tint: rgba(255, 160, 73, 0.14);
+  --luke-color-complete-tint: rgba(111, 220, 164, 0.14);
+  --luke-color-working: #5cd5ff;
+  --luke-color-merged: #c3a0ff;
+
+  --luke-color-switch-track: rgba(255, 255, 255, 0.09);
+  --luke-color-switch-on: #2f9bd8;
+  --luke-color-switch-thumb: rgba(255, 255, 255, 0.95);
+  --luke-color-tooltip: #0b0b0c;
+  --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
+  --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
+  --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
+
+  --luke-color-scrim: rgba(0, 0, 0, 0.55);
+  --luke-color-shadow-soft: rgba(0, 0, 0, 0.4);
+  --luke-color-shadow: rgba(0, 0, 0, 0.5);
+  --luke-color-shadow-deep: rgba(0, 0, 0, 0.6);
+  --luke-shadow-switch-thumb: none;
+}
