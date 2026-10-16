@@ -1,0 +1,44 @@
+/* form-field.css -- a field's parts one under another: its label in the
+   label role, the control, what it is for in a muted caption, and what is
+   wrong with it in the danger ink. */
+
+@layer components {
+  .luke-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-6);
+    min-width: 0;
+  }
+
+  .luke-field-label {
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  :is(.luke-field-description, .luke-field-error) {
+    margin: 0;
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-field-description {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-field-error {
+    color: var(--luke-color-danger-text);
+  }
+
+  /* Empty, it keeps its place in the tree, so its live region is standing
+     when an error arrives, and gives back the gap before it. */
+  .luke-field-error:empty {
+    margin-top: calc(-1 * var(--luke-space-6));
+  }
+}
