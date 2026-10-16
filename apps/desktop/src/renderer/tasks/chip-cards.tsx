@@ -146,18 +146,21 @@ export function VersionChipCard({
   );
 }
 
-/** A page's card, its tab's, previewing it, where the window holds the page, one of the open plan's; else `fallback`. */
+/** A page's card, its tab's, previewing it, where the page is one of the open plan's, the only ones the window holds; else `fallback`. */
 export function PageChipCard({
+  taskId,
   pageId,
   fallback,
 }: {
+  /** The plan the link names the page on. */
+  taskId: string;
   pageId: string;
   fallback: ReactNode;
 }): ReactNode {
   const tasks = useAppState()?.tasks;
-  const page = tasks?.pages?.find((each) => each.id === pageId);
-  const taskId = tasks?.activeTaskId;
-  if (page === undefined || taskId === undefined) return fallback;
+  const page =
+    tasks?.activeTaskId === taskId ? tasks.pages?.find((each) => each.id === pageId) : undefined;
+  if (page === undefined) return fallback;
   return <PageCard taskId={taskId} page={page} />;
 }
 

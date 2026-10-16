@@ -367,7 +367,7 @@ function MentionCard({
         />
       );
     case MENTION_KIND.PAGE:
-      return <PageChipCard pageId={mention.pageId} fallback={card} />;
+      return <PageChipCard taskId={mention.taskId} pageId={mention.pageId} fallback={card} />;
     // Any other agent hangs its tab's card all the same, read as the card is hung.
     case MENTION_KIND.AGENT:
       return (
@@ -607,7 +607,7 @@ function PlaceCard({
         <VersionChipCard taskId={place.planId} revision={place.revision} fallback={fallback} />
       );
     case LINK_PLACE.PAGE:
-      return <PageChipCard pageId={place.pageId} fallback={fallback} />;
+      return <PageChipCard taskId={place.planId} pageId={place.pageId} fallback={fallback} />;
     case LINK_PLACE.AGENT:
       return (
         <MentionedAgentCard

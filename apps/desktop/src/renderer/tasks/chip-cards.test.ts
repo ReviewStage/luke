@@ -316,7 +316,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 
-test("a page's chip hangs its title, its version, and when it moved; one the window holds nothing of keeps the chip's own card", async () => {
+test("a page's chip hangs its title, its version, and when it moved; one the window holds nothing of, or one of another plan, keeps the chip's own card", async () => {
   const container = await drawn(
     [
       mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE_ID }, "", PLACE),
@@ -329,12 +329,22 @@ test("a page's chip hangs its title, its version, and when it moved; one the win
         "Old draft",
         PLACE,
       ),
+      mentionMarkdown(
+        {
+          kind: MENTION_KIND.PAGE,
+          taskId: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
+          pageId: PAGE_ID,
+        },
+        "Another plan's page",
+        PLACE,
+      ),
     ].join(" "),
   );
-  const [held, unheld] = chipsOf(container);
+  const [held, unheld, elsewhere] = chipsOf(container);
 
   const page = await cardOf(held);
   const other = await cardOf(unheld);
+  const another = await cardOf(elsewhere);
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
@@ -342,6 +352,9 @@ test("a page's chip hangs its title, its version, and when it moved; one the win
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(other.card, "data-mention-card");
   assert.equal(other.name, "Old draft");
+  // A page id the open plan holds, named on another plan, is not the open plan's page.
+  assert.equal(another.card, "data-mention-card");
+  assert.equal(another.name, "Another plan's page");
 });
 
 test("a file's and a folder's chips hang their path, their repository, and where they are read", async () => {
