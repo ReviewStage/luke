@@ -1,13 +1,13 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgent,
-  archiveUnmovedCodingAgent,
+  archiveIdleCodingAgent,
   awaitingLinesOfReached,
   type CodingAgent,
-  codingAgentLineSeq,
+  IDLE_ARCHIVE,
   latestTurnsOfReached,
   readCodingAgent,
   readCodingAgentByKey,
+  unarchiveCodingAgentFrom,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
 import { listTasks } from "@luke/database/models/task-store";
@@ -109,9 +109,10 @@ import {
  * beside it who archived it, the caller on that member's behalf, and the
  * reason given, which the archived agent's banner shows. Where the menu asks
  * the developer before it stops a working agent, a tool has no one to ask,
- * so only an idle agent is archived, and only while its conversation stands
- * where it was read idle; an agent archives no one while it works and never
- * itself. An archive or an unarchive already standing answers as done, so
+ * so only an idle agent is archived, read idle under its conversation's
+ * lock, which every turn queued and every message handed over takes; an
+ * agent never archives itself, and an unarchive brings back only the
+ * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice. Each tool reaches eve as the deployment acting for the caller's member,
  * which the coder channel's table admits for exactly this
  * (`coder-host/channel.ts`). Every answer is data the model reads, never a
@@ -181,9 +182,9 @@ export const ARCHIVE_AGENT_REFUSAL = {
   WORKING:
     "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
     "Wait until it is idle, or ask the developer, who can stop and archive it.",
-  MOVED:
-    "Not archived: that agent's conversation moved as it was read, so it may be working again; " +
-    `read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it is idle.`,
+  REARCHIVED:
+    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
+    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
@@ -997,26 +998,26 @@ export function runArchiveAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
-      if (agent.archivedAt !== null) return archiveAnswer(agent, task, true, true);
-      const userId = callerUserId(caller);
-      // Note that how far its lines ran is read before where it stands, so a turn begun after
-      // the read below moves them and the archive takes nothing, rather than archive it at work.
-      const seen = yield* codingAgentLineSeq(userId, agent.id);
-      if (Option.isNone(seen)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { status } = (yield* standingsOf([agent]))(agent);
-      if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
+      // Whether it is idle is read under its conversation's lock, so a turn queued or a message
+      // handed over meanwhile waits on the archive and is seen by it, never left running unseen.
+      const archived = yield* archiveIdleCodingAgent(
+        callerUserId(caller),
+        agent.id,
+        archiverOf(caller, reason),
+        (standing) =>
+          Effect.map(standingsOf([standing]), (read) => {
+            const { status } = read(standing);
+            return (
+              status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING
+            );
+          }),
+      );
+      if (archived === IDLE_ARCHIVE.NOT_FOUND) {
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      }
+      if (archived === IDLE_ARCHIVE.WORKING)
         return agentToolRejected(ARCHIVE_AGENT_REFUSAL.WORKING);
-      }
-      const archiver = archiverOf(caller, reason);
-      if (yield* archiveUnmovedCodingAgent(userId, agent.id, seen.value, archiver)) {
-        return archiveAnswer(agent, task, true, false);
-      }
-      // One archived meanwhile, by a member or a call run twice, is done; one that moved is not.
-      const now = yield* readCodingAgent(userId, agent.id);
-      if (Option.isSome(now) && now.value.archivedAt !== null) {
-        return archiveAnswer(agent, task, true, true);
-      }
-      return agentToolRejected(ARCHIVE_AGENT_REFUSAL.MOVED);
+      return archiveAnswer(agent, task, true, archived === IDLE_ARCHIVE.ALREADY);
     }),
   );
 }
@@ -1037,9 +1038,16 @@ export function runUnarchiveAgent(
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
       if (agent.archivedAt === null) return archiveAnswer(agent, task, false, true);
-      const back = yield* archiveCodingAgent(callerUserId(caller), agent.id, false);
-      if (Option.isNone(back)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      return archiveAnswer(agent, task, false, false);
+      const userId = callerUserId(caller);
+      // Note that only the archive read is cleared, so one made again since stands as its maker left it.
+      if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) {
+        return archiveAnswer(agent, task, false, false);
+      }
+      const now = yield* readCodingAgent(userId, agent.id);
+      if (Option.isSome(now) && now.value.archivedAt === null) {
+        return archiveAnswer(agent, task, false, true);
+      }
+      return agentToolRejected(ARCHIVE_AGENT_REFUSAL.REARCHIVED);
     }),
   );
 }
