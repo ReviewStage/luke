@@ -2185,8 +2185,10 @@ export function useTasksTab(input: {
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, tasks.activeTaskId, onOpenFile]);
 
-  // Every tab closed is kept as it stood for ⇧⌘T to open again: the plan's
-  // tab never closes, and a draft's lets its draft go, so neither is kept.
+  // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
+  // which lets its draft go, and the plan's while it stands alone, which
+  // does not close. Note that a tab's place is counted among those after the
+  // plan's, which stand there whether or not the plan's tab is open.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
   // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
@@ -2201,10 +2203,12 @@ export function useTasksTab(input: {
   );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
-      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      const after = openTabs.filter((each) => each !== MAIN_TAB.PLAN);
+      const at = after.findIndex((each) => sameTab(each, tab));
+      const closes = tab === MAIN_TAB.PLAN ? openTabs.includes(tab) && after.length > 0 : at >= 0;
       const task = viewed.activeTaskId;
-      if (task !== undefined && at > 0 && !isDraftTab(tab)) {
-        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: at - 1 };
+      if (task !== undefined && closes && !isDraftTab(tab)) {
+        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: Math.max(0, at) };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closeMainTab(tab);
