@@ -284,6 +284,10 @@ test("a plan whose strip holds no tab draws no panel, and the next plan with a t
   act(() => panel.control().onToggle());
   assert.equal(panel.control().open, true, "shown on purpose, it stands empty");
   assert.deepEqual(panel.control().strip, []);
+  panel.render({ task: TASK, taskAgents: [] });
+  panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
+  assert.equal(panel.control().open, false, "left and come back to, it is asked for again");
+  act(() => panel.control().onToggle());
   act(() => panel.control().onToggle());
   assert.equal(panel.control().open, false);
   panel.render({ task: TASK, taskAgents: [] });

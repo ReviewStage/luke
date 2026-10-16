@@ -1550,12 +1550,15 @@ export function useSidePanel(
   const shown = state.open && (strip.length > 0 || emptyShownOn === taskId);
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
-  // its "+" standing; one shut is shown empty only when asked again.
+  // its "+" standing; one shut, or whose plan was left, is shown empty only
+  // when asked again.
   if (!shown && (fullScreen || newTabAsked)) {
     setFullScreen(false);
     setNewTabAsked(false);
   }
-  if (!state.open && emptyShownOn !== undefined) setEmptyShownOn(undefined);
+  if (emptyShownOn !== undefined && (!state.open || emptyShownOn !== taskId)) {
+    setEmptyShownOn(undefined);
+  }
 
   // Note that showing a strip with no tab shows the panel empty, offering
   // in place what its "+" does, since there is nothing of the plan's to

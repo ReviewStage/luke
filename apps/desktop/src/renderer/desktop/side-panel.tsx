@@ -851,7 +851,13 @@ function PanelTabs({
   );
 }
 
-/** The panel with every tab closed: every row its "+" menu offers, under the menu's own headings, each opening what it names as its row there does. */
+/**
+ * The panel shown on purpose with every tab closed: every row its "+" menu
+ * offers, under the menu's own headings, each opening what it names as its
+ * row there does. Note that a plan's page reaches it by ⌘T alone, since its
+ * Show panel opens a tab first (`useTasksTab`), while an agent's page, which
+ * has no summary to list its tabs, reaches it by its toggle too.
+ */
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
