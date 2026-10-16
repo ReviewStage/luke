@@ -205,6 +205,11 @@ function leftWithFace(actor: Actor): boolean {
 /** What a screen reader hears after a name that is a member who left, since their grayed face is hidden from it. */
 const LEFT_WORDS = " (former member)";
 
+/** What a screen reader hears after the name of a member who left, set beside it; nothing for anyone else. */
+export function LeftWords({ actor }: { actor: Actor }): React.JSX.Element | null {
+  return leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null;
+}
+
 /** An actor's circle or square alone, at a size. */
 export function ActorMark({
   actor,
@@ -486,7 +491,7 @@ export function ActorRef({
     <>
       <ActorMark actor={actor} />
       <span className="actor-ref-name">{name}</span>
-      {leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null}
+      <LeftWords actor={actor} />
     </>
   );
   return (
