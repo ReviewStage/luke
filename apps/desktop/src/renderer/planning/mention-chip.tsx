@@ -1,5 +1,5 @@
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
+import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
@@ -46,9 +46,10 @@ import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
+import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
-import { useLinearIssue } from "./use-linear-issue";
+import { type LinkStanding, useLinkStanding } from "./use-link-standing";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -66,10 +67,11 @@ import { useOpenLink } from "./use-open-link";
  * place can open none. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark; a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A Linear issue's chip says the
- * state it stands in after its name, and a bare one is called by its key and
- * title, as the workspace's own Linear answers them on the service
- * (`use-linear-issue.ts`). A page an agent showed on a plan
+ * browser, its card saying its address. A Linear issue's chip and a pull
+ * request's say the state it stands in after their name, a pull request's
+ * wearing its mark for it, and a bare one is called by its key and title, as
+ * the workspace's own Linear or GitHub App answers them on the service
+ * (`use-link-standing.ts`). A page an agent showed on a plan
  * wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
  * opens its tab through the window's opener for a Luke link, as a link
@@ -207,10 +209,18 @@ function pressOf(
 function MentionGlyph({
   mention,
   doors,
+  standing,
 }: {
   mention: Mention;
   doors: MentionDoors;
+  standing?: LinkStanding | undefined;
 }): React.JSX.Element {
+  // A pull request its provider answered for wears its own mark for where it stands, as everywhere the window draws one.
+  if (standing?.pullRequest !== undefined) {
+    return (
+      <PullRequestMark pullRequest={{ ...standing.pullRequest, checks: CHECK_SUMMARY.NONE }} />
+    );
+  }
   switch (mention.kind) {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
@@ -260,28 +270,6 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
 }
 
 /** The card a chip hangs: a file's own card, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
-/** A page of an integration's as its provider answered for it: its key, `ENG-123`, its title, and the state it stands in. */
-interface LinkStanding {
-  readonly key: string;
-  readonly title: string;
-  readonly state: string | undefined;
-}
-
-/** What the provider answers for the page a link mention names, read through the workspace the words are of; none for any other mention, or while unanswered. */
-function useLinkStanding(mention: Mention, doors: MentionDoors): LinkStanding | undefined {
-  const identifier =
-    mention.kind === MENTION_KIND.LINK && mention.provider === INTEGRATION_PROVIDER.LINEAR
-      ? linearIssueIdentifierOf(mention.url)
-      : undefined;
-  const issue = useLinearIssue(identifier, {
-    planId: doors.planId,
-    workspace: doors.place.workspace,
-  });
-  return issue === undefined
-    ? undefined
-    : { key: issue.identifier, title: issue.title, state: issue.state };
-}
-
 function MentionCard({
   mention,
   name,
@@ -306,7 +294,7 @@ function MentionCard({
   return (
     <HoverCard data-mention-card="">
       <CardHead
-        glyph={<MentionGlyph mention={mention} doors={doors} />}
+        glyph={<MentionGlyph mention={mention} doors={doors} standing={standing} />}
         name={standing?.title ?? whole}
       />
       {standing === undefined ? null : (
@@ -366,14 +354,17 @@ function MentionChip({
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const known = useKnownNames();
-  const standing = useLinkStanding(mention, doors);
+  const standing = useLinkStanding(mention, {
+    planId: doors.planId,
+    workspace: doors.place.workspace,
+  });
   const name = bareName(mention, written, bare, known, standing);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const face = (
     <>
       <span className="mention-chip-glyph">
-        <MentionGlyph mention={mention} doors={doors} />
+        <MentionGlyph mention={mention} doors={doors} standing={standing} />
       </span>
       <span className="mention-chip-label">{name}</span>
       {standing?.state === undefined ? null : (

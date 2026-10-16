@@ -110,3 +110,43 @@ export const githubRepositoryPullRequestAnswerSchema = EffectSchema.Struct({
 });
 
 export type GitHubRepositoryPullRequestAnswer = typeof githubRepositoryPullRequestAnswerSchema.Type;
+
+/** GitHub's own host, whose `/<owner>/<name>/pull/<number>` pages are its pull requests. */
+const GITHUB_HOST = "github.com";
+
+/** The step before a pull request's number in its page's path. */
+const PULL_STEP = "pull";
+
+/** A pull request's number as its page's path spells it: whole, from one. */
+const PULL_NUMBER = /^[1-9]\d{0,8}$/u;
+
+/** A pull request a page's address names: its repository, `owner/name`, and its number. */
+export interface PullRequestAddress {
+  readonly repository: string;
+  readonly number: number;
+}
+
+/**
+ * The pull request a page of GitHub's is, `acme/relay` and `42` from
+ * `https://github.com/acme/relay/pull/42` or any page under it, its Files
+ * tab say; nothing for any other address, another of GitHub's pages among
+ * them.
+ */
+export function pullRequestAddressOf(href: string): PullRequestAddress | undefined {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname !== GITHUB_HOST) return undefined;
+  const [first, owner, name, step, number] = url.pathname.split("/");
+  if (first !== "" || owner === undefined || name === undefined || step !== PULL_STEP) {
+    return undefined;
+  }
+  if (number === undefined || !PULL_NUMBER.test(number)) return undefined;
+  const repository = `${owner}/${name}`;
+  return EffectSchema.is(githubRepositoryFullNameSchema)(repository)
+    ? { repository, number: Number(number) }
+    : undefined;
+}
