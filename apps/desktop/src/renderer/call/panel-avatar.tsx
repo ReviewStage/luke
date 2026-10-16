@@ -1,18 +1,21 @@
 /**
- * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video at the top of the call's own Call tab.
+ * panel-avatar.tsx -- Luke's avatar as the panel draws it: his voice from the panel's root, and his video at the top of the call's own Call tab and on the call card.
  *
  * The panel runs the avatar's session (`call-avatar.ts`) for as long as main
  * hands it a grant, whichever tab it shows and while it is hidden, because
  * the avatar's voice is what the developer hears: the voice window's own
  * element is muted while the avatar plays. So the voice is played from the
  * panel's root, and only the video is drawn in the Call tab, on the plan
- * the call is about.
+ * the call is about, and on the call card wherever the window docks it.
+ * Both draw the one track the session published, each on an element of its
+ * own, so a second view costs no second subscription and never drifts from
+ * the first.
  */
 
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { callTabVideoStatus } from "@luke/ui/call-card-model";
+import { callCardVideoStatus, callTabVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -26,6 +29,7 @@ import {
   callAvatarPlaybackAtom,
   NO_AVATAR_TRACKS,
 } from "./call-avatar";
+import type { CallCardVideo } from "./call-card";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile";
 
 /** The avatar's tracks as published so far, none before a session stands. */
@@ -67,4 +71,24 @@ export function CallTabVideo({ planId }: { planId: string }): React.JSX.Element 
       onSetVideo={(on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on })}
     />
   );
+}
+
+/**
+ * The avatar as the panel's call card draws it (`callCardVideoStatus`), on
+ * the same track, status, and toggle as the Call tab, or nothing while the
+ * card has no video to offer.
+ */
+export function useCallCardVideo(): CallCardVideo | undefined {
+  const { tell } = useAct();
+  const state = useAppState();
+  const { view } = useVoiceView();
+  const track = useAvatarTracks().video;
+  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
+  const status = callCardVideoStatus({
+    view,
+    avatar: state?.voice.avatar ?? AVATAR_OFF,
+    videoCalls,
+  });
+  if (status === undefined) return undefined;
+  return { status, track, onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }

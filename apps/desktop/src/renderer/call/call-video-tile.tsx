@@ -133,7 +133,7 @@ export function AvatarVoice({
 }
 
 /** Video off or Video on: one button that says which the press will do. */
-function VideoToggle({
+export function VideoToggle({
   on,
   onSetVideo,
 }: {

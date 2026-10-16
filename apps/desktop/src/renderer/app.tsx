@@ -42,6 +42,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
+import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
@@ -396,12 +397,14 @@ export function App(): React.JSX.Element {
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activePlanId: state?.planning.activePlanId,
   });
+  const callVideo = useCallCardVideo();
   const call: CallCardInput | undefined =
     !accountGated && callCardShown({ view: voiceView, focused, planShown })
       ? {
           card: callCard({ view: voiceView, planning: state?.planning ?? IDLE_PLANNING_VIEW }),
           speakerMuted: voiceView.speakerMuted,
           controls: callControls(tell, voiceView.speakerMuted),
+          video: callVideo,
         }
       : undefined;
   // An agent's end said in the toast while the window was focused: its View

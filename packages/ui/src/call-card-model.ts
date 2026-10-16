@@ -13,6 +13,7 @@ import {
   AVATAR_STATUS,
   type AvatarState,
   type AvatarStatus,
+  avatarStanding,
   avatarTiled,
 } from "@luke/voice/avatar";
 import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
@@ -103,7 +104,27 @@ export function callTabVideoStatus(input: {
 }): AvatarStatus | undefined {
   const { view, avatar, planId, videoCalls } = input;
   if (!callInProgress(view) || view.callPlanId !== planId) return undefined;
-  const standing = avatar.status === AVATAR_STATUS.STARTING || avatar.status === AVATAR_STATUS.LIVE;
-  if (!videoCalls) return standing ? avatar.status : undefined;
+  if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
+}
+
+/**
+ * What the call card draws of the avatar while the call is in progress:
+ * the tile above its name while the avatar is starting or live, the card's
+ * own Video on beside its name once it is down for any reason, `OFF`, and
+ * `undefined`, which is today's card and nothing more, once the call is
+ * over or while the Video calls experiment is off. The card is small, so an
+ * avatar that ended is not drawn ended there: it falls back to the plain
+ * card, and the Call tab keeps saying why. As on the Call tab, an avatar
+ * still standing when the experiment is turned off keeps its tile.
+ */
+export function callCardVideoStatus(input: {
+  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  avatar: AvatarState;
+  videoCalls: boolean;
+}): AvatarStatus | undefined {
+  const { view, avatar, videoCalls } = input;
+  if (!callInProgress(view)) return undefined;
+  if (avatarStanding(avatar)) return avatar.status;
+  return videoCalls ? AVATAR_STATUS.OFF : undefined;
 }

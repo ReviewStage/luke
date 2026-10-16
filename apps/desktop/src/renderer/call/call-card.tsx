@@ -15,6 +15,7 @@ import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { ReturnIcon } from "@luke/ui";
 import { type CallCardModel, callCard } from "@luke/ui/call-card-model";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
@@ -24,6 +25,7 @@ import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
+import { CallVideoTile, VideoToggle } from "./call-video-tile";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
@@ -51,11 +53,26 @@ export interface CallControls {
   onEnd: () => void;
 }
 
+/**
+ * The avatar as a card draws it (`callCardVideoStatus`): its tile while it
+ * is starting or live, playing the track handed, and Video on beside the
+ * plan's name while it is `OFF`. Video off and Video on ask main, as the
+ * Call tab's do, so one press turns video off or on in every view at once.
+ */
+export interface CallCardVideo {
+  status: AvatarStatus;
+  /** The avatar's video, or nothing yet, which the tile draws as Luke's still face. */
+  track: MediaStreamTrack | undefined;
+  onSetVideo: (on: boolean) => void;
+}
+
 /** Everything a card is drawn from, as a Luke window hands it to wherever it docks. */
 export interface CallCardInput {
   card: CallCardModel;
   speakerMuted: boolean;
   controls: CallControls;
+  /** Absent on a call with no video to offer, which draws the card alone. */
+  video?: CallCardVideo | undefined;
 }
 
 /**
@@ -83,12 +100,15 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
  * for the plan it opens. In the floating window the name is the drag handle,
  * since macOS hands a press on a drag region to the drag, never the page.
  * There is no ×: End call is the way to put a call away, and a live call
- * nobody can see is what the card is for.
+ * nobody can see is what the card is for. On a video call the Call tab's
+ * own tile stands over the name while the avatar does, with its Video off
+ * and no end of its own, and Video on stands beside the name once it is down.
  */
 function CallCard({
   card,
   speakerMuted,
   controls,
+  video,
   surface,
   leaving = false,
   onLeft,
@@ -126,6 +146,7 @@ function CallCard({
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
+  const tiled = video !== undefined && video.status !== AVATAR_STATUS.OFF;
   return (
     <section
       className="call-card"
@@ -135,8 +156,14 @@ function CallCard({
       onAnimationEnd={left}
       onMouseDown={inWindow ? keepFocus : undefined}
     >
+      {tiled ? (
+        <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
+      ) : null}
       <div className="call-card-head">
         <p className="call-card-title">{name}</p>
+        {video?.status === AVATAR_STATUS.OFF ? (
+          <VideoToggle on={false} onSetVideo={video.onSetVideo} />
+        ) : null}
         {inWindow ? (
           returnButton
         ) : (
