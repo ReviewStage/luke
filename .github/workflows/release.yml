@@ -140,13 +140,6 @@ jobs:
         if: ${{ steps.ci.outputs.passed == 'true' && !inputs.full_checks }}
         run: ./scripts/repository-checks.sh
 
-      # The Chromium @luke/ui's browser tests run in, at the build its pinned
-      # `playwright` names: bootstrap.sh leaves it to each CI job that runs
-      # them, and check.sh does when it runs.
-      - name: Install the browser tests' Chromium
-        if: ${{ steps.ci.outputs.passed != 'true' || inputs.full_checks }}
-        run: pnpm --filter @luke/ui exec playwright install chromium
-
       - name: Run every check
         if: ${{ steps.ci.outputs.passed != 'true' || inputs.full_checks }}
         run: ./scripts/check.sh
