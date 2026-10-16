@@ -1,3 +1,4 @@
+import { emulateReducedMotion } from "@luke/ui/testing/browser-commands";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
@@ -36,6 +37,7 @@ export default defineConfig({
         },
       }),
       instances: [{ browser: "chromium" }],
+      commands: { emulateReducedMotion },
       expect: {
         toMatchScreenshot: {
           comparatorName: "pixelmatch",

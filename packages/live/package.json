@@ -1,6 +1,5 @@
 {
   "name": "@luke/live",
-  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The GPT Live protocol as Luke reads it, Node-free so the renderer, the host, and a web function share it",

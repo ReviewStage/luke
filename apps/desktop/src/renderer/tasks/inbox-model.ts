@@ -96,7 +96,7 @@ export function withValue(
 
 /** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words. */
 function replyKindOf(
-  item: InboxItem,
+  item: Pick<InboxItem, "response">,
   draft: InboxDraft,
   press: InboxReplyKind | undefined,
 ): InboxReplyKind | undefined {
@@ -127,7 +127,7 @@ function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue
  * form by its fields, with the note beside them.
  */
 export function inboxReply(
-  item: InboxItem,
+  item: Pick<InboxItem, "response">,
   draft: InboxDraft,
   press?: InboxReplyKind,
 ): InboxReply | undefined {

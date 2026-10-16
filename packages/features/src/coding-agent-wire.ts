@@ -752,15 +752,14 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * whether that bot is Luke's own App, whose commits and pull requests, or
- * co-authorship beside a developer, are its agents'; and the Luke account whose linked GitHub account it is,
- * where that account is a member of the agent's workspace.
+ * the Luke account whose linked GitHub account it is, where that account is
+ * a member of the agent's workspace. Luke's own App's bot is an App's bot
+ * like any other.
  */
 const githubPersonSchema = EffectSchema.Struct({
   login: EffectSchema.String,
   avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
   bot: EffectSchema.Boolean,
-  luke: EffectSchema.optionalKey(EffectSchema.Boolean),
   userId: EffectSchema.optionalKey(EffectSchema.String),
 });
 

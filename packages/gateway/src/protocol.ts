@@ -146,6 +146,11 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's issues: listed, one read, one filed, and one changed. */
+  ISSUES_LIST: "issues.list",
+  ISSUES_READ: "issues.read",
+  ISSUES_CREATE: "issues.create",
+  ISSUES_CHANGE: "issues.change",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

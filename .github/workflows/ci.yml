@@ -53,12 +53,15 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The four jobs keep the names the ruleset requires. @luke/service's suite
-  # is the largest, so it is cut into three vitest shards, one per job, and
-  # the fourth job runs every other workspace's tests, one
-  # workspace at a time (`scripts/check.mjs` says why). Every workspace with
-  # tests runs under one of these names or `scripts/repository-checks.sh`
-  # fails, so no test file can fall outside all four jobs.
+  # The four jobs keep the names the ruleset requires, and split the suites
+  # so no job waits on another's tail: @luke/service's suite, the largest, is
+  # cut into two vitest shards, one per job; the desktop's, the next, runs
+  # alone in the third; and the fourth runs every other workspace's tests,
+  # one workspace at a time (`scripts/check.mjs` says why). The third and
+  # fourth filter on the desktop and everything but it, so between them they
+  # name every workspace. Every workspace with tests runs under one of these
+  # task names or `scripts/repository-checks.sh` fails, so no test file can
+  # fall outside all four jobs.
   #
   # The job holding web's tests (`changelog`) runs them alone for a
   # release-only change, because they parse CHANGELOG.md as the page does.
@@ -77,10 +80,10 @@ jobs:
             task: test:vitest:2
             changelog: false
           - shard: 3
-            task: test:vitest:3
+            task: test:vitest --filter=@luke/desktop
             changelog: false
           - shard: 4
-            task: test:vitest
+            task: test:vitest --filter=!@luke/desktop
             changelog: true
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "to": {
+      "type": "string",
+      "maxLength": 81
+    },
+    "replyTo": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "additionalProperties": false
+}

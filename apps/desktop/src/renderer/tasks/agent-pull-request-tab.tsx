@@ -42,19 +42,12 @@ import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "./agent-ref";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { DiffRowLine } from "./diff-rows";
 import { useLinesLook } from "./file-tab";
 import { PullRequestMark } from "./pull-request-mark";
-import {
-  OpenedBy,
-  PersonRef,
-  type PullRequestAgent,
-  ReviewersLine,
-  ReviewStanding,
-} from "./pull-request-people";
+import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
 import {
@@ -495,12 +488,10 @@ function EntryWords({
  */
 function ThreadCard({
   thread,
-  agent,
   now,
   picture,
 }: {
   thread: ReviewThread;
-  agent: PullRequestAgent;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
@@ -543,7 +534,7 @@ function ThreadCard({
             {thread.comments.map((comment) => (
               <li key={comment.url} className="pull-request-thread-comment">
                 <span className="changes-comment-head">
-                  <PersonRef person={comment.by} agent={agent} />
+                  <PersonRef person={comment.by} />
                   <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
                 </span>
                 <EntryWords entry={comment} picture={picture} />
@@ -568,12 +559,10 @@ function ThreadCard({
 /** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
 function EntryCard({
   entry,
-  agent,
   now,
   picture,
 }: {
   entry: ConversationEntry;
-  agent: PullRequestAgent;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
@@ -581,7 +570,7 @@ function EntryCard({
   return (
     <li className="pull-request-entry">
       <span className="changes-comment-head">
-        <PersonRef person={entry.by} agent={agent} />
+        <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
@@ -593,7 +582,6 @@ function EntryCard({
             <ThreadCard
               key={thread.comments[0]?.url ?? `${at}`}
               thread={thread}
-              agent={agent}
               now={now}
               picture={picture}
             />
@@ -608,11 +596,9 @@ function EntryCard({
 function PullRequestPage({
   agentId,
   pullRequest,
-  agent,
 }: {
   agentId: string;
   pullRequest: CodingAgentOverview;
-  agent: PullRequestAgent;
 }): React.JSX.Element {
   const now = useMinute();
   const openLink = useOpenLink();
@@ -634,15 +620,13 @@ function PullRequestPage({
         </p>
       </Tooltip>
       <div className="changes-people pull-request-people">
-        {author === undefined ? null : (
-          <OpenedBy person={author} writtenAs={pullRequest.writtenAs} agent={agent} />
-        )}
+        {author === undefined ? null : <OpenedBy person={author} />}
         {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
         <span className="pull-request-quiet">
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} agent={agent} />}
+        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
       <Checks checks={pullRequest.checks} />
@@ -680,7 +664,7 @@ function PullRequestPage({
         ) : (
           <ol className="pull-request-conversation">
             {conversation.map((entry) => (
-              <EntryCard key={entry.url} entry={entry} agent={agent} now={now} picture={picture} />
+              <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
             ))}
           </ol>
         )}
@@ -693,7 +677,6 @@ function PullRequestPage({
 function OverviewView({
   agentId,
   read,
-  agent,
 }: {
   agentId: string;
   read: {
@@ -701,7 +684,6 @@ function OverviewView({
     readonly out: boolean;
     readonly ask: () => void;
   };
-  agent: PullRequestAgent;
 }): React.JSX.Element {
   const { answer, out, ask } = read;
   // A failure gives way to the wait as soon as it is asked again; a page drawn stands until the answer lands.
@@ -724,7 +706,7 @@ function OverviewView({
       <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
     );
   }
-  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} agent={agent} />;
+  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} />;
 }
 
 /**
@@ -757,11 +739,6 @@ export function AgentPullRequestTab({
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const onOverview = view === PULL_REQUEST_VIEW.OVERVIEW;
   const read = useAgentRead(agentId, shown && onOverview, ended, control.readOverview, UNANSWERED);
-  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
-  const agent = {
-    subject: agentSubject(control, agentId, NOTHING_HELD, false),
-    models: control.models,
-  };
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
@@ -771,7 +748,7 @@ export function AgentPullRequestTab({
         overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}
       />
       <div className="pull-request-view" hidden={!onOverview}>
-        <OverviewView agentId={agentId} read={read} agent={agent} />
+        <OverviewView agentId={agentId} read={read} />
       </div>
       <div className="pull-request-view" hidden={onOverview}>
         <AgentChangesTab

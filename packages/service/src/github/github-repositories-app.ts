@@ -217,15 +217,24 @@ const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(reached)) return null;
   const found = yield* pullRequestByNumber(reached.value.token, place.repository, number);
   if (Option.isNone(found)) return null;
-  const { title, url, state, author, additions, deletions } = found.value;
+  const pull = found.value;
   return {
-    number: found.value.number,
-    title,
-    url,
-    state,
-    ...(author === undefined ? undefined : { author }),
-    additions,
-    deletions,
+    number: pull.number,
+    title: pull.title,
+    url: pull.url,
+    state: pull.state,
+    additions: pull.additions,
+    deletions: pull.deletions,
+    changedFiles: pull.changedFiles,
+    headRef: pull.headRef,
+    ...(pull.author === undefined ? undefined : { author: pull.author }),
+    ...(pull.openedAt === undefined ? undefined : { openedAt: pull.openedAt }),
+    ...(pull.mergedAt === undefined ? undefined : { mergedAt: pull.mergedAt }),
+    ...(pull.closedAt === undefined ? undefined : { closedAt: pull.closedAt }),
+    ...(pull.baseRef === undefined ? undefined : { baseRef: pull.baseRef }),
+    ...(pull.labels === undefined ? undefined : { labels: pull.labels }),
+    ...(pull.comments === undefined ? undefined : { comments: pull.comments }),
+    ...(pull.commits === undefined ? undefined : { commits: pull.commits }),
   };
 });
 

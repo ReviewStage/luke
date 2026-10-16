@@ -1,0 +1,149 @@
+/* chip.css -- the chip: a control of the shared contract in one of three
+   looks, giving way before the row around it does, its words cut short
+   rather than pushing past it. A mark beside the words is a size under the
+   control's glyph, and a menu's chevron is the small, muted one a menu
+   draws. */
+
+@layer components {
+  .luke-chip {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    max-width: 100%;
+    height: var(--luke-control-height);
+    margin: 0;
+    padding: 0 var(--luke-space-8);
+    border: 1px solid transparent;
+    border-radius: var(--luke-control-radius);
+    background: transparent;
+    /* The look's ink, named so an unavailable chip can fade it whatever
+       look it wears. */
+    --luke-chip-ink: var(--luke-color-text-body);
+    color: var(--luke-chip-ink);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-hover) ease,
+      color var(--duration-hover) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-chip {
+    cursor: default;
+  }
+
+  .luke-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* All a chip holds stands in one face, so an unavailable chip fades it
+     once, whatever it holds: bare words, a name, a picture, a mark, or the
+     chevron. */
+  .luke-chip-face {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: inherit;
+    min-width: 0;
+  }
+
+  .luke-chip-face > svg {
+    flex: none;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-chip-face > svg.settings-chevron {
+    width: 12px;
+    height: 12px;
+    color: var(--luke-color-text-subtle);
+  }
+
+  /* A toolbar chip and a field light under the pointer and while their
+     menu is open, as a quiet button does. */
+  .luke-chip:is([data-look="toolbar"], [data-look="field"]):where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"]
+  ) {
+    background: var(--luke-color-fill-selected);
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  .luke-chip:is([data-look="toolbar"], [data-look="field"]):active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    background: var(--luke-color-fill-pressed);
+  }
+
+  /* A pill names a thing, so it stands filled and inside a hairline at rest,
+     its fill deepening under the pointer rather than taking a button's. */
+  .luke-chip[data-look="pill"] {
+    padding: 0 var(--luke-space-12) 0 var(--luke-space-8);
+    border-color: var(--luke-color-border);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-hover);
+    --luke-chip-ink: var(--luke-color-text-muted);
+  }
+
+  /* The site's muted ink holds AA on its page's ground and not on a fill,
+     so a pill there names its thing in the text's own ink. */
+  [data-luke-profile="web"] .luke-chip[data-look="pill"] {
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  .luke-chip[data-look="pill"]:where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"]
+  ) {
+    background: var(--luke-color-fill-strong);
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  /* A field is a settings row's value, inside an outlined button's
+     hairline, its words leading and its chevron at the far end. */
+  .luke-chip[data-look="field"] {
+    justify-content: flex-start;
+    padding: 0 var(--luke-space-8) 0 var(--luke-space-12);
+    border-color: var(--luke-color-border);
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  .luke-chip[data-look="field"] > .luke-chip-face {
+    flex: 1;
+  }
+
+  /* A field's chevron stands at its far end whatever its words are, a
+     name that fills the field or bare words that do not. */
+  .luke-chip[data-look="field"] .luke-chip-face > .settings-chevron {
+    margin-left: auto;
+  }
+
+  .luke-chip[data-look="field"] .luke-chip-name {
+    flex: 1;
+    text-align: left;
+  }
+
+  /* Unavailable, a chip fades to 45%: a disabled one whole, one that keeps
+     the keyboard (`aria-disabled`, so a hint can say why) its fill and its
+     words alone, so the app's ring around it is drawn at full strength. */
+  .luke-chip:disabled {
+    opacity: 0.45;
+  }
+
+  .luke-chip[aria-disabled="true"] > .luke-chip-face {
+    opacity: 0.45;
+  }
+
+  .luke-chip[data-look="pill"][aria-disabled="true"] {
+    background: color-mix(in srgb, var(--luke-color-fill-hover) 45%, transparent);
+  }
+}

@@ -9,6 +9,7 @@
     "renderer/terminal.js": 146170,
     "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 148920,
-    "renderer/diagram.js": 195262
+    "renderer/diagram.js": 195262,
+    "renderer/diff-view.js": 135766
   }
 }

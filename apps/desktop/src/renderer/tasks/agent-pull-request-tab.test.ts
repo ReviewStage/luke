@@ -77,6 +77,12 @@ function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STAT
 /** An upload in the description, as GitHub's rendering names it. */
 const UPLOAD = "https://github.com/user-attachments/assets/4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
 
+/** A bot's themed badge, its light image as GitHub's image proxy serves it. */
+const BADGE = "https://camo.githubusercontent.com/abc123/6c69676874";
+
+/** A screenshot on a branch of the agent's own repository. */
+const SCREENSHOT = "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42/overview.png";
+
 /** The image the service reads for it, a transparent pixel. */
 const PIXEL = { contentType: "image/png", base64: "iVBORw0KGgo=" } as const;
 
@@ -96,6 +102,10 @@ const OVERVIEW: CodingAgentOverview = {
     '<input type="checkbox" class="task-list-item-checkbox" disabled="" checked=""> Sweep</li></ul>',
     `<p dir="auto"><a target="_blank" href="${UPLOAD}"><img src="${UPLOAD}" alt="before and after"></a></p>`,
     '<p dir="auto"><img src="https://tracker.example.com/pixel.png" alt="pixel"></p>',
+    '<p dir="auto"><a href="https://review.example.com"><picture>',
+    '<source media="(prefers-color-scheme: dark)" srcset="https://camo.githubusercontent.com/abc123/6461726b">',
+    `<img src="${BADGE}" alt="Request review"></picture></a></p>`,
+    `<p dir="auto"><a href="${SCREENSHOT}"><img src="${SCREENSHOT}" alt="Overview"></a></p>`,
     '<p dir="auto">Run <code class="notranslate">pnpm test</code> first.</p>',
     "<script>window.stolen = true;</script>",
   ].join(""),
@@ -109,7 +119,7 @@ const OVERVIEW: CodingAgentOverview = {
     check("build", CHECK_STATE.PENDING),
     check("test", CHECK_STATE.PASSED),
   ],
-  author: { login: "luke[bot]", bot: true, luke: true },
+  author: { login: "luke-agent[bot]", bot: true },
   reviewers: [{ by: CHARLES_ON_GITHUB, state: REVIEW_STATE.CHANGES_REQUESTED }],
   conversation: [
     {
@@ -270,6 +280,13 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     tab.querySelector(".pull-request-merge")?.getAttribute("data-merge-tone"),
     "blocked",
   );
+  const opener =
+    tab.querySelector(".pull-request-people .actor-ref") ?? assert.fail("who opened it is named");
+  assert.deepEqual(
+    [opener.querySelector(".actor-ref-name")?.textContent, opener.getAttribute("data-kind")],
+    ["luke-agent", "github"],
+    "Luke's own App's bot opened it, an App's bot on GitHub like any other",
+  );
 
   const checks = tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks stand");
   assert.equal(
@@ -311,7 +328,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   await settle();
   assert.deepEqual(
     images,
-    [UPLOAD],
+    [UPLOAD, BADGE, SCREENSHOT],
     "only an image GitHub serves is asked for, through the service",
   );
   const upload =
@@ -324,6 +341,18 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "an image elsewhere is not drawn",
   );
   assert.match(description.textContent ?? "", /pixel/u, "it stands as its link");
+  assert.equal(
+    description.querySelector("source"),
+    null,
+    "a themed badge names no address the window would read itself",
+  );
+  for (const alt of ["Request review", "Overview"]) {
+    assert.equal(
+      description.querySelector<HTMLImageElement>(`img[alt="${alt}"]`)?.src,
+      `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+      `${alt} is drawn from what the service read`,
+    );
+  }
 
   const entries = [...tab.querySelectorAll(".pull-request-entry")];
   assert.equal(entries.length, 2);

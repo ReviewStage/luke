@@ -313,10 +313,14 @@ body,
   display: flex;
 }
 
-/* The buttons over the open sidebar, or the floating one, stand on its ground. */
+/* The buttons over the open sidebar, or the floating one, stand on its
+   ground, and so do the folded sidebar's over Chat's rail, which stands on
+   the sidebar's ground too. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
+  .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
@@ -2096,6 +2100,8 @@ ul.actor-stack {
 .icon-button,
 .primary-button,
 .danger-button,
+.luke-button,
+.luke-chip,
 .segment,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
@@ -2326,70 +2332,31 @@ ul.actor-stack {
 
 /* Chips ----------------------------------------------------------------------- */
 
-/* A button that names a value or a thing (`chip.tsx`): the labelled button
-   above, giving way before the row around it does, its words cut short
-   rather than pushing past it, at a weight between the button's and the
-   body's. A mark beside the words is a size under the button's glyph, and a
-   menu's chevron is the small, muted one a menu draws. */
-.chip {
-  min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  font-weight: 560;
-}
-
+/* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
+   `@luke/ui/styles.css`. What stays here is the window's own: the marks it
+   holds a size under the control's glyph, its menu's chevron at the size a
+   menu draws it (restated, since `.settings-chevron`'s own rule here would
+   otherwise win over the shared layer), and the words its callers still mark
+   `.chip-name`, cut short rather than pushing past the row. */
 .chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chip :is(.repository-picture, .provider-mark, .harness-mark) {
+.luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
 }
 
-.chip .settings-chevron {
+.luke-chip .settings-chevron {
   width: 12px;
   height: 12px;
   color: var(--text-tertiary);
 }
 
-/* A toolbar chip picks what its place runs on, so it is drawn as the
-   toolbar's own buttons are, quiet until the pointer is on it or its menu is
-   open, tighter at its sides, and its words in the body's colour until then. */
-.chip:where([data-look="toolbar"]) {
-  padding: 0 var(--space-8);
-  color: var(--text-body);
-}
-
-/* A pill names a thing, so it stands filled and inside a hairline at rest,
-   its fill deepening under the pointer rather than taking a button's. */
-.chip:where([data-look="pill"]) {
-  padding: 0 var(--space-12) 0 var(--row-inset);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.chip:where([data-look="pill"]):is(:hover, [aria-expanded="true"]) {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-/* A field is a settings row's value, inside the row buttons' hairline, at
-   the form's type, its words leading and its chevron at the far end. */
-.chip:where([data-look="field"]) {
-  justify-content: flex-start;
-  padding: 0 var(--space-8) 0 var(--space-12);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.chip:where([data-look="field"]) :is(.chip-name, .model-label) {
+.luke-chip[data-look="field"] :is(.chip-name, .model-label) {
   flex: 1;
   text-align: left;
 }
@@ -5365,6 +5332,448 @@ button.automation-run:hover {
   color: var(--text-tertiary);
 }
 
+/* Chat ----------------------------------------------------------------------- */
+
+/* The window's Chat, in the plan's place beside the sidebar as the Inbox
+   stands: the rail of places on the sidebar's ground under a bar the work
+   column's height, and the place chosen beside it at a reading measure. */
+.chat-view {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: var(--chat-rail-width, 248px) minmax(0, 1fr);
+}
+
+.chat-rail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+/* While the sidebar is folded the rail is the window's first column, so its
+   name clears the title bar's buttons as the Inbox's list's does. */
+.desktop-shell[data-sidebar-collapsed="true"] .chat-rail-bar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+.chat-rail-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+.chat-rail-heading {
+  margin: var(--space-12) 0 var(--space-4);
+  padding: 0 var(--space-8);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chat-rail-row .sidebar-task-line {
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* What a direct message's row says after the handle, the agent's title or
+   the plan, steps back and gives way first, so the handle stays whole. */
+.chat-rail-row .sidebar-task-name {
+  flex: none;
+  max-width: 70%;
+}
+
+.chat-rail-sub {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-rail-count {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* A member's mark: an agent's glyph as its tab wears it, Luke's initial in
+   his blue, a person's initial on a quiet ground. */
+.chat-mark {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-mark[data-size="small"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.chat-mark[data-kind="planner"] {
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 35%, transparent);
+  background: color-mix(in srgb, var(--voice-luke) 12%, transparent);
+  color: var(--voice-luke);
+}
+
+.chat-mark[data-kind="agent"] {
+  background: transparent;
+}
+
+.chat-stream {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.chat-head {
+  gap: var(--space-12);
+  padding-left: var(--column-inset);
+}
+
+.chat-head-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-head-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-16) var(--column-inset);
+}
+
+.chat-messages,
+.chat-replies {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-message,
+.chat-reply {
+  display: flex;
+  gap: var(--space-12);
+  padding: 10px var(--space-12);
+  border-radius: 10px;
+}
+
+.chat-reply {
+  gap: 10px;
+  padding: var(--space-6) 0;
+}
+
+.chat-message-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chat-byline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.chat-byline-action {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.chat-message:hover .chat-byline-action,
+.chat-byline-action:focus-within {
+  opacity: 1;
+}
+
+.chat-byline-action .chat-thread-toggle {
+  padding: 0;
+}
+
+.chat-author {
+  font-weight: 600;
+}
+
+.chat-handle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-where,
+.chat-time {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chat-words {
+  color: var(--text-body);
+}
+
+.chat-code {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.chat-code-lines,
+.chat-image-words,
+.chat-unknown {
+  color: var(--text-tertiary);
+}
+
+.chat-image-words,
+.chat-unknown,
+.chat-link {
+  margin: 0;
+}
+
+/* An ask draws as a card in its row, headed by what kind of ask it is. */
+.chat-ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.chat-ask-kind {
+  margin: 0;
+  color: var(--state-attention);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.chat-ask-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-ask-option {
+  padding: 10px var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--raised);
+}
+
+.chat-ask-option-label {
+  font-weight: 600;
+}
+
+.chat-ask-recommended,
+.chat-ask-option-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-ask-option-detail {
+  margin: var(--space-2) 0 0;
+}
+
+.chat-thread {
+  margin-top: var(--space-6);
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--hairline);
+}
+
+.chat-thread-toggle {
+  padding: var(--space-4) 0;
+  border: 0;
+  background: none;
+  color: var(--voice-luke);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The composer at a place's foot, at the stream's reading measure: the box,
+   and under it a bar of what it takes with the round send at its end. */
+.chat-composer {
+  position: relative;
+  width: calc(100% - 2 * var(--column-inset));
+  max-width: 900px;
+  margin: var(--space-12) auto var(--space-16);
+}
+
+.chat-thread .chat-composer {
+  width: 100%;
+  margin: var(--space-6) 0 0;
+}
+
+.chat-composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.chat-composer[data-compact="true"] .chat-composer-box {
+  padding: var(--space-6) 10px;
+  border-radius: 10px;
+}
+
+.chat-composer-field,
+.chat-ask-note-field {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+}
+
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.chat-composer[data-compact="true"] .chat-composer-bar {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+}
+
+.chat-send {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.chat-send:not(:disabled) {
+  background: var(--message-sent);
+  color: white;
+}
+
+.chat-send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chat-composer-note {
+  margin: var(--space-6) 0 0;
+}
+
+/* The list an `@` or `#` opens stands over the box at its left. */
+.chat-mention-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-4));
+  left: 0;
+  width: 320px;
+  z-index: 10;
+}
+
+/* An open ask's note line, the round send at its end where the note is what is sent. */
+.chat-ask-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-4) 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--desktop-sidebar);
+}
+
+.chat-ask-presses {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.chat-ask-quiet,
+.chat-ask-settled {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-ask-values {
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-16);
+}
+
+.chat-ask-settled-note {
+  color: var(--text-primary);
+}
+
+.chat-empty {
+  margin: var(--space-24) 0;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
 /* Settings ------------------------------------------------------------------- */
 
 .desktop-settings,
@@ -7115,6 +7524,42 @@ button.automation-run:hover {
   font-size: 11px;
 }
 
+/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
+   name beside a dot of the colour GitHub gives it, a size under the notes,
+   wrapping where they run past the card's width. The dot carries the
+   colour rather than the words, since a label may be any colour, a dark one
+   the card's words could not be read in. */
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 6px; /* off-scale */
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px; /* off-scale */
+  overflow-wrap: anywhere;
+}
+
+.card-label-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
 .card-rule {
   width: 100%;
   height: 1px;
@@ -8161,13 +8606,13 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom. Over a dock at the
-   window's foot (a plan's call bar, an agent's composer or its to-do list)
-   the stack stands just above the highest of them, the window's step clear
-   of it, as the folded sidebar's call card does in the other corner. It
-   measures nothing: each dock names itself an anchor (below), and the
-   stack's foot stands on the anchor's top, or in the corner where none
-   stands. The window is never narrow enough for the two to meet.
+   its bottom-right corner, newest at the bottom, always the window's step
+   in from its corner whatever docks at its foot (a plan's call bar, an
+   agent's composer or its to-do list). A card over one of them stands
+   there only for its hold, and one with something to press can always be
+   dismissed to reach what is under it. The folded sidebar's call card
+   holds the other corner, and the window is never narrow enough for the
+   two to meet.
    Each rises in on the spring and fades first on its way out; the stack
    itself takes no pointer, so only a card with something to press stands in
    the way of what is under it, and that card is always one the developer
@@ -8176,34 +8621,9 @@ button.automation-run:hover {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: max(
-    var(--space-16),
-    calc(anchor(--dock-call top, 0px) + var(--space-8)),
-    calc(anchor(--dock-composer top, 0px) + var(--space-8)),
-    calc(anchor(--dock-todos top, 0px) + var(--space-8))
-  );
+  bottom: var(--space-16);
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
-}
-
-/* What docks at a column's foot names itself, by kind, the anchor the
-   toasts stand on; a column hidden under the side panel filling the window
-   leaves its docks unnamed, since nothing of it stands under the toasts. */
-.desktop-call-bar {
-  anchor-name: --dock-call;
-}
-
-.agent-composer {
-  anchor-name: --dock-composer;
-}
-
-.agent-todos-dock {
-  anchor-name: --dock-todos;
-}
-
-:is(.desktop-task-main[hidden], .desktop-task > .agent-page[hidden])
-  :is(.desktop-call-bar, .agent-composer, .agent-todos-dock) {
-  anchor-name: none;
 }
 
 .toast-stack > ol {

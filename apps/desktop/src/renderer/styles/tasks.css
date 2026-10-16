@@ -353,24 +353,46 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
   color: var(--text-secondary);
 }
 
-/* Who last changed a section, and when: a quiet line at the end of its
-   heading's row, shown while the pointer or the keyboard is on the section.
-   It fades on opacity alone, so nothing moves. */
+/* Who last changed a section, and when: the writer's face and a few
+   letters at the end of its heading's row, shown while the pointer or the
+   keyboard is on the section. It fades on opacity alone, so nothing moves.
+   `--plan-byline-room` holds a face and the widest of those letters, a date
+   such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
+   column with its ⋯, which hangs `--space-6` past the column's edge. */
+.plan-body {
+  --plan-byline-room: 64px;
+  --plan-unit-row-room: calc(
+    var(--plan-byline-room) +
+    var(--space-4) +
+    var(--control-height) -
+    var(--space-6)
+  );
+}
+
 .plan-unit-attributed {
   position: relative;
+}
+
+/* A section's heading wraps short of the row at its end, so the byline and
+   the ⋯ never stand over its words, however long it runs. The room is kept
+   whether or not they are shown, and in the editor too, so no heading
+   rewraps as the pointer comes and goes or as the text opens to be edited. */
+.plan-unit-attributed > .plan-unit > .markdown-heading:first-child,
+.plan-document-editor .plan-unit > .markdown-heading:is([data-level="1"], [data-level="2"]) {
+  padding-right: var(--plan-unit-row-room);
 }
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a
    control tall, each centred on it, so the line reads level with the button.
    The row hangs past the column's edge by `--space-6`, as the ⋯ always has,
-   and starts short of the heading's middle so a long byline is cut there;
-   where a section has no ⋯, the row keeps its room, so every byline ends at
-   one edge. It takes no pointer itself, only its byline and its ⋯ do. */
+   and holds the room its heading keeps; where a section has no ⋯, the row
+   keeps its room, so every byline ends at one edge. It takes no pointer
+   itself, only its byline and its ⋯ do. */
 .plan-unit-row {
   position: absolute;
   top: 0;
   right: calc(var(--space-6) * -1);
-  left: 45%;
+  width: calc(var(--plan-unit-row-room) + var(--space-6));
   display: flex;
   height: var(--control-height);
   align-items: center;
@@ -385,6 +407,7 @@ button.task-crumb-person-row:is(:hover, :focus-visible) {
 
 .plan-unit-byline {
   min-width: 0;
+  max-width: var(--plan-byline-room);
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
@@ -1463,39 +1486,12 @@ button.file-ref:hover .file-ref-path {
   color: var(--state-working);
 }
 
-/* A diff drawn in a File tab's lines (agent-changes-tab.tsx), which keep
-   their gutter, selection, settings, and type; what is a diff's alone is
-   the tint of a line added or removed, its hunk's header on the lit
-   lines' ground, and git's note on a line. */
-.code-line[data-diff="added"] {
-  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
-}
-
-.code-line[data-diff="removed"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.code-line[data-diff="hunk"] {
-  background: var(--code-pointed);
-  color: var(--code-line-number);
-}
-
-.code-line[data-diff="hunk"]:not(:first-child) {
-  margin-top: var(--space-6);
-}
-
-.code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* A narrow panel numbers a diff's lines on the new side alone, so the
-   code keeps the room a second gutter would take; a removed line, which
-   has no new number, still reads by its tint. */
-@container side-panel (max-width: 359px) {
-  .code-line[data-diff] > .code-line-number:first-child {
-    display: none;
-  }
+/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
+   of its own, in the panel's look (diff-view/index.ts); its box fills the
+   File tab's place and scrolls as a File tab's lines do. */
+.diff-view {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the
@@ -2087,6 +2083,21 @@ button.pull-request-check:hover {
   font-size: 10.5px;
   font-weight: 500;
   line-height: 16px;
+}
+
+/* A preview's rows (diff-rows.tsx) on the diff colours Files changed draws
+   in: the tint of a line added or removed, and git's note on a line. */
+.pull-request-thread-lines > .code-line[data-diff="added"] {
+  background: var(--diff-added-ground);
+}
+
+.pull-request-thread-lines > .code-line[data-diff="removed"] {
+  background: var(--diff-removed-ground);
+}
+
+.pull-request-thread-lines > .code-line[data-diff="note"] .code-line-text {
+  color: var(--code-line-number);
+  font-style: italic;
 }
 
 /* The preview stands in the box rather than filling a tab, on a File tab's ground. */
@@ -2845,7 +2856,7 @@ button.skill-chip:hover,
 /* Too narrow for the model's words: the chip draws its harness's mark
    alone, where it has one, its label and hint still naming the choice. */
 @container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) {
+  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
     padding: 0 var(--space-8);
   }
 
@@ -2853,7 +2864,10 @@ button.skill-chip:hover,
     display: block;
   }
 
-  .agent-composer .agent-model-chip .chip:has(.harness-mark) :is(.model-label, .settings-chevron) {
+  .agent-composer
+    .agent-model-chip
+    .luke-chip:has(.harness-mark)
+    :is(.model-label, .settings-chevron) {
     display: none;
   }
 }

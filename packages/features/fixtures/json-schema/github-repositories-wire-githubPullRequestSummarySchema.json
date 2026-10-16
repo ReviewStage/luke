@@ -30,6 +30,55 @@
     "deletions": {
       "type": "number",
       "minimum": 0
+    },
+    "changedFiles": {
+      "type": "number",
+      "minimum": 0
+    },
+    "openedAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "mergedAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "closedAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "baseRef": {
+      "type": "string"
+    },
+    "headRef": {
+      "type": "string"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "comments": {
+      "type": "number",
+      "minimum": 0
+    },
+    "commits": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [

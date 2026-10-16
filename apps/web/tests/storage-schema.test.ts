@@ -48,6 +48,9 @@ const DECLARED_TABLES = [
   "asks",
   "automation",
   "automation_run",
+  "chat_channel",
+  "chat_member",
+  "chat_message",
   "coding_agent",
   "coding_agent_delegation",
   "conversation_attachment",
@@ -93,6 +96,7 @@ const DECLARED_TABLES = [
   "voice_avatar_sessions",
   "voice_session_usage",
   "voice_sessions",
+  "workspace_chat",
   "voice_transcript_segments",
   "workspace_integration_connection",
 ].sort();
