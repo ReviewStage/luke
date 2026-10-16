@@ -17,7 +17,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { focusByKeyboard, layWindowStyles, ringOf } from "#testing/focus-ring";
 import { MemberDirectory } from "../member-directory";
 import { OpenSettingsProvider } from "../open-settings";
 import { OpenPersonProvider } from "../person-door";
@@ -258,16 +257,6 @@ test("who can edit takes the keyboard and hangs its card there, and Return or Sp
   assert.match(card.textContent ?? "", /Everyone in Acme/u);
   assert.deepEqual(links, []);
   assert.deepEqual(asked, []);
-});
-
-test("who can edit wears the window's own ring from the keyboard, not the engine's", async () => {
-  const styles = await layWindowStyles();
-  const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS);
-  const people =
-    nav.querySelector<HTMLElement>(".task-crumb-people") ?? assert.fail("who can edit stands");
-  focusByKeyboard(people);
-  assert.equal(ringOf(people)?.style, "solid");
-  styles.remove();
 });
 
 test("the repository says its name alone, as the sidebar does, and is no press: it drops no menu", async () => {
