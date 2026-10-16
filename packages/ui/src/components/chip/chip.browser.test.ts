@@ -49,21 +49,29 @@ test("a chip in a narrow row cuts its words short rather than leaving the row", 
   expect(name && name.scrollWidth > name.clientWidth).toBe(true);
 });
 
-test("a chip that keeps the keyboard while unavailable is drawn as unavailable, not as a chip to press", async () => {
+test("a chip that keeps the keyboard while unavailable fades all it holds and does not light", async () => {
   const { container } = await mount(
     createElement(
       "div",
-      null,
-      createElement(Chip, { look: CHIP_LOOK.FIELD, children: "Opus" }),
-      createElement(Chip, { look: CHIP_LOOK.FIELD, "aria-disabled": true, children: "Opus" }),
+      { style: { color: "rgb(255, 0, 0)" } },
+      Object.values(CHIP_LOOK).map((look) =>
+        createElement(Chip, {
+          key: look,
+          look,
+          chevron: true,
+          "aria-disabled": true,
+          children: createElement(ChipName, { children: look }),
+        }),
+      ),
     ),
   );
-  const [available, unavailable] = container.querySelectorAll("button");
-  expect(unavailable && getComputedStyle(unavailable).color).not.toBe(
-    available && getComputedStyle(available).color,
-  );
-  await userEvent.hover(page.getByRole("button", { name: "Opus" }).nth(1));
-  expect(unavailable && getComputedStyle(unavailable).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  for (const chip of container.querySelectorAll("button")) {
+    for (const part of chip.children) expect(getComputedStyle(part).opacity).toBe("0.45");
+    expect(getComputedStyle(chip).color).not.toBe("rgb(255, 0, 0)");
+  }
+  await userEvent.hover(page.getByRole("button", { name: "field" }));
+  const field = container.querySelector('[data-look="field"]');
+  expect(field && getComputedStyle(field).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
 for (const surface of [
