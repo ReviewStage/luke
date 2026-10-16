@@ -6,6 +6,7 @@ import {
   ArrowRightIcon,
   AudioLinesIcon,
   CircleCheckIcon,
+  FactoryIcon,
   FileTextIcon,
   GitMergeIcon,
   MessageCircleQuestionIcon,
@@ -14,6 +15,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { NEEDS_YOU } from "../planning/inbox-model";
@@ -23,8 +25,8 @@ import { RelativeTime } from "../planning/relative-time";
 import { AgentGlyph } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { Tooltip } from "../tooltip";
-import { NewPlanButton } from "./desktop-home";
 import {
   EMPTY_MERGED,
   FACTORY_STEP,
@@ -59,9 +61,12 @@ import { planCardOf } from "./plan-card";
  * from one step to another slides there once, and one that arrives fades in;
  * nothing else moves, and the times count on with the window's minute.
  * Escape leaves it for the plan it stood over, and so does any row of the
- * sidebar. It is an experiment (`EXPERIMENT.FACTORY`): every door to it is
- * gated on the account's switch, and its toolbar says so with the Experimental tag
- * and Send feedback.
+ * sidebar. Until the plan list is read nothing stands, a list that could
+ * not be read says so with Retry, above the line where an earlier read still
+ * stands, and with nothing being planned, built, or shipped the page is the
+ * app's empty state. It is an experiment
+ * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
+ * and its toolbar says so with the Experimental tag and Send feedback.
  */
 
 /** What each step is called, its glyph, and what its line says with nothing in it. */
@@ -460,6 +465,9 @@ function Summary({
   );
 }
 
+/** What the list says where it could not be read, as the sidebar says it. */
+const UNREAD_LINE = "Your tasks could not be read.";
+
 /** The window's Factory, in the plan's place: the line as it stands now. */
 export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
@@ -485,21 +493,29 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
         </div>
       </header>
       <div className="factory-scroll">
-        {empty ? (
-          <p className="factory-summary">Nothing is happening right now.</p>
+        {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
+        {plans.listFailed && empty ? (
+          <ReadFailure
+            line={UNREAD_LINE}
+            onRetry={plans.onRetryList}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
+        ) : !plans.listRead && !plans.listFailed ? null : empty ? (
+          <EmptyState icon={<FactoryIcon />} title="No agents at work">
+            Agents you and your team start show here as they work.
+          </EmptyState>
         ) : (
-          <Summary plans={plans} board={board} />
+          <>
+            {plans.listFailed ? (
+              <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+            ) : null}
+            <Summary plans={plans} board={board} />
+            {/* A teammate's task names its creator against the listed workspace's members. */}
+            <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+              <Line plans={plans} board={board} now={now} />
+            </MemberDirectory>
+          </>
         )}
-        {/* A teammate's task names its creator against the listed workspace's members. */}
-        <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-          <Line plans={plans} board={board} now={now} />
-        </MemberDirectory>
-        {empty ? (
-          <div className="factory-empty">
-            <span>Talk an idea through with Luke to start.</span>
-            <NewPlanButton plans={plans} />
-          </div>
-        ) : null}
       </div>
     </section>
   );

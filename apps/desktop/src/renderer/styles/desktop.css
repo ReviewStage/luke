@@ -2208,6 +2208,12 @@ ul.actor-stack {
   text-align: center;
 }
 
+/* Factory's scroller runs to the toolbar's edge, so its failure stands off it
+   as Automations' does by its scroller's padding. */
+.factory-scroll > .read-failure-centred {
+  margin-top: var(--space-16);
+}
+
 /* Among the rows, Retry is drawn back by its own inset, so its glyph stands
    a gap after the words, or under their first letter where it wraps. */
 .read-failure:not(.read-failure-centred) > .quiet-button {
@@ -2715,7 +2721,9 @@ ul.actor-stack {
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. Settings' column holds its page's name over the
    page, which keep their measure. */
-:is(.automations-scroll, .inbox-plans-scroll, .settings-page-scroll):has(.empty-state) {
+:is(.automations-scroll, .factory-scroll, .inbox-plans-scroll, .settings-page-scroll):has(
+  .empty-state
+) {
   display: flex;
   flex-direction: column;
 }
@@ -4441,17 +4449,6 @@ body:has(.app-stage[data-capture="true"])
 
 .factory-row:has(.factory-shipped) .sidebar-plan-name {
   color: var(--text-secondary);
-}
-
-.factory-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-12);
-  max-width: 1080px; /* off-scale */
-  margin-top: var(--space-48);
-  color: var(--text-secondary);
-  font-size: 13px;
 }
 
 /* Automations ---------------------------------------------------------------- */

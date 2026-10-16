@@ -113,20 +113,16 @@ interface Opened {
   readonly inbox: (InboxChoice | "inbox")[];
   readonly github: string[];
   readonly feedback: Experiment[];
-  newPlans: number;
 }
 
 /** Factory over `listed`, what waits, and the call, every door it opens recorded. */
 function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> = {}) {
-  const opened: Opened = { plans: [], inbox: [], github: [], feedback: [], newPlans: 0 };
+  const opened: Opened = { plans: [], inbox: [], github: [], feedback: [] };
   const base = plansControl();
   const plans = plansControl({
     plans: listed,
     listed: { plans: listed, archived: [], inbox: [], inboxPlans: [] },
     onSelect: (planId) => opened.plans.push(planId),
-    onNewPlan: () => {
-      opened.newPlans += 1;
-    },
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
     inboxView: {
       open: false,
@@ -240,23 +236,41 @@ test("a question opens the Inbox on its item, a pull request ready to merge open
   assert.deepEqual(opened.plans, [DRAFT.id]);
 });
 
-test("the plan on the call stands in Plan however old, and with nothing standing anywhere the page says so and offers New plan", () => {
+test("the plan on the call stands in Plan however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = plan(5, "Factory tab", 10 * 24 * HOUR);
   const call = mount([old], { callPlanId: old.id });
   assert.deepEqual(rows(call.page, "plan"), ["Factory tab"]);
   act(() => root?.unmount());
 
-  const { page, opened } = mount([old]);
-  assert.equal(
-    page.querySelector(".factory-summary")?.textContent,
-    "Nothing is happening right now.",
+  const { page } = mount([old]);
+  assert.equal(page.querySelector(".empty-state h3")?.textContent, "No agents at work");
+  assert.equal(page.querySelector("section[data-step]"), null);
+  assert.equal(page.querySelector(".factory-scroll button"), null);
+});
+
+test("until the plan list is read nothing stands, not even the empty state", () => {
+  const { page } = mount([], { listRead: false });
+  assert.equal(page.querySelector(".factory-scroll")?.childElementCount, 0);
+});
+
+test("a plan list that could not be read says so, and Retry reads it again", () => {
+  let retries = 0;
+  const { page } = mount([], {
+    listFailed: true,
+    listRead: false,
+    onRetryList: () => {
+      retries += 1;
+    },
+  });
+  const alert = page.querySelector('[role="alert"]');
+  assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
+  assert.equal(page.querySelector(".empty-state"), null);
+  const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
   );
-  const newPlan = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.startsWith("New task"),
-  );
-  assert.ok(newPlan);
-  act(() => newPlan.click());
-  assert.equal(opened.newPlans, 1);
+  assert.ok(retry);
+  act(() => retry.click());
+  assert.equal(retries, 1);
 });
 
 test("with only merges waiting, the summary opens the first one on GitHub; with a question waiting, it opens the Inbox", () => {
@@ -327,4 +341,24 @@ test("a task a teammate created wears their face before its time, wherever it st
   assert.equal(face(DRAFT.name), "C");
   assert.equal(face(SEARCH.name), null);
   assert.match(row(page, DRAFT.name).textContent ?? "", /\(created by Charles Pan\)/u);
+});
+
+test("a refresh that fails over a list read before keeps the line standing, and says so above it with Retry", () => {
+  let retries = 0;
+  const { page } = mount([SEARCH], {
+    listFailed: true,
+    onRetryList: () => {
+      retries += 1;
+    },
+  });
+  // The agent at work on the task read before still stands in Build.
+  assert.ok(page.querySelector('section[data-step="build"] .sidebar-plan'));
+  const alert = page.querySelector('[role="alert"]');
+  assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
+  const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry);
+  act(() => retry.click());
+  assert.equal(retries, 1);
 });
